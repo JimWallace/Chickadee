@@ -4,11 +4,10 @@
 // zip uploaded by the instructor.
 
 /// Entry for a single test suite in the manifest.
-/// Uses optional fields to accommodate both Java (className) and Python (module).
+/// `module` is the pytest module name (Python) or notebook filename (Jupyter).
 struct TestSuiteEntry: Codable, Equatable, Sendable {
     let tier: TestTier
-    let className: String?  // Java: JUnit class name
-    let module: String?     // Python: pytest module name
+    let module: String      // Python: pytest module; Jupyter: .ipynb filename
 }
 
 /// Resource limits applied to the runner subprocess.
@@ -22,6 +21,17 @@ struct ManifestOptions: Codable, Equatable, Sendable {
     let allowPartialCredit: Bool
 }
 
+/// Configuration for an optional Makefile step that runs before tests.
+///
+/// If present in the manifest, the runner invokes `make [target]` in the
+/// working directory before executing any test suites. A non-zero exit from
+/// make is reported as `buildStatus: "failed"` with make's output in
+/// `compilerOutput`. The Makefile itself must be included in the test setup zip.
+struct MakefileConfig: Codable, Equatable, Sendable {
+    /// The make target to invoke. `nil` runs the default target (bare `make`).
+    let target: String?
+}
+
 /// Top-level manifest describing how to build and test a submission.
 struct TestSetupManifest: Codable, Equatable, Sendable {
     let schemaVersion: Int
@@ -30,4 +40,6 @@ struct TestSetupManifest: Codable, Equatable, Sendable {
     let testSuites: [TestSuiteEntry]
     let limits: ResourceLimits
     let options: ManifestOptions
+    /// If present, `make [target]` is run before tests. Nil means no Makefile step.
+    let makefile: MakefileConfig?
 }

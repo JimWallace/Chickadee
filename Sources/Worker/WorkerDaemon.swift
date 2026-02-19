@@ -48,10 +48,8 @@ struct WorkerCommand: AsyncParsableCommand {
         // Select strategy
         let strategy: BuildStrategy
         switch manifest.language {
-        case .java:
-            strategy = JavaBuildStrategy(runnersDir: runnersDirURL)
-        case .python:
-            fputs("Python support not yet implemented (Phase 3)\n", stderr)
+        case .python, .jupyter:
+            fputs("Python/Jupyter support not yet implemented (Phase 2)\n", stderr)
             throw ExitCode.failure
         }
 
