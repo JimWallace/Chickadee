@@ -10,13 +10,19 @@ let package = Package(
         .package(url: "https://github.com/vapor/vapor.git", from: "4.89.0"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.9.0"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.6.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+        // async-http-client preferred for server-side Swift (better connection pooling).
+        // URLSession used for now; swap in when NIO EventLoopGroup lifecycle is wired up.
+        // .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     ],
     targets: [
         // MARK: - Core library
         .target(
             name: "Core",
-            dependencies: [],
+            dependencies: [
+                .product(name: "Logging", package: "swift-log"),
+            ],
             path: "Sources/Core"
         ),
 
@@ -28,6 +34,7 @@ let package = Package(
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
+                .product(name: "Logging", package: "swift-log"),
             ],
             path: "Sources/APIServer"
         ),
@@ -38,6 +45,7 @@ let package = Package(
             dependencies: [
                 .target(name: "Core"),
                 .product(name: "Vapor", package: "vapor"),
+                .product(name: "Logging", package: "swift-log"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/Worker"

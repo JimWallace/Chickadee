@@ -1,4 +1,6 @@
 // Worker/Strategies/BuildStrategy.swift
+//
+// Spec §7: protocol-based polymorphism; all errors use BuildError.
 
 import Foundation
 import Core
@@ -7,40 +9,16 @@ import Core
 protocol BuildStrategy {
     var language: BuildLanguage { get }
 
-    /// Validate that the runner environment is available
-    /// (e.g. javac is on PATH). Called once at startup.
+    /// Validate that the runner environment is available (e.g. python3 on PATH).
+    /// Throws `BuildError.internalError` if a required tool is missing.
     func preflight() async throws
 
     /// Run the full build + test cycle for a submission.
-    /// - Parameters:
-    ///   - submission: URL of the submission zip file on disk.
-    ///   - testSetup: URL of the directory containing test class files and the manifest.
-    ///   - manifest: Parsed test setup manifest.
-    /// - Returns: The parsed RunnerResult from the runner script.
+    /// - Throws: `BuildError.compileFailure` on a build error reported by the runner;
+    ///   `BuildError.internalError` on infrastructure failures.
     func run(
         submission: URL,
         testSetup: URL,
         manifest: TestSetupManifest
     ) async throws -> RunnerResult
-}
-
-/// Errors thrown by build strategies.
-enum BuildStrategyError: Error, LocalizedError {
-    case toolNotFound(String)
-    case runnerScriptNotFound(URL)
-    case runnerFailed(exitCode: Int32, stderr: String)
-    case invalidRunnerOutput(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .toolNotFound(let tool):
-            return "Required tool not found on PATH: \(tool)"
-        case .runnerScriptNotFound(let url):
-            return "Runner script not found at: \(url.path)"
-        case .runnerFailed(let code, let stderr):
-            return "Runner exited with code \(code): \(stderr)"
-        case .invalidRunnerOutput(let detail):
-            return "Could not parse runner JSON output: \(detail)"
-        }
-    }
 }

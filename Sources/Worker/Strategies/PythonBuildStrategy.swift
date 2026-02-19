@@ -1,26 +1,29 @@
 // Worker/Strategies/PythonBuildStrategy.swift
 //
-// Phase 2 stub — full implementation in Phase 3.
-// Provides a compilable BuildStrategy conformance so the worker daemon
-// can reference it; throws NotImplemented if actually invoked.
+// Phase 2 stub — full runner script implemented in Phase 3.
+// Spec §3: throws BuildError throughout.
+// Spec §8: uses Logger; no fputs()/print().
 
 import Foundation
 import Core
+import Logging
 
 struct PythonBuildStrategy: BuildStrategy {
     let language: BuildLanguage = .python
     let runnersDir: URL
+    var logger: Logger
 
-    init(runnersDir: URL) {
+    init(runnersDir: URL, logger: Logger) {
         self.runnersDir = runnersDir
+        self.logger     = logger
     }
 
     func preflight() async throws {
-        // Verify python3 is available on PATH.
-        let result = try await runCommand("/usr/bin/env", args: ["python3", "--version"])
-        guard result == 0 else {
-            throw BuildStrategyError.toolNotFound("python3")
+        let status = try await runCommand("/usr/bin/env", args: ["python3", "--version"])
+        guard status == 0 else {
+            throw BuildError.internalError("python3 not found on PATH")
         }
+        logger.debug("python3 preflight passed")
     }
 
     func run(
@@ -33,49 +36,54 @@ struct PythonBuildStrategy: BuildStrategy {
             .appendingPathComponent("run_tests.py")
 
         guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-            throw BuildStrategyError.runnerScriptNotFound(scriptURL)
+            throw BuildError.internalError("Runner script not found at \(scriptURL.path)")
         }
 
-        let encoder    = JSONEncoder()
-        let manifestJSON = try String(data: encoder.encode(manifest), encoding: .utf8)!
+        let manifestJSON: String
+        do {
+            let data = try JSONEncoder().encode(manifest)
+            manifestJSON = String(data: data, encoding: .utf8)!
+        } catch {
+            throw BuildError.internalError("Failed to encode manifest", underlying: error)
+        }
 
-        let proc       = Process()
+        let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments     = [
-            "python3", scriptURL.path,
-            submission.path,
-            testSetup.path,
-            manifestJSON
-        ]
+        proc.arguments     = ["python3", scriptURL.path,
+                               submission.path, testSetup.path, manifestJSON]
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         proc.standardOutput = stdoutPipe
         proc.standardError  = stderrPipe
 
-        try proc.run()
+        do {
+            try proc.run()
+        } catch {
+            throw BuildError.internalError("Failed to launch runner", underlying: error)
+        }
         proc.waitUntilExit()
 
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        if !stderrData.isEmpty {
-            fputs(String(data: stderrData, encoding: .utf8) ?? "", stderr)
+        let stderrText = String(
+            data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8) ?? ""
+        if !stderrText.isEmpty {
+            logger.debug("Runner stderr", metadata: ["output": .string(stderrText)])
         }
 
+        // Non-zero exit is an infrastructure error (not a compile failure).
+        // Compile failures are reported inside the JSON with buildStatus "failed".
         guard proc.terminationStatus == 0 else {
-            let errText = String(data: stderrData, encoding: .utf8) ?? ""
-            throw BuildStrategyError.runnerFailed(
-                exitCode: proc.terminationStatus,
-                stderr:   errText
-            )
+            throw BuildError.internalError(
+                "Runner exited with code \(proc.terminationStatus): \(stderrText)")
         }
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
         do {
-            let decoder = JSONDecoder()
-            return try decoder.decode(RunnerResult.self, from: stdoutData)
+            return try JSONDecoder().decode(RunnerResult.self, from: stdoutData)
         } catch {
             let raw = String(data: stdoutData, encoding: .utf8) ?? "<binary>"
-            throw BuildStrategyError.invalidRunnerOutput(raw)
+            throw BuildError.internalError("Cannot parse runner JSON: \(raw)")
         }
     }
 
@@ -84,11 +92,13 @@ struct PythonBuildStrategy: BuildStrategy {
     @discardableResult
     private func runCommand(_ exe: String, args: [String]) async throws -> Int32 {
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: exe)
-        proc.arguments     = args
+        proc.executableURL  = URL(fileURLWithPath: exe)
+        proc.arguments      = args
         proc.standardOutput = FileHandle.nullDevice
         proc.standardError  = FileHandle.nullDevice
-        try proc.run()
+        do { try proc.run() } catch {
+            throw BuildError.internalError("Cannot launch \(exe)", underlying: error)
+        }
         proc.waitUntilExit()
         return proc.terminationStatus
     }

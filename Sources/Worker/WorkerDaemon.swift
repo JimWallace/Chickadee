@@ -1,10 +1,16 @@
 // Worker/WorkerDaemon.swift
 //
-// Phase 2: full actor-based pull loop.
-// Replaces the Phase 1 single-shot CLI stub.
+// Entry point + actor-based pull loop.
+// Spec §2: structured concurrency, AsyncStream, no DispatchQueue/Thread.
+// Spec §3: exhaustive BuildError handling.
+// Spec §4: BuildServerConfig loaded from JSON; CLI flags available as overrides.
+// Spec §6: POSIX file lock for single-instance enforcement.
+// Spec §7: WorkerDaemon depends only on BuildServerBackend protocol.
+// Spec §8: swift-log Logger, no print()/fputs().
 
 import Foundation
 import ArgumentParser
+import Logging
 import Core
 
 // MARK: - Entry point
@@ -16,66 +22,121 @@ struct WorkerCommand: AsyncParsableCommand {
         abstract: "Chickadee build worker — polls the API server and processes submissions"
     )
 
-    @Option(name: .long, help: "Base URL of the API server (e.g. http://localhost:8080)")
-    var apiBaseURL: String = "http://localhost:8080"
+    @Option(name: .long, help: "Path to JSON config file (see BuildServerConfig)")
+    var config: String?
+
+    // Individual flags override config-file values when both are supplied.
+    @Option(name: .long, help: "Base URL of the API server")
+    var apiBaseURL: String?
 
     @Option(name: .long, help: "Unique identifier for this worker instance")
-    var workerID: String = "worker-\(ProcessInfo.processInfo.hostName)"
+    var workerID: String?
 
     @Option(name: .long, help: "Maximum number of concurrent jobs")
-    var maxJobs: Int = 4
+    var maxJobs: Int?
 
     @Option(name: .long, help: "Path to the Runners/ directory")
-    var runnersDir: String = "Runners"
+    var runnersDir: String?
+
+    @Option(name: .long, help: "Path to lock file for single-instance enforcement")
+    var lockFile: String?
+
+    @Option(name: .long, help: "Log level: trace|debug|info|notice|warning|error|critical")
+    var logLevel: String?
 
     mutating func run() async throws {
-        guard let baseURL = URL(string: apiBaseURL) else {
-            fputs("Error: invalid --api-base-url '\(apiBaseURL)'\n", stderr)
-            throw ExitCode.failure
+        // Load base config from file if provided, otherwise build from flags.
+        var cfg: BuildServerConfig
+        if let configPath = config {
+            cfg = try BuildServerConfig.load(from: URL(fileURLWithPath: configPath))
+        } else {
+            guard let rawURL = apiBaseURL, let url = URL(string: rawURL) else {
+                throw ValidationError("--api-base-url is required when --config is not provided")
+            }
+            let defaultLockPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("chickadee-worker.lock")
+            cfg = BuildServerConfig(
+                apiBaseURL:        url,
+                workerID:          workerID ?? "worker-\(ProcessInfo.processInfo.hostName)",
+                maxConcurrentJobs: maxJobs ?? 4,
+                runnersDirectory:  URL(fileURLWithPath: runnersDir ?? "Runners"),
+                lockFilePath:      URL(fileURLWithPath: lockFile ?? defaultLockPath.path)
+            )
         }
 
-        let poller   = JobPoller(
-            apiBaseURL:         baseURL,
-            workerID:           workerID,
-            supportedLanguages: ["python", "jupyter"]
+        // Apply individual flag overrides.
+        if let rawURL = apiBaseURL, let url = URL(string: rawURL) {
+            cfg = BuildServerConfig(apiBaseURL: url, workerID: cfg.workerID,
+                maxConcurrentJobs: cfg.maxConcurrentJobs, runnersDirectory: cfg.runnersDirectory,
+                lockFilePath: cfg.lockFilePath, logLevel: cfg.logLevel,
+                debugDoNotLoop: cfg.debugDoNotLoop)
+        }
+
+        // Bootstrap swift-log.
+        var logger = Logger(label: "edu.umd.cs.buildServer.worker")
+        logger.logLevel = Logger.Level(rawValue: logLevel ?? cfg.logLevel) ?? .info
+
+        // Acquire single-instance lock before doing any real work.
+        let lockHandle: FileHandle
+        do {
+            lockHandle = try acquireLock(at: cfg.lockFilePath)
+        } catch BuildError.alreadyRunning {
+            logger.critical("Another worker is already running — exiting",
+                metadata: ["lockFile": .string(cfg.lockFilePath.path)])
+            throw ExitCode.failure
+        }
+        defer { releaseLock(lockHandle) }
+
+        logger.info("Worker starting",
+            metadata: [
+                "workerID":  .string(cfg.workerID),
+                "apiBase":   .string(cfg.apiBaseURL.absoluteString),
+                "maxJobs":   .string("\(cfg.maxConcurrentJobs)"),
+                "pid":       .string("\(getpid())"),
+            ])
+
+        let backend = DaemonBackend(
+            apiBaseURL:         cfg.apiBaseURL,
+            workerID:           cfg.workerID,
+            supportedLanguages: ["python", "jupyter"],
+            logger:             logger
         )
-        let reporter = Reporter(apiBaseURL: baseURL)
-        let runnersDirURL = URL(fileURLWithPath: runnersDir)
 
         let daemon = WorkerDaemon(
-            poller:      poller,
-            reporter:    reporter,
-            runnersDir:  runnersDirURL,
-            workerID:    workerID,
-            maxConcurrentJobs: maxJobs
+            backend:           backend,
+            runnersDir:        cfg.runnersDirectory,
+            workerID:          cfg.workerID,
+            maxConcurrentJobs: cfg.maxConcurrentJobs,
+            logger:            logger
         )
 
-        fputs("Worker \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs)\n", stderr)
         try await daemon.run()
     }
 }
 
 // MARK: - WorkerDaemon actor
 
+/// Core processing actor.  Depends only on `BuildServerBackend` — never on
+/// `DaemonBackend` directly, enabling TestHarnessBackend substitution in tests.
 actor WorkerDaemon {
-    private let poller:   JobPoller
-    private let reporter: Reporter
+    private let backend: any BuildServerBackend
     private let runnersDir: URL
     private let workerID: String
     private let maxConcurrentJobs: Int
+    private var logger: Logger
 
     init(
-        poller:   JobPoller,
-        reporter: Reporter,
+        backend: any BuildServerBackend,
         runnersDir: URL,
         workerID: String,
-        maxConcurrentJobs: Int
+        maxConcurrentJobs: Int,
+        logger: Logger
     ) {
-        self.poller            = poller
-        self.reporter          = reporter
+        self.backend           = backend
         self.runnersDir        = runnersDir
         self.workerID          = workerID
         self.maxConcurrentJobs = maxConcurrentJobs
+        self.logger            = logger
     }
 
     func run() async throws {
@@ -87,50 +148,91 @@ actor WorkerDaemon {
         }
     }
 
-    // MARK: - Per-worker loop
+    // MARK: - Per-slot loop (spec §2 AsyncStream pattern)
 
     private func workerLoop() async throws {
-        var backoff = ExponentialBackoff(initial: .seconds(1), max: .seconds(30))
-        while true {
-            if let job = try await poller.requestJob() {
-                backoff.reset()
-                do {
-                    try await process(job)
-                } catch {
-                    fputs("[\(workerID)] Error processing job \(job.submissionID): \(error)\n", stderr)
-                }
-            } else {
-                let delay = backoff.next()
-                try await Task.sleep(for: delay)
+        for await job in submissionStream() {
+            do {
+                try await process(job)
+            } catch BuildError.compileFailure(let output) {
+                logger.warning("Compile failure",
+                    metadata: ["submissionID": .string(job.submissionID), "output": .string(output)])
+            } catch BuildError.internalError(let msg, _) {
+                logger.error("Internal error processing job",
+                    metadata: ["submissionID": .string(job.submissionID), "error": .string(msg)])
+                await backend.reportDeath(submissionID: job.submissionID, testSetupID: job.testSetupID)
+            } catch BuildError.networkFailure(let underlying) {
+                logger.error("Network failure, will retry",
+                    metadata: ["submissionID": .string(job.submissionID), "error": .string("\(underlying)")])
+            } catch {
+                logger.error("Unexpected error processing job",
+                    metadata: ["submissionID": .string(job.submissionID), "error": .string("\(error)")])
+                await backend.reportDeath(submissionID: job.submissionID, testSetupID: job.testSetupID)
             }
         }
+    }
+
+    /// Infinite stream of jobs from the API server with exponential backoff + jitter.
+    /// Spec §2: AsyncStream pattern.
+    private func submissionStream() -> AsyncStream<Job> {
+        AsyncStream { continuation in
+            Task {
+                var noWorkCount = 0
+                while true {
+                    do {
+                        if let job = try await backend.fetchSubmission() {
+                            noWorkCount = 0
+                            continuation.yield(job)
+                        } else {
+                            let delay = backoffDuration(noWorkCount: noWorkCount)
+                            noWorkCount += 1
+                            try await Task.sleep(for: delay)
+                        }
+                    } catch BuildError.shutdownRequested {
+                        continuation.finish()
+                        return
+                    } catch {
+                        // Network hiccup — back off and retry.
+                        let delay = backoffDuration(noWorkCount: noWorkCount)
+                        noWorkCount = min(noWorkCount + 1, 4)
+                        try? await Task.sleep(for: delay)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Exponential backoff with jitter.
+    /// Spec §2: cap = min(noWorkCount, 4), base = 1 << cap seconds, jitter up to base.
+    private func backoffDuration(noWorkCount: Int) -> Duration {
+        let cap    = min(noWorkCount, 4)
+        let base   = Duration.seconds(1 << cap)
+        let jitter = Duration.milliseconds(Int.random(in: 0...(1000 * (1 << cap))))
+        return base + jitter
     }
 
     // MARK: - Job processing
 
     private func process(_ job: Job) async throws {
-        fputs("[\(workerID)] Processing submission \(job.submissionID)\n", stderr)
+        logger.info("Processing submission",
+            metadata: ["submissionID": .string(job.submissionID),
+                       "language":     .string(job.manifest.language.rawValue)])
 
-        // Download submission and test-setup zips to temp dirs.
         let workDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)",
+                                    isDirectory: true)
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        defer {
-            try? FileManager.default.removeItem(at: workDir)
-        }
+        defer { try? FileManager.default.removeItem(at: workDir) }
 
         let submissionZip = workDir.appendingPathComponent("submission.zip")
+        let testSetupZip  = workDir.appendingPathComponent("testsetup.zip")
         let testSetupDir  = workDir.appendingPathComponent("testsetup", isDirectory: true)
         try FileManager.default.createDirectory(at: testSetupDir, withIntermediateDirectories: true)
-        let testSetupZip  = workDir.appendingPathComponent("testsetup.zip")
 
-        try await download(url: job.submissionURL, to: submissionZip)
-        try await download(url: job.testSetupURL,  to: testSetupZip)
-
-        // Unzip test setup into testSetupDir.
+        try await backend.downloadSubmission(job, to: submissionZip)
+        try await backend.downloadTestSetup(job,  to: testSetupZip)
         try unzip(testSetupZip, to: testSetupDir)
 
-        // Dispatch to the appropriate strategy.
         let strategy = try strategyFor(job.manifest.language)
         try await strategy.preflight()
 
@@ -141,9 +243,12 @@ actor WorkerDaemon {
         )
 
         let collection = makeCollection(from: result, job: job)
-        try await reporter.report(collection)
+        try await backend.reportResults(collection, for: job)
 
-        fputs("[\(workerID)] Reported result for \(job.submissionID) — \(collection.buildStatus.rawValue)\n", stderr)
+        logger.info("Result reported",
+            metadata: ["submissionID": .string(job.submissionID),
+                       "buildStatus":  .string(collection.buildStatus.rawValue),
+                       "pass":         .string("\(collection.passCount)/\(collection.totalTests)")])
     }
 
     // MARK: - Strategy selection
@@ -151,56 +256,43 @@ actor WorkerDaemon {
     private func strategyFor(_ language: BuildLanguage) throws -> BuildStrategy {
         switch language {
         case .python, .jupyter:
-            return PythonBuildStrategy(runnersDir: runnersDir)
+            return PythonBuildStrategy(runnersDir: runnersDir, logger: logger)
         }
     }
 
     // MARK: - Helpers
 
-    private func download(url: URL, to destination: URL) async throws {
-        let (tmpURL, response) = try await URLSession.shared.download(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw WorkerDaemonError.downloadFailed(url)
-        }
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: tmpURL, to: destination)
-    }
-
     private func unzip(_ zipFile: URL, to directory: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments     = ["-q", zipFile.path, "-d", directory.path]
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw WorkerDaemonError.unzipFailed(zipFile)
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments     = ["-q", zipFile.path, "-d", directory.path]
+        do {
+            try proc.run()
+        } catch {
+            throw BuildError.internalError("Cannot launch unzip", underlying: error)
+        }
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
+            throw BuildError.internalError("unzip exited with code \(proc.terminationStatus)")
         }
     }
 
     private func makeCollection(from result: RunnerResult, job: Job) -> TestOutcomeCollection {
         let outcomes = result.outcomes.map { o in
             TestOutcome(
-                testName:        o.testName,
-                testClass:       o.testClass,
-                tier:            o.tier,
-                status:          o.status,
-                shortResult:     o.shortResult,
-                longResult:      o.longResult,
-                executionTimeMs: o.executionTimeMs,
+                testName:         o.testName,
+                testClass:        o.testClass,
+                tier:             o.tier,
+                status:           o.status,
+                shortResult:      o.shortResult,
+                longResult:       o.longResult,
+                executionTimeMs:  o.executionTimeMs,
                 memoryUsageBytes: o.memoryUsageBytes,
-                score:           nil,
-                attemptNumber:   1,
+                score:            nil,
+                attemptNumber:    1,
                 isFirstPassSuccess: o.status == .pass
             )
         }
-
-        let passCount    = outcomes.filter { $0.status == .pass    }.count
-        let failCount    = outcomes.filter { $0.status == .fail    }.count
-        let errorCount   = outcomes.filter { $0.status == .error   }.count
-        let timeoutCount = outcomes.filter { $0.status == .timeout }.count
-
         return TestOutcomeCollection(
             submissionID:    job.submissionID,
             testSetupID:     job.testSetupID,
@@ -209,55 +301,13 @@ actor WorkerDaemon {
             compilerOutput:  result.compilerOutput,
             outcomes:        outcomes,
             totalTests:      outcomes.count,
-            passCount:       passCount,
-            failCount:       failCount,
-            errorCount:      errorCount,
-            timeoutCount:    timeoutCount,
+            passCount:       outcomes.filter { $0.status == .pass    }.count,
+            failCount:       outcomes.filter { $0.status == .fail    }.count,
+            errorCount:      outcomes.filter { $0.status == .error   }.count,
+            timeoutCount:    outcomes.filter { $0.status == .timeout }.count,
             executionTimeMs: result.executionTimeMs,
             runnerVersion:   result.runnerVersion,
             timestamp:       Date()
         )
-    }
-}
-
-// MARK: - ExponentialBackoff
-
-struct ExponentialBackoff {
-    private let initial: Duration
-    private let max: Duration
-    private var current: Duration
-
-    init(initial: Duration, max: Duration) {
-        self.initial = initial
-        self.max     = max
-        self.current = initial
-    }
-
-    mutating func next() -> Duration {
-        let value = current
-        // Double the delay, capped at max.
-        let doubled = Duration.seconds(
-            min(current.components.seconds * 2, max.components.seconds)
-        )
-        current = doubled
-        return value
-    }
-
-    mutating func reset() {
-        current = initial
-    }
-}
-
-// MARK: - Errors
-
-enum WorkerDaemonError: Error, LocalizedError {
-    case downloadFailed(URL)
-    case unzipFailed(URL)
-
-    var errorDescription: String? {
-        switch self {
-        case .downloadFailed(let url): return "Failed to download \(url)"
-        case .unzipFailed(let url):    return "Failed to unzip \(url.lastPathComponent)"
-        }
     }
 }
