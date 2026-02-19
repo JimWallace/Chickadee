@@ -5,7 +5,7 @@
 /// Note: "Could Not Run" is represented at the collection level
 /// (buildStatus == .failed), not at the individual test level.
 /// Individual tests are only recorded if the build succeeded.
-public enum TestOutcomeStatus: String, Codable, Sendable {
+public enum TestStatus: String, Codable, Sendable {
     case pass       // Test ran and all assertions passed
     case fail       // Test ran and an assertion failed
     case error      // Test ran but threw an unexpected exception/crash
