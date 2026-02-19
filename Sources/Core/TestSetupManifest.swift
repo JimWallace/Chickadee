@@ -5,20 +5,20 @@
 
 /// Entry for a single test suite in the manifest.
 /// `module` is the pytest module name (Python) or notebook filename (Jupyter).
-struct TestSuiteEntry: Codable, Equatable, Sendable {
-    let tier: TestTier
-    let module: String      // Python: pytest module; Jupyter: .ipynb filename
+public struct TestSuiteEntry: Codable, Equatable, Sendable {
+    public let tier: TestTier
+    public let module: String      // Python: pytest module; Jupyter: .ipynb filename
 }
 
 /// Resource limits applied to the runner subprocess.
-struct ResourceLimits: Codable, Equatable, Sendable {
-    let timeLimitSeconds: Int
-    let memoryLimitMb: Int
+public struct ResourceLimits: Codable, Equatable, Sendable {
+    public let timeLimitSeconds: Int
+    public let memoryLimitMb: Int
 }
 
 /// Optional behavioural flags for a test setup.
-struct ManifestOptions: Codable, Equatable, Sendable {
-    let allowPartialCredit: Bool
+public struct ManifestOptions: Codable, Equatable, Sendable {
+    public let allowPartialCredit: Bool
 }
 
 /// Configuration for an optional Makefile step that runs before tests.
@@ -27,19 +27,19 @@ struct ManifestOptions: Codable, Equatable, Sendable {
 /// working directory before executing any test suites. A non-zero exit from
 /// make is reported as `buildStatus: "failed"` with make's output in
 /// `compilerOutput`. The Makefile itself must be included in the test setup zip.
-struct MakefileConfig: Codable, Equatable, Sendable {
+public struct MakefileConfig: Codable, Equatable, Sendable {
     /// The make target to invoke. `nil` runs the default target (bare `make`).
-    let target: String?
+    public let target: String?
 }
 
 /// Top-level manifest describing how to build and test a submission.
-struct TestSetupManifest: Codable, Equatable, Sendable {
-    let schemaVersion: Int
-    let language: BuildLanguage
-    let requiredFiles: [String]
-    let testSuites: [TestSuiteEntry]
-    let limits: ResourceLimits
-    let options: ManifestOptions
+public struct TestSetupManifest: Codable, Equatable, Sendable {
+    public let schemaVersion: Int
+    public let language: BuildLanguage
+    public let requiredFiles: [String]
+    public let testSuites: [TestSuiteEntry]
+    public let limits: ResourceLimits
+    public let options: ManifestOptions
     /// If present, `make [target]` is run before tests. Nil means no Makefile step.
-    let makefile: MakefileConfig?
+    public let makefile: MakefileConfig?
 }
