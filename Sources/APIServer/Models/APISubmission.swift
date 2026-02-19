@@ -3,6 +3,8 @@
 import Fluent
 import Vapor
 
+// @unchecked Sendable: Fluent's Model property wrappers are not Sendable.
+// Access is always through async Fluent/Vapor contexts which ensure safety.
 final class APISubmission: Model, Content, @unchecked Sendable {
     static let schema = "submissions"
 
