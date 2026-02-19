@@ -7,13 +7,27 @@
 import Foundation
 
 /// A unit of work handed to a worker after it wins a polling request.
-struct Job: Codable, Sendable {
-    let submissionID: String
-    let testSetupID: String
+public struct Job: Codable, Sendable {
+    public let submissionID: String
+    public let testSetupID: String
     /// URL the worker should GET to download the submission zip.
-    let submissionURL: URL
+    public let submissionURL: URL
     /// URL the worker should GET to download the test-setup zip.
-    let testSetupURL: URL
+    public let testSetupURL: URL
     /// Parsed manifest — avoids a second round-trip to fetch it separately.
-    let manifest: TestSetupManifest
+    public let manifest: TestSetupManifest
+
+    public init(
+        submissionID: String,
+        testSetupID: String,
+        submissionURL: URL,
+        testSetupURL: URL,
+        manifest: TestSetupManifest
+    ) {
+        self.submissionID  = submissionID
+        self.testSetupID   = testSetupID
+        self.submissionURL = submissionURL
+        self.testSetupURL  = testSetupURL
+        self.manifest      = manifest
+    }
 }

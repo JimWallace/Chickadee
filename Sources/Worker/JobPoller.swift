@@ -19,7 +19,7 @@ struct JobPoller: Sendable {
     }()
 
     /// POST /api/v1/worker/request → Job, or nil when no work is available.
-    func requestJob() async throws -> Job? {
+    func requestJob() async throws -> Core.Job? {
         let url     = apiBaseURL.appendingPathComponent("api/v1/worker/request")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -42,7 +42,7 @@ struct JobPoller: Sendable {
         case 200:
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(Job.self, from: data)
+            return try decoder.decode(Core.Job.self, from: data)
         case 204:
             return nil
         default:

@@ -234,13 +234,13 @@ struct ExponentialBackoff {
     }
 
     mutating func next() -> Duration {
-        let value = current
-        // Double the delay, capped at max.
-        let doubled = Duration.seconds(
-            min(current.components.seconds * 2, max.components.seconds)
-        )
-        current = doubled
-        return value
+        // Double the cap, capped at max.
+        let doubled = min(current.components.seconds * 2, max.components.seconds)
+        current = Duration.seconds(doubled)
+        // Full jitter: pick uniformly in [0, cap] to avoid thundering herd
+        // when multiple worker loops wake up simultaneously.
+        let jittered = Double.random(in: 0...Double(doubled))
+        return Duration.seconds(jittered)
     }
 
     mutating func reset() {
