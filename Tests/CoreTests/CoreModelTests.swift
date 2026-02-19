@@ -119,7 +119,7 @@ final class CoreModelTests: XCTestCase {
         XCTAssertTrue(result.outcomes.isEmpty)
     }
 
-    // MARK: - TestSetupManifest (Python)
+    // MARK: - TestSetupManifest (Python, no Makefile)
 
     func testPythonManifestRoundTrip() throws {
         let json = """
@@ -144,10 +144,57 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(manifest.testSuites[0].tier, .pub)
         XCTAssertEqual(manifest.limits.timeLimitSeconds, 10)
         XCTAssertFalse(manifest.options.allowPartialCredit)
+        XCTAssertNil(manifest.makefile)
 
         let reencoded = try encoder.encode(manifest)
         let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
         XCTAssertEqual(manifest, redecoded)
+    }
+
+    // MARK: - TestSetupManifest (Python, with Makefile)
+
+    func testPythonManifestWithMakefileRoundTrip() throws {
+        let json = """
+        {
+          "schemaVersion": 1,
+          "language": "python",
+          "requiredFiles": ["warmup.py"],
+          "testSuites": [
+            { "tier": "public", "module": "test_public" }
+          ],
+          "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
+          "options": { "allowPartialCredit": false },
+          "makefile": { "target": "build" }
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
+        XCTAssertNotNil(manifest.makefile)
+        XCTAssertEqual(manifest.makefile?.target, "build")
+
+        let reencoded = try encoder.encode(manifest)
+        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
+        XCTAssertEqual(manifest, redecoded)
+    }
+
+    func testPythonManifestWithDefaultMakeTarget() throws {
+        let json = """
+        {
+          "schemaVersion": 1,
+          "language": "python",
+          "requiredFiles": ["warmup.py"],
+          "testSuites": [
+            { "tier": "public", "module": "test_public" }
+          ],
+          "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
+          "options": { "allowPartialCredit": false },
+          "makefile": { "target": null }
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
+        XCTAssertNotNil(manifest.makefile)
+        XCTAssertNil(manifest.makefile?.target)  // bare `make`, no target
     }
 
     // MARK: - TestSetupManifest (Jupyter)
