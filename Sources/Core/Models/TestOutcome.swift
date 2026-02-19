@@ -21,7 +21,6 @@ public struct TestOutcome: Codable, Equatable, Sendable {
     public let memoryUsageBytes: Int?  // gamification — null if not measured yet
 
     // MARK: - Gamification (future-ready, nullable now)
-    public let score: Double?          // 0.0–1.0 for partial credit; null = binary
     public let attemptNumber: Int      // Which attempt this was (starts at 1)
     public let isFirstPassSuccess: Bool // true if passed on attempt 1
 
@@ -34,7 +33,6 @@ public struct TestOutcome: Codable, Equatable, Sendable {
         longResult: String?,
         executionTimeMs: Int,
         memoryUsageBytes: Int?,
-        score: Double?,
         attemptNumber: Int,
         isFirstPassSuccess: Bool
     ) {
@@ -46,7 +44,6 @@ public struct TestOutcome: Codable, Equatable, Sendable {
         self.longResult          = longResult
         self.executionTimeMs     = executionTimeMs
         self.memoryUsageBytes    = memoryUsageBytes
-        self.score               = score
         self.attemptNumber       = attemptNumber
         self.isFirstPassSuccess  = isFirstPassSuccess
     }

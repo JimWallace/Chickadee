@@ -33,9 +33,9 @@ struct TestSetupRoutes: RouteCollection {
         // Validate manifest JSON and schema version.
         let manifestData = Data(upload.manifest.utf8)
         let decoder      = JSONDecoder()
-        let manifest: TestSetupManifest
+        let manifest: TestProperties
         do {
-            manifest = try decoder.decode(TestSetupManifest.self, from: manifestData)
+            manifest = try decoder.decode(TestProperties.self, from: manifestData)
         } catch {
             throw Abort(.unprocessableEntity, reason: "Invalid manifest JSON: \(error)")
         }
@@ -60,13 +60,12 @@ struct TestSetupRoutes: RouteCollection {
 
         let setup = APITestSetup(
             id:       setupID,
-            language: manifest.language.rawValue,
             manifest: storedManifest,
             zipPath:  zipPath
         )
         try await setup.save(on: req.db)
 
-        req.logger.info("Stored test setup \(setupID) for language \(manifest.language.rawValue)")
+        req.logger.info("Stored test setup \(setupID)")
 
         let responseBody = try JSONEncoder().encode(["testSetupID": setupID])
         return Response(
@@ -92,7 +91,7 @@ struct TestSetupRoutes: RouteCollection {
 // MARK: - Multipart form
 
 struct TestSetupUpload: Content {
-    /// Raw JSON text of the TestSetupManifest.
+    /// Raw JSON text of the TestProperties.
     var manifest: String
     /// Raw bytes of the test-setup zip file.
     var files: Data

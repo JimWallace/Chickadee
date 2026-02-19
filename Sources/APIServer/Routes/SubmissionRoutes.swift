@@ -1,9 +1,4 @@
 // APIServer/Routes/SubmissionRoutes.swift
-//
-// Phase 2: job-request endpoint.
-// Workers POST here to claim the next pending submission that matches
-// their supported languages.  Returns a Job (200) or 204 if nothing
-// is pending.
 
 import Vapor
 import Fluent
@@ -17,7 +12,7 @@ struct SubmissionRoutes: RouteCollection {
         // POST /api/v1/worker/request
         api.grouped("worker").post("request", use: requestJob)
 
-        // POST /api/v1/submissions  (instructor / client submits work)
+        // POST /api/v1/submissions
         api.post("submissions", use: createSubmission)
     }
 
@@ -27,31 +22,29 @@ struct SubmissionRoutes: RouteCollection {
     func requestJob(req: Request) async throws -> Response {
         let body = try req.content.decode(WorkerRequestBody.self)
 
-        // Find the oldest pending submission whose language the worker supports.
+        // Find the oldest pending submission.
         guard
             let submission = try await APISubmission.query(on: req.db)
                 .filter(\.$status == "pending")
-                .filter(\.$language ~~ body.supportedLanguages)
                 .sort(\.$submittedAt, .ascending)
                 .first()
         else {
             return Response(status: .noContent)
         }
 
-        // Claim it atomically: mark as assigned.
+        // Claim it atomically.
         submission.status     = "assigned"
         submission.workerID   = body.workerID
         submission.assignedAt = Date()
         try await submission.save(on: req.db)
 
-        // Fetch the matching test setup so we can embed the manifest.
         guard let setup = try await APITestSetup.find(submission.testSetupID, on: req.db) else {
             throw Abort(.internalServerError, reason: "TestSetup \(submission.testSetupID) not found")
         }
 
         let manifestData = Data(setup.manifest.utf8)
         let decoder      = JSONDecoder()
-        let manifest     = try decoder.decode(TestSetupManifest.self, from: manifestData)
+        let manifest     = try decoder.decode(TestProperties.self, from: manifestData)
 
         let baseURL = req.application.http.server.configuration.hostname
         let port    = req.application.http.server.configuration.port
@@ -82,12 +75,10 @@ struct SubmissionRoutes: RouteCollection {
     func createSubmission(req: Request) async throws -> SubmissionCreatedResponse {
         let body = try req.content.decode(CreateSubmissionBody.self)
 
-        // Validate the referenced test setup exists.
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
         }
 
-        // Save the zip.
         let submissionsDir = req.application.submissionsDirectory
         let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
         let zipPath        = submissionsDir + "\(subID).zip"
@@ -102,7 +93,6 @@ struct SubmissionRoutes: RouteCollection {
         let submission = APISubmission(
             id:          subID,
             testSetupID: setup.id!,
-            language:    setup.language,
             zipPath:     zipPath
         )
         try await submission.save(on: req.db)
@@ -111,7 +101,7 @@ struct SubmissionRoutes: RouteCollection {
     }
 }
 
-// MARK: - GET /api/v1/submissions/:id/download  (download submission zip)
+// MARK: - GET /api/v1/submissions/:id/download
 
 struct SubmissionDownloadRoute: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -134,13 +124,12 @@ struct SubmissionDownloadRoute: RouteCollection {
 
 struct WorkerRequestBody: Content {
     let workerID: String
-    let supportedLanguages: [String]
     let hostname: String?
 }
 
 struct CreateSubmissionBody: Content {
     let testSetupID: String
-    let zipBase64: String       // base-64 encoded zip contents
+    let zipBase64: String
 }
 
 struct SubmissionCreatedResponse: Content {

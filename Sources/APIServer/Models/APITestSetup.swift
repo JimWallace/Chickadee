@@ -10,11 +10,8 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
     @ID(custom: "id", generatedBy: .user)
     var id: String?
 
-    @Field(key: "language")
-    var language: String
-
     @Field(key: "manifest")
-    var manifest: String        // JSON blob of TestSetupManifest
+    var manifest: String        // JSON blob of TestProperties
 
     @Field(key: "zip_path")
     var zipPath: String
@@ -24,9 +21,8 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: String, language: String, manifest: String, zipPath: String) {
+    init(id: String, manifest: String, zipPath: String) {
         self.id       = id
-        self.language = language
         self.manifest = manifest
         self.zipPath  = zipPath
     }

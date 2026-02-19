@@ -7,7 +7,6 @@ struct CreateSubmissions: AsyncMigration {
         try await database.schema("submissions")
             .field("id",           .string, .identifier(auto: false))
             .field("test_setup_id",.string, .required)
-            .field("language",     .string, .required)
             .field("status",       .string, .required)
             .field("worker_id",    .string)
             .field("zip_path",     .string, .required)
