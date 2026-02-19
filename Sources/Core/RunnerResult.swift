@@ -6,22 +6,22 @@
 
 /// A single test outcome as reported by a runner script.
 /// Does not include gamification fields — those are added by the worker.
-struct RunnerOutcome: Codable, Equatable, Sendable {
-    let testName: String
-    let testClass: String?
-    let tier: TestTier
-    let status: TestOutcomeStatus
-    let shortResult: String
-    let longResult: String?
-    let executionTimeMs: Int
-    let memoryUsageBytes: Int?
+public struct RunnerOutcome: Codable, Equatable, Sendable {
+    public let testName: String
+    public let testClass: String?
+    public let tier: TestTier
+    public let status: TestOutcomeStatus
+    public let shortResult: String
+    public let longResult: String?
+    public let executionTimeMs: Int
+    public let memoryUsageBytes: Int?
 }
 
 /// The top-level document written to stdout by every runner script.
-struct RunnerResult: Codable, Equatable, Sendable {
-    let runnerVersion: String
-    let buildStatus: BuildStatus
-    let compilerOutput: String?
-    let executionTimeMs: Int
-    let outcomes: [RunnerOutcome]
+public struct RunnerResult: Codable, Equatable, Sendable {
+    public let runnerVersion: String
+    public let buildStatus: BuildStatus
+    public let compilerOutput: String?
+    public let executionTimeMs: Int
+    public let outcomes: [RunnerOutcome]
 }

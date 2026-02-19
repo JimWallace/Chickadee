@@ -1,4 +1,4 @@
-<img src="Assets/chickadee-icon.png" alt="Chickadee mascot" width="160" align="right">
+<img src="Assets/chickadee-icon-alt.png" alt="Chickadee mascot" width="160" align="right">
 
 # Chickadee
 

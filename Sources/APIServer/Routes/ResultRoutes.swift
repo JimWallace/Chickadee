@@ -22,8 +22,8 @@ struct ResultRoutes: RouteCollection {
 
         let collection: TestOutcomeCollection
         do {
-            let body = try req.body.collect().get()
-            guard let data = body.getData(at: 0, length: body.readableBytes) else {
+            var buffer = try await req.body.collect(upTo: req.application.routes.defaultMaxBodySize.value)
+            guard let data = buffer.readData(length: buffer.readableBytes) else {
                 throw Abort(.badRequest, reason: "Empty request body")
             }
             collection = try decoder.decode(TestOutcomeCollection.self, from: data)
@@ -32,9 +32,9 @@ struct ResultRoutes: RouteCollection {
         }
 
         // Persist to DB and disk concurrently.
-        async let dbSave   = persistToDB(collection, on: req)
-        async let diskSave = persistToDisk(collection, on: req)
-        _ = try await (dbSave, diskSave)
+        async let db: Void   = persistToDB(collection, on: req)
+        async let disk: Void = persistToDisk(collection, on: req)
+        try await (db, disk)
 
         // Advance the submission's state machine to "complete".
         if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {

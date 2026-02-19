@@ -311,3 +311,45 @@ actor WorkerDaemon {
         )
     }
 }
+
+// MARK: - ExponentialBackoff
+
+struct ExponentialBackoff {
+    private let initial: Duration
+    private let max: Duration
+    private var current: Duration
+
+    init(initial: Duration, max: Duration) {
+        self.initial = initial
+        self.max     = max
+        self.current = initial
+    }
+
+    mutating func next() -> Duration {
+        // Double the cap, capped at max.
+        let doubled = min(current.components.seconds * 2, max.components.seconds)
+        current = Duration.seconds(doubled)
+        // Full jitter: pick uniformly in [0, cap] to avoid thundering herd
+        // when multiple worker loops wake up simultaneously.
+        let jittered = Double.random(in: 0...Double(doubled))
+        return Duration.seconds(jittered)
+    }
+
+    mutating func reset() {
+        current = initial
+    }
+}
+
+// MARK: - Errors
+
+enum WorkerDaemonError: Error, LocalizedError {
+    case downloadFailed(URL)
+    case unzipFailed(URL)
+
+    var errorDescription: String? {
+        switch self {
+        case .downloadFailed(let url): return "Failed to download \(url)"
+        case .unzipFailed(let url):    return "Failed to unzip \(url.lastPathComponent)"
+        }
+    }
+}
