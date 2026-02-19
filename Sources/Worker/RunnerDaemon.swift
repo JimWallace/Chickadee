@@ -1,7 +1,4 @@
-// Worker/WorkerDaemon.swift
-//
-// Phase 2: full actor-based pull loop.
-// Replaces the Phase 1 single-shot CLI stub.
+// Worker/RunnerDaemon.swift
 
 import Foundation
 import ArgumentParser
@@ -25,28 +22,21 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum number of concurrent jobs")
     var maxJobs: Int = 4
 
-    @Option(name: .long, help: "Path to the Runners/ directory")
-    var runnersDir: String = "Runners"
-
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
             fputs("Error: invalid --api-base-url '\(apiBaseURL)'\n", stderr)
             throw ExitCode.failure
         }
 
-        let poller   = JobPoller(
-            apiBaseURL:         baseURL,
-            workerID:           workerID,
-            supportedLanguages: ["python", "jupyter"]
-        )
+        let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID)
         let reporter = Reporter(apiBaseURL: baseURL)
-        let runnersDirURL = URL(fileURLWithPath: runnersDir)
+        let runner   = UnsandboxedScriptRunner()
 
         let daemon = WorkerDaemon(
-            poller:      poller,
-            reporter:    reporter,
-            runnersDir:  runnersDirURL,
-            workerID:    workerID,
+            poller:            poller,
+            reporter:          reporter,
+            runner:            runner,
+            workerID:          workerID,
             maxConcurrentJobs: maxJobs
         )
 
@@ -60,20 +50,20 @@ struct WorkerCommand: AsyncParsableCommand {
 actor WorkerDaemon {
     private let poller:   JobPoller
     private let reporter: Reporter
-    private let runnersDir: URL
+    private let runner:   any ScriptRunner
     private let workerID: String
     private let maxConcurrentJobs: Int
 
     init(
         poller:   JobPoller,
         reporter: Reporter,
-        runnersDir: URL,
+        runner:   any ScriptRunner,
         workerID: String,
         maxConcurrentJobs: Int
     ) {
         self.poller            = poller
         self.reporter          = reporter
-        self.runnersDir        = runnersDir
+        self.runner            = runner
         self.workerID          = workerID
         self.maxConcurrentJobs = maxConcurrentJobs
     }
@@ -111,51 +101,141 @@ actor WorkerDaemon {
     private func process(_ job: Job) async throws {
         fputs("[\(workerID)] Processing submission \(job.submissionID)\n", stderr)
 
-        // Download submission and test-setup zips to temp dirs.
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        defer {
-            try? FileManager.default.removeItem(at: workDir)
-        }
+        defer { try? FileManager.default.removeItem(at: workDir) }
 
+        // Download and unzip both zips.
         let submissionZip = workDir.appendingPathComponent("submission.zip")
+        let testSetupZip  = workDir.appendingPathComponent("testsetup.zip")
         let testSetupDir  = workDir.appendingPathComponent("testsetup", isDirectory: true)
         try FileManager.default.createDirectory(at: testSetupDir, withIntermediateDirectories: true)
-        let testSetupZip  = workDir.appendingPathComponent("testsetup.zip")
 
         try await download(url: job.submissionURL, to: submissionZip)
         try await download(url: job.testSetupURL,  to: testSetupZip)
-
-        // Unzip test setup into testSetupDir.
         try unzip(testSetupZip, to: testSetupDir)
 
-        // Dispatch to the appropriate strategy.
-        let strategy = try strategyFor(job.manifest.language)
-        try await strategy.preflight()
+        let manifest = job.manifest
 
-        let result = try await strategy.run(
-            submission: submissionZip,
-            testSetup:  testSetupDir,
-            manifest:   job.manifest
-        )
+        // Copy required submission files into the test setup dir so scripts can reference them.
+        try unzip(submissionZip, to: testSetupDir)
 
-        let collection = makeCollection(from: result, job: job)
+        // Optional make step.
+        if let makefile = manifest.makefile {
+            try runMake(in: testSetupDir, target: makefile.target)
+        }
+
+        // Run each test script and collect outcomes.
+        var outcomes: [TestOutcome] = []
+        for entry in manifest.testSuites {
+            let scriptURL = testSetupDir.appendingPathComponent(entry.script)
+            guard FileManager.default.fileExists(atPath: scriptURL.path) else {
+                fputs("[\(workerID)] Warning: script not found: \(entry.script)\n", stderr)
+                continue
+            }
+
+            let output = await runner.run(
+                script:           scriptURL,
+                workDir:          testSetupDir,
+                timeLimitSeconds: manifest.timeLimitSeconds
+            )
+
+            let isFirstAttempt = true  // attempt tracking comes in Phase 5
+            let outcome = interpretOutput(output, entry: entry, attemptNumber: 1, isFirstAttempt: isFirstAttempt)
+            outcomes.append(outcome)
+        }
+
+        let collection = makeCollection(outcomes: outcomes, job: job)
         try await reporter.report(collection)
 
         fputs("[\(workerID)] Reported result for \(job.submissionID) — \(collection.buildStatus.rawValue)\n", stderr)
     }
 
-    // MARK: - Strategy selection
+    // MARK: - Script output interpretation
 
-    private func strategyFor(_ language: BuildLanguage) throws -> BuildStrategy {
-        switch language {
-        case .python, .jupyter:
-            return PythonBuildStrategy(runnersDir: runnersDir)
+    private func interpretOutput(
+        _ output: ScriptOutput,
+        entry: TestSuiteEntry,
+        attemptNumber: Int,
+        isFirstAttempt: Bool
+    ) -> TestOutcome {
+        let status: TestOutcomeStatus
+        if output.timedOut {
+            status = .timeout
+        } else {
+            switch output.exitCode {
+            case 0:  status = .pass
+            case 1:  status = .fail
+            default: status = .error
+            }
         }
+
+        // Parse the last non-empty stdout line as optional JSON for score/shortResult.
+        let lastLine = output.stdout
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last(where: { !$0.isEmpty })
+
+        var shortResult: String
+
+        if let line = lastLine,
+           let data = line.data(using: .utf8),
+           let json = try? JSONDecoder().decode(ScriptResultJSON.self, from: data) {
+            shortResult = json.shortResult ?? status.defaultShortResult
+            // json.score reserved for Phase 5 gamification
+        } else if let line = lastLine {
+            shortResult = line
+        } else {
+            shortResult = status.defaultShortResult
+        }
+
+        let longResult = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return TestOutcome(
+            testName:           String(entry.script.dropLast(entry.script.hasSuffix(".sh") ? 3 : 0)),
+            testClass:          nil,
+            tier:               entry.tier,
+            status:             status,
+            shortResult:        shortResult,
+            longResult:         longResult.isEmpty ? nil : longResult,
+            executionTimeMs:    output.executionTimeMs,
+            memoryUsageBytes:   nil,
+            attemptNumber:      attemptNumber,
+            isFirstPassSuccess: isFirstAttempt && status == .pass
+        )
     }
 
-    // MARK: - Helpers
+    // MARK: - Collection assembly
+
+    private func makeCollection(outcomes: [TestOutcome], job: Job) -> TestOutcomeCollection {
+        let passCount    = outcomes.filter { $0.status == .pass    }.count
+        let failCount    = outcomes.filter { $0.status == .fail    }.count
+        let errorCount   = outcomes.filter { $0.status == .error   }.count
+        let timeoutCount = outcomes.filter { $0.status == .timeout }.count
+        let totalMs      = outcomes.reduce(0) { $0 + $1.executionTimeMs }
+
+        let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
+
+        return TestOutcomeCollection(
+            submissionID:    job.submissionID,
+            testSetupID:     job.testSetupID,
+            attemptNumber:   1,
+            buildStatus:     buildStatus,
+            compilerOutput:  nil,
+            outcomes:        outcomes,
+            totalTests:      outcomes.count,
+            passCount:       passCount,
+            failCount:       failCount,
+            errorCount:      errorCount,
+            timeoutCount:    timeoutCount,
+            executionTimeMs: totalMs,
+            runnerVersion:   "shell-runner/1.0",
+            timestamp:       Date()
+        )
+    }
+
+    // MARK: - Subprocess helpers
 
     private func download(url: URL, to destination: URL) async throws {
         let (tmpURL, response) = try await URLSession.shared.download(from: url)
@@ -169,54 +249,47 @@ actor WorkerDaemon {
     }
 
     private func unzip(_ zipFile: URL, to directory: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments     = ["-q", zipFile.path, "-d", directory.path]
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments     = ["-q", "-o", zipFile.path, "-d", directory.path]
+        try proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
             throw WorkerDaemonError.unzipFailed(zipFile)
         }
     }
 
-    private func makeCollection(from result: RunnerResult, job: Job) -> TestOutcomeCollection {
-        let outcomes = result.outcomes.map { o in
-            TestOutcome(
-                testName:        o.testName,
-                testClass:       o.testClass,
-                tier:            o.tier,
-                status:          o.status,
-                shortResult:     o.shortResult,
-                longResult:      o.longResult,
-                executionTimeMs: o.executionTimeMs,
-                memoryUsageBytes: o.memoryUsageBytes,
-                score:           nil,
-                attemptNumber:   1,
-                isFirstPassSuccess: o.status == .pass
-            )
+    private func runMake(in directory: URL, target: String?) throws {
+        let proc = Process()
+        proc.executableURL   = URL(fileURLWithPath: "/usr/bin/make")
+        proc.arguments       = target.map { [$0] } ?? []
+        proc.currentDirectoryURL = directory
+        try proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
+            throw WorkerDaemonError.makeFailed(target)
         }
+    }
+}
 
-        let passCount    = outcomes.filter { $0.status == .pass    }.count
-        let failCount    = outcomes.filter { $0.status == .fail    }.count
-        let errorCount   = outcomes.filter { $0.status == .error   }.count
-        let timeoutCount = outcomes.filter { $0.status == .timeout }.count
+// MARK: - Script result JSON (optional last-line protocol)
 
-        return TestOutcomeCollection(
-            submissionID:    job.submissionID,
-            testSetupID:     job.testSetupID,
-            attemptNumber:   1,
-            buildStatus:     result.buildStatus,
-            compilerOutput:  result.compilerOutput,
-            outcomes:        outcomes,
-            totalTests:      outcomes.count,
-            passCount:       passCount,
-            failCount:       failCount,
-            errorCount:      errorCount,
-            timeoutCount:    timeoutCount,
-            executionTimeMs: result.executionTimeMs,
-            runnerVersion:   result.runnerVersion,
-            timestamp:       Date()
-        )
+/// Scripts may optionally write this as their last stdout line to report a score.
+private struct ScriptResultJSON: Decodable {
+    let score: Double?
+    let shortResult: String?
+}
+
+// MARK: - Helpers
+
+private extension TestOutcomeStatus {
+    var defaultShortResult: String {
+        switch self {
+        case .pass:    return "passed"
+        case .fail:    return "failed"
+        case .error:   return "error"
+        case .timeout: return "timed out"
+        }
     }
 }
 
@@ -234,11 +307,8 @@ struct ExponentialBackoff {
     }
 
     mutating func next() -> Duration {
-        // Double the cap, capped at max.
         let doubled = min(current.components.seconds * 2, max.components.seconds)
         current = Duration.seconds(doubled)
-        // Full jitter: pick uniformly in [0, cap] to avoid thundering herd
-        // when multiple worker loops wake up simultaneously.
         let jittered = Double.random(in: 0...Double(doubled))
         return Duration.seconds(jittered)
     }
@@ -253,11 +323,13 @@ struct ExponentialBackoff {
 enum WorkerDaemonError: Error, LocalizedError {
     case downloadFailed(URL)
     case unzipFailed(URL)
+    case makeFailed(String?)
 
     var errorDescription: String? {
         switch self {
-        case .downloadFailed(let url): return "Failed to download \(url)"
-        case .unzipFailed(let url):    return "Failed to unzip \(url.lastPathComponent)"
+        case .downloadFailed(let url):  return "Failed to download \(url)"
+        case .unzipFailed(let url):     return "Failed to unzip \(url.lastPathComponent)"
+        case .makeFailed(let target):   return "make \(target ?? "") failed"
         }
     }
 }

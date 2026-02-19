@@ -17,14 +17,15 @@ needed, but the architecture has been redesigned from scratch.
 Three components, each in its own Swift target:
 
 - **APIServer** — Vapor app. Exposes REST endpoints for workers and instructors.
-- **Worker** — Daemon process. Pulls jobs, runs builds and tests in sandboxed
+- **Worker** — Daemon process. Pulls jobs, runs shell-script test suites in
   subprocesses, reports structured results back to the API server.
 - **Core** — Shared models and types. No Vapor dependency. Both APIServer and
   Worker depend on this.
 
-Language-specific build/test logic lives in **runner scripts** under `Runners/`
-(not in Swift). The Swift worker spawns these as subprocesses and parses their
-JSON output. This means adding a new language never requires changes to Swift code.
+Test suites are **shell scripts** bundled by the instructor inside the test
+setup zip. The Swift worker runs each script generically — no language-specific
+code paths exist. Adding a new language means writing a new shell script; no
+Swift changes are required.
 
 Full project structure and component diagrams are in `docs/architecture.md`.
 
@@ -32,27 +33,61 @@ Full project structure and component diagrams are in `docs/architecture.md`.
 
 ## Key Design Decisions
 
-**Runner protocol over JUnit XML.** All language runners write a single JSON
-document to stdout. The Swift worker parses this. Runners must never write
-anything else to stdout — use stderr for diagnostics.
+**Shell scripts, not language runners.** Each test suite is a `.sh` file at the
+root of the instructor's test setup zip. The worker runs them with `/bin/sh`
+and interprets the exit code. No per-language runners, no runner JSON protocol.
+
+**Instructor bundles the helper library.** Any helper library (Swift, Python,
+etc.) is included in the test setup zip by the instructor. The worker does not
+inject anything.
 
 **Build failure lives at the collection level, not the test level.** If the
-build fails, `buildStatus` is `"failed"` and `outcomes` is `[]`. There is no
-`couldNotRun` state on individual test outcomes.
+build fails (e.g. `make` step fails), `buildStatus` is `"failed"` and
+`outcomes` is `[]`. There is no `couldNotRun` state on individual test outcomes.
 
 **Test outcomes have four states only:** `pass`, `fail`, `error`, `timeout`.
 
 **Three test tiers:** `public` (shown immediately), `release` (hidden until
 deadline), `secret` (never shown), `student` (student-written tests).
 
-**Gamification fields are present from day one but nullable.** `score`,
-`memoryUsageBytes`, `attemptNumber`, `isFirstPassSuccess` are in the schema
-now so we never need a migration later. They can be null/zero until the
-feature is built.
+**Gamification fields are present from day one but nullable.** `memoryUsageBytes`,
+`attemptNumber`, `isFirstPassSuccess` are in the schema now so we never need a
+migration later. They can be null/zero until the feature is built. No partial
+credit — `score` is not used.
+
+**`ScriptRunner` is the sandbox boundary.** `UnsandboxedScriptRunner` is used
+in Phase 1. Phase 4 adds `SandboxedScriptRunner` implementing the same protocol
+without changing any callers.
 
 **Subprocess boundary for all language execution.** Swift never imports a JVM,
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
+
+---
+
+## Test Script Contract
+
+Each test suite is a shell script run with `/bin/sh <script>` from the test
+setup directory as the working directory.
+
+| Exit code | Meaning |
+|-----------|---------|
+| 0 | pass |
+| 1 | fail |
+| 2 | error |
+| killed (SIGKILL after timeout) | timeout |
+
+**stdout:** Everything is ignored except the last non-empty line, which is
+attempted as JSON:
+```json
+{ "score": 0.75, "shortResult": "3/4 cases passed" }
+```
+If the last line is not valid JSON, it is used as the plain-text `shortResult`.
+If stdout is empty, `shortResult` is synthesized from the exit code
+("passed" / "failed" / "error"). `score` is reserved for Phase 5 (partial
+credit) and ignored for now.
+
+**stderr:** Captured verbatim as `longResult` (nil if empty).
 
 ---
 
@@ -75,28 +110,18 @@ enum TestTier: String, Codable {
 }
 ```
 
-### BuildLanguage
-```swift
-enum BuildLanguage: String, Codable {
-    case java
-    case python
-    // others added here as runners are written
-}
-```
-
 ### TestOutcome
 Single test case result. All fields present from day one.
 ```swift
 struct TestOutcome: Codable {
     let testName: String
-    let testClass: String?          // nil for Python
+    let testClass: String?          // always nil (shell scripts have no class)
     let tier: TestTier
     let status: TestOutcomeStatus
     let shortResult: String
     let longResult: String?
     let executionTimeMs: Int
     let memoryUsageBytes: Int?      // nullable until measured
-    let score: Double?              // 0.0–1.0, nullable until partial credit built
     let attemptNumber: Int
     let isFirstPassSuccess: Bool
 }
@@ -118,64 +143,31 @@ struct TestOutcomeCollection: Codable {
     let errorCount: Int
     let timeoutCount: Int
     let executionTimeMs: Int
-    let runnerVersion: String
+    let runnerVersion: String       // "shell-runner/1.0"
     let timestamp: Date
 }
 ```
 
-### TestSetupManifest
-Replaces the original Java `test.properties` file. Stored as JSON inside the
-instructor-uploaded test setup zip.
+### TestProperties
+Stored as `test.properties.json` inside the instructor-uploaded test setup zip.
 
 ```json
 {
   "schemaVersion": 1,
-  "language": "java",
-  "requiredFiles": ["src/Warmup.java"],
+  "requiredFiles": ["warmup.py"],
   "testSuites": [
-    { "tier": "public",  "className": "PublicTests"  },
-    { "tier": "release", "className": "ReleaseTests" },
-    { "tier": "student", "className": "StudentTests" }
+    { "tier": "public",  "script": "test_bit_count.sh"  },
+    { "tier": "release", "script": "test_first_digit.sh" },
+    { "tier": "student", "script": "test_student.sh" }
   ],
-  "limits": {
-    "timeLimitSeconds": 10,
-    "memoryLimitMb": 256
-  },
-  "options": {
-    "allowPartialCredit": false
-  }
+  "timeLimitSeconds": 10,
+  "makefile": null
 }
 ```
 
----
-
-## Runner JSON Protocol
-
-Every runner must write exactly this structure to stdout and nothing else.
-
-```json
-{
-  "runnerVersion": "java-runner/1.0",
-  "buildStatus": "passed",
-  "compilerOutput": null,
-  "executionTimeMs": 342,
-  "outcomes": [
-    {
-      "testName": "testBitCount",
-      "testClass": "PublicTests",
-      "tier": "public",
-      "status": "pass",
-      "shortResult": "passed",
-      "longResult": null,
-      "executionTimeMs": 12,
-      "memoryUsageBytes": null
-    }
-  ]
-}
-```
-
-On build failure, `outcomes` is `[]` and `compilerOutput` contains the
-compiler error text.
+`makefile` is optional. When present, a `make` step runs before the test
+scripts. If `target` is `null`, bare `make` is invoked; otherwise
+`make <target>` is used.
 
 ---
 
@@ -209,20 +201,17 @@ All endpoints use `application/json` except the multipart upload.
 
 ## Current Phase
 
-**Phase 1 — Core pipeline.**
+**Phase 2 — Full REST API and worker pull loop.**
 
 Goals for this phase:
-1. `Package.swift` with three targets: `Core`, `Worker`, `APIServer`
-2. All `Core/` models with full `Codable` conformances and unit tests
-3. `RunnerResult` — the Swift type that maps from runner JSON output
-4. `TestSetupManifest` parser
-5. `JavaBuildStrategy` — spawns `Runners/java/run_tests.sh`, parses output
-6. `WorkerDaemon` — basic loop, no sandbox yet
-7. `POST /api/v1/worker/results` — accepts and stores a `TestOutcomeCollection`
-8. End-to-end test: submit a zip manually, get a JSON result
-
-Do not work ahead into Phase 2 (full API, test setup management) until
-Phase 1 has a working end-to-end path.
+1. `POST /api/v1/testsetups` — multipart upload, store zip + manifest in DB ✓
+2. `GET /api/v1/testsetups/:id/download` — stream zip to worker ✓
+3. `POST /api/v1/submissions` — accept student submission zip ✓
+4. `POST /api/v1/worker/request` — worker polls for pending jobs ✓
+5. `POST /api/v1/worker/results` — worker reports `TestOutcomeCollection` ✓
+6. `WorkerDaemon` pull loop with exponential backoff ✓
+7. `ScriptRunner` protocol + `UnsandboxedScriptRunner` ✓
+8. End-to-end: upload test setup → submit code → worker runs scripts → results stored
 
 ---
 
@@ -230,25 +219,23 @@ Phase 1 has a working end-to-end path.
 
 | Phase | Focus |
 |-------|-------|
-| 1 | Core models, Java runner, basic worker loop, single result endpoint |
-| 2 | Full REST API, test setup upload and storage, worker pull loop |
-| 3 | Python runner and PythonBuildStrategy |
-| 4 | Sandboxing (macOS first, then Linux) |
+| 1 | Core models, basic worker loop, single result endpoint |
+| 2 | Full REST API, test setup upload and storage, worker pull loop, shell-script runner |
+| 3 | Submission result retrieval API, student-facing endpoints |
+| 4 | Sandboxing (macOS first via Sandbox profiles, then Linux) |
 | 5 | Gamification — attempt tracking, leaderboards, partial credit |
 
 ---
 
 ## What Not To Do
 
-- Do not add a database dependency in Phase 1. Write results to disk as JSON.
-- Do not implement sandboxing in Phase 1.
-- Do not add authentication in Phase 1.
+- Do not implement sandboxing in Phase 1 or 2.
+- Do not add authentication in Phase 1 or 2.
 - Do not import Vapor in `Core/`.
-- Do not parse JUnit XML. The Java runner handles that internally and emits
-  the canonical JSON protocol.
-- Do not use `ObjectOutputStream` or any Java serialization format anywhere.
+- Do not add per-language build strategies — test suites are plain shell scripts.
 - Do not add `CouldNotRun` as a `TestOutcomeStatus`. Build failures are
   represented at the collection level.
+- Do not write a runner JSON protocol — the worker interprets exit codes directly.
 
 ---
 

@@ -15,14 +15,14 @@ public struct Job: Codable, Sendable {
     /// URL the worker should GET to download the test-setup zip.
     public let testSetupURL: URL
     /// Parsed manifest — avoids a second round-trip to fetch it separately.
-    public let manifest: TestSetupManifest
+    public let manifest: TestProperties
 
     public init(
         submissionID: String,
         testSetupID: String,
         submissionURL: URL,
         testSetupURL: URL,
-        manifest: TestSetupManifest
+        manifest: TestProperties
     ) {
         self.submissionID  = submissionID
         self.testSetupID   = testSetupID

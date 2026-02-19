@@ -12,9 +12,6 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @Field(key: "test_setup_id")
     var testSetupID: String
 
-    @Field(key: "language")
-    var language: String
-
     @Field(key: "status")
     var status: String          // pending | assigned | complete | failed
 
@@ -35,13 +32,11 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     init(
         id: String,
         testSetupID: String,
-        language: String,
         zipPath: String,
         status: String = "pending"
     ) {
         self.id          = id
         self.testSetupID = testSetupID
-        self.language    = language
         self.zipPath     = zipPath
         self.status      = status
     }

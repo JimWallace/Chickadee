@@ -9,7 +9,6 @@ import Core
 struct JobPoller: Sendable {
     let apiBaseURL: URL
     let workerID: String
-    let supportedLanguages: [String]
 
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.default
@@ -26,9 +25,8 @@ struct JobPoller: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body = WorkerRequestPayload(
-            workerID:           workerID,
-            supportedLanguages: supportedLanguages,
-            hostname:           ProcessInfo.processInfo.hostName
+            workerID: workerID,
+            hostname: ProcessInfo.processInfo.hostName
         )
         request.httpBody = try JSONEncoder().encode(body)
 
@@ -56,7 +54,6 @@ struct JobPoller: Sendable {
 
 private struct WorkerRequestPayload: Encodable {
     let workerID: String
-    let supportedLanguages: [String]
     let hostname: String
 }
 

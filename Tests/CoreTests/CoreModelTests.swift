@@ -42,186 +42,75 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(TestTier.student.rawValue, "student")
     }
 
-    // MARK: - BuildLanguage
+    // MARK: - TestProperties (no Makefile)
 
-    func testBuildLanguageRoundTrip() throws {
-        for lang in [BuildLanguage.python, .jupyter] {
-            let data = try encoder.encode(lang)
-            let decoded = try decoder.decode(BuildLanguage.self, from: data)
-            XCTAssertEqual(lang, decoded)
-        }
-    }
-
-    // MARK: - RunnerResult (success)
-
-    func testRunnerResultSuccessRoundTrip() throws {
-        let json = """
-        {
-          "runnerVersion": "python-runner/1.0",
-          "buildStatus": "passed",
-          "compilerOutput": null,
-          "executionTimeMs": 342,
-          "outcomes": [
-            {
-              "testName": "test_bit_count",
-              "testClass": null,
-              "tier": "public",
-              "status": "pass",
-              "shortResult": "passed",
-              "longResult": null,
-              "executionTimeMs": 12,
-              "memoryUsageBytes": null
-            },
-            {
-              "testName": "test_first_digit",
-              "testClass": null,
-              "tier": "release",
-              "status": "fail",
-              "shortResult": "AssertionError: expected 2, got 8",
-              "longResult": "AssertionError: expected 2, got 8\\n  File test_release.py, line 14",
-              "executionTimeMs": 8,
-              "memoryUsageBytes": null
-            }
-          ]
-        }
-        """.data(using: .utf8)!
-
-        let result = try decoder.decode(RunnerResult.self, from: json)
-        XCTAssertEqual(result.buildStatus, .passed)
-        XCTAssertNil(result.compilerOutput)
-        XCTAssertEqual(result.outcomes.count, 2)
-        XCTAssertEqual(result.outcomes[0].testName, "test_bit_count")
-        XCTAssertEqual(result.outcomes[0].status, .pass)
-        XCTAssertEqual(result.outcomes[1].status, .fail)
-
-        // Round-trip
-        let reencoded = try encoder.encode(result)
-        let redecoded = try decoder.decode(RunnerResult.self, from: reencoded)
-        XCTAssertEqual(result, redecoded)
-    }
-
-    // MARK: - RunnerResult (import error / setup failure)
-
-    func testRunnerResultSetupFailureHasEmptyOutcomes() throws {
-        let json = """
-        {
-          "runnerVersion": "python-runner/1.0",
-          "buildStatus": "failed",
-          "compilerOutput": "ImportError: cannot import name 'warmup' from 'warmup'",
-          "executionTimeMs": 0,
-          "outcomes": []
-        }
-        """.data(using: .utf8)!
-
-        let result = try decoder.decode(RunnerResult.self, from: json)
-        XCTAssertEqual(result.buildStatus, .failed)
-        XCTAssertNotNil(result.compilerOutput)
-        XCTAssertTrue(result.outcomes.isEmpty)
-    }
-
-    // MARK: - TestSetupManifest (Python, no Makefile)
-
-    func testPythonManifestRoundTrip() throws {
+    func testTestPropertiesRoundTrip() throws {
         let json = """
         {
           "schemaVersion": 1,
-          "language": "python",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
-            { "tier": "public",  "module": "test_public"  },
-            { "tier": "release", "module": "test_release" }
+            { "tier": "public",  "script": "test_bit_count.sh"  },
+            { "tier": "release", "script": "test_first_digit.sh" }
           ],
-          "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
-          "options": { "allowPartialCredit": false }
+          "timeLimitSeconds": 10
         }
         """.data(using: .utf8)!
 
-        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
-        XCTAssertEqual(manifest.language, .python)
+        let manifest = try decoder.decode(TestProperties.self, from: json)
+        XCTAssertEqual(manifest.schemaVersion, 1)
         XCTAssertEqual(manifest.requiredFiles, ["warmup.py"])
         XCTAssertEqual(manifest.testSuites.count, 2)
-        XCTAssertEqual(manifest.testSuites[0].module, "test_public")
+        XCTAssertEqual(manifest.testSuites[0].script, "test_bit_count.sh")
         XCTAssertEqual(manifest.testSuites[0].tier, .pub)
-        XCTAssertEqual(manifest.limits.timeLimitSeconds, 10)
-        XCTAssertFalse(manifest.options.allowPartialCredit)
+        XCTAssertEqual(manifest.timeLimitSeconds, 10)
         XCTAssertNil(manifest.makefile)
 
         let reencoded = try encoder.encode(manifest)
-        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
+        let redecoded = try decoder.decode(TestProperties.self, from: reencoded)
         XCTAssertEqual(manifest, redecoded)
     }
 
-    // MARK: - TestSetupManifest (Python, with Makefile)
+    // MARK: - TestProperties (with Makefile)
 
-    func testPythonManifestWithMakefileRoundTrip() throws {
+    func testTestPropertiesWithMakefileRoundTrip() throws {
         let json = """
         {
           "schemaVersion": 1,
-          "language": "python",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
-            { "tier": "public", "module": "test_public" }
+            { "tier": "public", "script": "test_bit_count.sh" }
           ],
-          "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
-          "options": { "allowPartialCredit": false },
+          "timeLimitSeconds": 10,
           "makefile": { "target": "build" }
         }
         """.data(using: .utf8)!
 
-        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
+        let manifest = try decoder.decode(TestProperties.self, from: json)
         XCTAssertNotNil(manifest.makefile)
         XCTAssertEqual(manifest.makefile?.target, "build")
 
         let reencoded = try encoder.encode(manifest)
-        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
+        let redecoded = try decoder.decode(TestProperties.self, from: reencoded)
         XCTAssertEqual(manifest, redecoded)
     }
 
-    func testPythonManifestWithDefaultMakeTarget() throws {
+    func testTestPropertiesWithDefaultMakeTarget() throws {
         let json = """
         {
           "schemaVersion": 1,
-          "language": "python",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
-            { "tier": "public", "module": "test_public" }
+            { "tier": "public", "script": "test_bit_count.sh" }
           ],
-          "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
-          "options": { "allowPartialCredit": false },
+          "timeLimitSeconds": 10,
           "makefile": { "target": null }
         }
         """.data(using: .utf8)!
 
-        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
+        let manifest = try decoder.decode(TestProperties.self, from: json)
         XCTAssertNotNil(manifest.makefile)
         XCTAssertNil(manifest.makefile?.target)  // bare `make`, no target
-    }
-
-    // MARK: - TestSetupManifest (Jupyter)
-
-    func testJupyterManifestRoundTrip() throws {
-        let json = """
-        {
-          "schemaVersion": 1,
-          "language": "jupyter",
-          "requiredFiles": ["warmup.ipynb"],
-          "testSuites": [
-            { "tier": "public",  "module": "test_public.ipynb"  },
-            { "tier": "release", "module": "test_release.ipynb" }
-          ],
-          "limits": { "timeLimitSeconds": 30, "memoryLimitMb": 512 },
-          "options": { "allowPartialCredit": false }
-        }
-        """.data(using: .utf8)!
-
-        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
-        XCTAssertEqual(manifest.language, .jupyter)
-        XCTAssertEqual(manifest.requiredFiles, ["warmup.ipynb"])
-        XCTAssertEqual(manifest.testSuites[0].module, "test_public.ipynb")
-
-        let reencoded = try encoder.encode(manifest)
-        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
-        XCTAssertEqual(manifest, redecoded)
     }
 
     // MARK: - TestOutcomeCollection
@@ -236,7 +125,6 @@ final class CoreModelTests: XCTestCase {
             longResult: nil,
             executionTimeMs: 5,
             memoryUsageBytes: nil,
-            score: nil,
             attemptNumber: 1,
             isFirstPassSuccess: true
         )
@@ -253,7 +141,7 @@ final class CoreModelTests: XCTestCase {
             errorCount: 0,
             timeoutCount: 0,
             executionTimeMs: 100,
-            runnerVersion: "python-runner/1.0",
+            runnerVersion: "shell-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
 
@@ -272,7 +160,7 @@ final class CoreModelTests: XCTestCase {
             testSetupID: "setup_001",
             attemptNumber: 1,
             buildStatus: .failed,
-            compilerOutput: "ImportError: cannot import name 'warmup'",
+            compilerOutput: "Script not found: test_foo.sh",
             outcomes: [],
             totalTests: 0,
             passCount: 0,
@@ -280,7 +168,7 @@ final class CoreModelTests: XCTestCase {
             errorCount: 0,
             timeoutCount: 0,
             executionTimeMs: 0,
-            runnerVersion: "python-runner/1.0",
+            runnerVersion: "shell-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
 
@@ -288,6 +176,6 @@ final class CoreModelTests: XCTestCase {
         let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
         XCTAssertEqual(decoded.buildStatus, .failed)
         XCTAssertTrue(decoded.outcomes.isEmpty)
-        XCTAssertEqual(decoded.compilerOutput, "ImportError: cannot import name 'warmup'")
+        XCTAssertEqual(decoded.compilerOutput, "Script not found: test_foo.sh")
     }
 }
