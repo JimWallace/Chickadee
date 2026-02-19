@@ -4,11 +4,10 @@
 // zip uploaded by the instructor.
 
 /// Entry for a single test suite in the manifest.
-/// Uses optional fields to accommodate both Java (className) and Python (module).
+/// `module` is the pytest module name (Python) or notebook filename (Jupyter).
 struct TestSuiteEntry: Codable, Equatable, Sendable {
     let tier: TestTier
-    let className: String?  // Java: JUnit class name
-    let module: String?     // Python: pytest module name
+    let module: String      // Python: pytest module; Jupyter: .ipynb filename
 }
 
 /// Resource limits applied to the runner subprocess.

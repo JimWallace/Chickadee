@@ -45,7 +45,7 @@ final class CoreModelTests: XCTestCase {
     // MARK: - BuildLanguage
 
     func testBuildLanguageRoundTrip() throws {
-        for lang in [BuildLanguage.java, .python] {
+        for lang in [BuildLanguage.python, .jupyter] {
             let data = try encoder.encode(lang)
             let decoded = try decoder.decode(BuildLanguage.self, from: data)
             XCTAssertEqual(lang, decoded)
@@ -57,14 +57,14 @@ final class CoreModelTests: XCTestCase {
     func testRunnerResultSuccessRoundTrip() throws {
         let json = """
         {
-          "runnerVersion": "java-runner/1.0",
+          "runnerVersion": "python-runner/1.0",
           "buildStatus": "passed",
           "compilerOutput": null,
           "executionTimeMs": 342,
           "outcomes": [
             {
-              "testName": "testBitCount",
-              "testClass": "PublicTests",
+              "testName": "test_bit_count",
+              "testClass": null,
               "tier": "public",
               "status": "pass",
               "shortResult": "passed",
@@ -73,12 +73,12 @@ final class CoreModelTests: XCTestCase {
               "memoryUsageBytes": null
             },
             {
-              "testName": "testFirstDigit",
-              "testClass": "ReleaseTests",
+              "testName": "test_first_digit",
+              "testClass": null,
               "tier": "release",
               "status": "fail",
-              "shortResult": "expected:<2> but was:<8>",
-              "longResult": "AssertionFailedError at line 45",
+              "shortResult": "AssertionError: expected 2, got 8",
+              "longResult": "AssertionError: expected 2, got 8\\n  File test_release.py, line 14",
               "executionTimeMs": 8,
               "memoryUsageBytes": null
             }
@@ -90,7 +90,7 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(result.buildStatus, .passed)
         XCTAssertNil(result.compilerOutput)
         XCTAssertEqual(result.outcomes.count, 2)
-        XCTAssertEqual(result.outcomes[0].testName, "testBitCount")
+        XCTAssertEqual(result.outcomes[0].testName, "test_bit_count")
         XCTAssertEqual(result.outcomes[0].status, .pass)
         XCTAssertEqual(result.outcomes[1].status, .fail)
 
@@ -100,14 +100,14 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(result, redecoded)
     }
 
-    // MARK: - RunnerResult (build failure)
+    // MARK: - RunnerResult (import error / setup failure)
 
-    func testRunnerResultBuildFailureHasEmptyOutcomes() throws {
+    func testRunnerResultSetupFailureHasEmptyOutcomes() throws {
         let json = """
         {
-          "runnerVersion": "java-runner/1.0",
+          "runnerVersion": "python-runner/1.0",
           "buildStatus": "failed",
-          "compilerOutput": "Warmup.java:12: error: ';' expected",
+          "compilerOutput": "ImportError: cannot import name 'warmup' from 'warmup'",
           "executionTimeMs": 0,
           "outcomes": []
         }
@@ -115,40 +115,8 @@ final class CoreModelTests: XCTestCase {
 
         let result = try decoder.decode(RunnerResult.self, from: json)
         XCTAssertEqual(result.buildStatus, .failed)
-        XCTAssertEqual(result.compilerOutput, "Warmup.java:12: error: ';' expected")
+        XCTAssertNotNil(result.compilerOutput)
         XCTAssertTrue(result.outcomes.isEmpty)
-    }
-
-    // MARK: - TestSetupManifest (Java)
-
-    func testJavaManifestRoundTrip() throws {
-        let json = """
-        {
-          "schemaVersion": 1,
-          "language": "java",
-          "requiredFiles": ["src/Warmup.java"],
-          "testSuites": [
-            { "tier": "public",     "className": "PublicTests",  "module": null },
-            { "tier": "release", "className": "ReleaseTests", "module": null },
-            { "tier": "student", "className": "StudentTests", "module": null }
-          ],
-          "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
-          "options": { "allowPartialCredit": false }
-        }
-        """.data(using: .utf8)!
-
-        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
-        XCTAssertEqual(manifest.language, .java)
-        XCTAssertEqual(manifest.requiredFiles, ["src/Warmup.java"])
-        XCTAssertEqual(manifest.testSuites.count, 3)
-        XCTAssertEqual(manifest.testSuites[0].className, "PublicTests")
-        XCTAssertNil(manifest.testSuites[0].module)
-        XCTAssertEqual(manifest.limits.timeLimitSeconds, 10)
-        XCTAssertFalse(manifest.options.allowPartialCredit)
-
-        let reencoded = try encoder.encode(manifest)
-        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
-        XCTAssertEqual(manifest, redecoded)
     }
 
     // MARK: - TestSetupManifest (Python)
@@ -160,8 +128,8 @@ final class CoreModelTests: XCTestCase {
           "language": "python",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
-            { "tier": "public",     "module": "test_public",  "className": null },
-            { "tier": "release", "module": "test_release", "className": null }
+            { "tier": "public",  "module": "test_public"  },
+            { "tier": "release", "module": "test_release" }
           ],
           "limits": { "timeLimitSeconds": 10, "memoryLimitMb": 256 },
           "options": { "allowPartialCredit": false }
@@ -170,16 +138,51 @@ final class CoreModelTests: XCTestCase {
 
         let manifest = try decoder.decode(TestSetupManifest.self, from: json)
         XCTAssertEqual(manifest.language, .python)
+        XCTAssertEqual(manifest.requiredFiles, ["warmup.py"])
+        XCTAssertEqual(manifest.testSuites.count, 2)
         XCTAssertEqual(manifest.testSuites[0].module, "test_public")
-        XCTAssertNil(manifest.testSuites[0].className)
+        XCTAssertEqual(manifest.testSuites[0].tier, .pub)
+        XCTAssertEqual(manifest.limits.timeLimitSeconds, 10)
+        XCTAssertFalse(manifest.options.allowPartialCredit)
+
+        let reencoded = try encoder.encode(manifest)
+        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
+        XCTAssertEqual(manifest, redecoded)
+    }
+
+    // MARK: - TestSetupManifest (Jupyter)
+
+    func testJupyterManifestRoundTrip() throws {
+        let json = """
+        {
+          "schemaVersion": 1,
+          "language": "jupyter",
+          "requiredFiles": ["warmup.ipynb"],
+          "testSuites": [
+            { "tier": "public",  "module": "test_public.ipynb"  },
+            { "tier": "release", "module": "test_release.ipynb" }
+          ],
+          "limits": { "timeLimitSeconds": 30, "memoryLimitMb": 512 },
+          "options": { "allowPartialCredit": false }
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try decoder.decode(TestSetupManifest.self, from: json)
+        XCTAssertEqual(manifest.language, .jupyter)
+        XCTAssertEqual(manifest.requiredFiles, ["warmup.ipynb"])
+        XCTAssertEqual(manifest.testSuites[0].module, "test_public.ipynb")
+
+        let reencoded = try encoder.encode(manifest)
+        let redecoded = try decoder.decode(TestSetupManifest.self, from: reencoded)
+        XCTAssertEqual(manifest, redecoded)
     }
 
     // MARK: - TestOutcomeCollection
 
     func testTestOutcomeCollectionRoundTrip() throws {
         let outcome = TestOutcome(
-            testName: "testFoo",
-            testClass: "PublicTests",
+            testName: "test_foo",
+            testClass: nil,
             tier: .pub,
             status: .pass,
             shortResult: "passed",
@@ -203,7 +206,7 @@ final class CoreModelTests: XCTestCase {
             errorCount: 0,
             timeoutCount: 0,
             executionTimeMs: 100,
-            runnerVersion: "java-runner/1.0",
+            runnerVersion: "python-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
 
@@ -212,7 +215,7 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(decoded.submissionID, "sub_001")
         XCTAssertEqual(decoded.buildStatus, .passed)
         XCTAssertEqual(decoded.outcomes.count, 1)
-        XCTAssertEqual(decoded.outcomes[0].testName, "testFoo")
+        XCTAssertEqual(decoded.outcomes[0].testName, "test_foo")
         XCTAssertTrue(decoded.outcomes[0].isFirstPassSuccess)
     }
 
@@ -222,7 +225,7 @@ final class CoreModelTests: XCTestCase {
             testSetupID: "setup_001",
             attemptNumber: 1,
             buildStatus: .failed,
-            compilerOutput: "error: ';' expected",
+            compilerOutput: "ImportError: cannot import name 'warmup'",
             outcomes: [],
             totalTests: 0,
             passCount: 0,
@@ -230,7 +233,7 @@ final class CoreModelTests: XCTestCase {
             errorCount: 0,
             timeoutCount: 0,
             executionTimeMs: 0,
-            runnerVersion: "java-runner/1.0",
+            runnerVersion: "python-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
 
@@ -238,6 +241,6 @@ final class CoreModelTests: XCTestCase {
         let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
         XCTAssertEqual(decoded.buildStatus, .failed)
         XCTAssertTrue(decoded.outcomes.isEmpty)
-        XCTAssertEqual(decoded.compilerOutput, "error: ';' expected")
+        XCTAssertEqual(decoded.compilerOutput, "ImportError: cannot import name 'warmup'")
     }
 }

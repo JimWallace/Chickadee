@@ -32,8 +32,8 @@ Three Swift targets share a clean dependency boundary:
                    │  subprocess + sandbox
         ┌──────────┴──────────┐
         ▼                     ▼
-  Runners/java/         Runners/python/
-  run_tests.sh          run_tests.py
+  Runners/python/       Runners/jupyter/
+  run_tests.py          run_tests.py
   (emit JSON)           (emit JSON)
 ```
 
@@ -50,7 +50,7 @@ Three Swift targets share a clean dependency boundary:
 | Language | Swift 6 (strict concurrency) |
 | Web framework | Vapor 4 |
 | Concurrency | `async/await`, actors, structured task groups |
-| Test runners | JUnit 3/4/5 (Java), pytest (Python) |
+| Test runners | pytest (Python), nbmake (Jupyter Notebook) |
 | Sandboxing | `sandbox-exec` (macOS), seccomp + user namespaces (Linux) |
 | Build tool | Swift Package Manager |
 
@@ -65,8 +65,8 @@ Chickadee/
 │   ├── APIServer/     # Vapor app and REST routes
 │   └── Worker/        # Job poller, build strategies, sandbox
 ├── Runners/
-│   ├── java/          # run_tests.sh + MarmosetRunner.java (JUnit shim)
-│   └── python/        # run_tests.py (pytest wrapper)
+│   ├── python/        # run_tests.py (pytest wrapper)
+│   └── jupyter/       # run_tests.py (nbmake wrapper)
 ├── Tests/
 │   ├── CoreTests/     # Round-trip JSON encode/decode for all models
 │   ├── APITests/      # XCTVapor integration tests
@@ -108,14 +108,14 @@ Every language runner writes a single JSON document to stdout when it finishes. 
 
 ```json
 {
-  "runnerVersion": "java-runner/1.0",
+  "runnerVersion": "python-runner/1.0",
   "buildStatus": "passed",
   "compilerOutput": null,
   "executionTimeMs": 342,
   "outcomes": [
     {
-      "testName": "testBitCount",
-      "testClass": "PublicTests",
+      "testName": "test_bit_count",
+      "testClass": null,
       "tier": "public",
       "status": "pass",
       "shortResult": "passed",
@@ -146,9 +146,9 @@ On build failure, `buildStatus` is `"failed"`, `compilerOutput` contains the com
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 1 | Core models, Java runner, Worker CLI stub, `POST /results` | Complete |
+| 1 | Core models, Worker CLI stub, `POST /results` | Complete |
 | 2 | Full REST API, test setup upload, Worker pull loop | Up next |
-| 3 | Python runner and `PythonBuildStrategy` | Planned |
+| 3 | Python and Jupyter runners, `PythonBuildStrategy`, `JupyterBuildStrategy` | Planned |
 | 4 | Sandboxing — macOS first, then Linux | Planned |
 | 5 | Gamification — attempt tracking, leaderboards, partial credit | Planned |
 
