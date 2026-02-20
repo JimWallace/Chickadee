@@ -1,0 +1,66 @@
+#extend("base"):
+#export("title"):
+Submission #(submissionID)
+#endexport
+#export("content"):
+<div id="submission-root" data-submission-id="#(submissionID)" data-pending="#(isPending)">
+
+<div class="submission-header">
+    <h1>Submission <code>#(submissionID)</code></h1>
+    <p class="submission-meta">
+        Attempt #(attemptNumber) ·
+        <a href="/testsetups/#(testSetupID)/submit">← Submit again</a>
+    </p>
+</div>
+
+#if(isPending):
+<div class="pending-box">
+    <div class="spinner"></div>
+    <p>Waiting for a worker to pick up your submission…</p>
+</div>
+
+#elseif(buildFailed):
+<div class="error-box">
+    <h2>Build failed</h2>
+    #if(compilerOutput):
+    <pre class="compiler-output">#(compilerOutput)</pre>
+    #endif
+</div>
+
+#else:
+<p class="score">#(passCount) / #(totalTests) passed
+    <span class="exec-time">(#(executionTimeMs) ms total)</span>
+</p>
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Test</th>
+            <th>Tier</th>
+            <th>Result</th>
+            <th>ms</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(outcome in outcomes):
+        <tr class="status-#(outcome.status)">
+            <td><code>#(outcome.testName)</code></td>
+            <td><span class="tier">#(outcome.tier)</span></td>
+            <td>
+                #(outcome.shortResult)
+                #if(outcome.longResult):
+                <details>
+                    <summary>details</summary>
+                    <pre>#(outcome.longResult)</pre>
+                </details>
+                #endif
+            </td>
+            <td class="time">#(outcome.executionTimeMs)</td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+
+</div>
+#endexport
+#endextend
