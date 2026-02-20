@@ -3,6 +3,7 @@
 import Vapor
 import Fluent
 import FluentSQLiteDriver
+import Leaf
 import Foundation
 
 @main
@@ -35,6 +36,11 @@ func configure(_ app: Application) throws {
     app.storage[ResultsDirectoryKey.self]     = resultsDir
     app.storage[TestSetupsDirectoryKey.self]  = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
+
+    // MARK: - Views + static files
+
+    app.views.use(.leaf)
+    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
 
     // MARK: - Database
 

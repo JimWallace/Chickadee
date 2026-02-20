@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>#import("title") — Chickadee</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="nav">
+    <a class="nav-brand" href="/">Chickadee</a>
+    <a class="nav-link" href="/testsetups/new">Upload Setup</a>
+</nav>
+<main class="main">
+    #import("content")
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

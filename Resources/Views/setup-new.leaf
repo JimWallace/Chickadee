@@ -1,0 +1,23 @@
+#extend("base"):
+#export("title"):
+Upload Test Setup
+#endexport
+#export("content"):
+<h1>Upload Test Setup</h1>
+<form class="form" method="post" action="/testsetups/new" enctype="multipart/form-data">
+    <label class="form-label">
+        Manifest JSON
+        <textarea class="form-input" name="manifest" rows="12" required
+            placeholder='{"schemaVersion":1,"requiredFiles":["warmup.py"],"testSuites":[{"tier":"public","script":"test_public.sh"}],"timeLimitSeconds":10,"makefile":null}'></textarea>
+    </label>
+    <label class="form-label">
+        Test Setup Zip
+        <input class="form-input" type="file" name="files" accept=".zip" required>
+    </label>
+    <div>
+        <button class="btn btn-primary" type="submit">Upload</button>
+        <a class="btn" href="/">Cancel</a>
+    </div>
+</form>
+#endexport
+#endextend

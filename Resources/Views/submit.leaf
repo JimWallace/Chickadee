@@ -1,0 +1,20 @@
+#extend("base"):
+#export("title"):
+Submit Code
+#endexport
+#export("content"):
+<h1>Submit to <code>#(testSetupID)</code></h1>
+<form class="form" id="submit-form" method="post"
+    action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
+    <div class="drop-zone" id="drop-zone">
+        <p>Drag your submission zip here, or click to choose a file</p>
+        <input type="file" name="files" id="file-input" accept=".zip" required>
+    </div>
+    <p class="drop-filename" id="drop-filename"></p>
+    <div>
+        <button class="btn btn-primary" type="submit">Submit</button>
+        <a class="btn" href="/">Cancel</a>
+    </div>
+</form>
+#endexport
+#endextend

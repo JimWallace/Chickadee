@@ -1,0 +1,23 @@
+#extend("base"):
+#export("title"):
+Assignments
+#endexport
+#export("content"):
+<h1>Assignments</h1>
+#if(setups.isEmpty):
+<p class="empty">No test setups uploaded yet. <a href="/testsetups/new">Upload one</a>.</p>
+#else:
+<ul class="card-list">
+#for(setup in setups):
+<li class="card">
+    <div class="card-body">
+        <h2 class="card-title">#(setup.id)</h2>
+        <p class="card-meta">#(setup.suiteCount) test suite(s) · #(setup.createdAt)</p>
+    </div>
+    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit">Submit</a>
+</li>
+#endfor
+</ul>
+#endif
+#endexport
+#endextend
