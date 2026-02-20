@@ -387,8 +387,9 @@ with a Leaf template. Form submissions use standard HTML `POST` — no JavaScrip
 required for the core flows.
 
 ```
-GET  /                           Login page (leaf: login.leaf)
-POST /login                      Authenticate, set session cookie, redirect
+GET  /                           Landing page — "Sign in with UWaterloo" button
+GET  /auth/start                 Redirect to UWaterloo Azure AD authorization URL
+GET  /auth/callback              Exchange code for tokens, upsert user, start session
 POST /logout                     Clear session, redirect to /
 
 GET  /dashboard                  Student: enrolled courses + assignments
@@ -489,9 +490,10 @@ users
   id           TEXT PRIMARY KEY
   name         TEXT NOT NULL
   email        TEXT NOT NULL UNIQUE
-  role         TEXT NOT NULL   -- "student" | "instructor"
-  passwordHash TEXT NOT NULL
+  oauthSubject TEXT NOT NULL UNIQUE  -- "sub" claim from UWaterloo's ID token
+  role         TEXT NOT NULL         -- "student" | "instructor"
   createdAt    DATETIME
+  -- no passwordHash: credentials are managed entirely by UWaterloo
 
 sessions
   id        TEXT PRIMARY KEY   -- random token stored in cookie
@@ -521,10 +523,40 @@ submissions gains:
   studentID  TEXT               -- FK → users.id (nullable for worker-only submissions)
 ```
 
-**Authentication:** Vapor's built-in `SessionsMiddleware` with a `sessions`
-table. Login sets a signed cookie; the middleware validates it on every
-protected route. `Bcrypt` for password hashing (already in Vapor's crypto
-package — no new dependency).
+**Authentication:** UWaterloo uses **Microsoft Azure AD / Entra ID** as its
+identity provider, which speaks standard **OAuth 2.0 + OpenID Connect (OIDC)**.
+No passwords are stored or managed by Chickadee.
+
+Login flow:
+1. User clicks "Sign in with UWaterloo" → Vapor redirects to Azure AD
+2. User authenticates with WatIAM credentials on UWaterloo's servers
+3. Azure AD redirects to `GET /auth/callback?code=...`
+4. Vapor exchanges the code for tokens via `req.client` (built-in HTTP client)
+5. ID token (a JWT) validated with `vapor/jwt-kit` against Azure AD's public
+   keys, fetched from UWaterloo's OIDC discovery endpoint
+6. `sub` claim uniquely identifies the user; `email` and `name` are upserted
+   into the `users` table on first login
+7. A `SessionsMiddleware` session is created — same as any Vapor session
+
+**Dev / test auth:** UWaterloo's IdP is not reachable without registration.
+Auth is abstracted behind a protocol so the implementation can be swapped:
+
+```swift
+protocol IdentityProvider {
+    func authorizationRedirect(req: Request) throws -> Response
+    func handleCallback(req: Request) async throws -> UserIdentity
+}
+
+struct UWaterlooOIDC: IdentityProvider { ... }  // production
+struct DevStaticAuth: IdentityProvider { ... }  // local dev — fixed test users
+```
+
+Active implementation chosen at startup via `AUTH_PROVIDER` environment variable
+(`uwaterloo` or `dev`). `DevStaticAuth` is never compiled into a release build.
+
+**Worker API auth:** workers authenticate with a static Bearer token set as an
+environment variable on both sides. Validated by a `BearerAuthenticator` on the
+`/api/v1/worker/*` routes. No OAuth involvement.
 
 **Tier visibility logic** moves server-side into the web routes: the
 `assignment.leaf` template receives only the outcomes the current user may see.
@@ -540,7 +572,7 @@ package — no new dependency).
 | Templates | **Leaf** (Vapor built-in) | Server-side rendering in the same process; no npm, no build step, no context switch |
 | Styling | Plain CSS in `Public/styles.css` served by Vapor's `FileMiddleware` | No build tool needed; a single stylesheet is sufficient for this UI surface |
 | Interactivity | ~50 lines of vanilla JS | Drag-drop zone on the submit form; 2s polling after submission until `status != "pending"` — no framework needed |
-| Auth | `SessionsMiddleware` + `sessions` DB table | Native to Vapor; cookie-based, no JWT complexity |
+| Auth | UWaterloo Azure AD (OIDC) + `SessionsMiddleware` | Standard OAuth 2.0/OIDC; `vapor/jwt-kit` validates ID tokens; sessions handle the browser cookie layer; `DevStaticAuth` swapped in for local dev |
 | File structure | Templates: `Resources/Views/` — Static assets: `Public/` — Web routes: `Sources/APIServer/Routes/Web/` | Follows Vapor conventions; no new directories outside the existing target |
 
 **Leaf syntax sample** (for reference when writing templates):
@@ -568,7 +600,7 @@ all other templates extend it via `#extend`/`#export`.
 
 | Sub-phase | What ships |
 |-----------|-----------|
-| 6.1 | `leaf` dependency, `base.leaf` layout, login/logout, session middleware, `users` + `sessions` migrations |
+| 6.1 | `leaf` + `jwt-kit` dependencies, `base.leaf` layout, `IdentityProvider` protocol, `UWaterlooOIDC` + `DevStaticAuth` implementations, `/auth/callback` route, `SessionsMiddleware`, `users` + `sessions` migrations |
 | 6.2 | Student dashboard, course overview, assignment page with submit form + result polling |
 | 6.3 | Attempt history, leaderboard, release-tier deadline unlock, CSV export (instructor) |
 | 6.4 | Instructor dashboard, live roster, result drilldown, assignment creation form (replaces raw `curl`) |
