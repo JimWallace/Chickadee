@@ -22,6 +22,9 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum number of concurrent jobs")
     var maxJobs: Int = 4
 
+    @Flag(name: .long, help: "Run test scripts inside a sandbox (network-isolated, privilege-dropped)")
+    var sandbox: Bool = false
+
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
             fputs("Error: invalid --api-base-url '\(apiBaseURL)'\n", stderr)
@@ -30,7 +33,7 @@ struct WorkerCommand: AsyncParsableCommand {
 
         let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID)
         let reporter = Reporter(apiBaseURL: baseURL)
-        let runner   = UnsandboxedScriptRunner()
+        let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
         let daemon = WorkerDaemon(
             poller:            poller,
@@ -40,7 +43,8 @@ struct WorkerCommand: AsyncParsableCommand {
             maxConcurrentJobs: maxJobs
         )
 
-        fputs("Worker \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs)\n", stderr)
+        let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
+        fputs("Worker \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n", stderr)
         try await daemon.run()
     }
 }
