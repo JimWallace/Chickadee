@@ -201,9 +201,9 @@ All endpoints use `application/json` except the multipart upload.
 
 ## Current Phase
 
-**Phase 2 — Full REST API and worker pull loop.**
+**Phase 3 — Submission result retrieval API, student-facing endpoints.**
 
-Goals for this phase:
+Phase 2 complete ✓:
 1. `POST /api/v1/testsetups` — multipart upload, store zip + manifest in DB ✓
 2. `GET /api/v1/testsetups/:id/download` — stream zip to worker ✓
 3. `POST /api/v1/submissions` — accept student submission zip ✓
@@ -211,7 +211,13 @@ Goals for this phase:
 5. `POST /api/v1/worker/results` — worker reports `TestOutcomeCollection` ✓
 6. `WorkerDaemon` pull loop with exponential backoff ✓
 7. `ScriptRunner` protocol + `UnsandboxedScriptRunner` ✓
-8. End-to-end: upload test setup → submit code → worker runs scripts → results stored
+8. End-to-end: upload test setup → submit code → worker runs scripts → results stored ✓
+
+Goals for this phase:
+1. `GET /api/v1/submissions` — list submissions, optional `?testSetupID=` filter ✓
+2. `GET /api/v1/submissions/:id` — submission status (pending/assigned/complete/failed) ✓
+3. `GET /api/v1/submissions/:id/results` — full `TestOutcomeCollection`, optional `?tiers=` filter ✓
+4. Tests covering all three endpoints including tier filtering ✓
 
 ---
 
