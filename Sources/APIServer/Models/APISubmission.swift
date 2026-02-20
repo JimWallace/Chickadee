@@ -27,17 +27,22 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "assigned_at")
     var assignedAt: Date?
 
+    @OptionalField(key: "attempt_number")
+    var attemptNumber: Int?
+
     init() {}
 
     init(
         id: String,
         testSetupID: String,
         zipPath: String,
+        attemptNumber: Int,
         status: String = "pending"
     ) {
-        self.id          = id
-        self.testSetupID = testSetupID
-        self.zipPath     = zipPath
-        self.status      = status
+        self.id            = id
+        self.testSetupID   = testSetupID
+        self.zipPath       = zipPath
+        self.attemptNumber = attemptNumber
+        self.status        = status
     }
 }

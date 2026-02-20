@@ -43,6 +43,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
+    app.migrations.add(AddAttemptNumberToSubmissions())
 
     try app.autoMigrate().wait()
 

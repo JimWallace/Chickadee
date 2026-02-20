@@ -53,6 +53,7 @@ struct SubmissionRoutes: RouteCollection {
         let job = Job(
             submissionID:  submission.id!,
             testSetupID:   setup.id!,
+            attemptNumber: submission.attemptNumber ?? 1,
             submissionURL: URL(string: "\(base)/api/v1/submissions/\(submission.id!)/download")!,
             testSetupURL:  URL(string: "\(base)/api/v1/testsetups/\(setup.id!)/download")!,
             manifest:      manifest
@@ -90,10 +91,16 @@ struct SubmissionRoutes: RouteCollection {
         }
         try decoded.write(to: URL(fileURLWithPath: zipPath))
 
+        // Count prior submissions for this test setup to determine attempt number.
+        let priorCount = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setup.id!)
+            .count()
+
         let submission = APISubmission(
-            id:          subID,
-            testSetupID: setup.id!,
-            zipPath:     zipPath
+            id:            subID,
+            testSetupID:   setup.id!,
+            zipPath:       zipPath,
+            attemptNumber: priorCount + 1
         )
         try await submission.save(on: req.db)
 
