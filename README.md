@@ -92,22 +92,30 @@ swift test
 Run the API server:
 
 ```bash
-swift run APIServer
+swift run chickadee-server
 ```
 
-Run the Worker, pointing it at a running API server:
+Run the worker, pointing it at a running API server:
 
 ```bash
-swift run Worker \
+swift run chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
   --max-jobs     4
 
 # With sandboxing enabled (recommended for production):
-swift run Worker \
+swift run chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
   --sandbox
+```
+
+`swift run` is a development convenience that builds and runs in one step. For production, build a release binary once and invoke it directly — no Swift toolchain is needed at runtime:
+
+```bash
+swift build -c release
+.build/release/chickadee-server
+.build/release/chickadee-runner --api-base-url http://api:8080 --worker-id w1 --sandbox
 ```
 
 ---

@@ -9,7 +9,7 @@ import Core
 @main
 struct WorkerCommand: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
-        commandName: "Worker",
+        commandName: "chickadee-runner",
         abstract: "Chickadee build worker — polls the API server and processes submissions"
     )
 

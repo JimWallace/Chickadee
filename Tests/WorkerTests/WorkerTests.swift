@@ -1,5 +1,5 @@
 import XCTest
-@testable import Worker
+@testable import chickadee_runner
 import Foundation
 
 final class WorkerTests: XCTestCase {

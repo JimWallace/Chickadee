@@ -22,7 +22,7 @@ let package = Package(
 
         // MARK: - API Server executable
         .executableTarget(
-            name: "APIServer",
+            name: "chickadee-server",
             dependencies: [
                 .target(name: "Core"),
                 .product(name: "Vapor", package: "vapor"),
@@ -34,7 +34,7 @@ let package = Package(
 
         // MARK: - Worker executable
         .executableTarget(
-            name: "Worker",
+            name: "chickadee-runner",
             dependencies: [
                 .target(name: "Core"),
                 .product(name: "Vapor", package: "vapor"),
@@ -54,7 +54,7 @@ let package = Package(
         .testTarget(
             name: "APITests",
             dependencies: [
-                .target(name: "APIServer"),
+                .target(name: "chickadee-server"),
                 .product(name: "XCTVapor", package: "vapor"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
             ],
@@ -63,7 +63,7 @@ let package = Package(
         .testTarget(
             name: "WorkerTests",
             dependencies: [
-                .target(name: "Worker"),
+                .target(name: "chickadee-runner"),
             ],
             path: "Tests/WorkerTests"
         ),

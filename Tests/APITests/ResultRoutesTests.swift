@@ -1,6 +1,6 @@
 import XCTest
 import XCTVapor
-@testable import APIServer
+@testable import chickadee_server
 @testable import Core
 import Foundation
 
