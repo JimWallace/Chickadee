@@ -2,7 +2,7 @@
 
 # Chickadee
 
-A clean-break rewrite of [Marmoset](https://marmoset.student.cs.uwaterloo.ca/), the student code submission and autograding system. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
+A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student code submission and autograding system. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
 
 ---
 
