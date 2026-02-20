@@ -141,8 +141,8 @@ actor WorkerDaemon {
                 timeLimitSeconds: manifest.timeLimitSeconds
             )
 
-            let isFirstAttempt = true  // attempt tracking comes in Phase 5
-            let outcome = interpretOutput(output, entry: entry, attemptNumber: 1, isFirstAttempt: isFirstAttempt)
+            let isFirstAttempt = job.attemptNumber == 1
+            let outcome = interpretOutput(output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
             outcomes.append(outcome)
         }
 
@@ -220,7 +220,7 @@ actor WorkerDaemon {
         return TestOutcomeCollection(
             submissionID:    job.submissionID,
             testSetupID:     job.testSetupID,
-            attemptNumber:   1,
+            attemptNumber:   job.attemptNumber,
             buildStatus:     buildStatus,
             compilerOutput:  nil,
             outcomes:        outcomes,
