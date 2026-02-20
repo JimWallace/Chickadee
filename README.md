@@ -8,7 +8,9 @@ A clean-break rewrite of [Marmoset](https://marmoset.student.cs.uwaterloo.ca/), 
 
 ## What it does
 
-Chickadee accepts student code submissions, builds them, runs instructor-defined test suites, and returns structured JSON results. It is designed from the ground up to support gamification features (attempt tracking, partial credit, leaderboards) without requiring a schema migration later.
+Chickadee accepts student code submissions, runs instructor-defined test suites, and returns structured JSON results. Test suites are plain shell scripts — no language-specific code paths exist in Swift. Adding support for a new language or framework means writing a new shell script; no Swift changes are required.
+
+Gamification fields (attempt tracking, leaderboards, partial credit) are present in the schema from day one so they never require a migration.
 
 ---
 
@@ -20,29 +22,30 @@ Three Swift targets share a clean dependency boundary:
 ┌─────────────────────────────────────────┐
 │             APIServer (Vapor)           │
 │  POST /api/v1/submissions               │
+│  GET  /api/v1/submissions               │
+│  GET  /api/v1/submissions/:id           │
+│  GET  /api/v1/submissions/:id/results   │
 │  POST /api/v1/worker/request            │
 │  POST /api/v1/worker/results            │
 │  POST /api/v1/testsetups                │
 │  GET  /api/v1/testsetups/:id/download   │
-│  GET  /api/v1/submissions/:id/download  │
 └──────────────────┬──────────────────────┘
                    │  SQLite (Fluent)
 ┌──────────────────▼──────────────────────┐
 │               Worker                    │
-│  Polls for jobs → BuildStrategy         │
+│  Polls for jobs → ScriptRunner          │
 │  Reports TestOutcomeCollection to API   │
 └──────────────────┬──────────────────────┘
-                   │  subprocess
+                   │  subprocess (sandboxed)
         ┌──────────┴──────────┐
         ▼                     ▼
-  Runners/python/       Runners/jupyter/
-  run_tests.py          run_tests.py
-  (emit JSON)           (emit JSON)
+  test_public.sh        test_release.sh
+  (instructor-written shell scripts)
 ```
 
 **Core** — shared models with no Vapor dependency. Both APIServer and Worker depend on this.
 
-**Language-specific logic lives entirely in runner scripts.** The Swift worker spawns them as subprocesses and parses their JSON output. Adding a new language means writing a new runner script, not touching Swift.
+**Shell scripts, not language runners.** Each test suite is a `.sh` file at the root of the instructor's test-setup zip. The worker runs them with `/bin/sh` and maps the exit code to a result. Any helper library (Python, Java, etc.) is bundled inside the zip by the instructor.
 
 ---
 
@@ -54,8 +57,8 @@ Three Swift targets share a clean dependency boundary:
 | Web framework | Vapor 4 |
 | Database | SQLite via Fluent |
 | Concurrency | `async/await`, actors, structured task groups |
-| Test runners | pytest (Python), nbmake (Jupyter Notebook) |
-| Sandboxing | `sandbox-exec` (macOS), seccomp + user namespaces (Linux) — Phase 4 |
+| Test runners | Instructor-authored shell scripts |
+| Sandboxing | `sandbox-exec` (macOS), `unshare --user --net` (Linux) |
 | Build tool | Swift Package Manager |
 
 ---
@@ -67,14 +70,11 @@ Chickadee/
 ├── Sources/
 │   ├── Core/          # Shared models — Codable, Sendable, no Vapor
 │   ├── APIServer/     # Vapor app, REST routes, Fluent migrations
-│   └── Worker/        # Job poller, build strategies, worker daemon
-├── Runners/
-│   ├── python/        # run_tests.py (pytest wrapper)
-│   └── jupyter/       # run_tests.py (nbmake wrapper)
+│   └── Worker/        # Job poller, script runner, worker daemon
 ├── Tests/
 │   ├── CoreTests/     # Round-trip JSON encode/decode for all models
 │   ├── APITests/      # XCTVapor integration tests
-│   └── WorkerTests/   # Worker unit tests
+│   └── WorkerTests/   # ScriptRunner and worker unit tests
 └── Assets/            # Project icons
 ```
 
@@ -101,8 +101,13 @@ Run the Worker, pointing it at a running API server:
 swift run Worker \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
-  --max-jobs     4 \
-  --runners-dir  Runners/
+  --max-jobs     4
+
+# With sandboxing enabled (recommended for production):
+swift run Worker \
+  --api-base-url http://localhost:8080 \
+  --worker-id    worker-1 \
+  --sandbox
 ```
 
 ---
@@ -113,64 +118,61 @@ Base path: `/api/v1`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/submissions` | Submit a zip for grading (base-64 encoded) |
-| `GET`  | `/submissions/:id/download` | Download a submission zip |
+| `POST` | `/submissions` | Submit a zip for grading (base-64 encoded body) |
+| `GET`  | `/submissions` | List submissions; optional `?testSetupID=` filter |
+| `GET`  | `/submissions/:id` | Submission status (`pending`/`assigned`/`complete`/`failed`) |
+| `GET`  | `/submissions/:id/results` | Full `TestOutcomeCollection`; optional `?tiers=public,student` filter |
 | `POST` | `/worker/request` | Worker claims the next pending job |
 | `POST` | `/worker/results` | Worker reports a completed `TestOutcomeCollection` |
-| `POST` | `/testsetups` | Instructor uploads a test setup (multipart) |
+| `POST` | `/testsetups` | Instructor uploads a test-setup zip (multipart) |
 | `GET`  | `/testsetups/:id/download` | Download a test-setup zip |
 
 ---
 
-## Runner protocol
+## Test script contract
 
-Every language runner writes a single JSON document to stdout when it finishes. Nothing else goes to stdout — diagnostics use stderr.
+Each test suite is a shell script run as `/bin/sh <script>` from the test-setup directory as the working directory.
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | pass |
+| `1` | fail |
+| `2` | error |
+| Killed after timeout | timeout |
+
+**stdout:** Everything is ignored except the last non-empty line, which is attempted as JSON:
 
 ```json
-{
-  "runnerVersion": "python-runner/1.0",
-  "buildStatus": "passed",
-  "compilerOutput": null,
-  "executionTimeMs": 342,
-  "outcomes": [
-    {
-      "testName": "test_bit_count",
-      "testClass": null,
-      "tier": "public",
-      "status": "pass",
-      "shortResult": "passed",
-      "longResult": null,
-      "executionTimeMs": 12,
-      "memoryUsageBytes": null
-    }
-  ]
-}
+{ "shortResult": "3/4 cases passed" }
 ```
 
-On build failure, `buildStatus` is `"failed"`, `compilerOutput` contains the error, and `outcomes` is `[]`. There is no per-test "could not run" state.
+If the last line is not valid JSON it is used as plain-text `shortResult`. If stdout is empty, `shortResult` is synthesised from the exit code.
+
+**stderr:** Captured verbatim as `longResult` (nil if empty).
+
+Build failure (e.g. a `make` step that exits non-zero) is recorded at the collection level — `buildStatus: "failed"`, `outcomes: []`. There is no per-test "could not run" state.
 
 ---
 
 ## Test setup manifest
 
-Stored as JSON inside the test-setup zip uploaded by the instructor. Replaces the legacy `test.properties` file.
+Stored as `test.properties.json` inside the instructor-uploaded test-setup zip.
 
 ```json
 {
   "schemaVersion": 1,
-  "language": "python",
   "requiredFiles": ["warmup.py"],
   "testSuites": [
-    { "tier": "public",  "module": "test_public"  },
-    { "tier": "release", "module": "test_release" }
+    { "tier": "public",  "script": "test_public.sh"  },
+    { "tier": "release", "script": "test_release.sh" },
+    { "tier": "student", "script": "test_student.sh" }
   ],
-  "limits": {
-    "timeLimitSeconds": 10
-  }
+  "timeLimitSeconds": 10,
+  "makefile": null
 }
 ```
 
-For Jupyter Notebook submissions, `module` is the `.ipynb` filename.
+When `makefile` is non-null, a `make` step runs before the test scripts. Set `"target": null` for bare `make` or `"target": "test"` for `make test`.
 
 ---
 
@@ -179,9 +181,27 @@ For Jupyter Notebook submissions, `module` is the `.ipynb` filename.
 | Tier | Shown to student |
 |------|-----------------|
 | `public` | Immediately after submission |
-| `release` | On demand; hidden until deadline passes |
-| `secret` | Never |
+| `release` | Hidden until deadline; unlocked on demand |
+| `secret` | Never shown |
 | `student` | Student-written tests, always visible |
+
+The `GET /submissions/:id/results` endpoint accepts a `?tiers=` query parameter to filter which tiers are returned. Aggregate counts (`passCount`, `failCount`, etc.) are recomputed to match the filtered set.
+
+---
+
+## Sandboxing
+
+`ScriptRunner` is the sandbox boundary. Two implementations exist:
+
+- **`UnsandboxedScriptRunner`** — direct subprocess, no restrictions. Default when `--sandbox` is omitted. Suitable for development.
+- **`SandboxedScriptRunner`** — wraps execution in an OS-level sandbox. Use `--sandbox` in production.
+
+| Platform | Mechanism | What it restricts |
+|----------|-----------|------------------|
+| macOS | `sandbox-exec -p <profile>` | Network denied; writes confined to the working directory |
+| Linux | `unshare --user --net --map-root-user` | Private network namespace (no external routes); UID mapped to unprivileged user inside the namespace |
+
+Both implementations honour the same timeout, stdout/stderr capture, and exit-code mapping as the unsandboxed runner. No call sites change when switching between them.
 
 ---
 
@@ -189,11 +209,11 @@ For Jupyter Notebook submissions, `module` is the `.ipynb` filename.
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 1 | Core models, `RunnerResult`, `TestSetupManifest`, `POST /results` stub | Complete |
-| 2 | Full REST API, SQLite persistence, Worker pull loop | Complete |
-| 3 | Python and Jupyter runners, `run_tests.py` scripts | Up next |
-| 4 | Sandboxing — macOS first, then Linux | Planned |
-| 5 | Gamification — attempt tracking, leaderboards, partial credit | Planned |
+| 1 | Core models, `ScriptRunner`, `POST /results` stub | Complete |
+| 2 | Full REST API, SQLite persistence, worker pull loop, shell-script runner | Complete |
+| 3 | Submission result retrieval — `GET /submissions`, `GET /submissions/:id`, `GET /submissions/:id/results` with tier filtering | Complete |
+| 4 | Sandboxing — `SandboxedScriptRunner` with `sandbox-exec` (macOS) and `unshare` (Linux), `--sandbox` worker flag | Complete |
+| 5 | Gamification — attempt tracking, leaderboards, partial credit | Up next |
 
 ---
 
