@@ -8,6 +8,7 @@
 //   POST /testsetups/new            → save test setup, redirect to /
 //   GET  /testsetups/:id/submit     → submit.leaf     (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
+//   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
 //   GET  /submissions/:id           → submission.leaf (live results)
 
 import Vapor
@@ -23,6 +24,7 @@ struct WebRoutes: RouteCollection {
         routes.post("testsetups", "new", use: createSetup)
         routes.get("testsetups", ":testSetupID", "submit", use: submitForm)
         routes.post("testsetups", ":testSetupID", "submit", use: createSubmission)
+        routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("submissions", ":submissionID", use: submissionPage)
     }
 
@@ -120,8 +122,13 @@ struct WebRoutes: RouteCollection {
         let body    = try req.content.decode(SubmitFormBody.self)
         let subsDir = req.application.submissionsDirectory
         let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath = subsDir + "\(subID).zip"
-        try body.files.write(to: URL(fileURLWithPath: zipPath))
+
+        // Detect whether the upload is a zip by checking PK magic bytes.
+        let isZip     = body.files.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
+        let ext       = body.uploadFilename.flatMap { URL(fileURLWithPath: $0).pathExtension } ?? "zip"
+        let storedExt = isZip ? "zip" : ext
+        let filePath  = subsDir + "\(subID).\(storedExt)"
+        try body.files.write(to: URL(fileURLWithPath: filePath))
 
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setupID)
@@ -130,12 +137,26 @@ struct WebRoutes: RouteCollection {
         let submission = APISubmission(
             id:            subID,
             testSetupID:   setupID,
-            zipPath:       zipPath,
-            attemptNumber: priorCount + 1
+            zipPath:       filePath,
+            attemptNumber: priorCount + 1,
+            filename:      isZip ? nil : body.uploadFilename
         )
         try await submission.save(on: req.db)
 
         return req.redirect(to: "/submissions/\(subID)")
+    }
+
+    // MARK: - GET /testsetups/:id/notebook
+
+    @Sendable
+    func notebookPage(req: Request) async throws -> View {
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let _ = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        return try await req.view.render("notebook", NotebookContext(testSetupID: setupID))
     }
 
     // MARK: - GET /submissions/:id
@@ -222,6 +243,10 @@ private struct SubmitContext: Encodable {
     let testSetupID: String
 }
 
+private struct NotebookContext: Encodable {
+    let testSetupID: String
+}
+
 private struct OutcomeRow: Encodable {
     let testName: String
     let tier: String
@@ -249,4 +274,6 @@ private struct SubmissionContext: Encodable {
 
 private struct SubmitFormBody: Content {
     var files: Data
+    /// Original filename from the browser's multipart upload (nil for older clients).
+    var uploadFilename: String?
 }

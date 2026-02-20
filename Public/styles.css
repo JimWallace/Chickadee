@@ -308,3 +308,44 @@ details pre {
 .empty { color: var(--gray-600); font-size: .95rem; }
 
 code { font-family: ui-monospace, monospace; font-size: .9em; }
+
+/* ── Notebook page ───────────────────────────────────── */
+
+.notebook-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .75rem;
+    flex-wrap: wrap;
+    gap: .75rem;
+}
+
+.notebook-header h1 { margin-bottom: 0; }
+
+.notebook-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.nb-status {
+    font-size: .875rem;
+    color: var(--gray-600);
+}
+
+/* Full-viewport iframe minus the nav + header */
+.jl-frame {
+    width: 100%;
+    height: calc(100vh - 9rem);
+    border: 1px solid var(--gray-200);
+    border-radius: .5rem;
+    background: white;
+    display: block;
+}
+
+/* ── Alt-submit link ─────────────────────────────────── */
+.alt-submit {
+    font-size: .875rem;
+    color: var(--gray-600);
+    margin-top: .75rem;
+}

@@ -1,0 +1,25 @@
+#extend("base"):
+#export("title"):
+Notebook — #(testSetupID)
+#endexport
+#export("content"):
+<style>
+/* Override the 900px max-width for this page only */
+.main { max-width: 100%; padding: 0 1rem; }
+</style>
+<div class="notebook-header">
+    <h1>Assignment <code>#(testSetupID)</code></h1>
+    <div class="notebook-toolbar">
+        <button class="btn btn-primary" id="nb-submit">Submit</button>
+        <span class="nb-status" id="nb-status"></span>
+    </div>
+</div>
+<iframe
+    id="jl-frame"
+    class="jl-frame"
+    data-setup-id="#(testSetupID)"
+    allow="cross-origin-isolated">
+</iframe>
+<script src="/notebook.js"></script>
+#endexport
+#endextend
