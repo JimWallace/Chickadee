@@ -351,9 +351,14 @@ outcome records; expose aggregate endpoints for leaderboard use.
 
 ## Phase 6 — Web Frontend
 
-Goal: a modern, lightweight website that replaces direct API calls for both
-students submitting code and instructors managing assignments. The backend REST
-API is the only interface; the frontend is a separate static app.
+Goal: a modern, lightweight website built directly into the Vapor app using
+**Leaf** (Vapor's templating engine). Web routes render HTML server-side and
+read from the DB via Fluent — no separate frontend process, no npm, no build
+step. The existing REST API continues to serve the worker unchanged.
+
+**Key dependency:** add `vapor/leaf` to `Package.swift`. Templates live in
+`Resources/Views/`; new web route collections live alongside the existing API
+routes in `Sources/APIServer/Routes/Web/`.
 
 ---
 
@@ -377,19 +382,29 @@ API is the only interface; the frontend is a separate static app.
 
 ### 6.2 Page Inventory
 
-```
-/                           Landing / login
-/dashboard                  Student: list of enrolled courses + assignments
-/courses/:id                Course overview — assignment list with deadlines
-/assignments/:id            Assignment page (submit + current result)
-/assignments/:id/history    Student's full attempt history for one assignment
-/assignments/:id/leaderboard Ranked list (pass count / score; public tier only)
+Each route is a Vapor `GET` that queries Fluent and calls `req.view.render()`
+with a Leaf template. Form submissions use standard HTML `POST` — no JavaScript
+required for the core flows.
 
-/instructor                 Instructor dashboard — courses managed
-/instructor/courses/new     Create course
-/instructor/assignments/new Upload test setup + configure assignment
-/instructor/assignments/:id Live roster — all students, latest results
-/instructor/assignments/:id/student/:studentID  Full result drilldown
+```
+GET  /                           Login page (leaf: login.leaf)
+POST /login                      Authenticate, set session cookie, redirect
+POST /logout                     Clear session, redirect to /
+
+GET  /dashboard                  Student: enrolled courses + assignments
+GET  /courses/:id                Course overview — assignment list with deadlines
+GET  /assignments/:id            Assignment page — submit form + latest results
+POST /assignments/:id/submit     Accept multipart zip upload, enqueue submission
+GET  /assignments/:id/history    Student's full attempt history
+GET  /assignments/:id/leaderboard Ranked list (public-tier pass count only)
+
+GET  /instructor                 Instructor dashboard
+GET  /instructor/courses/new     New course form
+POST /instructor/courses         Create course
+GET  /instructor/assignments/new New assignment form (upload test setup)
+POST /instructor/assignments     Create assignment + upload test setup zip
+GET  /instructor/assignments/:id Live roster — all students, latest results
+GET  /instructor/assignments/:id/students/:studentID  Full result drilldown
 ```
 
 ---
@@ -464,54 +479,88 @@ API is the only interface; the frontend is a separate static app.
 
 ---
 
-### 6.4 New API Endpoints Required
+### 6.4 New Data Models Required
 
-The frontend needs endpoints that don't yet exist. These become the Phase 6
-backend work before (or alongside) the UI build.
+The web layer adds context that the worker API doesn't need. These become new
+Fluent models and migrations in the existing `APIServer` target.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/api/v1/auth/login` | Exchange credentials for session token |
-| `GET` | `/api/v1/courses` | List courses for current user |
-| `POST` | `/api/v1/courses` | Create a course (instructor) |
-| `GET` | `/api/v1/courses/:id/assignments` | List assignments in a course |
-| `POST` | `/api/v1/courses/:id/assignments` | Create assignment (wraps test setup + deadline) |
-| `GET` | `/api/v1/assignments/:id` | Assignment metadata (deadline, tier config) |
-| `GET` | `/api/v1/assignments/:id/mysubmissions` | Current student's submission list |
-| `GET` | `/api/v1/assignments/:id/roster` | All students + latest results (instructor) |
-| `GET` | `/api/v1/assignments/:id/leaderboard` | Ranked list by pass count (public tier) |
+```
+users
+  id           TEXT PRIMARY KEY
+  name         TEXT NOT NULL
+  email        TEXT NOT NULL UNIQUE
+  role         TEXT NOT NULL   -- "student" | "instructor"
+  passwordHash TEXT NOT NULL
+  createdAt    DATETIME
 
-**New data model additions** (database migrations):
-- `courses` — `id`, `name`, `instructorID`, `createdAt`
-- `assignments` — `id`, `courseID`, `testSetupID`, `deadline`, `name`, `releaseTestsAt`
-- `users` — `id`, `name`, `email`, `role` (student | instructor), `passwordHash`
-- `enrollments` — `courseID`, `userID` (join table)
-- `submissions` gains `studentID` column
+sessions
+  id        TEXT PRIMARY KEY   -- random token stored in cookie
+  userID    TEXT NOT NULL
+  expiresAt DATETIME NOT NULL
 
-**Authentication:** session tokens in a `sessions` table; cookie-based for the
-browser, Bearer token for the API. Phase 6.1 can use HTTP Basic for simplicity
-and graduate to session tokens in 6.2.
+courses
+  id           TEXT PRIMARY KEY
+  name         TEXT NOT NULL
+  instructorID TEXT NOT NULL   -- FK → users.id
+  createdAt    DATETIME
 
-**Tier visibility logic** moves server-side: the results endpoint checks
-`now >= assignment.releaseTestsAt` before including `release` tier outcomes.
-`secret` outcomes are never returned.
+enrollments
+  courseID  TEXT NOT NULL   -- FK → courses.id
+  userID    TEXT NOT NULL   -- FK → users.id
+  PRIMARY KEY (courseID, userID)
+
+assignments
+  id             TEXT PRIMARY KEY
+  courseID       TEXT NOT NULL   -- FK → courses.id
+  testSetupID    TEXT NOT NULL   -- FK → test_setups.id
+  name           TEXT NOT NULL
+  deadline       DATETIME
+  releaseTestsAt DATETIME        -- when "release" tier becomes visible
+
+submissions gains:
+  studentID  TEXT               -- FK → users.id (nullable for worker-only submissions)
+```
+
+**Authentication:** Vapor's built-in `SessionsMiddleware` with a `sessions`
+table. Login sets a signed cookie; the middleware validates it on every
+protected route. `Bcrypt` for password hashing (already in Vapor's crypto
+package — no new dependency).
+
+**Tier visibility logic** moves server-side into the web routes: the
+`assignment.leaf` template receives only the outcomes the current user may see.
+`release` outcomes are included only when `now >= assignment.releaseTestsAt`.
+`secret` outcomes are never passed to any template.
 
 ---
 
-### 6.5 Tech Stack Recommendation
+### 6.5 Tech Stack
 
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
-| Framework | **SvelteKit** | Zero-runtime components, SSR by default, tiny bundle; simpler than Next.js for a focused tool |
-| Styling | **Tailwind CSS** | Utility-first; avoids a design system dependency for a small UI surface |
-| HTTP client | Native `fetch` + a thin typed wrapper | No axios; SvelteKit's `load()` functions handle server-side fetching naturally |
-| Auth | Cookie sessions (server-side) | Simple to implement with SvelteKit's hooks; avoids client-side JWT complexity |
-| Hosting | Static export to a CDN, or Vapor serves the built `/build` dir | One fewer service to operate in early deploys |
-| Real-time updates | Polling `/api/v1/submissions/:id` every 2s while `status == "pending"` | Avoids WebSocket complexity; jobs typically finish in < 10s |
+| Templates | **Leaf** (Vapor built-in) | Server-side rendering in the same process; no npm, no build step, no context switch |
+| Styling | Plain CSS in `Public/styles.css` served by Vapor's `FileMiddleware` | No build tool needed; a single stylesheet is sufficient for this UI surface |
+| Interactivity | ~50 lines of vanilla JS | Drag-drop zone on the submit form; 2s polling after submission until `status != "pending"` — no framework needed |
+| Auth | `SessionsMiddleware` + `sessions` DB table | Native to Vapor; cookie-based, no JWT complexity |
+| File structure | Templates: `Resources/Views/` — Static assets: `Public/` — Web routes: `Sources/APIServer/Routes/Web/` | Follows Vapor conventions; no new directories outside the existing target |
 
-The frontend lives in a `Web/` directory at the repo root and is a separate
-package (`package.json`). It talks exclusively to the Vapor API server; no
-server-side logic lives in the frontend.
+**Leaf syntax sample** (for reference when writing templates):
+
+```html
+#extend("base"):
+  #export("content"):
+    <h1>#(assignment.name)</h1>
+    <p>Due #(assignment.deadline)</p>
+    #for(outcome in outcomes):
+      <div class="outcome #(outcome.status)">
+        #(outcome.testName) — #(outcome.shortResult)
+      </div>
+    #endfor
+  #endexport
+#endextend
+```
+
+The `base.leaf` layout holds the `<html>` shell, nav bar, and stylesheet link;
+all other templates extend it via `#extend`/`#export`.
 
 ---
 
@@ -519,10 +568,10 @@ server-side logic lives in the frontend.
 
 | Sub-phase | What ships |
 |-----------|-----------|
-| 6.1 | Auth (login/logout), student dashboard, submit + poll for results |
-| 6.2 | Attempt history, result detail view, instructor roster |
-| 6.3 | Leaderboard, CSV export, release-tier deadline unlock |
-| 6.4 | Instructor assignment creation UI (replaces raw `curl` to `/testsetups`) |
+| 6.1 | `leaf` dependency, `base.leaf` layout, login/logout, session middleware, `users` + `sessions` migrations |
+| 6.2 | Student dashboard, course overview, assignment page with submit form + result polling |
+| 6.3 | Attempt history, leaderboard, release-tier deadline unlock, CSV export (instructor) |
+| 6.4 | Instructor dashboard, live roster, result drilldown, assignment creation form (replaces raw `curl`) |
 
 
 | Layer | Tool | When |
