@@ -122,8 +122,13 @@ actor WorkerDaemon {
 
         let manifest = job.manifest
 
-        // Copy required submission files into the test setup dir so scripts can reference them.
-        try unzip(submissionZip, to: testSetupDir)
+        // Copy or unzip the submission depending on whether it is a raw file or a zip.
+        if let filename = job.submissionFilename {
+            let dest = testSetupDir.appendingPathComponent(filename)
+            try FileManager.default.copyItem(at: submissionZip, to: dest)
+        } else {
+            try unzip(submissionZip, to: testSetupDir)
+        }
 
         // Optional make step.
         if let makefile = manifest.makefile {

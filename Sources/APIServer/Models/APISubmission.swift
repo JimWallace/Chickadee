@@ -30,6 +30,11 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "attempt_number")
     var attemptNumber: Int?
 
+    /// Non-nil when the submission is a raw file (not a zip).
+    /// Stores the original filename so the worker can place it correctly.
+    @OptionalField(key: "filename")
+    var filename: String?
+
     init() {}
 
     init(
@@ -37,12 +42,14 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         testSetupID: String,
         zipPath: String,
         attemptNumber: Int,
-        status: String = "pending"
+        status: String = "pending",
+        filename: String? = nil
     ) {
         self.id            = id
         self.testSetupID   = testSetupID
         self.zipPath       = zipPath
         self.attemptNumber = attemptNumber
         self.status        = status
+        self.filename      = filename
     }
 }

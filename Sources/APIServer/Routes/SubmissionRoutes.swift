@@ -14,6 +14,9 @@ struct SubmissionRoutes: RouteCollection {
 
         // POST /api/v1/submissions
         api.post("submissions", use: createSubmission)
+
+        // POST /api/v1/submissions/file  — multipart, accepts raw .ipynb / .py
+        api.post("submissions", "file", use: createSubmissionFile)
     }
 
     // MARK: - POST /api/v1/worker/request
@@ -51,12 +54,13 @@ struct SubmissionRoutes: RouteCollection {
         let base    = "http://\(baseURL):\(port)"
 
         let job = Job(
-            submissionID:  submission.id!,
-            testSetupID:   setup.id!,
-            attemptNumber: submission.attemptNumber ?? 1,
-            submissionURL: URL(string: "\(base)/api/v1/submissions/\(submission.id!)/download")!,
-            testSetupURL:  URL(string: "\(base)/api/v1/testsetups/\(setup.id!)/download")!,
-            manifest:      manifest
+            submissionID:       submission.id!,
+            testSetupID:        setup.id!,
+            attemptNumber:      submission.attemptNumber ?? 1,
+            submissionURL:      URL(string: "\(base)/api/v1/submissions/\(submission.id!)/download")!,
+            testSetupURL:       URL(string: "\(base)/api/v1/testsetups/\(setup.id!)/download")!,
+            manifest:           manifest,
+            submissionFilename: submission.filename
         )
 
         let encoder = JSONEncoder()
@@ -106,6 +110,41 @@ struct SubmissionRoutes: RouteCollection {
 
         return SubmissionCreatedResponse(submissionID: subID)
     }
+
+    // MARK: - POST /api/v1/submissions/file
+
+    @Sendable
+    func createSubmissionFile(req: Request) async throws -> SubmissionCreatedResponse {
+        let body = try req.content.decode(SubmitFileBody.self)
+
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
+            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+        }
+
+        let submissionsDir = req.application.submissionsDirectory
+        let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+
+        // Derive extension from the provided filename, default to original ext.
+        let ext      = URL(fileURLWithPath: body.filename).pathExtension
+        let filePath = submissionsDir + "\(subID).\(ext.isEmpty ? "bin" : ext)"
+
+        try body.file.write(to: URL(fileURLWithPath: filePath))
+
+        let priorCount = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setup.id!)
+            .count()
+
+        let submission = APISubmission(
+            id:            subID,
+            testSetupID:   setup.id!,
+            zipPath:       filePath,
+            attemptNumber: priorCount + 1,
+            filename:      body.filename
+        )
+        try await submission.save(on: req.db)
+
+        return SubmissionCreatedResponse(submissionID: subID)
+    }
 }
 
 // MARK: - GET /api/v1/submissions/:id/download
@@ -137,6 +176,12 @@ struct WorkerRequestBody: Content {
 struct CreateSubmissionBody: Content {
     let testSetupID: String
     let zipBase64: String
+}
+
+struct SubmitFileBody: Content {
+    var testSetupID: String
+    var filename: String
+    var file: Data
 }
 
 struct SubmissionCreatedResponse: Content {

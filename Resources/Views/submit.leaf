@@ -7,8 +7,8 @@ Submit Code
 <form class="form" id="submit-form" method="post"
     action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
     <div class="drop-zone" id="drop-zone">
-        <p>Drag your submission zip here, or click to choose a file</p>
-        <input type="file" name="files" id="file-input" accept=".zip" required>
+        <p>Drag your file here, or click to choose</p>
+        <input type="file" name="files" id="file-input" accept=".zip,.ipynb,.py" required>
     </div>
     <p class="drop-filename" id="drop-filename"></p>
     <div>
@@ -16,5 +16,8 @@ Submit Code
         <a class="btn" href="/">Cancel</a>
     </div>
 </form>
+<p class="alt-submit">
+    Or <a href="/testsetups/#(testSetupID)/notebook">write and run in the browser →</a>
+</p>
 #endexport
 #endextend

@@ -9,6 +9,9 @@
 //
 // GET /api/v1/testsetups/:id/download
 //   Streams the stored zip back to the caller.
+//
+// GET /api/v1/testsetups/:id/assignment
+//   Extracts assignment.ipynb from the test setup zip and returns it as JSON.
 
 import Vapor
 import Fluent
@@ -21,6 +24,7 @@ struct TestSetupRoutes: RouteCollection {
         api.post(use: uploadTestSetup)
         api.group(":testSetupID") { group in
             group.get("download", use: downloadTestSetup)
+            group.get("assignment", use: getAssignment)
         }
     }
 
@@ -85,6 +89,44 @@ struct TestSetupRoutes: RouteCollection {
             throw Abort(.notFound)
         }
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
+    }
+
+    // MARK: - GET /api/v1/testsetups/:id/assignment
+
+    @Sendable
+    func getAssignment(req: Request) async throws -> Response {
+        guard let setupID = req.parameters.get("testSetupID"),
+              let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        // Extract assignment.ipynb from the zip using unzip -p (prints to stdout).
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments     = ["-p", setup.zipPath, "assignment.ipynb"]
+
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError  = Pipe()    // discard stderr
+
+        do {
+            try proc.run()
+        } catch {
+            throw Abort(.internalServerError, reason: "Failed to run unzip: \(error)")
+        }
+        proc.waitUntilExit()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard proc.terminationStatus == 0, !data.isEmpty else {
+            throw Abort(.notFound, reason: "No assignment.ipynb found in this test setup")
+        }
+
+        return Response(
+            status: .ok,
+            headers: ["Content-Type": "application/json"],
+            body: .init(data: data)
+        )
     }
 }
 
