@@ -12,7 +12,7 @@ public struct TestOutcome: Codable, Equatable, Sendable {
     public let tier: TestTier
 
     // MARK: - Result
-    public let status: TestOutcomeStatus
+    public let status: TestStatus
     public let shortResult: String     // One-line human-readable summary
     public let longResult: String?     // Full output, stack trace, diff, etc.
 
@@ -28,7 +28,7 @@ public struct TestOutcome: Codable, Equatable, Sendable {
         testName: String,
         testClass: String?,
         tier: TestTier,
-        status: TestOutcomeStatus,
+        status: TestStatus,
         shortResult: String,
         longResult: String?,
         executionTimeMs: Int,

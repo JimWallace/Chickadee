@@ -123,7 +123,7 @@ struct SubmissionDownloadRoute: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        return req.fileio.streamFile(at: submission.zipPath)
+        return try await req.fileio.asyncStreamFile(at: submission.zipPath)
     }
 }
 

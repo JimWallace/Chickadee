@@ -12,11 +12,17 @@ struct APIServerApp {
         var env = try Environment.detect()
         try LoggingSystem.bootstrap(from: &env)
 
-        let app = Application(env)
-        defer { app.shutdown() }
-
-        try configure(app)
-        try await app.run()
+        let app = try await Application.make(env)
+        
+        do {
+            try configure(app)
+            try await app.execute()
+        } catch {
+            try await app.asyncShutdown()
+            throw error
+        }
+        
+        try await app.asyncShutdown()
     }
 }
 

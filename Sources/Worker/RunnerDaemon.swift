@@ -164,7 +164,7 @@ actor WorkerDaemon {
         attemptNumber: Int,
         isFirstAttempt: Bool
     ) -> TestOutcome {
-        let status: TestOutcomeStatus
+        let status: TestStatus
         if output.timedOut {
             status = .timeout
         } else {
@@ -286,7 +286,7 @@ private struct ScriptResultJSON: Decodable {
 
 // MARK: - Helpers
 
-private extension TestOutcomeStatus {
+private extension TestStatus {
     var defaultShortResult: String {
         switch self {
         case .pass:    return "passed"

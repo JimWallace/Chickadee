@@ -84,7 +84,7 @@ struct TestSetupRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        return req.fileio.streamFile(at: setup.zipPath)
+        return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 }
 

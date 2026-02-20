@@ -34,7 +34,7 @@ struct ResultRoutes: RouteCollection {
         // Persist to DB and disk concurrently.
         async let db: Void   = persistToDB(collection, on: req)
         async let disk: Void = persistToDisk(collection, on: req)
-        try await (db, disk)
+        _ = try await (db, disk)
 
         // Advance the submission's state machine to "complete".
         if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {
