@@ -349,7 +349,181 @@ outcome records; expose aggregate endpoints for leaderboard use.
 
 ---
 
-## Testing Strategy
+## Phase 6 — Web Frontend
+
+Goal: a modern, lightweight website that replaces direct API calls for both
+students submitting code and instructors managing assignments. The backend REST
+API is the only interface; the frontend is a separate static app.
+
+---
+
+### 6.1 User Roles and Key Flows
+
+**Student**
+1. Open an assignment → drag-and-drop (or pick) a zip file → submit
+2. Results appear automatically: public tests shown immediately, release tests
+   hidden until the deadline passes
+3. History view shows all prior attempts with trend (improving? regressing?)
+4. Optional: leaderboard showing rank among classmates (pass count / score)
+
+**Instructor**
+1. Create a course and add assignments
+2. Upload a test setup zip + fill out a short manifest form (no JSON editing)
+3. Set deadline per assignment; release tests auto-unlock at that time
+4. View a live roster: one row per student, color-coded by latest result
+5. Drill into any student's full submission history and raw output
+
+---
+
+### 6.2 Page Inventory
+
+```
+/                           Landing / login
+/dashboard                  Student: list of enrolled courses + assignments
+/courses/:id                Course overview — assignment list with deadlines
+/assignments/:id            Assignment page (submit + current result)
+/assignments/:id/history    Student's full attempt history for one assignment
+/assignments/:id/leaderboard Ranked list (pass count / score; public tier only)
+
+/instructor                 Instructor dashboard — courses managed
+/instructor/courses/new     Create course
+/instructor/assignments/new Upload test setup + configure assignment
+/instructor/assignments/:id Live roster — all students, latest results
+/instructor/assignments/:id/student/:studentID  Full result drilldown
+```
+
+---
+
+### 6.3 Screen Sketches
+
+#### Assignment page — student view
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ CS 101  /  Project 2 — Bit Manipulation          Due: Mar 5 │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                                                       │  │
+│  │     Drag your submission zip here, or click to pick  │  │
+│  │                                                       │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                              [Submit]                        │
+│                                                             │
+│  Latest result  (attempt 3 of 5)              ● 5 / 8 pass  │
+│  ─────────────────────────────────────────────────────────  │
+│  ✓  test_bit_count          passed          12 ms   public   │
+│  ✓  test_clear_bit          passed           8 ms   public   │
+│  ✗  test_set_bit            wrong answer    11 ms   public   │
+│  ✗  test_toggle             wrong answer     9 ms   public   │
+│  ✓  test_parity             passed          14 ms   public   │
+│  ✗  test_count_ones         failed           8 ms   public   │
+│  –  test_edge_cases         (hidden until deadline)          │
+│  –  test_stress             (hidden until deadline)          │
+│                                                             │
+│  [View history]  [Leaderboard]                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Attempt history — student view
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Attempt history — Project 2                                 │
+├────────┬───────────────┬──────────┬──────────┬─────────────┤
+│ Attempt│ Submitted     │ Build    │ Public   │ Time        │
+├────────┼───────────────┼──────────┼──────────┼─────────────┤
+│   1    │ Feb 28 10:14  │ ✓ passed │ 2 / 6 ●● │ 0.3s        │
+│   2    │ Feb 28 14:52  │ ✓ passed │ 4 / 6 ●●●│ 0.3s        │
+│   3    │ Mar  1 09:07  │ ✓ passed │ 5 / 6 ●●●│ 0.3s  ← now │
+├────────┴───────────────┴──────────┴──────────┴─────────────┤
+│ [View full output for attempt 3 ▾]                          │
+│  test_bit_count   passed   "passed"                         │
+│  test_clear_bit   passed   "passed"                         │
+│  test_set_bit     fail     "expected 0b1101, got 0b0101"    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Live roster — instructor view
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Project 2 — Roster            45 students  [Export CSV]     │
+├─────────────────────────────────────────────────────────────┤
+│ Filter: [All ▾]  Search: [              ]                   │
+├──────────────────┬──────────┬──────────┬────────┬───────────┤
+│ Student          │ Attempts │ Best     │ Latest │ Updated   │
+├──────────────────┼──────────┼──────────┼────────┼───────────┤
+│ Alice Chen       │   3      │ 6 / 8  ● │ 5 / 8  │ 2h ago    │
+│ Bob Smith        │   1      │ 8 / 8  ✓ │ 8 / 8  │ 5h ago    │
+│ Carol Wang       │   0      │ —        │ —      │ —         │
+│ Dan Lee          │   2      │ 3 / 8  ● │ 4 / 8  │ 1d ago    │
+│   …              │          │          │        │           │
+└──────────────────┴──────────┴──────────┴────────┴───────────┘
+```
+
+---
+
+### 6.4 New API Endpoints Required
+
+The frontend needs endpoints that don't yet exist. These become the Phase 6
+backend work before (or alongside) the UI build.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/v1/auth/login` | Exchange credentials for session token |
+| `GET` | `/api/v1/courses` | List courses for current user |
+| `POST` | `/api/v1/courses` | Create a course (instructor) |
+| `GET` | `/api/v1/courses/:id/assignments` | List assignments in a course |
+| `POST` | `/api/v1/courses/:id/assignments` | Create assignment (wraps test setup + deadline) |
+| `GET` | `/api/v1/assignments/:id` | Assignment metadata (deadline, tier config) |
+| `GET` | `/api/v1/assignments/:id/mysubmissions` | Current student's submission list |
+| `GET` | `/api/v1/assignments/:id/roster` | All students + latest results (instructor) |
+| `GET` | `/api/v1/assignments/:id/leaderboard` | Ranked list by pass count (public tier) |
+
+**New data model additions** (database migrations):
+- `courses` — `id`, `name`, `instructorID`, `createdAt`
+- `assignments` — `id`, `courseID`, `testSetupID`, `deadline`, `name`, `releaseTestsAt`
+- `users` — `id`, `name`, `email`, `role` (student | instructor), `passwordHash`
+- `enrollments` — `courseID`, `userID` (join table)
+- `submissions` gains `studentID` column
+
+**Authentication:** session tokens in a `sessions` table; cookie-based for the
+browser, Bearer token for the API. Phase 6.1 can use HTTP Basic for simplicity
+and graduate to session tokens in 6.2.
+
+**Tier visibility logic** moves server-side: the results endpoint checks
+`now >= assignment.releaseTestsAt` before including `release` tier outcomes.
+`secret` outcomes are never returned.
+
+---
+
+### 6.5 Tech Stack Recommendation
+
+| Layer | Choice | Rationale |
+|-------|--------|-----------|
+| Framework | **SvelteKit** | Zero-runtime components, SSR by default, tiny bundle; simpler than Next.js for a focused tool |
+| Styling | **Tailwind CSS** | Utility-first; avoids a design system dependency for a small UI surface |
+| HTTP client | Native `fetch` + a thin typed wrapper | No axios; SvelteKit's `load()` functions handle server-side fetching naturally |
+| Auth | Cookie sessions (server-side) | Simple to implement with SvelteKit's hooks; avoids client-side JWT complexity |
+| Hosting | Static export to a CDN, or Vapor serves the built `/build` dir | One fewer service to operate in early deploys |
+| Real-time updates | Polling `/api/v1/submissions/:id` every 2s while `status == "pending"` | Avoids WebSocket complexity; jobs typically finish in < 10s |
+
+The frontend lives in a `Web/` directory at the repo root and is a separate
+package (`package.json`). It talks exclusively to the Vapor API server; no
+server-side logic lives in the frontend.
+
+---
+
+### 6.6 Phased Delivery
+
+| Sub-phase | What ships |
+|-----------|-----------|
+| 6.1 | Auth (login/logout), student dashboard, submit + poll for results |
+| 6.2 | Attempt history, result detail view, instructor roster |
+| 6.3 | Leaderboard, CSV export, release-tier deadline unlock |
+| 6.4 | Instructor assignment creation UI (replaces raw `curl` to `/testsetups`) |
+
 
 | Layer | Tool | When |
 |-------|------|------|
