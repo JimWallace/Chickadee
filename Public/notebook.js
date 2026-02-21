@@ -5,14 +5,19 @@
 // Loads the assignment notebook, lets the student edit it in JupyterLite,
 // then on "Submit" runs the notebook via Pyodide, collects per-test outcomes,
 // and POSTs a TestOutcomeCollection to POST /api/v1/submissions/browser-result.
+//
+// Results are rendered inline on the same page so students can iterate
+// without navigating away. A "View official submission" link is shown
+// after each run for the permanent record.
 
 (function () {
     'use strict';
 
-    const frame    = document.getElementById('jl-frame');
-    const statusEl = document.getElementById('nb-status');
+    const frame     = document.getElementById('jl-frame');
+    const statusEl  = document.getElementById('nb-status');
     const submitBtn = document.getElementById('nb-submit');
-    const setupID  = frame ? frame.dataset.setupId : null;
+    const resultsEl = document.getElementById('nb-results');
+    const setupID   = frame ? frame.dataset.setupId : null;
 
     if (!frame || !setupID) return;
 
@@ -27,11 +32,12 @@
     frame.src = `/jupyterlite/index.html?path=assignment.ipynb&fromURL=${encodeURIComponent(notebookURL)}`;
 
     // -------------------------------------------------------------------------
-    // 2. Submit button — run via Pyodide and POST results
+    // 2. Submit button — run via Pyodide, POST results, render inline
     // -------------------------------------------------------------------------
 
     submitBtn.addEventListener('click', async () => {
         submitBtn.disabled = true;
+        clearResults();
         setStatus('loading', 'Loading grading engine…');
 
         try {
@@ -47,11 +53,12 @@
             const collection = buildCollection(outcomes, setupID);
             const response   = await postBrowserResult(collection, notebook, setupID);
 
-            // Redirect to the submission results page (shows browser preview
-            // immediately, polls for the official worker result).
-            window.location.href = `/submissions/${response.workerSubmissionID}`;
+            // Render results inline — no page navigation.
+            renderResults(outcomes, response);
+            setStatus('', '');
         } catch (err) {
             setStatus('error', `Error: ${err.message}`);
+        } finally {
             submitBtn.disabled = false;
         }
     });
@@ -102,14 +109,15 @@
                 try {
                     await py.runPythonAsync(source);
                 } catch (err) {
+                    const longResult = await captureTraceback(py, err);
                     // A non-test cell threw — record a generic error and stop.
                     outcomes.push({
                         testName:          'setup_error',
                         testClass:         null,
                         tier:              'public',
                         status:            'error',
-                        shortResult:       `Setup cell failed: ${err.message}`,
-                        longResult:        err.message,
+                        shortResult:       `Setup cell failed: ${firstLine(err.message)}`,
+                        longResult,
                         executionTimeMs:   Date.now() - startMs,
                         memoryUsageBytes:  null,
                         attemptNumber:     1,
@@ -133,14 +141,19 @@
             await py.runPythonAsync(source);
         } catch (err) {
             const msg = err.message || String(err);
+            longResult = await captureTraceback(py, err);
+
             if (msg.includes('AssertionError') || msg.includes('assert')) {
-                status      = 'fail';
-                shortResult = 'failed';
+                status = 'fail';
+                // Surface the assertion message if one was provided.
+                const assertMsg = extractAssertionMessage(msg);
+                shortResult = assertMsg
+                    ? `failed: ${assertMsg.substring(0, 80)}`
+                    : 'failed';
             } else {
                 status      = 'error';
-                shortResult = 'error';
+                shortResult = `error: ${firstLine(msg).substring(0, 80)}`;
             }
-            longResult = msg;
         }
 
         return {
@@ -155,6 +168,37 @@
             attemptNumber:     1,
             isFirstPassSuccess: status === 'pass',
         };
+    }
+
+    // Ask Pyodide to format the last traceback from Python's sys module.
+    // Falls back to err.message if Python-level info is unavailable.
+    async function captureTraceback(py, err) {
+        try {
+            const tb = await py.runPythonAsync(`
+import traceback, sys
+_exc = sys.last_value
+if _exc is not None:
+    ''.join(traceback.format_exception(type(_exc), _exc, _exc.__traceback__))
+else:
+    ''
+`);
+            return tb.trim() || (err.message || String(err));
+        } catch (_) {
+            return err.message || String(err);
+        }
+    }
+
+    // Extract the message from an AssertionError line, e.g.:
+    //   "AssertionError: expected 5 but got 3"  →  "expected 5 but got 3"
+    function extractAssertionMessage(msg) {
+        const line = msg.split('\n').find(l => l.includes('AssertionError'));
+        if (!line) return null;
+        const colon = line.indexOf(':');
+        return colon >= 0 ? line.slice(colon + 1).trim() : null;
+    }
+
+    function firstLine(msg) {
+        return (msg || '').split('\n')[0].trim();
     }
 
     // -------------------------------------------------------------------------
@@ -236,12 +280,97 @@
     }
 
     // -------------------------------------------------------------------------
-    // 7. Helpers
+    // 7. Inline results rendering
+    // -------------------------------------------------------------------------
+
+    function clearResults() {
+        if (resultsEl) {
+            resultsEl.hidden = true;
+            resultsEl.innerHTML = '';
+        }
+    }
+
+    function renderResults(outcomes, response) {
+        if (!resultsEl) return;
+
+        const pass  = outcomes.filter(o => o.status === 'pass').length;
+        const total = outcomes.length;
+        const totalMs = outcomes.reduce((s, o) => s + o.executionTimeMs, 0);
+
+        const allPassed = pass === total && total > 0;
+
+        // Score line
+        const scoreEl = document.createElement('p');
+        scoreEl.className = 'score';
+        scoreEl.innerHTML =
+            `${pass} / ${total} passed ` +
+            `<span class="exec-time">(${totalMs} ms)</span>`;
+        if (allPassed) {
+            scoreEl.innerHTML += ' <span style="color:var(--green)">✓ All tests passed!</span>';
+        }
+
+        // Results table — reuses the same CSS classes as submission.leaf
+        const table = document.createElement('table');
+        table.className = 'results-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Test</th>
+                    <th>Tier</th>
+                    <th>Result</th>
+                    <th>ms</th>
+                </tr>
+            </thead>`;
+
+        const tbody = document.createElement('tbody');
+        for (const o of outcomes) {
+            const tr = document.createElement('tr');
+            tr.className = `status-${o.status}`;
+
+            const longCell = o.longResult
+                ? `<details><summary>details</summary><pre>${escHtml(o.longResult)}</pre></details>`
+                : '';
+
+            tr.innerHTML = `
+                <td><code>${escHtml(o.testName)}</code></td>
+                <td><span class="tier">${escHtml(o.tier)}</span></td>
+                <td>${escHtml(o.shortResult)}${longCell}</td>
+                <td class="time">${o.executionTimeMs}</td>`;
+            tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+
+        // "View official submission" link
+        const link = document.createElement('a');
+        link.className = 'nb-results-link';
+        link.href = `/submissions/${response.workerSubmissionID}`;
+        link.textContent = 'View official submission →';
+
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(scoreEl);
+        resultsEl.appendChild(table);
+        resultsEl.appendChild(link);
+        resultsEl.hidden = false;
+
+        // Scroll results into view so student sees feedback immediately.
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function escHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. Helpers
     // -------------------------------------------------------------------------
 
     function setStatus(type, msg) {
         statusEl.textContent  = msg;
-        statusEl.className    = `nb-status nb-status-${type}`;
+        statusEl.className    = `nb-status${type ? ' nb-status-' + type : ''}`;
     }
 
     function loadScript(src) {
