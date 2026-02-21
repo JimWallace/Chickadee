@@ -5,13 +5,19 @@
 // POST /api/v1/testsetups
 //   Multipart: field "manifest" (JSON text) + field "files" (zip binary).
 //   Validates the manifest, stores the zip on disk, records metadata in DB.
+//   For browser-mode setups, also extracts and stores a flat .ipynb file.
 //   Returns {"testSetupID": "..."}  (201 Created).
 //
 // GET /api/v1/testsetups/:id/download
 //   Streams the stored zip back to the caller.
 //
 // GET /api/v1/testsetups/:id/assignment
-//   Extracts assignment.ipynb from the test setup zip and returns it as JSON.
+//   Returns the notebook JSON. Serves the flat .ipynb file if present
+//   (browser-mode, possibly edited); falls back to extracting from the zip.
+//
+// PUT /api/v1/testsetups/:id/assignment   [Phase 8]
+//   Body: raw notebook JSON. Saves to disk as testsetups/<id>.ipynb and
+//   updates notebookPath in DB. Returns 204 No Content.
 
 import Vapor
 import Fluent
@@ -23,8 +29,9 @@ struct TestSetupRoutes: RouteCollection {
         let api = routes.grouped("api", "v1", "testsetups")
         api.post(use: uploadTestSetup)
         api.group(":testSetupID") { group in
-            group.get("download", use: downloadTestSetup)
-            group.get("assignment", use: getAssignment)
+            group.get("download",    use: downloadTestSetup)
+            group.get("assignment",  use: getAssignment)
+            group.put("assignment",  use: saveAssignment)   // Phase 8
         }
     }
 
@@ -78,6 +85,18 @@ struct TestSetupRoutes: RouteCollection {
         )
         try await setup.save(on: req.db)
 
+        // For browser-mode: extract and save the flat .ipynb file so the
+        // instructor can edit it later without re-uploading the zip.
+        if manifest.gradingMode == .browser {
+            let notebookPath = setupsDir + "\(setupID).ipynb"
+            if let data = extractNotebookFromZip(zipPath: zipPath) {
+                try data.write(to: URL(fileURLWithPath: notebookPath))
+                setup.notebookPath = notebookPath
+                try await setup.save(on: req.db)
+                req.logger.info("Saved flat notebook for setup \(setupID) at \(notebookPath)")
+            }
+        }
+
         req.logger.info("Stored test setup \(setupID)")
 
         let responseBody = try JSONEncoder().encode(["testSetupID": setupID])
@@ -110,7 +129,27 @@ struct TestSetupRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        // Extract assignment.ipynb from the zip using unzip -p (prints to stdout).
+        // Phase 8: if a flat .ipynb file exists (browser-mode, possibly edited),
+        // serve it directly without touching the zip.
+        if let notebookPath = setup.notebookPath {
+            let url = URL(fileURLWithPath: notebookPath)
+            guard let data = try? Data(contentsOf: url), !data.isEmpty else {
+                // Fall through to zip extraction if the file is missing/empty.
+                req.logger.warning("Flat notebook at \(notebookPath) missing or empty; falling back to zip")
+                return try getAssignmentFromZip(setup: setup, req: req)
+            }
+            return Response(
+                status: .ok,
+                headers: ["Content-Type": "application/json"],
+                body: .init(data: data)
+            )
+        }
+
+        // Worker-mode (or browser-mode before Phase 8 migration): extract from zip.
+        return try getAssignmentFromZip(setup: setup, req: req)
+    }
+
+    private func getAssignmentFromZip(setup: APITestSetup, req: Request) throws -> Response {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         proc.arguments     = ["-p", setup.zipPath, "assignment.ipynb"]
@@ -137,6 +176,48 @@ struct TestSetupRoutes: RouteCollection {
             body: .init(data: data)
         )
     }
+
+    // MARK: - PUT /api/v1/testsetups/:id/assignment  [Phase 8]
+
+    @Sendable
+    func saveAssignment(req: Request) async throws -> HTTPStatus {
+        guard let setupID = req.parameters.get("testSetupID"),
+              let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        // Collect the raw request body as Data.
+        guard let bodyBuffer = req.body.data,
+              bodyBuffer.readableBytes > 0
+        else {
+            throw Abort(.badRequest, reason: "Request body is empty")
+        }
+        let notebookData = Data(bodyBuffer.readableBytesView)
+
+        // Basic JSON validation — reject obviously non-JSON bodies.
+        guard (try? JSONSerialization.jsonObject(with: notebookData)) != nil else {
+            throw Abort(.unprocessableEntity, reason: "Body is not valid JSON")
+        }
+
+        // Determine the save path: reuse existing notebookPath or derive from setupID.
+        let notebookPath: String
+        if let existing = setup.notebookPath {
+            notebookPath = existing
+        } else {
+            notebookPath = req.application.testSetupsDirectory + "\(setupID).ipynb"
+        }
+
+        try notebookData.write(to: URL(fileURLWithPath: notebookPath))
+
+        if setup.notebookPath == nil {
+            setup.notebookPath = notebookPath
+            try await setup.save(on: req.db)
+        }
+
+        req.logger.info("Saved edited notebook for setup \(setupID)")
+        return .noContent
+    }
 }
 
 // MARK: - Multipart form
@@ -148,7 +229,7 @@ struct TestSetupUpload: Content {
     var files: Data
 }
 
-// MARK: - Zip inspection helper
+// MARK: - Zip inspection helpers
 
 /// Returns true if the zip archive contains at least one `.ipynb` file.
 /// Uses `unzip -l` (list mode) so no files are extracted.
@@ -170,4 +251,20 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
 
     let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     return output.contains(".ipynb")
+}
+
+/// Extracts `assignment.ipynb` from the zip at `zipPath` and returns its Data,
+/// or nil if the file is not present or unzip fails.
+func extractNotebookFromZip(zipPath: String) -> Data? {
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+    proc.arguments     = ["-p", zipPath, "assignment.ipynb"]
+    let pipe = Pipe()
+    proc.standardOutput = pipe
+    proc.standardError  = Pipe()
+    guard (try? proc.run()) != nil else { return nil }
+    proc.waitUntilExit()
+    guard proc.terminationStatus == 0 else { return nil }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    return data.isEmpty ? nil : data
 }

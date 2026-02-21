@@ -1,0 +1,66 @@
+#extend("base"):
+#export("title"):
+Edit — #(title)
+#endexport
+#export("content"):
+<style>
+/* Override the 900px max-width for the editor page only */
+.main { max-width: 100%; padding: 0 1rem; }
+</style>
+
+<div class="notebook-header">
+    <div>
+        <h1 style="margin:0">Edit — #(title)</h1>
+        <p class="card-meta" style="margin:.25rem 0 0"><code>#(setupID)</code></p>
+    </div>
+    <div class="notebook-toolbar" style="gap:.5rem;flex-wrap:wrap;align-items:center">
+        <!-- Save: upload file from JupyterLite's Download → then upload here -->
+        <label class="btn btn-primary" id="save-label" title="Download the notebook from JupyterLite (File → Download), then upload it here to save to the server">
+            Save notebook…
+            <input type="file" id="save-file" accept=".ipynb" style="display:none">
+        </label>
+        <button class="btn" id="run-btn" disabled title="Upload a .py solution file and run tests against the saved notebook">Run tests…</button>
+        <span id="edit-status" class="nb-status"></span>
+        <a class="btn" href="/assignments" style="margin-left:.5rem">← Assignments</a>
+    </div>
+</div>
+
+<!-- JupyterLite iframe (editable) -->
+<iframe
+    id="jl-frame"
+    class="jl-frame"
+    data-setup-id="#(setupID)"
+    data-assignment-id="#(assignmentID)"
+    data-notebook-url="#(notebookURL)"
+    allow="cross-origin-isolated"
+    style="height:68vh;width:100%;border:none;display:block">
+</iframe>
+
+<!-- Run tests panel (hidden until "Run tests…" is clicked) -->
+<div id="run-panel" hidden style="margin-top:1rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:6px">
+    <h3 style="margin:0 0 .75rem">Validate solution</h3>
+    <p style="margin:0 0 .75rem;font-size:.9rem;color:var(--gray-600)">
+        Upload a reference solution (.py) to run against the <em>currently saved</em> version of the notebook.
+        Save your edits first, then run.
+    </p>
+    <label class="form-label" style="max-width:480px;margin-bottom:.75rem">
+        Solution file (.py)
+        <input class="form-input" id="solution-file" type="file" accept=".py,.ipynb">
+    </label>
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="run-solution-btn" disabled>Run</button>
+        <span id="validate-status" class="nb-status"></span>
+    </div>
+</div>
+
+<!-- Inline results (hidden until run) -->
+<div id="validate-results" hidden style="margin-top:1rem"></div>
+
+<script
+    data-setup-id="#(setupID)"
+    data-assignment-id="#(assignmentID)"
+    data-notebook-url="#(notebookURL)"
+    src="/setup-edit.js">
+</script>
+#endexport
+#endextend

@@ -47,6 +47,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         app.migrations.add(CreateUsers())
         app.migrations.add(CreateAssignments())
         app.migrations.add(AddUserIDToSubmissions())
+        app.migrations.add(AddNotebookPathToTestSetups())
         try await app.autoMigrate().get()
 
         try routes(app)
