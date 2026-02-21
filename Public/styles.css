@@ -349,3 +349,21 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--gray-600);
     margin-top: .75rem;
 }
+
+/* ── Inline notebook results panel ───────────────────── */
+.nb-results {
+    margin-top: 1.25rem;
+    padding-bottom: 2rem;
+}
+
+.nb-results .score {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: .75rem;
+}
+
+.nb-results-link {
+    display: inline-block;
+    margin-top: .875rem;
+    font-size: .875rem;
+}
