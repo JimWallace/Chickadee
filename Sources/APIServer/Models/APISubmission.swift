@@ -35,6 +35,10 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "filename")
     var filename: String?
 
+    /// The user who submitted (nil for submissions created before Phase 6).
+    @OptionalField(key: "user_id")
+    var userID: UUID?
+
     init() {}
 
     init(
@@ -43,7 +47,8 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         zipPath: String,
         attemptNumber: Int,
         status: String = "pending",
-        filename: String? = nil
+        filename: String? = nil,
+        userID: UUID? = nil
     ) {
         self.id            = id
         self.testSetupID   = testSetupID
@@ -51,5 +56,6 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         self.attemptNumber = attemptNumber
         self.status        = status
         self.filename      = filename
+        self.userID        = userID
     }
 }

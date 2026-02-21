@@ -1,9 +1,11 @@
 // APIServer/Routes/Web/WebRoutes.swift
 //
-// Browser-facing routes for the Chickadee MVP web UI.
-// No authentication — all submissions are anonymous.
+// Browser-facing routes for the Chickadee web UI.
+// All routes in this collection require authentication (enforced by RoleMiddleware
+// in routes.swift). Instructor-only routes (testsetups/new) are in a separate
+// group in routes.swift.
 //
-//   GET  /                          → index.leaf      (list test setups)
+//   GET  /                          → index.leaf      (assignments)
 //   GET  /testsetups/new            → setup-new.leaf  (instructor upload form)
 //   POST /testsetups/new            → save test setup, redirect to /
 //   GET  /testsetups/:id/submit     → submit.leaf     (student submission form)
@@ -32,39 +34,65 @@ struct WebRoutes: RouteCollection {
 
     @Sendable
     func index(req: Request) async throws -> View {
-        let setups = try await APITestSetup.query(on: req.db)
-            .sort(\.$createdAt, .descending)
-            .all()
+        let user = try req.auth.require(APIUser.self)
 
         let decoder = JSONDecoder()
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
 
+        let setups: [APITestSetup]
+        if user.isInstructor {
+            // Instructors and admins see all test setups.
+            setups = try await APITestSetup.query(on: req.db)
+                .sort(\.$createdAt, .descending)
+                .all()
+        } else {
+            // Students see only test setups that have an open published assignment.
+            let assignments = try await APIAssignment.query(on: req.db)
+                .filter(\.$isOpen == true)
+                .all()
+            let publishedIDs = Set(assignments.map(\.testSetupID))
+            guard !publishedIDs.isEmpty else {
+                return try await req.view.render("index",
+                    IndexContext(setups: [], currentUser: req.currentUserContext))
+            }
+            setups = try await APITestSetup.query(on: req.db)
+                .filter(\.$id ~~ publishedIDs)
+                .sort(\.$createdAt, .descending)
+                .all()
+        }
+
         let rows = setups.map { setup -> TestSetupRow in
             let data  = Data(setup.manifest.utf8)
             let props = try? decoder.decode(TestProperties.self, from: data)
             return TestSetupRow(
-                id:        setup.id ?? "",
+                id:         setup.id ?? "",
                 suiteCount: props?.testSuites.count ?? 0,
-                createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—"
+                createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—"
             )
         }
 
-        return try await req.view.render("index", IndexContext(setups: rows))
+        return try await req.view.render("index",
+            IndexContext(setups: rows, currentUser: req.currentUserContext))
     }
 
     // MARK: - GET /testsetups/new
 
     @Sendable
     func newSetupForm(req: Request) async throws -> View {
-        try await req.view.render("setup-new", EmptyContext())
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+        return try await req.view.render("setup-new",
+            BaseContext(currentUser: req.currentUserContext))
     }
 
     // MARK: - POST /testsetups/new
 
     @Sendable
     func createSetup(req: Request) async throws -> Response {
+        let setupUser = try req.auth.require(APIUser.self)
+        guard setupUser.isInstructor else { throw Abort(.forbidden) }
         let upload = try req.content.decode(TestSetupUpload.self)
 
         let manifestData = Data(upload.manifest.utf8)
@@ -77,9 +105,6 @@ struct WebRoutes: RouteCollection {
         }
         guard manifest.schemaVersion == 1 else {
             throw Abort(.badRequest, reason: "Unsupported schemaVersion; expected 1")
-        }
-        guard !manifest.testSuites.isEmpty else {
-            throw Abort(.badRequest, reason: "Manifest must list at least one test suite")
         }
 
         let setupsDir = req.application.testSetupsDirectory
@@ -105,13 +130,16 @@ struct WebRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        return try await req.view.render("submit", SubmitContext(testSetupID: setupID))
+        return try await req.view.render("submit",
+            SubmitContext(testSetupID: setupID, currentUser: req.currentUserContext))
     }
 
     // MARK: - POST /testsetups/:id/submit
 
     @Sendable
     func createSubmission(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+
         guard
             let setupID = req.parameters.get("testSetupID"),
             let _ = try await APITestSetup.find(setupID, on: req.db)
@@ -130,8 +158,10 @@ struct WebRoutes: RouteCollection {
         let filePath  = subsDir + "\(subID).\(storedExt)"
         try body.files.write(to: URL(fileURLWithPath: filePath))
 
+        // Attempt number is scoped to this student for this test setup.
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setupID)
+            .filter(\.$userID == user.id)
             .count()
 
         let submission = APISubmission(
@@ -139,7 +169,8 @@ struct WebRoutes: RouteCollection {
             testSetupID:   setupID,
             zipPath:       filePath,
             attemptNumber: priorCount + 1,
-            filename:      isZip ? nil : body.uploadFilename
+            filename:      isZip ? nil : body.uploadFilename,
+            userID:        user.id
         )
         try await submission.save(on: req.db)
 
@@ -156,13 +187,16 @@ struct WebRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        return try await req.view.render("notebook", NotebookContext(testSetupID: setupID))
+        return try await req.view.render("notebook",
+            NotebookContext(testSetupID: setupID, currentUser: req.currentUserContext))
     }
 
     // MARK: - GET /submissions/:id
 
     @Sendable
     func submissionPage(req: Request) async throws -> View {
+        let user = try req.auth.require(APIUser.self)
+
         guard
             let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
@@ -170,8 +204,15 @@ struct WebRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
+        // Students may only view their own submissions.
+        if !user.isInstructor {
+            guard submission.userID == user.id else {
+                throw Abort(.forbidden)
+            }
+        }
+
         // "browser-complete" means the browser run finished but worker hasn't yet.
-        let isPending = submission.status == "pending" || submission.status == "assigned"
+        let isPending         = submission.status == "pending" || submission.status == "assigned"
         let isBrowserComplete = submission.status == "browser-complete"
 
         var buildFailed     = false
@@ -231,7 +272,8 @@ struct WebRoutes: RouteCollection {
             outcomes:          outcomes,
             passCount:         passCount,
             totalTests:        totalTests,
-            executionTimeMs:   executionTimeMs
+            executionTimeMs:   executionTimeMs,
+            currentUser:       req.currentUserContext
         )
         return try await req.view.render("submission", ctx)
     }
@@ -239,7 +281,9 @@ struct WebRoutes: RouteCollection {
 
 // MARK: - Context types
 
-private struct EmptyContext: Encodable {}
+private struct BaseContext: Encodable {
+    let currentUser: CurrentUserContext?
+}
 
 private struct TestSetupRow: Encodable {
     let id: String
@@ -249,14 +293,17 @@ private struct TestSetupRow: Encodable {
 
 private struct IndexContext: Encodable {
     let setups: [TestSetupRow]
+    let currentUser: CurrentUserContext?
 }
 
 private struct SubmitContext: Encodable {
     let testSetupID: String
+    let currentUser: CurrentUserContext?
 }
 
 private struct NotebookContext: Encodable {
     let testSetupID: String
+    let currentUser: CurrentUserContext?
 }
 
 private struct OutcomeRow: Encodable {
@@ -284,6 +331,7 @@ private struct SubmissionContext: Encodable {
     let passCount: Int
     let totalTests: Int
     let executionTimeMs: Int
+    let currentUser: CurrentUserContext?
 }
 
 // MARK: - Multipart body for code submission

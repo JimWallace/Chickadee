@@ -1,0 +1,32 @@
+#extend("base"):
+#export("title"):
+Register
+#endexport
+#export("content"):
+<div class="auth-box">
+    <h1>Create an account</h1>
+    #if(error == "taken"):
+    <div class="error-box" style="margin-bottom:1rem"><p>That username is already taken.</p></div>
+    #elseif(error == "username_short"):
+    <div class="error-box" style="margin-bottom:1rem"><p>Username must be at least 3 characters.</p></div>
+    #elseif(error == "password_short"):
+    <div class="error-box" style="margin-bottom:1rem"><p>Password must be at least 8 characters.</p></div>
+    #endif
+    <form class="form" method="post" action="/register">
+        <label class="form-label">
+            Username
+            <input class="form-input" type="text" name="username"
+                   autocomplete="username" autofocus required minlength="3">
+        </label>
+        <label class="form-label">
+            Password
+            <input class="form-input" type="password" name="password"
+                   autocomplete="new-password" required minlength="8">
+            <span style="font-size:.8rem;color:var(--gray-600)">At least 8 characters</span>
+        </label>
+        <button class="btn btn-primary" type="submit">Create account</button>
+    </form>
+    <p class="auth-alt">Already have an account? <a href="/login">Log in</a></p>
+</div>
+#endexport
+#endextend
