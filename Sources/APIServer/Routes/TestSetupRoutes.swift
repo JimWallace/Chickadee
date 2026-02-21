@@ -46,8 +46,17 @@ struct TestSetupRoutes: RouteCollection {
         guard manifest.schemaVersion == 1 else {
             throw Abort(.unprocessableEntity, reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1")
         }
-        guard !manifest.testSuites.isEmpty else {
-            throw Abort(.unprocessableEntity, reason: "Manifest must contain at least one test suite")
+
+        // Mode-specific validation.
+        switch manifest.gradingMode {
+        case .browser:
+            guard zipContainsNotebook(upload.files) else {
+                throw Abort(.unprocessableEntity, reason: "Browser-mode test setup must contain at least one .ipynb file")
+            }
+        case .worker:
+            guard !manifest.testSuites.isEmpty else {
+                throw Abort(.unprocessableEntity, reason: "Worker-mode test setup must contain at least one test suite")
+            }
         }
 
         // Persist the zip.
@@ -137,4 +146,28 @@ struct TestSetupUpload: Content {
     var manifest: String
     /// Raw bytes of the test-setup zip file.
     var files: Data
+}
+
+// MARK: - Zip inspection helper
+
+/// Returns true if the zip archive contains at least one `.ipynb` file.
+/// Uses `unzip -l` (list mode) so no files are extracted.
+func zipContainsNotebook(_ zipData: Data) -> Bool {
+    let tmp = FileManager.default.temporaryDirectory
+        .appendingPathComponent("chickadee_zip_check_\(UUID().uuidString).zip")
+    defer { try? FileManager.default.removeItem(at: tmp) }
+
+    guard (try? zipData.write(to: tmp)) != nil else { return false }
+
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+    proc.arguments     = ["-l", tmp.path]
+    let pipe = Pipe()
+    proc.standardOutput = pipe
+    proc.standardError  = Pipe()
+    guard (try? proc.run()) != nil else { return false }
+    proc.waitUntilExit()
+
+    let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    return output.contains(".ipynb")
 }

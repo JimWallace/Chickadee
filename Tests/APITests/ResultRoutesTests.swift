@@ -3,6 +3,7 @@ import XCTVapor
 @testable import chickadee_server
 @testable import Core
 import Foundation
+import FluentSQLiteDriver
 
 final class ResultRoutesTests: XCTestCase {
 
@@ -14,14 +15,24 @@ final class ResultRoutesTests: XCTestCase {
 
         // Use a temp directory so tests don't pollute the project directory
         tmpResultsDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-test-results-\(UUID().uuidString)/")
-            .path
+            .appendingPathComponent("chickadee-test-results-\(UUID().uuidString)", isDirectory: true)
+            .path + "/"
         try FileManager.default.createDirectory(
             atPath: tmpResultsDir,
             withIntermediateDirectories: true
         )
 
         app.resultsDirectory = tmpResultsDir
+
+        app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateTestSetups())
+        app.migrations.add(CreateSubmissions())
+        app.migrations.add(CreateResults())
+        app.migrations.add(AddAttemptNumberToSubmissions())
+        app.migrations.add(AddFilenameToSubmissions())
+        app.migrations.add(AddSourceToResults())
+        try await app.autoMigrate().get()
+
         try routes(app)
     }
 

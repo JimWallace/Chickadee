@@ -3,7 +3,10 @@
 Submission #(submissionID)
 #endexport
 #export("content"):
-<div id="submission-root" data-submission-id="#(submissionID)" data-pending="#(isPending)">
+<div id="submission-root"
+     data-submission-id="#(submissionID)"
+     data-pending="#(isPending)"
+     data-browser-complete="#(isBrowserComplete)">
 
 <div class="submission-header">
     <h1>Submission <code>#(submissionID)</code></h1>
@@ -19,7 +22,17 @@ Submission #(submissionID)
     <p>Waiting for a worker to pick up your submission…</p>
 </div>
 
-#elseif(buildFailed):
+#else:
+
+#if(isBrowserComplete):
+<div class="info-box">
+    <strong>Preview result</strong> — your code ran in the browser.
+    The official grade is being computed by the server and will appear here automatically.
+    <div class="spinner spinner-inline"></div>
+</div>
+#endif
+
+#if(buildFailed):
 <div class="error-box">
     <h2>Build failed</h2>
     #if(compilerOutput):
@@ -30,6 +43,11 @@ Submission #(submissionID)
 #else:
 <p class="score">#(passCount) / #(totalTests) passed
     <span class="exec-time">(#(executionTimeMs) ms total)</span>
+    #if(isBrowserComplete):
+    <span class="result-source">(browser preview)</span>
+    #else:
+    <span class="result-source">(official)</span>
+    #endif
 </p>
 <table class="results-table">
     <thead>
@@ -59,6 +77,8 @@ Submission #(submissionID)
     #endfor
     </tbody>
 </table>
+#endif
+
 #endif
 
 </div>

@@ -32,21 +32,33 @@ if (dropZone && fileInput) {
     });
 }
 
-// Results page: poll until the submission is no longer pending
+// Results page: poll until the submission reaches its final state.
+//
+// Statuses that require polling:
+//   pending / assigned       — worker hasn't started yet
+//   browser-complete         — browser run done, waiting for official worker result
 const root = document.getElementById('submission-root');
-if (root && root.dataset.pending === 'true') {
-    const submissionID = root.dataset.submissionId;
-    const poll = setInterval(async () => {
-        try {
-            const res = await fetch(`/api/v1/submissions/${submissionID}`);
-            if (!res.ok) return;
-            const data = await res.json();
-            if (data.status !== 'pending' && data.status !== 'assigned') {
-                clearInterval(poll);
-                window.location.reload();
+if (root) {
+    const isPending         = root.dataset.pending === 'true';
+    const isBrowserComplete = root.dataset.browserComplete === 'true';
+
+    if (isPending || isBrowserComplete) {
+        const submissionID = root.dataset.submissionId;
+        const poll = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/v1/submissions/${submissionID}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const done = data.status !== 'pending'
+                          && data.status !== 'assigned'
+                          && data.status !== 'browser-complete';
+                if (done) {
+                    clearInterval(poll);
+                    window.location.reload();
+                }
+            } catch (_) {
+                // network blip — try again next tick
             }
-        } catch (_) {
-            // network blip — try again next tick
-        }
-    }, 2000);
+        }, 2000);
+    }
 }

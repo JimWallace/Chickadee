@@ -15,12 +15,12 @@ final class CoreModelTests: XCTestCase {
         return d
     }()
 
-    // MARK: - TestOutcomeStatus
+    // MARK: - TestStatus
 
-    func testTestOutcomeStatusRoundTrip() throws {
-        for status in [TestOutcomeStatus.pass, .fail, .error, .timeout] {
+    func testTestStatusRoundTrip() throws {
+        for status in [TestStatus.pass, .fail, .error, .timeout] {
             let data = try encoder.encode(status)
-            let decoded = try decoder.decode(TestOutcomeStatus.self, from: data)
+            let decoded = try decoder.decode(TestStatus.self, from: data)
             XCTAssertEqual(status, decoded)
         }
     }
@@ -42,12 +42,47 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(TestTier.student.rawValue, "student")
     }
 
+    // MARK: - GradingMode
+
+    func testGradingModeDefaultsBrowserWhenAbsent() throws {
+        let json = """
+        { "schemaVersion": 1 }
+        """.data(using: .utf8)!
+        let manifest = try decoder.decode(TestProperties.self, from: json)
+        XCTAssertEqual(manifest.gradingMode, .browser)
+    }
+
+    func testGradingModeExplicitBrowser() throws {
+        let json = """
+        { "schemaVersion": 1, "gradingMode": "browser" }
+        """.data(using: .utf8)!
+        let manifest = try decoder.decode(TestProperties.self, from: json)
+        XCTAssertEqual(manifest.gradingMode, .browser)
+    }
+
+    func testGradingModeExplicitWorker() throws {
+        let json = """
+        { "schemaVersion": 1, "gradingMode": "worker" }
+        """.data(using: .utf8)!
+        let manifest = try decoder.decode(TestProperties.self, from: json)
+        XCTAssertEqual(manifest.gradingMode, .worker)
+    }
+
+    func testGradingModeRoundTrip() throws {
+        for mode in [GradingMode.browser, .worker] {
+            let data = try encoder.encode(mode)
+            let decoded = try decoder.decode(GradingMode.self, from: data)
+            XCTAssertEqual(mode, decoded)
+        }
+    }
+
     // MARK: - TestProperties (no Makefile)
 
     func testTestPropertiesRoundTrip() throws {
         let json = """
         {
           "schemaVersion": 1,
+          "gradingMode": "worker",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
             { "tier": "public",  "script": "test_bit_count.sh"  },
@@ -59,6 +94,7 @@ final class CoreModelTests: XCTestCase {
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         XCTAssertEqual(manifest.schemaVersion, 1)
+        XCTAssertEqual(manifest.gradingMode, .worker)
         XCTAssertEqual(manifest.requiredFiles, ["warmup.py"])
         XCTAssertEqual(manifest.testSuites.count, 2)
         XCTAssertEqual(manifest.testSuites[0].script, "test_bit_count.sh")
@@ -77,6 +113,7 @@ final class CoreModelTests: XCTestCase {
         let json = """
         {
           "schemaVersion": 1,
+          "gradingMode": "worker",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
             { "tier": "public", "script": "test_bit_count.sh" }
@@ -99,6 +136,7 @@ final class CoreModelTests: XCTestCase {
         let json = """
         {
           "schemaVersion": 1,
+          "gradingMode": "worker",
           "requiredFiles": ["warmup.py"],
           "testSuites": [
             { "tier": "public", "script": "test_bit_count.sh" }

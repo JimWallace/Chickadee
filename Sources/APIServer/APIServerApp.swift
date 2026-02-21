@@ -57,6 +57,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateResults())
     app.migrations.add(AddAttemptNumberToSubmissions())
     app.migrations.add(AddFilenameToSubmissions())
+    app.migrations.add(AddSourceToResults())
 
     try app.autoMigrate().wait()
 
