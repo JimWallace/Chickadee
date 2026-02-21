@@ -6,6 +6,7 @@
 //   GET  /assignments                        → assignments.leaf (all setups + status)
 //   POST /assignments                        → create draft assignment → redirect to validate
 //   GET  /assignments/:assignmentID/validate → assignment-validate.leaf
+//   GET  /assignments/:assignmentID/edit     → setup-edit.leaf (JupyterLite notebook editor) [Phase 8]
 //   POST /assignments/:assignmentID/open     → set isOpen=true → redirect to /assignments
 //   POST /assignments/:assignmentID/close    → set isOpen=false → redirect to /assignments
 //   POST /assignments/:assignmentID/delete   → remove assignment record → redirect to /assignments
@@ -21,6 +22,7 @@ struct AssignmentRoutes: RouteCollection {
         r.get(use: list)
         r.post(use: publish)
         r.get(":assignmentID", "validate", use: validatePage)
+        r.get(":assignmentID", "edit",     use: editPage)         // Phase 8
         r.post(":assignmentID", "open",    use: openAssignment)
         r.post(":assignmentID", "close",   use: closeAssignment)
         r.post(":assignmentID", "delete",  use: deleteAssignment)
@@ -225,6 +227,35 @@ struct AssignmentRoutes: RouteCollection {
         try await assignment.delete(on: req.db)
         return req.redirect(to: "/assignments")
     }
+
+    // MARK: - GET /assignments/:assignmentID/edit  [Phase 8]
+    // Instructor-only notebook editor — loads JupyterLite, allows saving edits
+    // back to the server via PUT /api/v1/testsetups/:id/assignment.
+
+    @Sendable
+    func editPage(req: Request) async throws -> View {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+
+        guard
+            let idStr      = req.parameters.get("assignmentID"),
+            let uuid       = UUID(uuidString: idStr),
+            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let ctx = EditContext(
+            currentUser:  req.currentUserContext,
+            assignmentID: idStr,
+            setupID:      assignment.testSetupID,
+            title:        assignment.title,
+            notebookURL:  "/api/v1/testsetups/\(assignment.testSetupID)/assignment"
+        )
+        _ = setup   // referenced for the DB fetch; notebookPath resolved by getAssignment endpoint
+        return try await req.view.render("setup-edit", ctx)
+    }
 }
 
 // MARK: - View context types
@@ -252,4 +283,13 @@ private struct ValidateContext: Encodable {
     let title:        String
     let suiteCount:   Int
     let dueAt:        String?
+}
+
+private struct EditContext: Encodable {
+    let currentUser:  CurrentUserContext?
+    let assignmentID: String
+    let setupID:      String
+    let title:        String
+    /// URL of the notebook JSON endpoint, passed to JupyterLite via `fromURL`.
+    let notebookURL:  String
 }

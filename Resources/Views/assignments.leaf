@@ -67,6 +67,8 @@ Assignments
                         <button class="btn" type="submit"
                                 style="font-size:.8rem;padding:.25rem .6rem">Reopen</button>
                     </form>
+                    <a class="btn" href="/assignments/#(row.assignmentID)/edit"
+                       style="font-size:.8rem;padding:.25rem .6rem">Edit notebook</a>
                     <form method="post" action="/assignments/#(row.assignmentID)/delete"
                           onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                         <button class="btn" type="submit"
@@ -74,10 +76,14 @@ Assignments
                     </form>
                 </div>
                 #elseif(row.status == "open"):
-                <form method="post" action="/assignments/#(row.assignmentID)/close">
-                    <button class="btn" type="submit"
-                            style="font-size:.8rem;padding:.25rem .6rem">Close</button>
-                </form>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    <form method="post" action="/assignments/#(row.assignmentID)/close">
+                        <button class="btn" type="submit"
+                                style="font-size:.8rem;padding:.25rem .6rem">Close</button>
+                    </form>
+                    <a class="btn" href="/assignments/#(row.assignmentID)/edit"
+                       style="font-size:.8rem;padding:.25rem .6rem">Edit notebook</a>
+                </div>
                 #else:
                 <!-- draft — not yet validated/opened -->
                 <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate"

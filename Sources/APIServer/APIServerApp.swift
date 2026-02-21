@@ -66,6 +66,7 @@ func configure(_ app: Application) throws {
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateAssignments())
     app.migrations.add(AddUserIDToSubmissions())
+    app.migrations.add(AddNotebookPathToTestSetups())
 
     try app.autoMigrate().wait()
 

@@ -5,19 +5,93 @@ Upload Test Setup
 #export("content"):
 <h1>Upload Test Setup</h1>
 <form class="form" method="post" action="/testsetups/new" enctype="multipart/form-data">
+
+    <!-- ── Grading mode ─────────────────────────────────────── -->
+    <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:1.25rem">
+        <legend style="padding:0 .4rem;font-weight:600;font-size:.9rem">Grading mode</legend>
+        <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;cursor:pointer">
+            <input type="radio" name="gradingMode" value="browser" checked
+                   onchange="toggleMode(this.value)">
+            <span><strong>Browser</strong> — students run tests in-browser via Pyodide · upload <code>.ipynb</code></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="radio" name="gradingMode" value="worker"
+                   onchange="toggleMode(this.value)">
+            <span><strong>Worker</strong> — server-side shell scripts · upload <code>.zip</code></span>
+        </label>
+    </fieldset>
+
+    <!-- ── Manifest JSON ────────────────────────────────────── -->
     <label class="form-label">
         Manifest JSON
-        <textarea class="form-input" name="manifest" rows="12" required
-            placeholder='{"schemaVersion":1,"requiredFiles":["warmup.py"],"testSuites":[{"tier":"public","script":"test_public.sh"}],"timeLimitSeconds":10,"makefile":null}'></textarea>
+        <textarea class="form-input" name="manifest" id="manifest-field" rows="8" required
+            placeholder='{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}'></textarea>
     </label>
-    <label class="form-label">
-        Test Setup Zip
-        <input class="form-input" type="file" name="files" accept=".zip" required>
-    </label>
-    <div>
+
+    <!-- ── Browser mode: single .ipynb ─────────────────────── -->
+    <div id="upload-browser">
+        <label class="form-label">
+            Notebook (<code>.ipynb</code>)
+            <input class="form-input" type="file" name="files" id="nb-input" accept=".ipynb" required>
+        </label>
+        <p class="card-meta" style="margin-top:.25rem;font-size:.82rem">
+            The notebook must contain at least one code cell with a
+            <code># TEST: name</code> comment.
+        </p>
+    </div>
+
+    <!-- ── Worker mode: zip ─────────────────────────────────── -->
+    <div id="upload-worker" style="display:none">
+        <label class="form-label">
+            Test Setup Zip (<code>.zip</code>)
+            <input class="form-input" type="file" name="files" id="zip-input" accept=".zip">
+        </label>
+        <p class="card-meta" style="margin-top:.25rem;font-size:.82rem">
+            Zip must contain test scripts as <code>.sh</code> files at the root.
+        </p>
+    </div>
+
+    <div style="margin-top:1rem">
         <button class="btn btn-primary" type="submit">Upload</button>
         <a class="btn" href="/">Cancel</a>
     </div>
 </form>
+
+<script>
+(function () {
+    var templates = {
+        browser: '{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}',
+        worker:  '{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_public.sh"}],"timeLimitSeconds":10,"makefile":null}'
+    };
+
+    var manifestField = document.getElementById('manifest-field');
+    var uploadBrowser = document.getElementById('upload-browser');
+    var uploadWorker  = document.getElementById('upload-worker');
+    var nbInput       = document.getElementById('nb-input');
+    var zipInput      = document.getElementById('zip-input');
+
+    window.toggleMode = function (mode) {
+        var isBrowser = mode === 'browser';
+        uploadBrowser.style.display = isBrowser ? '' : 'none';
+        uploadWorker.style.display  = isBrowser ? 'none' : '';
+
+        // Swap required so HTML5 validation fires on the right input.
+        if (nbInput)  nbInput.required  = isBrowser;
+        if (zipInput) zipInput.required = !isBrowser;
+
+        // Pre-populate manifest template when blank or at a known default.
+        if (manifestField && (
+            manifestField.value === '' ||
+            manifestField.value === templates.browser ||
+            manifestField.value === templates.worker
+        )) {
+            manifestField.value = templates[mode];
+        }
+    };
+
+    // Initialise.
+    toggleMode('browser');
+})();
+</script>
 #endexport
 #endextend

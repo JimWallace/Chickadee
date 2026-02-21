@@ -16,14 +16,22 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
     @Field(key: "zip_path")
     var zipPath: String
 
+    /// Path to the flat `.ipynb` file on disk (browser-mode setups only).
+    /// Nil for worker-mode setups. Set when the setup is first uploaded
+    /// (browser-mode) or after the instructor saves edits via
+    /// `PUT /api/v1/testsetups/:id/assignment`.
+    @OptionalField(key: "notebook_path")
+    var notebookPath: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
     init() {}
 
-    init(id: String, manifest: String, zipPath: String) {
-        self.id       = id
-        self.manifest = manifest
-        self.zipPath  = zipPath
+    init(id: String, manifest: String, zipPath: String, notebookPath: String? = nil) {
+        self.id           = id
+        self.manifest     = manifest
+        self.zipPath      = zipPath
+        self.notebookPath = notebookPath
     }
 }
