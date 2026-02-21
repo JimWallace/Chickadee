@@ -108,7 +108,16 @@ private func macOSSandboxProfile(workDir: URL) -> String {
     //   • Write only inside the working directory and /dev/null
     //   • Deny all network access (remote ip, tcp, udp)
     //   • Allow process execution and forking (needed to run sub-commands)
-    let wd = workDir.path
+    //
+    // Resolve symlinks so that the sandbox path matches what the kernel sees.
+    // On macOS, FileManager.temporaryDirectory returns /var/folders/… which is
+    // a symlink to /private/var/folders/…; URL.resolvingSymlinksInPath() does
+    // not traverse /var → /private/var, so we call POSIX realpath(3) directly.
+    let wd: String = workDir.path.withCString { ptr in
+        guard let buf = Darwin.realpath(ptr, nil) else { return workDir.path }
+        defer { free(buf) }
+        return String(cString: buf)
+    }
     return """
     (version 1)
     (deny default)

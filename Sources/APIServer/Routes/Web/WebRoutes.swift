@@ -170,56 +170,68 @@ struct WebRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
+        // "browser-complete" means the browser run finished but worker hasn't yet.
         let isPending = submission.status == "pending" || submission.status == "assigned"
+        let isBrowserComplete = submission.status == "browser-complete"
+
         var buildFailed     = false
         var compilerOutput: String? = nil
         var outcomes:       [OutcomeRow] = []
         var passCount       = 0
         var totalTests      = 0
         var executionTimeMs = 0
+        var resultSource    = ""   // "browser" | "worker" | ""
 
-        if !isPending {
-            if let result = try await APIResult.query(on: req.db)
-                .filter(\.$submissionID == subID)
-                .sort(\.$receivedAt, .descending)
-                .first()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        // Prefer the worker result (official); fall back to browser result.
+        let allResults = try await APIResult.query(on: req.db)
+            .filter(\.$submissionID == subID)
+            .sort(\.$receivedAt, .descending)
+            .all()
+
+        let workerResult  = allResults.first { ($0.source ?? "worker") == "worker" }
+        let browserResult = allResults.first { $0.source == "browser" }
+        let displayResult = workerResult ?? browserResult
+
+        if let result = displayResult {
+            resultSource = result.source ?? "worker"
+            if let data       = result.collectionJSON.data(using: .utf8),
+               let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
             {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                if let data       = result.collectionJSON.data(using: .utf8),
-                   let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-                {
-                    buildFailed     = collection.buildStatus == .failed
-                    compilerOutput  = collection.compilerOutput
-                    passCount       = collection.passCount
-                    totalTests      = collection.totalTests
-                    executionTimeMs = collection.executionTimeMs
-                    outcomes = collection.outcomes.map { o in
-                        OutcomeRow(
-                            testName:        o.testName,
-                            tier:            o.tier.rawValue,
-                            status:          o.status.rawValue,
-                            shortResult:     o.shortResult,
-                            longResult:      o.longResult,
-                            executionTimeMs: o.executionTimeMs
-                        )
-                    }
+                buildFailed     = collection.buildStatus == .failed
+                compilerOutput  = collection.compilerOutput
+                passCount       = collection.passCount
+                totalTests      = collection.totalTests
+                executionTimeMs = collection.executionTimeMs
+                outcomes = collection.outcomes.map { o in
+                    OutcomeRow(
+                        testName:        o.testName,
+                        tier:            o.tier.rawValue,
+                        status:          o.status.rawValue,
+                        shortResult:     o.shortResult,
+                        longResult:      o.longResult,
+                        executionTimeMs: o.executionTimeMs
+                    )
                 }
             }
         }
 
         let ctx = SubmissionContext(
-            submissionID:    subID,
-            testSetupID:     submission.testSetupID,
-            status:          submission.status,
-            attemptNumber:   submission.attemptNumber ?? 1,
-            isPending:       isPending,
-            buildFailed:     buildFailed,
-            compilerOutput:  compilerOutput,
-            outcomes:        outcomes,
-            passCount:       passCount,
-            totalTests:      totalTests,
-            executionTimeMs: executionTimeMs
+            submissionID:      subID,
+            testSetupID:       submission.testSetupID,
+            status:            submission.status,
+            attemptNumber:     submission.attemptNumber ?? 1,
+            isPending:         isPending,
+            isBrowserComplete: isBrowserComplete,
+            resultSource:      resultSource,
+            buildFailed:       buildFailed,
+            compilerOutput:    compilerOutput,
+            outcomes:          outcomes,
+            passCount:         passCount,
+            totalTests:        totalTests,
+            executionTimeMs:   executionTimeMs
         )
         return try await req.view.render("submission", ctx)
     }
@@ -262,6 +274,10 @@ private struct SubmissionContext: Encodable {
     let status: String
     let attemptNumber: Int
     let isPending: Bool
+    /// True when the browser run is done but the worker hasn't reported yet.
+    let isBrowserComplete: Bool
+    /// "browser" or "worker" — which result is currently displayed.
+    let resultSource: String
     let buildFailed: Bool
     let compilerOutput: String?
     let outcomes: [OutcomeRow]

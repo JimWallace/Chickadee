@@ -38,6 +38,8 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
         app.migrations.add(AddAttemptNumberToSubmissions())
+        app.migrations.add(AddFilenameToSubmissions())
+        app.migrations.add(AddSourceToResults())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -108,7 +110,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     private func makeOutcome(
         name: String,
         tier: TestTier = .pub,
-        status: TestOutcomeStatus = .pass
+        status: TestStatus = .pass
     ) -> TestOutcome {
         TestOutcome(
             testName: name,
