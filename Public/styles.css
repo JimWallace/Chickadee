@@ -391,6 +391,52 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     margin-bottom: .875rem;
 }
 
+/* ── Assignment status badge variants ────────────────── */
+
+.tier-open {
+    background: #DCFCE7;
+    color: var(--green);
+}
+
+.tier-closed {
+    background: #FEE2E2;
+    color: var(--red);
+}
+
+.tier-unpublished {
+    background: var(--gray-100);
+    color: var(--gray-600);
+}
+
+/* ── Inline publish form (inside <details>) ──────────── */
+
+.publish-details summary::-webkit-details-marker { display: none; }
+
+.publish-form {
+    margin-top: .75rem;
+    padding: .75rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    background: var(--gray-50);
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    min-width: 260px;
+}
+
+/* ── Validate page results panel ─────────────────────── */
+
+#validate-results {
+    margin-top: 1.25rem;
+    padding-bottom: 2rem;
+}
+
+#validate-results .score {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: .75rem;
+}
+
 /* ── Inline notebook results panel ───────────────────── */
 .nb-results {
     margin-top: 1.25rem;

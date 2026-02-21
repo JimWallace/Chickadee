@@ -1,0 +1,93 @@
+#extend("base"):
+#export("title"):
+Assignments
+#endexport
+#export("content"):
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1.5rem">
+    <h1 style="margin:0">Assignments</h1>
+    <a class="btn btn-primary" href="/testsetups/new">Upload test setup</a>
+</div>
+
+#if(rows.isEmpty):
+<p class="empty">No test setups uploaded yet. <a href="/testsetups/new">Upload one to get started.</a></p>
+#else:
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Title / Setup ID</th>
+            <th>Suites</th>
+            <th>Status</th>
+            <th>Due</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(row in rows):
+        <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif">
+            <td>
+                #if(row.title):
+                <strong>#(row.title)</strong><br>
+                #endif
+                <code style="font-size:.8rem;color:var(--gray-600)">#(row.setupID)</code>
+            </td>
+            <td class="time">#(row.suiteCount)</td>
+            <td>
+                <span class="tier
+                    #if(row.status == "open"):tier-open
+                    #elseif(row.status == "closed"):tier-closed
+                    #elseif(row.status == "unpublished"):tier-unpublished
+                    #endif">#(row.status)</span>
+            </td>
+            <td class="time">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+            <td>
+                #if(row.status == "unpublished"):
+                <!-- Publish inline form, toggled open with <details> (no JS needed) -->
+                <details class="publish-details">
+                    <summary class="btn" style="font-size:.8rem;padding:.25rem .6rem;cursor:pointer;list-style:none">Publish…</summary>
+                    <form class="publish-form" method="post" action="/assignments">
+                        <input type="hidden" name="testSetupID" value="#(row.setupID)">
+                        <label class="form-label" style="font-size:.8rem">
+                            Title
+                            <input class="form-input" type="text" name="title"
+                                   placeholder="e.g. Lab 1 — Warmup" required
+                                   style="font-size:.85rem;padding:.3rem .5rem">
+                        </label>
+                        <label class="form-label" style="font-size:.8rem">
+                            Due date (optional)
+                            <input class="form-input" type="datetime-local" name="dueAt"
+                                   style="font-size:.85rem;padding:.3rem .5rem">
+                        </label>
+                        <button class="btn btn-primary" type="submit"
+                                style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
+                    </form>
+                </details>
+                #elseif(row.status == "closed"):
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    <form method="post" action="/assignments/#(row.assignmentID)/open">
+                        <button class="btn" type="submit"
+                                style="font-size:.8rem;padding:.25rem .6rem">Reopen</button>
+                    </form>
+                    <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                          onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                        <button class="btn" type="submit"
+                                style="font-size:.8rem;padding:.25rem .6rem;color:var(--red)">Remove</button>
+                    </form>
+                </div>
+                #elseif(row.status == "open"):
+                <form method="post" action="/assignments/#(row.assignmentID)/close">
+                    <button class="btn" type="submit"
+                            style="font-size:.8rem;padding:.25rem .6rem">Close</button>
+                </form>
+                #else:
+                <!-- draft — not yet validated/opened -->
+                <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate"
+                   style="font-size:.8rem;padding:.25rem .6rem">Validate &amp; open →</a>
+                #endif
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+#endexport
+#endextend

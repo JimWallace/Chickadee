@@ -1,0 +1,48 @@
+#extend("base"):
+#export("title"):
+Validate — #(title)
+#endexport
+#export("content"):
+<h1>Validate solution</h1>
+<p class="card-meta" style="margin-bottom:1.5rem">
+    <strong>#(title)</strong> ·
+    <code>#(setupID)</code> ·
+    #(suiteCount) test suite(s)
+    #if(dueAt): · due #(dueAt)#endif
+</p>
+
+<p>Upload your reference solution to confirm all tests pass before opening the assignment to students.</p>
+
+<!-- ── Solution upload ──────────────────────────────── -->
+<div style="margin-bottom:1.5rem">
+    <label class="form-label" style="max-width:480px">
+        Solution file (.py)
+        <input class="form-input" id="solution-file" type="file" accept=".py,.ipynb">
+    </label>
+    <div style="margin-top:.75rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="run-btn" disabled>Run tests</button>
+        <span id="validate-status" class="nb-status"></span>
+    </div>
+</div>
+
+<!-- ── Inline results (hidden until run) ───────────── -->
+<div id="validate-results" hidden></div>
+
+<!-- ── Go live (shown only when all tests pass) ─────── -->
+<div id="go-live-panel" hidden style="margin-top:1.5rem;padding:1rem;background:#F0FDF4;border:1px solid var(--green);border-radius:6px">
+    <p style="margin:0 0 .75rem;color:var(--green);font-weight:600">✓ All tests passed — ready to go live!</p>
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <form method="post" action="/assignments/#(assignmentID)/open">
+            <button class="btn btn-primary" type="submit">Go live</button>
+        </form>
+        <a class="btn" href="/assignments">Not yet — back to assignments</a>
+    </div>
+</div>
+
+<script
+    data-assignment-id="#(assignmentID)"
+    data-setup-id="#(setupID)"
+    src="/assignment-validate.js">
+</script>
+#endexport
+#endextend
