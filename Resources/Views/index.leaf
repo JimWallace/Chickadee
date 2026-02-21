@@ -5,7 +5,7 @@ Assignments
 #export("content"):
 <h1>Assignments</h1>
 #if(setups.isEmpty):
-<p class="empty">No test setups uploaded yet. <a href="/testsetups/new">Upload one</a>.</p>
+<p class="empty">No assignments available yet.</p>
 #else:
 <ul class="card-list">
 #for(setup in setups):

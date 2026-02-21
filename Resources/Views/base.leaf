@@ -9,7 +9,20 @@
 <body>
 <nav class="nav">
     <a class="nav-brand" href="/">Chickadee</a>
-    <a class="nav-link" href="/testsetups/new">Upload Setup</a>
+    #if(currentUser):
+        #if(currentUser.isInstructor):
+            <a class="nav-link" href="/testsetups/new">Upload Setup</a>
+        #endif
+        #if(currentUser.isAdmin):
+            <a class="nav-link" href="/admin">Admin</a>
+        #endif
+        <span class="nav-username">#(currentUser.username)</span>
+        <form method="post" action="/logout" style="display:inline;margin:0">
+            <button class="btn-link nav-link" type="submit">Log out</button>
+        </form>
+    #else:
+        <a class="nav-link" href="/login">Log in</a>
+    #endif
 </nav>
 <main class="main">
     #import("content")

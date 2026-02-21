@@ -350,6 +350,47 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     margin-top: .75rem;
 }
 
+/* ── Auth pages ──────────────────────────────────────── */
+
+.auth-box {
+    max-width: 420px;
+    margin: 3rem auto;
+}
+
+.auth-box h1 { margin-bottom: 1.5rem; }
+
+.auth-alt {
+    margin-top: 1rem;
+    font-size: .875rem;
+    color: var(--gray-600);
+}
+
+/* ── Nav username + logout button ────────────────────── */
+
+.nav-username {
+    font-size: .875rem;
+    color: var(--gray-600);
+    margin-left: auto;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+/* ── Admin dashboard ─────────────────────────────────── */
+
+.admin-section {
+    margin-bottom: 2.5rem;
+}
+
+.admin-section h2 {
+    margin-bottom: .875rem;
+}
+
 /* ── Inline notebook results panel ───────────────────── */
 .nb-results {
     margin-top: 1.25rem;

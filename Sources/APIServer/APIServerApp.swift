@@ -43,6 +43,11 @@ func configure(_ app: Application) throws {
     app.storage[TestSetupsDirectoryKey.self]  = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
 
+    // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
+
+    app.sessions.use(.memory)
+    app.middleware.use(app.sessions.middleware)
+
     // MARK: - Views + static files
 
     app.views.use(.leaf)
@@ -58,6 +63,9 @@ func configure(_ app: Application) throws {
     app.migrations.add(AddAttemptNumberToSubmissions())
     app.migrations.add(AddFilenameToSubmissions())
     app.migrations.add(AddSourceToResults())
+    app.migrations.add(CreateUsers())
+    app.migrations.add(CreateAssignments())
+    app.migrations.add(AddUserIDToSubmissions())
 
     try app.autoMigrate().wait()
 

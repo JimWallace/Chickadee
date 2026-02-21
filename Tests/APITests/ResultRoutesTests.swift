@@ -24,6 +24,10 @@ final class ResultRoutesTests: XCTestCase {
 
         app.resultsDirectory = tmpResultsDir
 
+        // Sessions are required because routes.swift now registers UserSessionAuthenticator.
+        app.sessions.use(.memory)
+        app.middleware.use(app.sessions.middleware)
+
         app.databases.use(.sqlite(.memory), as: .sqlite)
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
@@ -31,6 +35,9 @@ final class ResultRoutesTests: XCTestCase {
         app.migrations.add(AddAttemptNumberToSubmissions())
         app.migrations.add(AddFilenameToSubmissions())
         app.migrations.add(AddSourceToResults())
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateAssignments())
+        app.migrations.add(AddUserIDToSubmissions())
         try await app.autoMigrate().get()
 
         try routes(app)
