@@ -11,6 +11,7 @@
     <a class="nav-brand" href="/">Chickadee</a>
     #if(currentUser):
         #if(currentUser.isInstructor):
+            <a class="nav-link" href="/assignments">Assignments</a>
             <a class="nav-link" href="/testsetups/new">Upload Setup</a>
         #endif
         #if(currentUser.isAdmin):

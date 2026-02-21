@@ -11,8 +11,15 @@ Assignments
 #for(setup in setups):
 <li class="card">
     <div class="card-body">
+        #if(setup.title):
+        <h2 class="card-title">#(setup.title)</h2>
+        <p class="card-meta">
+            <code>#(setup.id)</code> · #(setup.suiteCount) test suite(s)#if(setup.dueAt): · <strong>due #(setup.dueAt)</strong>#endif
+        </p>
+        #else:
         <h2 class="card-title">#(setup.id)</h2>
         <p class="card-meta">#(setup.suiteCount) test suite(s) · #(setup.createdAt)</p>
+        #endif
     </div>
     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit">Submit</a>
 </li>

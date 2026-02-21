@@ -41,6 +41,15 @@ struct WebRoutes: RouteCollection {
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
 
+        // Fetch all open assignments to join title + dueAt onto setup rows.
+        let openAssignments = try await APIAssignment.query(on: req.db)
+            .filter(\.$isOpen == true)
+            .all()
+        let assignmentBySetup = Dictionary(
+            openAssignments.map { ($0.testSetupID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
         let setups: [APITestSetup]
         if user.isInstructor {
             // Instructors and admins see all test setups.
@@ -49,10 +58,7 @@ struct WebRoutes: RouteCollection {
                 .all()
         } else {
             // Students see only test setups that have an open published assignment.
-            let assignments = try await APIAssignment.query(on: req.db)
-                .filter(\.$isOpen == true)
-                .all()
-            let publishedIDs = Set(assignments.map(\.testSetupID))
+            let publishedIDs = Set(openAssignments.map(\.testSetupID))
             guard !publishedIDs.isEmpty else {
                 return try await req.view.render("index",
                     IndexContext(setups: [], currentUser: req.currentUserContext))
@@ -64,12 +70,16 @@ struct WebRoutes: RouteCollection {
         }
 
         let rows = setups.map { setup -> TestSetupRow in
-            let data  = Data(setup.manifest.utf8)
-            let props = try? decoder.decode(TestProperties.self, from: data)
+            let setupID    = setup.id ?? ""
+            let data       = Data(setup.manifest.utf8)
+            let props      = try? decoder.decode(TestProperties.self, from: data)
+            let assignment = assignmentBySetup[setupID]
             return TestSetupRow(
-                id:         setup.id ?? "",
+                id:         setupID,
+                title:      assignment?.title,
                 suiteCount: props?.testSuites.count ?? 0,
-                createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—"
+                createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—",
+                dueAt:      assignment?.dueAt.map { fmt.string(from: $0) }
             )
         }
 
@@ -287,8 +297,10 @@ private struct BaseContext: Encodable {
 
 private struct TestSetupRow: Encodable {
     let id: String
+    let title: String?      // from APIAssignment; nil when instructor sees unpublished setups
     let suiteCount: Int
     let createdAt: String
+    let dueAt: String?      // formatted due date, nil if no assignment or no due date
 }
 
 private struct IndexContext: Encodable {

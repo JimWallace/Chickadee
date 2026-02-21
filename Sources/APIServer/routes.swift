@@ -24,6 +24,7 @@ func routes(_ app: Application) throws {
 
     let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor))
     try instructor.register(collection: TestSetupRoutes())
+    try instructor.register(collection: AssignmentRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())
 

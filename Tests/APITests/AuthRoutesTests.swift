@@ -194,4 +194,23 @@ final class AuthRoutesTests: XCTestCase {
             XCTAssertEqual(res.status, .forbidden)
         })
     }
+
+    func testStudentCannotAccessAssignmentsPage() async throws {
+        let hash = try Bcrypt.hash("pass1234")
+        let student = APIUser(username: "student2", passwordHash: hash, role: "student")
+        try await student.save(on: app.db)
+
+        var sessionCookie = ""
+        try await app.test(.POST, "/login", beforeRequest: { req in
+            try req.content.encode(["username": "student2", "password": "pass1234"], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            sessionCookie = res.headers.first(name: .setCookie) ?? ""
+        })
+
+        try await app.test(.GET, "/assignments", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden)
+        })
+    }
 }

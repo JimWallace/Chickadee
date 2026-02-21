@@ -41,76 +41,11 @@ Admin
     </table>
 </section>
 
-<!-- ── Published assignments ──────────────────────────── -->
+<!-- ── Quick link to assignment management ────────────── -->
 <section class="admin-section">
-    <h2>Published assignments</h2>
-    #if(assignments.isEmpty):
-    <p class="empty">No assignments published yet.</p>
-    #else:
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Setup ID</th>
-                <th>Status</th>
-                <th>Due</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(a in assignments):
-            <tr class="#if(a.isOpen):status-pass#else:status-fail#endif">
-                <td>#(a.title)</td>
-                <td><code>#(a.testSetupID)</code></td>
-                <td><span class="tier">#if(a.isOpen):open#else:closed#endif</span></td>
-                <td class="time">#if(a.dueAt):#(a.dueAt)#else:—#endif</td>
-                <td style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    #if(a.isOpen):
-                    <form method="post" action="/admin/assignments/#(a.id)/close">
-                        <button class="btn" type="submit"
-                                style="font-size:.8rem;padding:.25rem .6rem">Close</button>
-                    </form>
-                    #endif
-                    <form method="post" action="/admin/assignments/#(a.id)/delete"
-                          onsubmit="return confirm('Remove this assignment?')">
-                        <button class="btn" type="submit"
-                                style="font-size:.8rem;padding:.25rem .6rem;color:var(--red)">Remove</button>
-                    </form>
-                </td>
-            </tr>
-        #endfor
-        </tbody>
-    </table>
-    #endif
-</section>
-
-<!-- ── Publish a new assignment ───────────────────────── -->
-<section class="admin-section">
-    <h2>Publish assignment</h2>
-    #if(unpublishedSetups.isEmpty):
-    <p class="empty">All test setups are already published.</p>
-    #else:
-    <form class="form" method="post" action="/admin/assignments">
-        <label class="form-label">
-            Test setup
-            <select name="testSetupID" class="form-input" required>
-                #for(s in unpublishedSetups):
-                <option value="#(s.id)">#(s.id)</option>
-                #endfor
-            </select>
-        </label>
-        <label class="form-label">
-            Title (shown to students)
-            <input class="form-input" type="text" name="title"
-                   placeholder="e.g. Lab 1 — Warmup" required>
-        </label>
-        <label class="form-label">
-            Due date (optional, ISO 8601)
-            <input class="form-input" type="datetime-local" name="dueAt">
-        </label>
-        <button class="btn btn-primary" type="submit">Publish</button>
-    </form>
-    #endif
+    <h2>Assignments</h2>
+    <p>Manage which assignments are published and open to students.</p>
+    <a class="btn btn-primary" href="/assignments">Go to Assignments →</a>
 </section>
 #endexport
 #endextend
