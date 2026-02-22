@@ -49,6 +49,7 @@ struct SubmissionRoutes: RouteCollection {
             attemptNumber: priorCount + 1
         )
         try await submission.save(on: req.db)
+        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return SubmissionCreatedResponse(submissionID: subID)
     }
@@ -94,6 +95,7 @@ struct SubmissionRoutes: RouteCollection {
             filename:      body.filename
         )
         try await submission.save(on: req.db)
+        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return SubmissionCreatedResponse(submissionID: subID)
     }

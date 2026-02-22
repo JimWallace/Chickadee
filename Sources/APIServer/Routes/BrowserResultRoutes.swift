@@ -108,6 +108,7 @@ struct BrowserResultRoutes: RouteCollection {
             userID:        caller.id
         )
         try await workerSub.save(on: req.db)
+        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         req.logger.info("Browser result stored for \(subID); worker job queued as \(workerSubID)")
 

@@ -133,47 +133,68 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func saveNewAssignment(req: Request) async throws -> Response {
-        struct SaveBody: Content {
+        struct SaveBodyMany: Content {
             var assignmentName: String?
             var dueAt: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: [File]?
+            var suiteConfig: String?
+        }
+        struct SaveBodySingle: Content {
+            var assignmentName: String?
+            var dueAt: String?
+            var assignmentNotebookFile: File?
+            var solutionNotebookFile: File?
+            var suiteFiles: File?
+            var suiteConfig: String?
         }
 
-        let body = try req.content.decode(SaveBody.self)
-        let title = (body.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let due = parseDueDate(body.dueAt)
+        let bodyMany = try? req.content.decode(SaveBodyMany.self)
+        let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
+        guard bodyMany != nil || bodySingle != nil else {
+            throw Abort(.badRequest, reason: "Invalid assignment upload payload")
+        }
+
+        let assignmentName = bodyMany?.assignmentName ?? bodySingle?.assignmentName
+        let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
+        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
+        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
+        let suiteFilesRaw = bodyMany?.suiteFiles ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
+        let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
+
+        let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let due = parseDueDate(dueAtRaw)
 
         guard !title.isEmpty else {
-            let q = "assignmentName=&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Assignment%20name%20is%20required"
+            let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
             return req.redirect(to: "/assignments/new?\(q)")
         }
 
-        guard let assignmentNotebookFile = body.assignmentNotebookFile,
+        guard let assignmentNotebookFile,
               assignmentNotebookFile.data.readableBytes > 0 else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
             return req.redirect(to: "/assignments/new?\(q)")
         }
-        guard let solutionNotebookFile = body.solutionNotebookFile,
+        guard let solutionNotebookFile,
               solutionNotebookFile.data.readableBytes > 0 else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required"
             return req.redirect(to: "/assignments/new?\(q)")
         }
-        let suiteFiles = (body.suiteFiles ?? []).filter { $0.data.readableBytes > 0 }
+        let suiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
         guard !suiteFiles.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=At%20least%20one%20test%20suite%20file%20is%20required"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=At%20least%20one%20test%20suite%20file%20is%20required"
             return req.redirect(to: "/assignments/new?\(q)")
         }
 
         let assignmentNotebookRaw = Data(assignmentNotebookFile.data.readableBytesView)
         let solutionNotebookRaw = Data(solutionNotebookFile.data.readableBytesView)
         guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
             return req.redirect(to: "/assignments/new?\(q)")
         }
         guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
             return req.redirect(to: "/assignments/new?\(q)")
         }
 
@@ -184,17 +205,21 @@ struct AssignmentRoutes: RouteCollection {
         let notebookPath = setupsDir + "\(setupID).ipynb"
         let zipPath = setupsDir + "\(setupID).zip"
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
-        let suiteScripts = try createRunnerSetupZip(
+        let setupPackage = try createRunnerSetupZip(
             assignmentNotebookData: assignmentNotebook,
             suiteFiles: suiteFiles,
+            suiteConfigJSON: suiteConfigRaw,
             zipPath: zipPath
         )
-        guard !suiteScripts.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=No%20supported%20test%20scripts%20found%20in%20test%20suite"
+        guard !setupPackage.testSuites.isEmpty else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
             return req.redirect(to: "/assignments/new?\(q)")
         }
 
-        let manifest = try makeWorkerManifestJSON(scripts: suiteScripts)
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: setupPackage.testSuites,
+            includeMakefile: setupPackage.hasMakefile
+        )
         let setup = APITestSetup(
             id: setupID,
             manifest: manifest,
@@ -232,8 +257,8 @@ struct AssignmentRoutes: RouteCollection {
         case .failed(let summary):
             assignment.validationStatus = "failed"
             try await assignment.save(on: req.db)
-            let q = "notice=\(urlEncode("Assignment saved, but runner validation failed (\(summary)). Fix your solution/test suite and create a new assignment."))"
-            return req.redirect(to: "/assignments/new?\(q)")
+            req.logger.warning("Assignment validation failed for setup \(setupID): \(summary) (submission \(validationSubmissionID))")
+            return req.redirect(to: "/submissions/\(validationSubmissionID)")
         case .timedOut:
             assignment.validationStatus = "pending"
             try await assignment.save(on: req.db)
@@ -413,6 +438,32 @@ struct AssignmentRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
+        let setupID = assignment.testSetupID
+
+        // Delete related submissions and their result rows for this setup.
+        let submissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .all()
+        let submissionIDs = submissions.compactMap(\.id)
+        if !submissionIDs.isEmpty {
+            try await APIResult.query(on: req.db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .delete()
+            try await APISubmission.query(on: req.db)
+                .filter(\.$id ~~ submissionIDs)
+                .delete()
+        }
+
+        // Delete setup artifacts and setup row so it disappears from the assignments list.
+        if let setup = try await APITestSetup.find(setupID, on: req.db) {
+            try? FileManager.default.removeItem(atPath: setup.zipPath)
+            if let notebookPath = setup.notebookPath, !notebookPath.isEmpty {
+                try? FileManager.default.removeItem(atPath: notebookPath)
+            }
+            removeMaterializedNotebookFiles(req: req, setupID: setupID)
+            try await setup.delete(on: req.db)
+        }
+
         try await assignment.delete(on: req.db)
         return req.redirect(to: "/assignments")
     }
@@ -569,14 +620,16 @@ private func defaultNotebookData(title: String) -> Data {
 private func createRunnerSetupZip(
     assignmentNotebookData: Data,
     suiteFiles: [File],
+    suiteConfigJSON: String?,
     zipPath: String
-) throws -> [String] {
+) throws -> RunnerSetupPackage {
     let fm = FileManager.default
     let tempDir = fm.temporaryDirectory.appendingPathComponent("chickadee_runner_setup_\(UUID().uuidString)")
     try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: tempDir) }
 
     var seenNames: Set<String> = []
+    var storedNameByIndex: [Int: String] = [:]
     for (index, file) in suiteFiles.enumerated() {
         let data = Data(file.data.readableBytesView)
         guard !data.isEmpty else { continue }
@@ -598,16 +651,20 @@ private func createRunnerSetupZip(
         }
         seenNames.insert(finalName)
         try data.write(to: tempDir.appendingPathComponent(finalName))
+        storedNameByIndex[index] = finalName
     }
 
     let notebookURL = tempDir.appendingPathComponent("assignment.ipynb")
     try assignmentNotebookData.write(to: notebookURL)
 
-    let discoveredScripts = discoverTestScripts(in: tempDir)
-    guard !discoveredScripts.isEmpty else {
-        throw Abort(.badRequest, reason: "Test suite must include at least one supported test script")
+    let testSuites = try buildSuiteEntries(
+        suiteFiles: suiteFiles,
+        storedNameByIndex: storedNameByIndex,
+        suiteConfigJSON: suiteConfigJSON
+    )
+    guard !testSuites.isEmpty else {
+        throw Abort(.badRequest, reason: "Select at least one test file in the suite file list")
     }
-    let scripts = try orderSuiteScripts(discoveredScripts)
 
     let zip = Process()
     zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
@@ -618,7 +675,11 @@ private func createRunnerSetupZip(
     guard zip.terminationStatus == 0 else {
         throw Abort(.internalServerError, reason: "Failed to package setup zip")
     }
-    return scripts
+    let hasMakefile = storedNameByIndex.values.contains {
+        let n = $0.lowercased()
+        return n == "makefile" || n == "gnumakefile"
+    }
+    return RunnerSetupPackage(testSuites: testSuites, hasMakefile: hasMakefile)
 }
 
 private func sanitizeSuiteFilename(_ raw: String) -> String {
@@ -629,90 +690,116 @@ private func sanitizeSuiteFilename(_ raw: String) -> String {
     return name
 }
 
-private func discoverTestScripts(in directory: URL) -> [String] {
-    guard let enumerator = FileManager.default.enumerator(
-        at: directory,
-        includingPropertiesForKeys: [.isRegularFileKey],
-        options: [.skipsHiddenFiles]
-    ) else { return [] }
-
-    var scripts: [String] = []
-    for case let fileURL as URL in enumerator {
-        guard isSupportedTestScript(fileURL) else { continue }
-        let relative = fileURL.path.replacingOccurrences(of: directory.path + "/", with: "")
-        scripts.append(relative)
-    }
-    return scripts.sorted()
+private struct SuiteConfigRow: Decodable {
+    let index: Int
+    let isTest: Bool
+    let tier: String?
+    let order: Int?
 }
 
-private func isSupportedTestScript(_ fileURL: URL) -> Bool {
-    let ext = fileURL.pathExtension.lowercased()
-    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "rb", "pl", "js", "php"]
-    if supportedExtensions.contains(ext) { return true }
-
-    let filename = fileURL.lastPathComponent.lowercased()
-    if filename == "assignment.ipynb" { return false }
-    if FileManager.default.isExecutableFile(atPath: fileURL.path) { return true }
-
-    guard let data = try? Data(contentsOf: fileURL),
-          let text = String(data: data.prefix(256), encoding: .utf8) else {
-        return false
-    }
-    return text.hasPrefix("#!")
+private struct ConfiguredSuiteEntry {
+    let script: String
+    let tier: String
+    let order: Int
 }
 
-private func orderSuiteScripts(_ scripts: [String]) throws -> [String] {
-    struct Entry {
-        let path: String
-        let order: Int?
-    }
+private struct RunnerSetupPackage {
+    let testSuites: [ConfiguredSuiteEntry]
+    let hasMakefile: Bool
+}
 
-    let entries = scripts.map { script -> Entry in
-        let filename = (script as NSString).lastPathComponent
-        let ns = filename as NSString
-        let range = NSRange(location: 0, length: ns.length)
-        let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+$"#)
-        guard let match = regex?.firstMatch(in: filename, options: [], range: range),
-              match.numberOfRanges >= 2,
-              let orderRange = Range(match.range(at: 1), in: filename),
-              let order = Int(filename[orderRange]) else {
-            return Entry(path: script, order: nil)
+private func buildSuiteEntries(
+    suiteFiles: [File],
+    storedNameByIndex: [Int: String],
+    suiteConfigJSON: String?
+) throws -> [ConfiguredSuiteEntry] {
+    let parsedRows: [SuiteConfigRow] = {
+        guard let raw = suiteConfigJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let data = raw.data(using: .utf8),
+              let rows = try? JSONDecoder().decode([SuiteConfigRow].self, from: data) else {
+            return []
         }
-        return Entry(path: script, order: order)
-    }
+        return rows
+    }()
 
-    let hasOrdered = entries.contains { $0.order != nil }
-    let hasUnordered = entries.contains { $0.order == nil }
-    if hasOrdered && hasUnordered {
-        throw Abort(
-            .badRequest,
-            reason: "When using numbered test scripts, every script must start with an order prefix like 01_ or 02-."
-        )
-    }
-
-    if hasOrdered {
-        return entries
+    if !parsedRows.isEmpty {
+        var rowsByIndex: [Int: SuiteConfigRow] = [:]
+        for row in parsedRows {
+            rowsByIndex[row.index] = row
+        }
+        var selected: [ConfiguredSuiteEntry] = []
+        for index in suiteFiles.indices {
+            guard let row = rowsByIndex[index], row.isTest else { continue }
+            guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
+            let tier = normalizeTier(row.tier)
+            selected.append(ConfiguredSuiteEntry(
+                script: script,
+                tier: tier,
+                order: row.order ?? (index + 1)
+            ))
+        }
+        return selected
             .sorted { lhs, rhs in
-                if lhs.order != rhs.order {
-                    return (lhs.order ?? 0) < (rhs.order ?? 0)
-                }
-                return lhs.path < rhs.path
+                if lhs.order != rhs.order { return lhs.order < rhs.order }
+                return lhs.script < rhs.script
             }
-            .map(\.path)
     }
 
-    return scripts.sorted()
+    // Backward-compatible fallback when no suite config JSON is submitted.
+    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "rb", "pl", "js", "php"]
+    var defaults: [ConfiguredSuiteEntry] = []
+    for index in suiteFiles.indices {
+        guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
+        let ext = URL(fileURLWithPath: script).pathExtension.lowercased()
+        guard supportedExtensions.contains(ext) else { continue }
+        defaults.append(ConfiguredSuiteEntry(
+            script: script,
+            tier: "public",
+            order: inferredOrder(from: script) ?? (index + 1)
+        ))
+    }
+    return defaults
+        .sorted { lhs, rhs in
+            if lhs.order != rhs.order { return lhs.order < rhs.order }
+            return lhs.script < rhs.script
+        }
 }
 
-private func makeWorkerManifestJSON(scripts: [String]) throws -> String {
-    let testSuites = scripts.map { ["tier": "public", "script": $0] }
+private func inferredOrder(from filename: String) -> Int? {
+    let base = (filename as NSString).lastPathComponent
+    let ns = base as NSString
+    let range = NSRange(location: 0, length: ns.length)
+    let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+$"#)
+    guard let match = regex?.firstMatch(in: base, options: [], range: range),
+          match.numberOfRanges >= 2,
+          let orderRange = Range(match.range(at: 1), in: base) else {
+        return nil
+    }
+    return Int(base[orderRange])
+}
+
+private func normalizeTier(_ raw: String?) -> String {
+    switch (raw ?? "public").lowercased() {
+    case "secret": return "secret"
+    case "release": return "release"
+    case "student": return "student"
+    default: return "public"
+    }
+}
+
+private func makeWorkerManifestJSON(
+    testSuites: [ConfiguredSuiteEntry],
+    includeMakefile: Bool
+) throws -> String {
+    let testSuiteJSON = testSuites.map { ["tier": $0.tier, "script": $0.script] }
     let manifest: [String: Any] = [
         "schemaVersion": 1,
         "gradingMode": "worker",
         "requiredFiles": [],
-        "testSuites": testSuites,
+        "testSuites": testSuiteJSON,
         "timeLimitSeconds": 10,
-        "makefile": NSNull()
+        "makefile": includeMakefile ? ["target": NSNull()] : NSNull()
     ]
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
@@ -798,6 +885,21 @@ private func ensureValidationRunnerAvailability(req: Request) async {
 
     await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
     try? await Task.sleep(nanoseconds: 1_000_000_000)
+}
+
+private func removeMaterializedNotebookFiles(req: Request, setupID: String) {
+    let roots = [
+        req.application.directory.publicDirectory + "files/",
+        req.application.directory.publicDirectory + "jupyterlite/files/",
+        req.application.directory.publicDirectory + "jupyterlite/lab/files/",
+        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
+    ]
+    for root in roots {
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: root) else { continue }
+        for name in entries where name.hasPrefix(setupID) && name.hasSuffix(".ipynb") {
+            try? FileManager.default.removeItem(atPath: root + name)
+        }
+    }
 }
 
 private struct EditContext: Encodable {

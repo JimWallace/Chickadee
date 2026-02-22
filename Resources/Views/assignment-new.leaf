@@ -43,8 +43,23 @@ Create Assignment
 
     <label class="form-label">
         <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>; use <code>01_</code>, <code>02_</code> prefixes to control order)</span>
-        <input class="form-input" type="file" name="suiteFiles" multiple required>
+        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple required>
     </label>
+    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+
+    <div id="suite-config-panel" style="display:none">
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Test?</th>
+                    <th>Tier</th>
+                    <th class="time">Order</th>
+                </tr>
+            </thead>
+            <tbody id="suite-config-body"></tbody>
+        </table>
+    </div>
 
     <p class="card-meta">
         The uploaded solution is validated immediately by a runner. The assignment stays closed until validation passes.
@@ -56,5 +71,124 @@ Create Assignment
         <a class="btn" href="/assignments">Cancel</a>
     </div>
 </form>
+<script>
+(function () {
+    'use strict';
+
+    var filesInput = document.getElementById('suite-files-input');
+    var configField = document.getElementById('suite-config-field');
+    var panel = document.getElementById('suite-config-panel');
+    var body = document.getElementById('suite-config-body');
+    if (!filesInput || !configField || !panel || !body) return;
+
+    function isLikelyScript(name) {
+        var lower = (name || '').toLowerCase();
+        return lower.endsWith('.sh')
+            || lower.endsWith('.bash')
+            || lower.endsWith('.zsh')
+            || lower.endsWith('.py')
+            || lower.endsWith('.rb')
+            || lower.endsWith('.pl')
+            || lower.endsWith('.js')
+            || lower.endsWith('.php');
+    }
+
+    function inferredOrder(name, fallback) {
+        var match = (name || '').match(/^([0-9]+)[_-]/);
+        if (!match) return fallback;
+        var n = Number(match[1]);
+        return Number.isFinite(n) && n > 0 ? n : fallback;
+    }
+
+    function renderRows() {
+        var files = Array.from(filesInput.files || []);
+        if (files.length === 0) {
+            panel.style.display = 'none';
+            body.innerHTML = '';
+            configField.value = '';
+            return;
+        }
+
+        panel.style.display = '';
+        body.innerHTML = files.map(function (file, index) {
+            var likelyScript = isLikelyScript(file.name);
+            var checked = likelyScript ? 'checked' : '';
+            var supportSelected = likelyScript ? '' : 'selected';
+            var publicSelected = likelyScript ? 'selected' : '';
+            var order = inferredOrder(file.name, index + 1);
+            return '<tr data-index="' + index + '">'
+                + '<td><code>' + escapeHtml(file.name) + '</code></td>'
+                + '<td><input type="checkbox" class="suite-test-toggle" ' + checked + '></td>'
+                + '<td>'
+                + '  <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+                + '    <option value="support" ' + supportSelected + '>support</option>'
+                + '    <option value="public" ' + publicSelected + '>public</option>'
+                + '    <option value="secret">secret</option>'
+                + '    <option value="release">release</option>'
+                + '  </select>'
+                + '</td>'
+                + '<td class="time"><input class="form-input suite-order" type="number" min="1" step="1" value="' + order + '" style="width:6rem;padding:.25rem .5rem;font-size:.8rem"></td>'
+                + '</tr>';
+        }).join('');
+        syncConfig();
+    }
+
+    function syncConfig() {
+        var rows = Array.from(body.querySelectorAll('tr[data-index]'));
+        var config = rows.map(function (row) {
+            var index = Number(row.getAttribute('data-index'));
+            var tier = row.querySelector('.suite-tier')?.value || 'public';
+            var toggleEl = row.querySelector('.suite-test-toggle');
+            var toggleChecked = !!toggleEl?.checked;
+            var isTest = toggleChecked && tier !== 'support';
+            var orderRaw = row.querySelector('.suite-order')?.value || '';
+            var order = Number(orderRaw);
+
+            var tierEl = row.querySelector('.suite-tier');
+            var orderEl = row.querySelector('.suite-order');
+            if (toggleEl) {
+                toggleEl.checked = isTest;
+            }
+            if (tierEl) tierEl.disabled = false;
+            if (orderEl) orderEl.disabled = !isTest;
+
+            return {
+                index: index,
+                isTest: isTest,
+                tier: tier,
+                order: Number.isFinite(order) && order > 0 ? Math.floor(order) : null
+            };
+        });
+        configField.value = JSON.stringify(config);
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    filesInput.addEventListener('change', renderRows);
+    body.addEventListener('change', syncConfig);
+    body.addEventListener('input', syncConfig);
+
+    var form = filesInput.closest('form');
+    if (form) {
+        form.addEventListener('submit', function (event) {
+            syncConfig();
+            var config = [];
+            try { config = JSON.parse(configField.value || '[]'); } catch (_) { config = []; }
+            var hasTest = config.some(function (row) { return !!row.isTest; });
+            if (!hasTest) {
+                event.preventDefault();
+                window.alert('Select at least one file as a test.');
+            }
+        });
+    }
+})();
+</script>
 #endexport
 #endextend
