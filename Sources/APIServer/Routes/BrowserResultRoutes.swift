@@ -3,6 +3,10 @@
 // Phase 5: accepts grading results from the student's browser (Pyodide run)
 // and enqueues the notebook for an authoritative worker re-run.
 //
+// Phase 9: merges instructor's hidden test cells back into the student's
+// notebook before saving to disk, so the worker grades with the full
+// test suite (including secret/release cells stripped from the download).
+//
 //   POST /api/v1/submissions/browser-result
 //
 // Multipart body:
@@ -46,10 +50,15 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         // Persist the notebook to disk as the submission artifact.
-        let subsDir = req.application.submissionsDirectory
-        let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let nbPath  = subsDir + "\(subID).ipynb"
-        try body.notebook.write(to: URL(fileURLWithPath: nbPath))
+        // Merge the student's notebook with the instructor's canonical notebook
+        // so that hidden test cells (secret, release) are re-injected before
+        // the worker runs the full authoritative test suite.
+        let subsDir        = req.application.submissionsDirectory
+        let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath         = subsDir + "\(subID).ipynb"
+        let instructorData = (try? notebookData(for: setup)) ?? body.notebook
+        let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
+        try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
         // Count prior submissions to derive the attempt number.
         let priorCount = try await APISubmission.query(on: req.db)

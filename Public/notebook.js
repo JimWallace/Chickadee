@@ -6,6 +6,11 @@
 // then on "Submit" runs the notebook via Pyodide, collects per-test outcomes,
 // and POSTs a TestOutcomeCollection to POST /api/v1/submissions/browser-result.
 //
+// "Upload & submit" (Phase 9): student picks a locally-edited .ipynb file;
+// the upload flow mirrors the Submit flow exactly — Pyodide runs against the
+// uploaded solution (merged with visible test cells from the server), results
+// are shown inline, and the submission is queued for an authoritative worker run.
+//
 // Results are rendered inline on the same page so students can iterate
 // without navigating away. A "View official submission" link is shown
 // after each run for the permanent record.
@@ -13,11 +18,12 @@
 (function () {
     'use strict';
 
-    const frame     = document.getElementById('jl-frame');
-    const statusEl  = document.getElementById('nb-status');
-    const submitBtn = document.getElementById('nb-submit');
-    const resultsEl = document.getElementById('nb-results');
-    const setupID   = frame ? frame.dataset.setupId : null;
+    const frame      = document.getElementById('jl-frame');
+    const statusEl   = document.getElementById('nb-status');
+    const submitBtn  = document.getElementById('nb-submit');
+    const resultsEl  = document.getElementById('nb-results');
+    const uploadFile = document.getElementById('nb-upload-file');
+    const setupID    = frame ? frame.dataset.setupId : null;
 
     if (!frame || !setupID) return;
 
@@ -64,7 +70,56 @@
     });
 
     // -------------------------------------------------------------------------
-    // 3. Pyodide execution engine
+    // 3. Upload & submit — read file → merge → Pyodide → POST → render
+    // -------------------------------------------------------------------------
+
+    if (uploadFile) {
+        uploadFile.addEventListener('change', async () => {
+            const file = uploadFile.files && uploadFile.files[0];
+            if (!file) return;
+
+            submitBtn.disabled = true;
+            clearResults();
+            setStatus('loading', 'Loading grading engine…');
+
+            try {
+                // Read the student's uploaded notebook.
+                const uploadedText     = await readFileAsText(file);
+                const uploadedNotebook = JSON.parse(uploadedText);
+
+                // Fetch the assignment notebook to get the visible test cells.
+                setStatus('loading', 'Fetching test definitions…');
+                const nbRes = await fetch(notebookURL);
+                if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
+                const assignmentNotebook = await nbRes.json();
+
+                // Build a merged notebook for Pyodide:
+                // solution cells from the upload + test cells from the assignment.
+                const mergedForPyodide = mergeNotebooksForRun(uploadedNotebook, assignmentNotebook);
+
+                setStatus('loading', 'Running tests…');
+                const outcomes = await runNotebook(mergedForPyodide);
+
+                setStatus('loading', 'Submitting…');
+                const collection = buildCollection(outcomes, setupID);
+                // POST the uploaded (unmerged) notebook as the submission artifact;
+                // the server will re-inject hidden test cells server-side.
+                const response = await postBrowserResult(collection, uploadedNotebook, setupID);
+
+                renderResults(outcomes, response);
+                setStatus('', '');
+            } catch (err) {
+                setStatus('error', `Error: ${err.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                // Reset so the same file can be re-selected.
+                uploadFile.value = '';
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Pyodide execution engine
     // -------------------------------------------------------------------------
 
     let pyodide = null;
@@ -202,7 +257,7 @@ else:
     }
 
     // -------------------------------------------------------------------------
-    // 4. # TEST: comment parser
+    // 5. # TEST: comment parser
     //
     // Format: # TEST: <name> [key=value ...]
     // Supported keys: tier (default "public"), weight (reserved), requires (reserved)
@@ -230,7 +285,29 @@ else:
     }
 
     // -------------------------------------------------------------------------
-    // 5. Build TestOutcomeCollection
+    // 6. Notebook merge helper (client-side, for Pyodide only)
+    //
+    // Produces a notebook with:
+    //   - non-test cells from the student's upload  (their solution code)
+    //   - test cells from the assignment notebook    (visible tiers only)
+    //
+    // The server re-injects hidden test cells when the notebook is saved.
+    // -------------------------------------------------------------------------
+
+    function mergeNotebooksForRun(studentNB, assignmentNB) {
+        const isTestCellJS = function (cell) {
+            const source = Array.isArray(cell.source)
+                ? cell.source.join('')
+                : (cell.source || '');
+            return /^#\s*TEST:/.test(source.trimStart().split('\n')[0]);
+        };
+        const solutionCells = (studentNB.cells   || []).filter(c => !isTestCellJS(c));
+        const testCells     = (assignmentNB.cells || []).filter(c =>  isTestCellJS(c));
+        return { ...studentNB, cells: [...solutionCells, ...testCells] };
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. Build TestOutcomeCollection
     // -------------------------------------------------------------------------
 
     function buildCollection(outcomes, testSetupID) {
@@ -259,7 +336,7 @@ else:
     }
 
     // -------------------------------------------------------------------------
-    // 6. POST to /api/v1/submissions/browser-result
+    // 8. POST to /api/v1/submissions/browser-result
     // -------------------------------------------------------------------------
 
     async function postBrowserResult(collection, notebook, testSetupID) {
@@ -280,7 +357,7 @@ else:
     }
 
     // -------------------------------------------------------------------------
-    // 7. Inline results rendering
+    // 9. Inline results rendering
     // -------------------------------------------------------------------------
 
     function clearResults() {
@@ -365,12 +442,21 @@ else:
     }
 
     // -------------------------------------------------------------------------
-    // 8. Helpers
+    // 10. Helpers
     // -------------------------------------------------------------------------
 
     function setStatus(type, msg) {
         statusEl.textContent  = msg;
         statusEl.className    = `nb-status${type ? ' nb-status-' + type : ''}`;
+    }
+
+    function readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const r   = new FileReader();
+            r.onload  = e => resolve(e.target.result);
+            r.onerror = () => reject(new Error('Could not read file'));
+            r.readAsText(file);
+        });
     }
 
     function loadScript(src) {
