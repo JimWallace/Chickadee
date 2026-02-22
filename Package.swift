@@ -18,7 +18,8 @@ let package = Package(
         .target(
             name: "Core",
             dependencies: [],
-            path: "Sources/Core"
+            path: "Sources/Core",
+            exclude: ["README.md"]
         ),
 
         // MARK: - API Server executable
@@ -31,7 +32,8 @@ let package = Package(
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "Leaf", package: "leaf"),
             ],
-            path: "Sources/APIServer"
+            path: "Sources/APIServer",
+            exclude: ["README.md"]
         ),
 
         // MARK: - Worker executable
@@ -42,7 +44,8 @@ let package = Package(
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
-            path: "Sources/Worker"
+            path: "Sources/Worker",
+            exclude: ["README.md"]
         ),
 
         // MARK: - Tests

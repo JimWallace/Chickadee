@@ -8,6 +8,7 @@ func routes(_ app: Application) throws {
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: AuthRoutes())
+    try app.register(collection: JupyterLiteContentsRoutes())
     // Worker result reporting is called by the worker daemon, not the browser.
     // It uses its own workerID for identification (Phase 7 will add worker tokens).
     try app.register(collection: ResultRoutes())

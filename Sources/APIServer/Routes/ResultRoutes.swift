@@ -17,6 +17,10 @@ struct ResultRoutes: RouteCollection {
     // POST /api/v1/worker/results
     @Sendable
     func reportResults(req: Request) async throws -> ReportResponse {
+        if let workerID = req.headers.first(name: "X-Worker-Id"), !workerID.isEmpty {
+            await req.application.workerActivityStore.markActive(workerID: workerID)
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 

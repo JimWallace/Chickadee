@@ -20,6 +20,7 @@
     const scriptEl     = document.currentScript;
     const setupID      = scriptEl ? scriptEl.dataset.setupId      : null;
     const assignmentID = scriptEl ? scriptEl.dataset.assignmentId : null;
+    const editorURL    = scriptEl ? scriptEl.dataset.editorUrl    : null;
     const notebookURL  = scriptEl ? scriptEl.dataset.notebookUrl  : null;
 
     // ── DOM refs ─────────────────────────────────────────────────────────────
@@ -36,9 +37,10 @@
     if (!setupID || !frame) return;
 
     // ── 1. Load JupyterLite ──────────────────────────────────────────────────
-    // We load the notebook from the server so the instructor sees the latest
-    // saved version (including any prior edits).
-    frame.src = `/jupyterlite/index.html?path=assignment.ipynb&fromURL=${encodeURIComponent(notebookURL)}`;
+    // The server pre-materializes a versioned notebook file and passes a full
+    // editor URL with workspace + path so JupyterLite can open it directly.
+    frame.src = editorURL ||
+        `/jupyterlite/lab/index.html?workspace=${encodeURIComponent(setupID)}&reset&path=assignment.ipynb`;
 
     // ── 2. Save notebook ─────────────────────────────────────────────────────
     // Workflow:

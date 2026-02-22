@@ -129,6 +129,30 @@ final class TestSetupEditTests: XCTestCase {
     }
     """
 
+    private let python3NotebookJSON = """
+    {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3 (ipykernel)",
+                "name": "python3"
+            },
+            "language_info": {
+                "name": "python"
+            }
+        },
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": ["x = 1"],
+                "metadata": {},
+                "outputs": []
+            }
+        ]
+    }
+    """
+
     // MARK: - PUT /api/v1/testsetups/:id/assignment
 
     func testPutAssignmentSavesFileToDisk() async throws {
@@ -170,6 +194,29 @@ final class TestSetupEditTests: XCTestCase {
         XCTAssertTrue(updated?.notebookPath?.hasSuffix("setup_put2.ipynb") == true)
     }
 
+    func testPutAssignmentNormalizesPython3KernelBeforeSaving() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_put_kernel")
+
+        try await app.test(.PUT, "/api/v1/testsetups/setup_put_kernel/assignment",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: python3NotebookJSON)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .noContent)
+            }
+        )
+
+        let expectedPath = tmpDir + "testsetups/setup_put_kernel.ipynb"
+        let savedData = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
+        let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
+        let metadata = savedJSON?["metadata"] as? [String: Any]
+        let kernelspec = metadata?["kernelspec"] as? [String: Any]
+        XCTAssertEqual(kernelspec?["name"] as? String, "python")
+        XCTAssertEqual(kernelspec?["display_name"] as? String, "Python (Pyodide)")
+    }
+
     func testGetAssignmentServesFlatFileWhenPresent() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_flat")
@@ -195,6 +242,32 @@ final class TestSetupEditTests: XCTestCase {
                 let body = res.body.string
                 XCTAssertTrue(body.contains("# edited"),
                               "Expected flat file content, got: \(body.prefix(200))")
+            }
+        )
+    }
+
+    func testGetAssignmentNormalizesPython3KernelToPyodideKernel() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_flat_kernel")
+
+        let flatPath = tmpDir + "testsetups/setup_flat_kernel.ipynb"
+        try python3NotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
+
+        let setup = try await APITestSetup.find("setup_flat_kernel", on: app.db)!
+        setup.notebookPath = flatPath
+        try await setup.save(on: app.db)
+
+        try await app.test(.GET, "/api/v1/testsetups/setup_flat_kernel/assignment",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let data = Data(res.body.readableBytesView)
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let metadata = json?["metadata"] as? [String: Any]
+                let kernelspec = metadata?["kernelspec"] as? [String: Any]
+                XCTAssertEqual(kernelspec?["name"] as? String, "python")
+                XCTAssertEqual(kernelspec?["display_name"] as? String, "Python (Pyodide)")
             }
         )
     }

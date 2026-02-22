@@ -23,6 +23,7 @@
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
     const uploadFile = document.getElementById('nb-upload-file');
+    const frameError = document.getElementById('nb-frame-error');
     const setupID    = frame ? frame.dataset.setupId : null;
 
     if (!frame || !setupID) return;
@@ -32,10 +33,35 @@
     // -------------------------------------------------------------------------
 
     // Point the iframe at the embedded JupyterLite distribution.
-    // We pass the assignment notebook URL as a query parameter so JupyterLite
-    // can pre-populate it.
+    // The server provides a concrete JupyterLite file path via data-editor-url.
+    // Fall back to a default lab path only if the attribute is missing.
     const notebookURL = `/api/v1/testsetups/${setupID}/assignment`;
-    frame.src = `/jupyterlite/index.html?path=assignment.ipynb&fromURL=${encodeURIComponent(notebookURL)}`;
+    const editorURL = frame.dataset.editorUrl ||
+        `/jupyterlite/lab/index.html?workspace=${encodeURIComponent(setupID)}&reset&path=assignment.ipynb`;
+    frame.src = editorURL;
+
+    // Quick reachability check helps explain blank/failed editor loads.
+    fetch(notebookURL, { method: 'GET' }).then((res) => {
+        if (!res.ok) {
+            setStatus('error', `Notebook source unavailable (${res.status})`);
+            if (frameError) frameError.style.display = '';
+        }
+    }).catch(() => {
+        setStatus('error', 'Notebook source unavailable');
+        if (frameError) frameError.style.display = '';
+    });
+
+    // Detect blank/failed iframe loads and provide an explicit fallback path.
+    let loaded = false;
+    frame.addEventListener('load', () => {
+        loaded = true;
+        if (frameError) frameError.style.display = 'none';
+    });
+    setTimeout(() => {
+        if (!loaded && frameError) {
+            frameError.style.display = '';
+        }
+    }, 5000);
 
     // -------------------------------------------------------------------------
     // 2. Submit button — run via Pyodide, POST results, render inline

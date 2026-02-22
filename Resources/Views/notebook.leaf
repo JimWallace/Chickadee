@@ -1,6 +1,6 @@
 #extend("base"):
 #export("title"):
-Notebook — #(testSetupID)
+Notebook — #(assignmentTitle)
 #endexport
 #export("content"):
 <style>
@@ -8,17 +8,22 @@ Notebook — #(testSetupID)
 .main { max-width: 100%; padding: 0 1rem; }
 </style>
 <div class="notebook-header">
-    <h1>Assignment <code>#(testSetupID)</code></h1>
+    <h1>#(assignmentTitle)</h1>
     <div class="notebook-toolbar">
         <button class="btn btn-primary" id="nb-submit">Submit</button>
         <a class="btn"
            href="/api/v1/testsetups/#(testSetupID)/assignment/download"
            download>Download</a>
-        <label class="btn" id="nb-upload-label"
+        <label class="btn btn-primary" id="nb-upload-label"
                title="Upload a locally-edited .ipynb and run tests immediately">
-            Upload &amp; submit
+            Upload and Submit
             <input type="file" id="nb-upload-file" accept=".ipynb" style="display:none">
         </label>
+        <a class="btn"
+           id="nb-open-editor"
+           href="/jupyterlite/lab/index.html?workspace=#(testSetupID)&reset&path=#(jupyterLiteNotebookPath)"
+           target="_blank"
+           rel="noopener">Open Editor in New Tab</a>
         <span class="nb-status" id="nb-status"></span>
     </div>
 </div>
@@ -26,8 +31,14 @@ Notebook — #(testSetupID)
     id="jl-frame"
     class="jl-frame"
     data-setup-id="#(testSetupID)"
-    allow="cross-origin-isolated">
+    data-editor-url="/jupyterlite/lab/index.html?workspace=#(testSetupID)&reset&path=#(jupyterLiteNotebookPath)"
+    src="/jupyterlite/lab/index.html?workspace=#(testSetupID)&reset&path=#(jupyterLiteNotebookPath)"
+    allow="cross-origin-isolated"
+    loading="eager">
 </iframe>
+<p id="nb-frame-error" class="empty" style="display:none;margin-top:.6rem">
+    The embedded editor did not load. Use <strong>Open Editor in New Tab</strong>.
+</p>
 <div id="nb-results" class="nb-results" hidden></div>
 <script src="/notebook.js"></script>
 #endexport

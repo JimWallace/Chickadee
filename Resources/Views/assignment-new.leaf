@@ -1,0 +1,36 @@
+#extend("base"):
+#export("title"):
+Create Assignment
+#endexport
+#export("content"):
+<h1>Create new Assignment</h1>
+<p class="card-meta" style="margin-bottom:1.25rem">
+    Step 1 of 2 · Choose how this assignment will be graded.
+</p>
+
+<form class="form" method="get" action="/assignments/new/details">
+    <label class="form-label">
+        Assignment Name
+        <input class="form-input" type="text" name="assignmentName" required placeholder="e.g. Lab 2 - Linked Lists">
+    </label>
+
+    <label class="form-label">
+        Due Date (optional)
+        <input class="form-input" type="datetime-local" name="dueAt">
+    </label>
+
+    <label class="form-label">
+        Grading Mode
+        <select class="form-input" name="gradingMode" required>
+            <option value="browser">Tested in browser</option>
+            <option value="server">Tested on server</option>
+        </select>
+    </label>
+
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">Continue</button>
+        <a class="btn" href="/assignments">Cancel</a>
+    </div>
+</form>
+#endexport
+#endextend
