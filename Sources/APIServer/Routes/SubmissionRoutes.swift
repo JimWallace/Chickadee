@@ -24,6 +24,7 @@ struct SubmissionRoutes: RouteCollection {
     @Sendable
     func requestJob(req: Request) async throws -> Response {
         let body = try req.content.decode(WorkerRequestBody.self)
+        await req.application.workerActivityStore.markActive(workerID: body.workerID)
 
         // Find the oldest pending submission.
         guard

@@ -31,7 +31,9 @@ Edit — #(title)
     class="jl-frame"
     data-setup-id="#(setupID)"
     data-assignment-id="#(assignmentID)"
+    data-editor-url="#(editorURL)"
     data-notebook-url="#(notebookURL)"
+    src="#(editorURL)"
     allow="cross-origin-isolated"
     style="height:68vh;width:100%;border:none;display:block">
 </iframe>
@@ -59,6 +61,7 @@ Edit — #(title)
 <script
     data-setup-id="#(setupID)"
     data-assignment-id="#(assignmentID)"
+    data-editor-url="#(editorURL)"
     data-notebook-url="#(notebookURL)"
     src="/setup-edit.js">
 </script>

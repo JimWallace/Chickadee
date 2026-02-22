@@ -4,15 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>#import("title") — Chickadee</title>
+    <link rel="icon" type="image/png" href="/images/chickadee-icon-alt.png">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <nav class="nav">
-    <a class="nav-brand" href="/">Chickadee</a>
+    <a class="nav-brand" href="/">
+        <img class="nav-brand-logo" src="/images/chickadee-icon.png" alt="">
+        <span>Chickadee</span>
+    </a>
+
     #if(currentUser):
         #if(currentUser.isInstructor):
-            <a class="nav-link" href="/assignments">Assignments</a>
-            <a class="nav-link" href="/testsetups/new">Upload Setup</a>
+            <a class="nav-link" href="/assignments">Instructor</a>
         #endif
         #if(currentUser.isAdmin):
             <a class="nav-link" href="/admin">Admin</a>

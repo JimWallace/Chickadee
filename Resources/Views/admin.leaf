@@ -41,11 +41,45 @@ Admin
     </table>
 </section>
 
-<!-- ── Quick link to assignment management ────────────── -->
 <section class="admin-section">
-    <h2>Assignments</h2>
-    <p>Manage which assignments are published and open to students.</p>
-    <a class="btn btn-primary" href="/assignments">Go to Assignments →</a>
+    <h2>Workers</h2>
+    <form method="post" action="/admin/worker-secret" style="max-width:700px">
+        <label class="form-label">
+            Worker shared secret (visible)
+            <div style="display:flex;gap:.5rem;align-items:center">
+                <input class="form-input"
+                       type="text"
+                       name="secret"
+                       value="#(workerSecret)"
+                       autocomplete="off"
+                       style="flex:1">
+                <button class="btn" type="submit">Save</button>
+            </div>
+        </label>
+    </form>
+
+    <div style="margin-top:1rem">
+        #if(workers.isEmpty):
+            <p class="empty">No workers have checked in yet.</p>
+        #else:
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Worker</th>
+                        <th>Last Active</th>
+                    </tr>
+                </thead>
+                <tbody>
+                #for(worker in workers):
+                    <tr>
+                        <td><code>#(worker.workerID)</code></td>
+                        <td class="time">#(worker.lastActive)</td>
+                    </tr>
+                #endfor
+                </tbody>
+            </table>
+        #endif
+    </div>
 </section>
 #endexport
 #endextend

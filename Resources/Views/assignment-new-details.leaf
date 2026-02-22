@@ -1,0 +1,118 @@
+#extend("base"):
+#export("title"):
+Create Assignment
+#endexport
+#export("content"):
+<style>
+/* Notebook authoring step needs full-width content area. */
+.main { max-width: 100%; padding: 0 1rem; }
+</style>
+
+<h1>Create new Assignment</h1>
+<p class="card-meta" style="margin-bottom:1.25rem">Step 2 of 2</p>
+
+#if(error):
+<div class="error-box" style="margin-bottom:1rem">
+    <h2>Could not save assignment</h2>
+    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+</div>
+#endif
+
+#if(notice):
+<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:#F0FDF4">
+    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+</div>
+#endif
+
+#if(requiresServerUpload):
+<form class="form" method="post" action="/assignments/new/save" enctype="multipart/form-data">
+    <label class="form-label">
+        Test Suite Zip (<code>.zip</code>)
+        <input class="form-input" type="file" name="suiteZip" accept=".zip" required>
+    </label>
+    <input type="hidden" name="assignmentName" value="#(assignmentName)">
+    <input type="hidden" name="dueAt" value="#(dueAt)">
+    <input type="hidden" name="gradingMode" value="#(gradingMode)">
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">Save &amp; Return to Instructor</button>
+        <a class="btn" href="/assignments/new">Back</a>
+    </div>
+</form>
+#else:
+<form method="post" action="/assignments/new/save" enctype="multipart/form-data">
+<input type="hidden" name="assignmentName" value="#(assignmentName)">
+<input type="hidden" name="dueAt" value="#(dueAt)">
+<input type="hidden" name="gradingMode" value="#(gradingMode)">
+
+<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--gray-200);border-radius:.5rem;background:white">
+    <p style="margin:0 0 .65rem;font-weight:600">Upload an existing notebook (.ipynb)</p>
+    <p class="card-meta" style="margin:0 0 .65rem">
+        Alternative path: upload a finished notebook directly instead of writing it below.
+    </p>
+    <label class="form-label" style="max-width:420px">
+        Notebook file
+        <input class="form-input" id="browser-notebook-file" type="file" name="browserNotebookFile" accept=".ipynb">
+    </label>
+</div>
+
+<div class="notebook-header">
+    <h2 style="margin:0">Write Assignment in JupyterLite</h2>
+    <div class="notebook-toolbar" style="gap:.5rem;flex-wrap:wrap">
+        <span class="nb-status" id="browser-notebook-status">Loading JupyterLite preview…</span>
+        <a class="btn" href="/jupyterlite/lab/index.html?path=assignment.ipynb" target="_blank" rel="noopener">Open JupyterLite in new tab</a>
+    </div>
+</div>
+
+<iframe
+    id="jl-frame"
+    class="jl-frame"
+    src="/jupyterlite/lab/index.html?path=assignment.ipynb"
+    allow="cross-origin-isolated"
+    loading="eager"
+    style="height:68vh;min-height:520px;border:2px solid var(--gray-200)">
+</iframe>
+
+<div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
+    <button class="btn btn-primary" type="submit">Save &amp; Return to Instructor</button>
+    <a class="btn" href="/assignments/new">Back</a>
+</div>
+
+<script>
+(function () {
+    var frame = document.getElementById('jl-frame');
+    var fileInput = document.getElementById('browser-notebook-file');
+    var statusEl = document.getElementById('browser-notebook-status');
+    if (!frame || !fileInput) return;
+
+    function setStatus(text) {
+        if (statusEl) statusEl.textContent = text;
+    }
+
+    frame.addEventListener('load', function () {
+        setStatus('JupyterLite ready.');
+    });
+
+    frame.addEventListener('error', function () {
+        setStatus('Could not load preview in-page. Use "Open JupyterLite in new tab".');
+    });
+
+    // Ensure the iframe src is always initialized even if the browser ignores
+    // initial markup during navigation restores.
+    if (!frame.getAttribute('src')) {
+        frame.setAttribute('src', '/jupyterlite/lab/index.html?path=assignment.ipynb');
+    }
+
+    fileInput.addEventListener('change', function () {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        // The embedded JupyterLite bundle does not support loading arbitrary
+        // notebooks via a `fromURL` query parameter. Keep the selected file for
+        // form upload and show a clear status message instead.
+        setStatus('Notebook selected. It will be uploaded when you save this assignment.');
+    });
+})();
+</script>
+</form>
+#endif
+#endexport
+#endextend

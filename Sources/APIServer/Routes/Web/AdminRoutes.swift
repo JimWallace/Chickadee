@@ -6,6 +6,7 @@
 //
 //   GET  /admin                        → admin.leaf  (user management dashboard)
 //   POST /admin/users/:id/role         → change a user's role
+//   POST /admin/worker-secret          → set/clear runtime worker secret
 
 import Vapor
 import Fluent
@@ -15,6 +16,7 @@ struct AdminRoutes: RouteCollection {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
         admin.post("users", ":userID", "role", use: changeRole)
+        admin.post("worker-secret", use: updateWorkerSecret)
     }
 
     // MARK: - GET /admin
@@ -34,9 +36,18 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
+        let iso = ISO8601DateFormatter()
+        let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
+        let workerRows = workers.map {
+            AdminWorkerRow(workerID: $0.workerID, lastActive: iso.string(from: $0.lastActive))
+        }
+        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
+
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
-            users:       userRows
+            users:       userRows,
+            workers:     workerRows,
+            workerSecret: effectiveSecret
         )
         return try await req.view.render("admin", ctx)
     }
@@ -64,6 +75,25 @@ struct AdminRoutes: RouteCollection {
         try await user.save(on: req.db)
         return req.redirect(to: "/admin")
     }
+
+    // MARK: - POST /admin/worker-secret
+
+    @Sendable
+    func updateWorkerSecret(req: Request) async throws -> Response {
+        struct WorkerSecretBody: Content { var secret: String }
+        let body = try req.content.decode(WorkerSecretBody.self)
+        let trimmed = body.secret.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            await req.application.workerSecretStore.setRuntimeOverride(nil)
+            req.logger.info("Admin cleared runtime worker secret override.")
+        } else {
+            await req.application.workerSecretStore.setRuntimeOverride(trimmed)
+            req.logger.info("Admin updated runtime worker secret override.")
+        }
+        return req.redirect(to: "/admin")
+    }
+
 }
 
 // MARK: - View context types
@@ -75,7 +105,14 @@ private struct AdminUserRow: Encodable {
     let createdAt: String
 }
 
+private struct AdminWorkerRow: Encodable {
+    let workerID: String
+    let lastActive: String
+}
+
 private struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let users: [AdminUserRow]
+    let workers: [AdminWorkerRow]
+    let workerSecret: String
 }

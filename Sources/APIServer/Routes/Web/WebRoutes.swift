@@ -18,6 +18,7 @@ import Fluent
 import Leaf
 import Core
 import Foundation
+import Crypto
 
 struct WebRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -41,12 +42,11 @@ struct WebRoutes: RouteCollection {
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
 
-        // Fetch all open assignments to join title + dueAt onto setup rows.
-        let openAssignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$isOpen == true)
-            .all()
+        // Load assignments so home can show status/due information in table rows.
+        let allAssignments = try await APIAssignment.query(on: req.db).all()
+        let openAssignments = allAssignments.filter(\.isOpen)
         let assignmentBySetup = Dictionary(
-            openAssignments.map { ($0.testSetupID, $0) },
+            allAssignments.map { ($0.testSetupID, $0) },
             uniquingKeysWith: { first, _ in first }
         )
 
@@ -74,12 +74,20 @@ struct WebRoutes: RouteCollection {
             let data       = Data(setup.manifest.utf8)
             let props      = try? decoder.decode(TestProperties.self, from: data)
             let assignment = assignmentBySetup[setupID]
+            let status: String
+            if let assignment {
+                status = assignment.isOpen ? "open" : "closed"
+            } else {
+                status = "unpublished"
+            }
             return TestSetupRow(
                 id:         setupID,
                 title:      assignment?.title,
                 suiteCount: props?.testSuites.count ?? 0,
                 createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—",
-                dueAt:      assignment?.dueAt.map { fmt.string(from: $0) }
+                dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },
+                status:     status,
+                isOpen:     assignment?.isOpen ?? false
             )
         }
 
@@ -191,14 +199,55 @@ struct WebRoutes: RouteCollection {
 
     @Sendable
     func notebookPage(req: Request) async throws -> View {
+        struct NotebookQuery: Content {
+            var title: String?
+        }
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let _ = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+        let query = try? req.query.decode(NotebookQuery.self)
+        let queryTitle = (query?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .first()
+        let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignmentTitle = {
+            if !queryTitle.isEmpty { return queryTitle }
+            if !dbTitle.isEmpty { return dbTitle }
+            return "Assignment"
+        }()
+
+        // Materialize notebook into all likely JupyterLite file roots.
+        // Different entrypoints may resolve baseUrl differently and look under
+        // /files, /jupyterlite/files, /jupyterlite/lab/files, or /jupyterlite/notebooks/files.
+        let fileRoots = [
+            req.application.directory.publicDirectory + "files/",
+            req.application.directory.publicDirectory + "jupyterlite/files/",
+            req.application.directory.publicDirectory + "jupyterlite/lab/files/",
+            req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
+        ]
+        let nbData = try notebookData(for: setup)
+        let digest = SHA256.hash(data: nbData)
+        let version = digest
+            .prefix(8)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let jlNotebookFilename = "\(setupID)-assignment-\(version).ipynb"
+        for root in fileRoots {
+            try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+            try nbData.write(to: URL(fileURLWithPath: root + jlNotebookFilename))
+        }
+
         return try await req.view.render("notebook",
-            NotebookContext(testSetupID: setupID, currentUser: req.currentUserContext))
+            NotebookContext(
+                testSetupID: setupID,
+                assignmentTitle: assignmentTitle,
+                jupyterLiteNotebookPath: jlNotebookFilename,
+                currentUser: req.currentUserContext
+            ))
     }
 
     // MARK: - GET /submissions/:id
@@ -301,6 +350,8 @@ private struct TestSetupRow: Encodable {
     let suiteCount: Int
     let createdAt: String
     let dueAt: String?      // formatted due date, nil if no assignment or no due date
+    let status: String      // "unpublished" | "open" | "closed"
+    let isOpen: Bool
 }
 
 private struct IndexContext: Encodable {
@@ -315,6 +366,8 @@ private struct SubmitContext: Encodable {
 
 private struct NotebookContext: Encodable {
     let testSetupID: String
+    let assignmentTitle: String
+    let jupyterLiteNotebookPath: String
     let currentUser: CurrentUserContext?
 }
 

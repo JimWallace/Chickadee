@@ -34,6 +34,8 @@ import Foundation
 
 /// Tiers that students cannot see in the notebook or in downloads.
 let hiddenTiersForStudents: Set<String> = ["secret", "release"]
+let jupyterLiteKernelName = "python"
+let jupyterLiteKernelDisplayName = "Python (Pyodide)"
 
 /// Extracts the joined source string for a notebook cell dictionary.
 func cellSource(_ cell: [String: Any]) -> String? {
@@ -102,12 +104,49 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
     return (try? JSONSerialization.data(withJSONObject: studentNB)) ?? studentData
 }
 
+/// Normalizes notebook metadata so JupyterLite can attach the browser kernel.
+///
+/// - For Python notebooks (`python3`/`python` or missing kernelspec), forces
+///   kernelspec.name = "python" and display_name = "Python (Pyodide)".
+/// - Leaves non-Python kernelspecs untouched.
+/// - Returns original data unchanged if parsing fails.
+func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
+    guard var notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    else { return data }
+
+    var metadata = notebook["metadata"] as? [String: Any] ?? [:]
+    let existingKernelSpec = metadata["kernelspec"] as? [String: Any]
+    let existingName = (existingKernelSpec?["name"] as? String)?.lowercased()
+
+    // Skip explicit non-Python kernelspecs.
+    if let existingName, !existingName.isEmpty,
+       existingName != "python", existingName != "python3" {
+        return data
+    }
+
+    var kernelSpec = existingKernelSpec ?? [:]
+    kernelSpec["name"] = jupyterLiteKernelName
+    kernelSpec["display_name"] = jupyterLiteKernelDisplayName
+    metadata["kernelspec"] = kernelSpec
+
+    var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
+    if (languageInfo["name"] as? String)?.isEmpty != false {
+        languageInfo["name"] = "python"
+    }
+    metadata["language_info"] = languageInfo
+
+    notebook["metadata"] = metadata
+    return (try? JSONSerialization.data(withJSONObject: notebook)) ?? data
+}
+
 /// Loads the notebook data for a test setup.
 /// Prefers the flat `.ipynb` file (Phase 8 editable path); falls back to zip extraction.
 func notebookData(for setup: APITestSetup) throws -> Data {
     if let path = setup.notebookPath,
        let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-       !data.isEmpty { return data }
+       !data.isEmpty {
+        return normalizeNotebookForJupyterLite(data)
+    }
     // Fall back to zip extraction.
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
@@ -121,7 +160,7 @@ func notebookData(for setup: APITestSetup) throws -> Data {
     guard proc.terminationStatus == 0, !data.isEmpty else {
         throw Abort(.notFound, reason: "No assignment.ipynb in this test setup")
     }
-    return data
+    return normalizeNotebookForJupyterLite(data)
 }
 
 // MARK: - Route collection
@@ -196,7 +235,8 @@ struct TestSetupRoutes: RouteCollection {
         if manifest.gradingMode == .browser {
             let notebookPath = setupsDir + "\(setupID).ipynb"
             if let data = extractNotebookFromZip(zipPath: zipPath) {
-                try data.write(to: URL(fileURLWithPath: notebookPath))
+                let normalized = normalizeNotebookForJupyterLite(data)
+                try normalized.write(to: URL(fileURLWithPath: notebookPath))
                 setup.notebookPath = notebookPath
                 try await setup.save(on: req.db)
                 req.logger.info("Saved flat notebook for setup \(setupID) at \(notebookPath)")
@@ -311,7 +351,8 @@ struct TestSetupRoutes: RouteCollection {
             notebookPath = req.application.testSetupsDirectory + "\(setupID).ipynb"
         }
 
-        try notebookBytes.write(to: URL(fileURLWithPath: notebookPath))
+        let normalizedNotebook = normalizeNotebookForJupyterLite(notebookBytes)
+        try normalizedNotebook.write(to: URL(fileURLWithPath: notebookPath))
 
         if setup.notebookPath == nil {
             setup.notebookPath = notebookPath

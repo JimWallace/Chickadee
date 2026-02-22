@@ -7,27 +7,51 @@ Assignments
 #if(setups.isEmpty):
 <p class="empty">No assignments available yet.</p>
 #else:
-<ul class="card-list">
-#for(setup in setups):
-<li class="card">
-    <div class="card-body">
-        #if(setup.title):
-        <h2 class="card-title">#(setup.title)</h2>
-        <p class="card-meta">
-            <code>#(setup.id)</code> · #(setup.suiteCount) test suite(s)#if(setup.dueAt): · <strong>due #(setup.dueAt)</strong>#endif
-            · <a href="/api/v1/testsetups/#(setup.id)/assignment/download" download>Download</a>
-        </p>
-        #else:
-        <h2 class="card-title">#(setup.id)</h2>
-        <p class="card-meta">#(setup.suiteCount) test suite(s) · #(setup.createdAt)
-            · <a href="/api/v1/testsetups/#(setup.id)/assignment/download" download>Download</a>
-        </p>
-        #endif
-    </div>
-    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit">Submit</a>
-</li>
-#endfor
-</ul>
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th class="due-col">Due</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(setup in setups):
+        <tr>
+            <td>
+                #if(setup.title):
+                    #if(setup.isOpen):
+                    <a href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"><strong>#(setup.title)</strong></a>
+                    #else:
+                    <strong>#(setup.title)</strong>
+                    #endif
+                #else:
+                <span style="color:var(--gray-600)">Unpublished</span>
+                #endif
+            </td>
+            <td>
+                <span class="tier
+                    #if(setup.status == "open"):tier-open
+                    #elseif(setup.status == "closed"):tier-closed
+                    #elseif(setup.status == "unpublished"):tier-unpublished
+                    #endif">#(setup.status)</span>
+            </td>
+            <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
+            <td>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    #if(setup.isOpen):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
+                       style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    #endif
+                    <a class="btn" href="/api/v1/testsetups/#(setup.id)/assignment/download" download
+                       style="font-size:.8rem;padding:.25rem .6rem">Download</a>
+                </div>
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
 #endif
 #endexport
 #endextend
