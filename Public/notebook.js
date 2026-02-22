@@ -67,33 +67,35 @@
     // 2. Submit button — run via Pyodide, POST results, render inline
     // -------------------------------------------------------------------------
 
-    submitBtn.addEventListener('click', async () => {
-        submitBtn.disabled = true;
-        clearResults();
-        setStatus('loading', 'Loading grading engine…');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', async () => {
+            submitBtn.disabled = true;
+            clearResults();
+            setStatus('loading', 'Loading grading engine…');
 
-        try {
-            // Fetch the notebook JSON directly (same file JupyterLite loaded).
-            const nbRes = await fetch(notebookURL);
-            if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
-            const notebook = await nbRes.json();
+            try {
+                // Fetch the notebook JSON directly (same file JupyterLite loaded).
+                const nbRes = await fetch(notebookURL);
+                if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
+                const notebook = await nbRes.json();
 
-            setStatus('loading', 'Running tests…');
-            const outcomes = await runNotebook(notebook);
+                setStatus('loading', 'Running tests…');
+                const outcomes = await runNotebook(notebook);
 
-            setStatus('loading', 'Submitting…');
-            const collection = buildCollection(outcomes, setupID);
-            const response   = await postBrowserResult(collection, notebook, setupID);
+                setStatus('loading', 'Submitting…');
+                const collection = buildCollection(outcomes, setupID);
+                const response   = await postBrowserResult(collection, notebook, setupID);
 
-            // Render results inline — no page navigation.
-            renderResults(outcomes, response);
-            setStatus('', '');
-        } catch (err) {
-            setStatus('error', `Error: ${err.message}`);
-        } finally {
-            submitBtn.disabled = false;
-        }
-    });
+                // Render results inline — no page navigation.
+                renderResults(outcomes, response);
+                setStatus('', '');
+            } catch (err) {
+                setStatus('error', `Error: ${err.message}`);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    }
 
     // -------------------------------------------------------------------------
     // 3. Upload & submit — read file → merge → Pyodide → POST → render
@@ -104,7 +106,7 @@
             const file = uploadFile.files && uploadFile.files[0];
             if (!file) return;
 
-            submitBtn.disabled = true;
+            if (submitBtn) submitBtn.disabled = true;
             clearResults();
             setStatus('loading', 'Loading grading engine…');
 
@@ -137,7 +139,7 @@
             } catch (err) {
                 setStatus('error', `Error: ${err.message}`);
             } finally {
-                submitBtn.disabled = false;
+                if (submitBtn) submitBtn.disabled = false;
                 // Reset so the same file can be re-selected.
                 uploadFile.value = '';
             }

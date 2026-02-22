@@ -1,6 +1,6 @@
 # chickadee-runner
 
-Worker daemon. Polls the API server for pending jobs, runs instructor-defined shell-script test suites in subprocesses, and reports structured results back.
+Runner daemon. Polls the API server for pending jobs, runs instructor-defined shell-script test suites in subprocesses, and reports structured results back.
 
 ---
 
@@ -9,7 +9,7 @@ Worker daemon. Polls the API server for pending jobs, runs instructor-defined sh
 | Flag | Type | Description |
 |------|------|-------------|
 | `--api-base-url` | `String` | Base URL of the API server (e.g. `http://localhost:8080`) |
-| `--worker-id` | `String` | Unique identifier for this worker instance |
+| `--worker-id` | `String` | Unique identifier for this runner instance |
 | `--max-jobs` | `Int` | Maximum number of concurrent jobs |
 | `--sandbox` | `Bool` (flag) | Run test scripts inside a network-isolated, privilege-dropped sandbox |
 

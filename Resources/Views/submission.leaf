@@ -19,7 +19,7 @@ Submission #(submissionID)
 #if(isPending):
 <div class="pending-box">
     <div class="spinner"></div>
-    <p>Waiting for a worker to pick up your submission…</p>
+    <p>Waiting for a runner to pick up your submission…</p>
 </div>
 
 #else:

@@ -17,7 +17,7 @@ Upload Test Setup
         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
             <input type="radio" name="gradingMode" value="worker"
                    onchange="toggleMode(this.value)">
-            <span><strong>Worker</strong> — server-side shell scripts · upload <code>.zip</code></span>
+            <span><strong>Runner</strong> — server-side shell scripts · upload <code>.zip</code></span>
         </label>
     </fieldset>
 
@@ -40,7 +40,7 @@ Upload Test Setup
         </p>
     </div>
 
-    <!-- ── Worker mode: zip ─────────────────────────────────── -->
+    <!-- ── Runner mode: zip ─────────────────────────────────── -->
     <div id="upload-worker" style="display:none">
         <label class="form-label">
             Test Setup Zip (<code>.zip</code>)
