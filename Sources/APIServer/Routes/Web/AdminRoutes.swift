@@ -20,6 +20,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("users", ":userID", "role", use: changeRole)
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
+        admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
     }
 
     // MARK: - GET /admin
@@ -41,12 +42,14 @@ struct AdminRoutes: RouteCollection {
 
         let workerRows = try await makeWorkerRows(req: req)
         let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
+        let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
 
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             users:       userRows,
             workers:     workerRows,
-            workerSecret: effectiveSecret
+            workerSecret: effectiveSecret,
+            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled
         )
         return try await req.view.render("admin", ctx)
     }
@@ -112,6 +115,25 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+    // MARK: - POST /admin/runner-autostart
+
+    @Sendable
+    func updateLocalRunnerAutoStart(req: Request) async throws -> Response {
+        struct AutoStartBody: Content {
+            var localRunnerAutoStart: String?
+        }
+
+        let body = try req.content.decode(AutoStartBody.self)
+        let enabled = (body.localRunnerAutoStart == "on")
+        await req.application.localRunnerAutoStartStore.setEnabled(enabled)
+        writeLocalRunnerAutoStartToDisk(
+            enabled: enabled,
+            filePath: req.application.localRunnerAutoStartFilePath
+        )
+        req.logger.info("Admin updated local runner autostart setting: \(enabled)")
+        return req.redirect(to: "/admin")
+    }
+
 }
 
 private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
@@ -167,4 +189,5 @@ private struct AdminContext: Encodable {
     let users: [AdminUserRow]
     let workers: [AdminWorkerRow]
     let workerSecret: String
+    let localRunnerAutoStartEnabled: Bool
 }

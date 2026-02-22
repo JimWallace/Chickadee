@@ -16,6 +16,7 @@ Assignments
         <tr>
             <th>Name</th>
             <th>Status</th>
+            <th>Validation</th>
             <th class="due-col">Due</th>
             <th>Actions</th>
         </tr>
@@ -31,7 +32,7 @@ Assignments
                 #endif
             </td>
             <td>
-                #if(row.assignmentID):
+                #if(row.assignmentID && row.validationStatus == "passed"):
                 <form method="post" action="/assignments/#(row.assignmentID)/status">
                     <select class="form-input" name="status" onchange="this.form.submit()"
                             style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
@@ -39,12 +40,35 @@ Assignments
                         <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                     </select>
                 </form>
+                #elseif(row.assignmentID):
+                <span class="tier tier-closed">closed</span>
                 #else:
                 <span class="tier
                     #if(row.status == "open"):tier-open
                     #elseif(row.status == "closed"):tier-closed
                     #elseif(row.status == "unpublished"):tier-unpublished
-                    #endif">#(row.status)</span>
+                #endif">#(row.status)</span>
+                #endif
+            </td>
+            <td>
+                #if(row.validationStatus == "passed"):
+                <span class="tier tier-open">passed</span>
+                #elseif(row.validationStatus == "failed"):
+                <span class="tier tier-closed">failed</span>
+                #if(row.validationSubmissionID):
+                <div style="margin-top:.25rem">
+                    <a href="/submissions/#(row.validationSubmissionID)">view</a>
+                </div>
+                #endif
+                #elseif(row.validationStatus == "pending"):
+                <span class="tier">pending</span>
+                #if(row.validationSubmissionID):
+                <div style="margin-top:.25rem">
+                    <a href="/submissions/#(row.validationSubmissionID)">track</a>
+                </div>
+                #endif
+                #else:
+                <span class="tier">—</span>
                 #endif
             </td>
             <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>

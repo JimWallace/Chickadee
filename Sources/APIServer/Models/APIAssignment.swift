@@ -34,17 +34,30 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @Field(key: "is_open")
     var isOpen: Bool
 
+    /// Runner validation state for instructor-created assignments.
+    /// Values: "pending" | "passed" | "failed"
+    @OptionalField(key: "validation_status")
+    var validationStatus: String?
+
+    /// Submission ID for the runner validation run, if any.
+    @OptionalField(key: "validation_submission_id")
+    var validationSubmissionID: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
     init() {}
 
     init(id: UUID? = nil, testSetupID: String, title: String,
-         dueAt: Date? = nil, isOpen: Bool = true) {
+         dueAt: Date? = nil, isOpen: Bool = true,
+         validationStatus: String? = nil,
+         validationSubmissionID: String? = nil) {
         self.id          = id
         self.testSetupID = testSetupID
         self.title       = title
         self.dueAt       = dueAt
         self.isOpen      = isOpen
+        self.validationStatus = validationStatus
+        self.validationSubmissionID = validationSubmissionID
     }
 }

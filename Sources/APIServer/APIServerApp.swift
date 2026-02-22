@@ -30,6 +30,7 @@ struct APIServerApp {
 func configure(_ app: Application, cliWorkerSecret: String?) throws {
     let workDir = DirectoryConfiguration.detect().workingDirectory
     let workerSecretFile = workDir + ".worker-secret"
+    let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
 
     // MARK: - Directories
 
@@ -45,12 +46,20 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.storage[TestSetupsDirectoryKey.self]  = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
     app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
+    app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
     let startupWorkerSecret = resolveStartupWorkerSecret(
         cliWorkerSecret: cliWorkerSecret,
         workerSecretFilePath: workerSecretFile
     )
+    let localRunnerAutoStartEnabled = readLocalRunnerAutoStartFromDisk(
+        filePath: localRunnerAutoStartFile
+    ) ?? false
     app.storage[WorkerSecretStoreKey.self]    = WorkerSecretStore(initialOverride: startupWorkerSecret)
     app.storage[WorkerActivityStoreKey.self]  = WorkerActivityStore()
+    app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
+        initialEnabled: localRunnerAutoStartEnabled
+    )
+    app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
 
     // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
 
@@ -76,6 +85,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.migrations.add(AddSourceToResults())
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateAssignments())
+    app.migrations.add(AddValidationToAssignments())
     app.migrations.add(AddUserIDToSubmissions())
     app.migrations.add(AddNotebookPathToTestSetups())
 
@@ -105,6 +115,15 @@ struct WorkerSecretFilePathKey: StorageKey {
 }
 struct WorkerActivityStoreKey: StorageKey {
     typealias Value = WorkerActivityStore
+}
+struct LocalRunnerAutoStartFilePathKey: StorageKey {
+    typealias Value = String
+}
+struct LocalRunnerAutoStartStoreKey: StorageKey {
+    typealias Value = LocalRunnerAutoStartStore
+}
+struct LocalRunnerManagerKey: StorageKey {
+    typealias Value = LocalRunnerManager
 }
 
 actor WorkerSecretStore {
@@ -145,6 +164,97 @@ actor WorkerActivityStore {
             .map { WorkerActivitySnapshot(workerID: $0.key, lastActive: $0.value) }
             .sorted { $0.lastActive > $1.lastActive }
     }
+
+    func hasRecentActivity(within seconds: TimeInterval, now: Date = Date()) -> Bool {
+        lastSeenByWorkerID.values.contains { now.timeIntervalSince($0) <= seconds }
+    }
+}
+
+actor LocalRunnerAutoStartStore {
+    private var enabled: Bool
+
+    init(initialEnabled: Bool) {
+        self.enabled = initialEnabled
+    }
+
+    func isEnabled() -> Bool {
+        enabled
+    }
+
+    func setEnabled(_ newValue: Bool) {
+        enabled = newValue
+    }
+}
+
+actor LocalRunnerManager {
+    private var process: Process?
+    private var logHandle: FileHandle?
+
+    func ensureRunning(app: Application, logger: Logger) async {
+        if let existing = process, existing.isRunning {
+            return
+        }
+
+        let secret = (await app.workerSecretStore.runtimeOverrideValue() ?? "").trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !secret.isEmpty else {
+            logger.warning("Local runner autostart is enabled, but worker secret is empty.")
+            return
+        }
+
+        let workDir = DirectoryConfiguration.detect().workingDirectory
+        let host = normalizedHost(app.http.server.configuration.hostname)
+        let port = app.http.server.configuration.port
+        let apiBaseURL = "http://\(host):\(port)"
+        let workerID = "autospawn-\(UUID().uuidString.lowercased().prefix(8))"
+        let runnerBinary = workDir + ".build/debug/chickadee-runner"
+        let launchViaBinary = FileManager.default.isExecutableFile(atPath: runnerBinary)
+        let argsPrefix = launchViaBinary ? [runnerBinary] : ["swift", "run", "chickadee-runner"]
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        proc.arguments = argsPrefix + [
+            "--api-base-url", apiBaseURL,
+            "--worker-id", workerID,
+            "--worker-secret", secret,
+            "--max-jobs", "1",
+            "--sandbox"
+        ]
+        proc.currentDirectoryURL = URL(fileURLWithPath: workDir)
+
+        let logPath = workDir + "results/local-runner.log"
+        if !FileManager.default.fileExists(atPath: logPath) {
+            FileManager.default.createFile(atPath: logPath, contents: nil)
+        }
+        if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
+            _ = try? handle.seekToEnd()
+            proc.standardOutput = handle
+            proc.standardError = handle
+            logHandle = handle
+        }
+
+        do {
+            try proc.run()
+            process = proc
+            logger.info("Started local runner \(workerID) (\(launchViaBinary ? "binary" : "swift run"))")
+        } catch {
+            logger.error("Failed to start local runner: \(error)")
+            process = nil
+            if let handle = logHandle {
+                try? handle.close()
+                logHandle = nil
+            }
+        }
+    }
+}
+
+private func normalizedHost(_ raw: String) -> String {
+    let host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if host.isEmpty || host == "0.0.0.0" || host == "::" {
+        return "localhost"
+    }
+    return host
 }
 
 extension Application {
@@ -192,6 +302,38 @@ extension Application {
     var workerSecretFilePath: String {
         get { storage[WorkerSecretFilePathKey.self] ?? (DirectoryConfiguration.detect().workingDirectory + ".worker-secret") }
         set { storage[WorkerSecretFilePathKey.self] = newValue }
+    }
+
+    var localRunnerAutoStartFilePath: String {
+        get {
+            storage[LocalRunnerAutoStartFilePathKey.self]
+                ?? (DirectoryConfiguration.detect().workingDirectory + ".local-runner-autostart")
+        }
+        set { storage[LocalRunnerAutoStartFilePathKey.self] = newValue }
+    }
+
+    var localRunnerAutoStartStore: LocalRunnerAutoStartStore {
+        get {
+            if let existing = storage[LocalRunnerAutoStartStoreKey.self] {
+                return existing
+            }
+            let created = LocalRunnerAutoStartStore(initialEnabled: false)
+            storage[LocalRunnerAutoStartStoreKey.self] = created
+            return created
+        }
+        set { storage[LocalRunnerAutoStartStoreKey.self] = newValue }
+    }
+
+    var localRunnerManager: LocalRunnerManager {
+        get {
+            if let existing = storage[LocalRunnerManagerKey.self] {
+                return existing
+            }
+            let created = LocalRunnerManager()
+            storage[LocalRunnerManagerKey.self] = created
+            return created
+        }
+        set { storage[LocalRunnerManagerKey.self] = newValue }
     }
 }
 
@@ -270,4 +412,20 @@ private func randomWorkerPassphrase() -> String {
         "orbit", "cobalt", "dawn", "ember", "ridge", "tunnel", "canyon", "signal"
     ]
     return (0..<3).compactMap { _ in words.randomElement() }.joined(separator: "-")
+}
+
+private func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
+          let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+          !text.isEmpty else {
+        return nil
+    }
+    return text == "1" || text == "true" || text == "yes" || text == "on"
+}
+
+func writeLocalRunnerAutoStartToDisk(enabled: Bool, filePath: String) {
+    let value = enabled ? "1" : "0"
+    try? value.write(to: URL(fileURLWithPath: filePath), atomically: true, encoding: .utf8)
 }
