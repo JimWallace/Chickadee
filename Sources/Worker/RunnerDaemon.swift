@@ -214,9 +214,10 @@ actor WorkerDaemon {
         }
 
         let longResult = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = (entry.script as NSString).deletingPathExtension
 
         return TestOutcome(
-            testName:           String(entry.script.dropLast(entry.script.hasSuffix(".sh") ? 3 : 0)),
+            testName:           baseName.isEmpty ? entry.script : baseName,
             testClass:          nil,
             tier:               entry.tier,
             status:             status,

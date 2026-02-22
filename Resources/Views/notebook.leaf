@@ -22,8 +22,8 @@ Notebook
     id="jl-frame"
     class="jl-frame"
     data-setup-id="#(testSetupID)"
-    data-editor-url="/jupyterlite/lab/index.html?workspace=#(testSetupID)&reset&path=#(jupyterLiteNotebookPath)"
-    src="/jupyterlite/lab/index.html?workspace=#(testSetupID)&reset&path=#(jupyterLiteNotebookPath)"
+    data-editor-url="#(jupyterLiteEditorURL)"
+    src="#(jupyterLiteEditorURL)"
     allow="cross-origin-isolated"
     loading="eager">
 </iframe>

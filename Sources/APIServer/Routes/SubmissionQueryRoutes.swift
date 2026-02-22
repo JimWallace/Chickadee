@@ -23,11 +23,15 @@ struct SubmissionQueryRoutes: RouteCollection {
 
     @Sendable
     func listSubmissions(req: Request) async throws -> SubmissionListResponse {
+        let caller = try req.auth.require(APIUser.self)
         var query = APISubmission.query(on: req.db)
             .sort(\.$submittedAt, .descending)
 
         if let testSetupID = req.query[String.self, at: "testSetupID"] {
             query = query.filter(\.$testSetupID == testSetupID)
+        }
+        if !caller.isInstructor {
+            query = query.filter(\.$userID == caller.id)
         }
 
         let submissions = try await query.all()
@@ -40,11 +44,15 @@ struct SubmissionQueryRoutes: RouteCollection {
 
     @Sendable
     func getSubmission(req: Request) async throws -> SubmissionStatusResponse {
+        let caller = try req.auth.require(APIUser.self)
         guard
             let subID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(subID, on: req.db)
         else {
             throw Abort(.notFound)
+        }
+        guard canViewSubmission(caller: caller, submission: submission) else {
+            throw Abort(.forbidden)
         }
         return SubmissionStatusResponse(submission: submission)
     }
@@ -53,11 +61,15 @@ struct SubmissionQueryRoutes: RouteCollection {
 
     @Sendable
     func getResults(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         guard
             let subID = req.parameters.get("submissionID"),
-            let _ = try await APISubmission.find(subID, on: req.db)
+            let submission = try await APISubmission.find(subID, on: req.db)
         else {
             throw Abort(.notFound)
+        }
+        guard canViewSubmission(caller: caller, submission: submission) else {
+            throw Abort(.forbidden)
         }
 
         guard let result = try await APIResult.query(on: req.db)
@@ -94,6 +106,11 @@ struct SubmissionQueryRoutes: RouteCollection {
             body: .init(data: responseData)
         )
     }
+}
+
+private func canViewSubmission(caller: APIUser, submission: APISubmission) -> Bool {
+    if caller.isInstructor { return true }
+    return submission.userID == caller.id
 }
 
 // MARK: - Tier filtering

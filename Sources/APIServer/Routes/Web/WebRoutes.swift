@@ -230,22 +230,25 @@ struct WebRoutes: RouteCollection {
             req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
         ]
         let nbData = try notebookData(for: setup)
-        let digest = SHA256.hash(data: nbData)
-        let version = digest
-            .prefix(8)
-            .map { String(format: "%02x", $0) }
-            .joined()
-        let jlNotebookFilename = "\(setupID)-assignment-\(version).ipynb"
+        let jlNotebookFilename = notebookFilenameForJupyterLite(title: assignmentTitle)
+        let fallbackNotebookFilename = "assignment.ipynb"
         for root in fileRoots {
             try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
             try nbData.write(to: URL(fileURLWithPath: root + jlNotebookFilename))
+            if jlNotebookFilename != fallbackNotebookFilename {
+                try nbData.write(to: URL(fileURLWithPath: root + fallbackNotebookFilename))
+            }
         }
+        let encodedPath = jlNotebookFilename.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            ?? "assignment.ipynb"
+        let workspaceID = "\(setupID)-student"
+        let editorURL = "/jupyterlite/lab/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
 
         return try await req.view.render("notebook",
             NotebookContext(
                 testSetupID: setupID,
                 assignmentTitle: assignmentTitle,
-                jupyterLiteNotebookPath: jlNotebookFilename,
+                jupyterLiteEditorURL: editorURL,
                 currentUser: req.currentUserContext
             ))
     }
@@ -280,6 +283,7 @@ struct WebRoutes: RouteCollection {
         var passCount       = 0
         var totalTests      = 0
         var executionTimeMs = 0
+        var gradePercent    = 0
         var resultSource    = ""   // "browser" | "worker" | ""
 
         let decoder = JSONDecoder()
@@ -305,6 +309,9 @@ struct WebRoutes: RouteCollection {
                 passCount       = collection.passCount
                 totalTests      = collection.totalTests
                 executionTimeMs = collection.executionTimeMs
+                gradePercent    = collection.totalTests > 0
+                    ? Int((Double(collection.passCount) / Double(collection.totalTests) * 100).rounded())
+                    : 0
                 outcomes = collection.outcomes.map { o in
                     OutcomeRow(
                         testName:        o.testName,
@@ -331,6 +338,7 @@ struct WebRoutes: RouteCollection {
             outcomes:          outcomes,
             passCount:         passCount,
             totalTests:        totalTests,
+            gradePercent:      gradePercent,
             executionTimeMs:   executionTimeMs,
             currentUser:       req.currentUserContext
         )
@@ -367,7 +375,7 @@ private struct SubmitContext: Encodable {
 private struct NotebookContext: Encodable {
     let testSetupID: String
     let assignmentTitle: String
-    let jupyterLiteNotebookPath: String
+    let jupyterLiteEditorURL: String
     let currentUser: CurrentUserContext?
 }
 
@@ -395,8 +403,23 @@ private struct SubmissionContext: Encodable {
     let outcomes: [OutcomeRow]
     let passCount: Int
     let totalTests: Int
+    let gradePercent: Int
     let executionTimeMs: Int
     let currentUser: CurrentUserContext?
+}
+
+private func notebookFilenameForJupyterLite(title: String) -> String {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    var value = trimmed.isEmpty ? "Assignment" : trimmed
+    value = value.replacingOccurrences(of: "/", with: "-")
+    value = value.replacingOccurrences(of: "\\", with: "-")
+    value = value.replacingOccurrences(of: ":", with: "-")
+    value = value.replacingOccurrences(of: "\n", with: " ")
+    value = value.replacingOccurrences(of: "\r", with: " ")
+    if !value.lowercased().hasSuffix(".ipynb") {
+        value += ".ipynb"
+    }
+    return value
 }
 
 // MARK: - Multipart body for code submission

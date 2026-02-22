@@ -77,10 +77,11 @@ struct SandboxedScriptRunner: ScriptRunner {
 // MARK: - Platform-specific sandbox setup
 
 private func configureSandboxedProcess(_ proc: Process, script: URL, workDir: URL) {
+    let invocation = scriptInvocation(for: script)
 #if os(macOS)
     let profile = macOSSandboxProfile(workDir: workDir)
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-    proc.arguments = ["-p", profile, "/bin/sh", script.path]
+    proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
     proc.currentDirectoryURL = workDir
 #elseif os(Linux)
     // unshare --user  : new user namespace — current UID maps to root inside
@@ -88,13 +89,13 @@ private func configureSandboxedProcess(_ proc: Process, script: URL, workDir: UR
     // --map-root-user : write uid_map/gid_map automatically (requires no extra
     //                   privileges on kernels with unprivileged_userns_clone=1)
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unshare")
-    proc.arguments = ["--user", "--net", "--map-root-user", "/bin/sh", script.path]
+    proc.arguments = ["--user", "--net", "--map-root-user", invocation.executableURL.path] + invocation.arguments
     proc.currentDirectoryURL = workDir
 #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
-    proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-    proc.arguments = [script.path]
+    proc.executableURL = invocation.executableURL
+    proc.arguments = invocation.arguments
     proc.currentDirectoryURL = workDir
 #endif
 }

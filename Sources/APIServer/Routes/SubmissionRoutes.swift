@@ -109,10 +109,14 @@ struct SubmissionDownloadRoute: RouteCollection {
 
     @Sendable
     func download(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         guard let subID = req.parameters.get("submissionID"),
               let submission = try await APISubmission.find(subID, on: req.db)
         else {
             throw Abort(.notFound)
+        }
+        if !caller.isInstructor && submission.userID != caller.id {
+            throw Abort(.forbidden)
         }
         return try await req.fileio.asyncStreamFile(at: submission.zipPath)
     }

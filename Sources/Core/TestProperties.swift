@@ -18,10 +18,10 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 }
 
 /// Entry for a single test in the manifest.
-/// `script` is the filename of the shell script at the root of the test setup zip.
+/// `script` is the filename/path of a runnable test script in the test setup zip.
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
-    public let script: String      // e.g. "test_bit_count.sh"
+    public let script: String      // e.g. "01_public.py"
 }
 
 /// Optional Makefile step to run before tests.

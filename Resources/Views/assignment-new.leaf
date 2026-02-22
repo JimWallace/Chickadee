@@ -42,7 +42,7 @@ Create Assignment
     </label>
 
     <label class="form-label">
-        <span style="white-space:nowrap">Test Suite Files (include one or more <code>.sh</code> scripts; use <code>01_</code>, <code>02_</code> prefixes to control order)</span>
+        <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>; use <code>01_</code>, <code>02_</code> prefixes to control order)</span>
         <input class="form-input" type="file" name="suiteFiles" multiple required>
     </label>
 

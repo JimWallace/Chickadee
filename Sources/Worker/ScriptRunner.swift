@@ -19,8 +19,9 @@ struct UnsandboxedScriptRunner: ScriptRunner {
         let start = Date()
 
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        proc.arguments     = [script.path]
+        let invocation = scriptInvocation(for: script)
+        proc.executableURL = invocation.executableURL
+        proc.arguments     = invocation.arguments
         proc.currentDirectoryURL = workDir
 
         let stdoutPipe = Pipe()
