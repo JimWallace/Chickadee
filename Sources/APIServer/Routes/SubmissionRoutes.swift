@@ -128,7 +128,17 @@ struct SubmissionRoutes: RouteCollection {
         let ext      = URL(fileURLWithPath: body.filename).pathExtension
         let filePath = submissionsDir + "\(subID).\(ext.isEmpty ? "bin" : ext)"
 
-        try body.file.write(to: URL(fileURLWithPath: filePath))
+        // For .ipynb submissions, merge the instructor's hidden test cells back in
+        // before saving, so the worker grades with the full authoritative test suite.
+        let fileData: Data
+        if body.filename.hasSuffix(".ipynb"),
+           let setup2 = try await APITestSetup.find(body.testSetupID, on: req.db),
+           let instructorData = try? notebookData(for: setup2) {
+            fileData = mergeNotebook(student: body.file, instructor: instructorData)
+        } else {
+            fileData = body.file   // .py or other files — no merge needed
+        }
+        try fileData.write(to: URL(fileURLWithPath: filePath))
 
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setup.id!)

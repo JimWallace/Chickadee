@@ -19,11 +19,13 @@ func routes(_ app: Application) throws {
     try auth.register(collection: SubmissionDownloadRoute())
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())
+    // TestSetupRoutes is in the auth group so students can fetch/download notebooks.
+    // Instructor-only handlers (upload, zip-download, save) guard themselves inline.
+    try auth.register(collection: TestSetupRoutes())
 
     // MARK: - Instructor or admin only
 
     let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor))
-    try instructor.register(collection: TestSetupRoutes())
     try instructor.register(collection: AssignmentRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())

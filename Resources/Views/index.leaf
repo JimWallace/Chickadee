@@ -15,10 +15,13 @@ Assignments
         <h2 class="card-title">#(setup.title)</h2>
         <p class="card-meta">
             <code>#(setup.id)</code> · #(setup.suiteCount) test suite(s)#if(setup.dueAt): · <strong>due #(setup.dueAt)</strong>#endif
+            · <a href="/api/v1/testsetups/#(setup.id)/assignment/download" download>Download</a>
         </p>
         #else:
         <h2 class="card-title">#(setup.id)</h2>
-        <p class="card-meta">#(setup.suiteCount) test suite(s) · #(setup.createdAt)</p>
+        <p class="card-meta">#(setup.suiteCount) test suite(s) · #(setup.createdAt)
+            · <a href="/api/v1/testsetups/#(setup.id)/assignment/download" download>Download</a>
+        </p>
         #endif
     </div>
     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit">Submit</a>
