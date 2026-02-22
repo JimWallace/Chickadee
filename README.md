@@ -111,6 +111,22 @@ swift build -c release
 .build/release/chickadee-runner --api-base-url http://api:8080 --worker-id w1 --sandbox
 ```
 
+## JupyterLite rebuilds
+
+`Public/jupyterlite` is generated output. The source-of-truth config and version pins live in:
+
+- `Tools/jupyterlite/jupyter-lite.json`
+- `Tools/jupyterlite/requirements.txt`
+
+Rebuild commands:
+
+```bash
+scripts/setup-jupyterlite.sh
+scripts/build-jupyterlite.sh
+```
+
+The build script keeps runtime notebook storage directories (`Public/jupyterlite/files`, `Public/jupyterlite/lab/files`, `Public/jupyterlite/notebooks/files`) while refreshing generated assets.
+
 ---
 
 ## Component docs

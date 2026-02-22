@@ -1,0 +1,27 @@
+name: JupyterLite
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install JupyterLite toolchain
+        run: scripts/setup-jupyterlite.sh
+
+      - name: Build JupyterLite
+        run: scripts/build-jupyterlite.sh
+
+      - name: Verify generated assets are committed
+        run: git diff --exit-code -- Public/jupyterlite
