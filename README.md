@@ -42,37 +42,6 @@ Three Swift targets share a clean dependency boundary:
 
 ---
 
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
-| Language | Swift 6 (strict concurrency) |
-| Web framework | Vapor 4 |
-| Database | SQLite via Fluent |
-| Concurrency | `async/await`, actors, structured task groups |
-| Test runners | Instructor-authored shell scripts |
-| Sandboxing | `sandbox-exec` (macOS), `unshare --user --net` (Linux) |
-| Build tool | Swift Package Manager |
-
----
-
-## Project structure
-
-```
-Chickadee/
-├── Sources/
-│   ├── Core/          # Shared models — Codable, Sendable, no Vapor
-│   ├── APIServer/     # Vapor app, REST routes, Fluent migrations, Leaf UI
-│   └── Worker/        # Job poller, script runner, worker daemon
-├── Tests/
-│   ├── CoreTests/     # Round-trip JSON encode/decode for all models
-│   ├── APITests/      # XCTVapor integration tests
-│   └── WorkerTests/   # ScriptRunner and worker unit tests
-└── Assets/            # Project icons
-```
-
----
-
 ## Building
 
 Requires Swift 6 ([swift.org](https://swift.org/download)) and Xcode 16+ on macOS.
@@ -85,21 +54,23 @@ swift test
 Run the API server:
 
 ```bash
-swift run chickadee-server
+swift run chickadee-server serve --port 8080 --worker-secret your-secret
 ```
 
-Run the worker, pointing it at a running API server:
+Run the runner, pointing it at a running API server:
 
 ```bash
 swift run chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
+  --worker-secret your-secret \
   --max-jobs     4
 
 # With sandboxing enabled (recommended for production):
 swift run chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
+  --worker-secret your-secret \
   --sandbox
 ```
 
@@ -107,8 +78,8 @@ swift run chickadee-runner \
 
 ```bash
 swift build -c release
-.build/release/chickadee-server
-.build/release/chickadee-runner --api-base-url http://api:8080 --worker-id w1 --sandbox
+.build/release/chickadee-server serve --port 8080 --worker-secret your-secret
+.build/release/chickadee-runner --api-base-url http://api:8080 --worker-id runner-1 --worker-secret your-secret --sandbox
 ```
 
 ## JupyterLite rebuilds
@@ -126,30 +97,6 @@ scripts/build-jupyterlite.sh
 ```
 
 The build script keeps runtime notebook storage directories (`Public/jupyterlite/files`, `Public/jupyterlite/lab/files`, `Public/jupyterlite/notebooks/files`) while refreshing generated assets.
-
----
-
-## Component docs
-
-| Component | README |
-|-----------|--------|
-| Core (shared models) | [Sources/Core/README.md](Sources/Core/README.md) |
-| chickadee-server (API + web UI) | [Sources/APIServer/README.md](Sources/APIServer/README.md) |
-| chickadee-runner (worker) | [Sources/Worker/README.md](Sources/Worker/README.md) |
-
----
-
-## Phase status
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 1 | Core models, `ScriptRunner`, `POST /results` stub | Complete |
-| 2 | Full REST API, SQLite persistence, worker pull loop, shell-script runner | Complete |
-| 3 | Submission result retrieval — `GET /submissions`, `GET /submissions/:id`, `GET /submissions/:id/results` with tier filtering | Complete |
-| 4 | Sandboxing — `SandboxedScriptRunner` with `sandbox-exec` (macOS) and `unshare` (Linux), `--sandbox` worker flag | Complete |
-| 5 | Gamification — attempt tracking, leaderboards, partial credit | Up next |
-
----
 
 ## License
 

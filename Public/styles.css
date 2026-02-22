@@ -45,8 +45,8 @@ a { color: var(--blue); }
 }
 
 .nav-brand-logo {
-    width: 2rem;
-    height: 2rem;
+    width: 2.4rem;
+    height: 2.4rem;
     object-fit: contain;
     display: block;
 }
@@ -359,6 +359,14 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     display: flex;
     align-items: center;
     gap: .75rem;
+    width: 100%;
+}
+
+.notebook-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
 }
 
 .nb-status {

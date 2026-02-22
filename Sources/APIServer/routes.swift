@@ -9,6 +9,8 @@ func routes(_ app: Application) throws {
 
     try app.register(collection: AuthRoutes())
     try app.register(collection: JupyterLiteContentsRoutes())
+    try app.register(collection: WorkerJobRoutes())
+    try app.register(collection: WorkerArtifactRoutes())
     // Worker result reporting is called by the worker daemon, not the browser.
     // It uses its own workerID for identification (Phase 7 will add worker tokens).
     try app.register(collection: ResultRoutes())

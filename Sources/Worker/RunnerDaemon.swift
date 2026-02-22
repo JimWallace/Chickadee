@@ -10,13 +10,13 @@ import Core
 struct WorkerCommand: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         commandName: "chickadee-runner",
-        abstract: "Chickadee build worker — polls the API server and processes submissions"
+        abstract: "Chickadee build runner — polls the API server and processes submissions"
     )
 
     @Option(name: .long, help: "Base URL of the API server (e.g. http://localhost:8080)")
     var apiBaseURL: String = "http://localhost:8080"
 
-    @Option(name: .long, help: "Unique identifier for this worker instance")
+    @Option(name: .long, help: "Unique identifier for this runner instance")
     var workerID: String = "worker-\(ProcessInfo.processInfo.hostName)"
 
     @Option(name: .long, help: "Maximum number of concurrent jobs")
@@ -25,14 +25,24 @@ struct WorkerCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Run test scripts inside a sandbox (network-isolated, privilege-dropped)")
     var sandbox: Bool = false
 
+    @Option(name: .long, help: "Runner shared secret for API auth (or WORKER_SHARED_SECRET env var)")
+    var workerSecret: String?
+
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
             fputs("Error: invalid --api-base-url '\(apiBaseURL)'\n", stderr)
             throw ExitCode.failure
         }
 
-        let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID)
-        let reporter = Reporter(apiBaseURL: baseURL)
+        let effectiveWorkerSecret = (workerSecret ?? ProcessInfo.processInfo.environment["WORKER_SHARED_SECRET"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !effectiveWorkerSecret.isEmpty else {
+            fputs("Error: missing runner secret. Use --worker-secret or set WORKER_SHARED_SECRET.\n", stderr)
+            throw ExitCode.failure
+        }
+
+        let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
+        let reporter = Reporter(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
         let daemon = WorkerDaemon(
@@ -40,11 +50,12 @@ struct WorkerCommand: AsyncParsableCommand {
             reporter:          reporter,
             runner:            runner,
             workerID:          workerID,
+            workerSecret:      effectiveWorkerSecret,
             maxConcurrentJobs: maxJobs
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
-        fputs("Worker \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n", stderr)
+        fputs("Runner \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n", stderr)
         try await daemon.run()
     }
 }
@@ -56,6 +67,7 @@ actor WorkerDaemon {
     private let reporter: Reporter
     private let runner:   any ScriptRunner
     private let workerID: String
+    private let workerSecret: String
     private let maxConcurrentJobs: Int
 
     init(
@@ -63,12 +75,14 @@ actor WorkerDaemon {
         reporter: Reporter,
         runner:   any ScriptRunner,
         workerID: String,
+        workerSecret: String,
         maxConcurrentJobs: Int
     ) {
         self.poller            = poller
         self.reporter          = reporter
         self.runner            = runner
         self.workerID          = workerID
+        self.workerSecret      = workerSecret
         self.maxConcurrentJobs = maxConcurrentJobs
     }
 
@@ -247,7 +261,10 @@ actor WorkerDaemon {
     // MARK: - Subprocess helpers
 
     private func download(url: URL, to destination: URL) async throws {
-        let (tmpURL, response) = try await URLSession.shared.download(from: url)
+        var request = URLRequest(url: url)
+        request.setValue(workerSecret, forHTTPHeaderField: "X-Worker-Secret")
+        request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
+        let (tmpURL, response) = try await URLSession.shared.download(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw WorkerDaemonError.downloadFailed(url)
         }

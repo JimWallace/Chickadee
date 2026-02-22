@@ -5,6 +5,52 @@ Admin
 #export("content"):
 <h1>Admin dashboard</h1>
 
+<section class="admin-section">
+    <h2>Runners</h2>
+    <form method="post" action="/admin/runner-secret" style="max-width:700px">
+        <label class="form-label">
+            Runner shared secret
+            <div style="display:flex;gap:.5rem;align-items:center">
+                <input class="form-input"
+                       type="text"
+                       name="secret"
+                       value="#(workerSecret)"
+                       autocomplete="off"
+                       style="flex:1">
+                <button class="btn" type="submit">Save</button>
+            </div>
+        </label>
+    </form>
+
+    <div style="margin-top:1rem">
+        <p id="workers-empty" class="empty" #if(!workers.isEmpty):style="display:none"#endif>
+            No runners have checked in yet.
+        </p>
+        <table id="workers-table" class="results-table" #if(workers.isEmpty):style="display:none"#endif>
+            <thead>
+                <tr>
+                    <th>Runner</th>
+                    <th>Status</th>
+                    <th class="time">Assigned Jobs</th>
+                    <th class="time">Jobs Processed</th>
+                    <th class="time">Last Active</th>
+                </tr>
+            </thead>
+            <tbody id="workers-body">
+            #for(worker in workers):
+                <tr>
+                    <td><code>#(worker.workerID)</code></td>
+                    <td>#(worker.status)</td>
+                    <td class="time">#(worker.assignedJobs)</td>
+                    <td class="time">#(worker.jobsProcessed)</td>
+                    <td class="time js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</td>
+                </tr>
+            #endfor
+            </tbody>
+        </table>
+    </div>
+</section>
+
 <!-- ── Users ──────────────────────────────────────────── -->
 <section class="admin-section">
     <h2>Users</h2>
@@ -13,7 +59,7 @@ Admin
             <tr>
                 <th>Username</th>
                 <th>Role</th>
-                <th>Joined</th>
+                <th class="time">Joined</th>
                 <th></th>
             </tr>
         </thead>
@@ -22,7 +68,7 @@ Admin
             <tr>
                 <td><code>#(user.username)</code></td>
                 <td><span class="tier">#(user.role)</span></td>
-                <td class="time">#(user.createdAt)</td>
+                <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
                 <td>
                     <form method="post" action="/admin/users/#(user.id)/role"
                           style="display:flex;gap:.4rem;align-items:center">
@@ -40,46 +86,108 @@ Admin
         </tbody>
     </table>
 </section>
+<script>
+(function () {
+    'use strict';
 
-<section class="admin-section">
-    <h2>Workers</h2>
-    <form method="post" action="/admin/worker-secret" style="max-width:700px">
-        <label class="form-label">
-            Worker shared secret (visible)
-            <div style="display:flex;gap:.5rem;align-items:center">
-                <input class="form-input"
-                       type="text"
-                       name="secret"
-                       value="#(workerSecret)"
-                       autocomplete="off"
-                       style="flex:1">
-                <button class="btn" type="submit">Save</button>
-            </div>
-        </label>
-    </form>
+    var workersBody = document.getElementById('workers-body');
+    var workersTable = document.getElementById('workers-table');
+    var workersEmpty = document.getElementById('workers-empty');
+    if (!workersBody || !workersTable || !workersEmpty) return;
 
-    <div style="margin-top:1rem">
-        #if(workers.isEmpty):
-            <p class="empty">No workers have checked in yet.</p>
-        #else:
-            <table class="results-table">
-                <thead>
-                    <tr>
-                        <th>Worker</th>
-                        <th>Last Active</th>
-                    </tr>
-                </thead>
-                <tbody>
-                #for(worker in workers):
-                    <tr>
-                        <td><code>#(worker.workerID)</code></td>
-                        <td class="time">#(worker.lastActive)</td>
-                    </tr>
-                #endfor
-                </tbody>
-            </table>
-        #endif
-    </div>
-</section>
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+    function formatRelative(isoString) {
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) return isoString;
+
+        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
+        var abs = Math.abs(seconds);
+
+        if (abs < 60) return relativeFormatter.format(seconds, 'second');
+        var minutes = Math.round(seconds / 60);
+        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
+        var hours = Math.round(minutes / 60);
+        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
+        var days = Math.round(hours / 24);
+        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
+        var weeks = Math.round(days / 7);
+        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
+        var months = Math.round(days / 30);
+        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
+        var years = Math.round(days / 365);
+        return relativeFormatter.format(years, 'year');
+    }
+
+    function applyRelativeTimes(root) {
+        var scope = root || document;
+        var nodes = scope.querySelectorAll('.js-relative-time[data-iso]');
+        nodes.forEach(function (el) {
+            var iso = el.getAttribute('data-iso');
+            if (!iso) return;
+            var date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return;
+            el.textContent = formatRelative(iso);
+            el.title = date.toLocaleString();
+        });
+    }
+
+    function renderWorkers(workers) {
+        if (!Array.isArray(workers) || workers.length === 0) {
+            workersBody.innerHTML = '';
+            workersTable.style.display = 'none';
+            workersEmpty.style.display = '';
+            return;
+        }
+
+        workersBody.innerHTML = workers.map(function (worker) {
+            var id = escapeHtml(worker.workerID || '');
+            var status = escapeHtml(worker.status || '');
+            var assignedJobs = escapeHtml(worker.assignedJobs == null ? '' : worker.assignedJobs);
+            var jobsProcessed = escapeHtml(worker.jobsProcessed == null ? '' : worker.jobsProcessed);
+            var lastActive = escapeHtml(worker.lastActive || '');
+            return '<tr>'
+                + '<td><code>' + id + '</code></td>'
+                + '<td>' + status + '</td>'
+                + '<td class="time">' + assignedJobs + '</td>'
+                + '<td class="time">' + jobsProcessed + '</td>'
+                + '<td class="time js-relative-time" data-iso="' + lastActive + '">' + lastActive + '</td>'
+                + '</tr>';
+        }).join('');
+        applyRelativeTimes(workersBody);
+        workersTable.style.display = '';
+        workersEmpty.style.display = 'none';
+    }
+
+    async function refreshWorkers() {
+        try {
+            var res = await fetch('/admin/runners', {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+            if (!res.ok) return;
+            var workers = await res.json();
+            renderWorkers(workers);
+        } catch (_) {
+            // Keep current UI state on transient polling errors.
+        }
+    }
+
+    applyRelativeTimes(document);
+    setInterval(function () {
+        applyRelativeTimes(document);
+        refreshWorkers();
+    }, 5000);
+})();
+</script>
 #endexport
 #endextend

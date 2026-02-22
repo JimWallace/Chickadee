@@ -9,6 +9,7 @@ import Core
 struct JobPoller: Sendable {
     let apiBaseURL: URL
     let workerID: String
+    let workerSecret: String
 
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.default
@@ -23,6 +24,10 @@ struct JobPoller: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !workerSecret.isEmpty {
+            request.setValue(workerSecret, forHTTPHeaderField: "X-Worker-Secret")
+            request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
+        }
 
         let body = WorkerRequestPayload(
             workerID: workerID,

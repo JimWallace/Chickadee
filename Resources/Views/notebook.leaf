@@ -1,6 +1,6 @@
 #extend("base"):
 #export("title"):
-Notebook — #(assignmentTitle)
+Notebook
 #endexport
 #export("content"):
 <style>
@@ -8,23 +8,14 @@ Notebook — #(assignmentTitle)
 .main { max-width: 100%; padding: 0 1rem; }
 </style>
 <div class="notebook-header">
-    <h1>#(assignmentTitle)</h1>
     <div class="notebook-toolbar">
-        <button class="btn btn-primary" id="nb-submit">Submit</button>
-        <a class="btn"
-           href="/api/v1/testsetups/#(testSetupID)/assignment/download"
-           download>Download</a>
-        <label class="btn btn-primary" id="nb-upload-label"
-               title="Upload a locally-edited .ipynb and run tests immediately">
-            Upload and Submit
-            <input type="file" id="nb-upload-file" accept=".ipynb" style="display:none">
-        </label>
-        <a class="btn"
-           id="nb-open-editor"
-           href="/jupyterlite/lab/index.html?workspace=#(testSetupID)&reset&path=#(jupyterLiteNotebookPath)"
-           target="_blank"
-           rel="noopener">Open Editor in New Tab</a>
         <span class="nb-status" id="nb-status"></span>
+        <div class="notebook-actions">
+            <button class="btn btn-primary" id="nb-submit">Submit</button>
+            <a class="btn"
+               href="/api/v1/testsetups/#(testSetupID)/assignment/download"
+               download>Download</a>
+        </div>
     </div>
 </div>
 <iframe
@@ -37,7 +28,7 @@ Notebook — #(assignmentTitle)
     loading="eager">
 </iframe>
 <p id="nb-frame-error" class="empty" style="display:none;margin-top:.6rem">
-    The embedded editor did not load. Use <strong>Open Editor in New Tab</strong>.
+    The embedded editor did not load.
 </p>
 <div id="nb-results" class="nb-results" hidden></div>
 <script src="/notebook.js"></script>

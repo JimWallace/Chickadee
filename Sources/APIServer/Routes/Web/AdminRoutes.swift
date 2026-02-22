@@ -6,7 +6,7 @@
 //
 //   GET  /admin                        → admin.leaf  (user management dashboard)
 //   POST /admin/users/:id/role         → change a user's role
-//   POST /admin/worker-secret          → set/clear runtime worker secret
+//   POST /admin/runner-secret          → set/clear runtime runner secret
 
 import Vapor
 import Fluent
@@ -15,7 +15,10 @@ struct AdminRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
+        admin.get("runners", use: runners)
+        admin.get("workers", use: workers)
         admin.post("users", ":userID", "role", use: changeRole)
+        admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
     }
 
@@ -36,11 +39,7 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
-        let iso = ISO8601DateFormatter()
-        let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
-        let workerRows = workers.map {
-            AdminWorkerRow(workerID: $0.workerID, lastActive: iso.string(from: $0.lastActive))
-        }
+        let workerRows = try await makeWorkerRows(req: req)
         let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
 
         let ctx = AdminContext(
@@ -50,6 +49,20 @@ struct AdminRoutes: RouteCollection {
             workerSecret: effectiveSecret
         )
         return try await req.view.render("admin", ctx)
+    }
+
+    // MARK: - GET /admin/runners
+
+    @Sendable
+    func runners(req: Request) async throws -> [AdminWorkerRow] {
+        try await makeWorkerRows(req: req)
+    }
+
+    // MARK: - GET /admin/workers (compat alias)
+
+    @Sendable
+    func workers(req: Request) async throws -> [AdminWorkerRow] {
+        try await makeWorkerRows(req: req)
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -76,7 +89,7 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
-    // MARK: - POST /admin/worker-secret
+    // MARK: - POST /admin/runner-secret
 
     @Sendable
     func updateWorkerSecret(req: Request) async throws -> Response {
@@ -86,14 +99,50 @@ struct AdminRoutes: RouteCollection {
 
         if trimmed.isEmpty {
             await req.application.workerSecretStore.setRuntimeOverride(nil)
-            req.logger.info("Admin cleared runtime worker secret override.")
+            if let persisted = readWorkerSecretFromDisk(workerSecretFilePath: req.application.workerSecretFilePath) {
+                await req.application.workerSecretStore.setRuntimeOverride(persisted)
+                req.logger.info("Admin reset runtime runner secret to persisted value.")
+            }
+            req.logger.info("Admin cleared runtime runner secret override.")
         } else {
             await req.application.workerSecretStore.setRuntimeOverride(trimmed)
-            req.logger.info("Admin updated runtime worker secret override.")
+            writeWorkerSecretToDisk(secret: trimmed, workerSecretFilePath: req.application.workerSecretFilePath)
+            req.logger.info("Admin updated runtime runner secret override.")
         }
         return req.redirect(to: "/admin")
     }
 
+}
+
+private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
+    let iso = ISO8601DateFormatter()
+    let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
+    let submissions = try await APISubmission.query(on: req.db).all()
+
+    var assignedByWorkerID: [String: Int] = [:]
+    var processedByWorkerID: [String: Int] = [:]
+
+    for submission in submissions {
+        guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
+        if submission.status == "assigned" {
+            assignedByWorkerID[workerID, default: 0] += 1
+        }
+        if submission.status == "complete" || submission.status == "failed" {
+            processedByWorkerID[workerID, default: 0] += 1
+        }
+    }
+
+    return workers.map { snapshot in
+        let assigned = assignedByWorkerID[snapshot.workerID, default: 0]
+        let processed = processedByWorkerID[snapshot.workerID, default: 0]
+        return AdminWorkerRow(
+            workerID: snapshot.workerID,
+            lastActive: iso.string(from: snapshot.lastActive),
+            status: assigned > 0 ? "busy" : "idle",
+            assignedJobs: assigned,
+            jobsProcessed: processed
+        )
+    }
 }
 
 // MARK: - View context types
@@ -105,9 +154,12 @@ private struct AdminUserRow: Encodable {
     let createdAt: String
 }
 
-private struct AdminWorkerRow: Encodable {
+struct AdminWorkerRow: Content {
     let workerID: String
     let lastActive: String
+    let status: String
+    let assignedJobs: Int
+    let jobsProcessed: Int
 }
 
 private struct AdminContext: Encodable {

@@ -35,8 +35,8 @@ if (dropZone && fileInput) {
 // Results page: poll until the submission reaches its final state.
 //
 // Statuses that require polling:
-//   pending / assigned       — worker hasn't started yet
-//   browser-complete         — browser run done, waiting for official worker result
+//   pending / assigned       — runner hasn't started yet
+//   browser-complete         — browser run done, waiting for official runner result
 const root = document.getElementById('submission-root');
 if (root) {
     const isPending         = root.dataset.pending === 'true';
