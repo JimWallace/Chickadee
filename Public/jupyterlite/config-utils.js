@@ -140,13 +140,14 @@ function mergeOneConfig(memo, config) {
 }
 
 function dedupFederatedExtensions(config) {
-  const originalList = Object.keys(config || {})['federated_extensions'] || [];
+  const originalList = (config || {}).federated_extensions || [];
   const named = {};
   for (const ext of originalList) {
     named[ext.name] = ext;
   }
   let allExtensions = [...Object.values(named)];
   allExtensions.sort((a, b) => a.name.localeCompare(b.name));
+  config.federated_extensions = allExtensions;
   return config;
 }
 

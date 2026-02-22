@@ -2,13 +2,9 @@
   "jupyter-config-data": {
     "appName": "JupyterLite",
     "appUrl": "./lab",
-    "appVersion": "0.7.1",
+    "appVersion": "0.7.1-chickadee.2",
     "baseUrl": "./",
     "defaultKernelName": "python",
-    "enableMemoryStorage": true,
-    "contentsStorageDrivers": ["memoryStorageDriver"],
-    "settingsStorageDrivers": ["memoryStorageDriver"],
-    "workspacesStorageDrivers": ["memoryStorageDriver"],
     "faviconUrl": "./lab/favicon.ico",
     "federated_extensions": [
       {
