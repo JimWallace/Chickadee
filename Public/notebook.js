@@ -37,7 +37,8 @@
     // Fall back to a default lab path only if the attribute is missing.
     const notebookURL = `/api/v1/testsetups/${setupID}/assignment`;
     const editorURL = frame.dataset.editorUrl ||
-        `/jupyterlite/lab/index.html?workspace=${encodeURIComponent(setupID)}&reset&path=assignment.ipynb`;
+        frame.getAttribute('src') ||
+        `/jupyterlite/lab/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
     frame.src = editorURL;
 
     // Quick reachability check helps explain blank/failed editor loads.
@@ -86,9 +87,9 @@
                 const collection = buildCollection(outcomes, setupID);
                 const response   = await postBrowserResult(collection, notebook, setupID);
 
-                // Render results inline — no page navigation.
-                renderResults(outcomes, response);
-                setStatus('', '');
+                setStatus('loading', 'Submission queued. Opening grade details…');
+                window.location.assign(`/submissions/${response.workerSubmissionID}`);
+                return;
             } catch (err) {
                 setStatus('error', `Error: ${err.message}`);
             } finally {
@@ -134,8 +135,9 @@
                 // the server will re-inject hidden test cells server-side.
                 const response = await postBrowserResult(collection, uploadedNotebook, setupID);
 
-                renderResults(outcomes, response);
-                setStatus('', '');
+                setStatus('loading', 'Submission queued. Opening grade details…');
+                window.location.assign(`/submissions/${response.workerSubmissionID}`);
+                return;
             } catch (err) {
                 setStatus('error', `Error: ${err.message}`);
             } finally {

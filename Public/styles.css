@@ -253,6 +253,15 @@ textarea.form-input {
     margin-bottom: 1rem;
 }
 
+.grade-pill {
+    display: inline-block;
+    padding: .1rem .45rem;
+    border-radius: 9999px;
+    background: #DBEAFE;
+    color: #1D4ED8;
+    font-size: .95rem;
+}
+
 .exec-time {
     font-size: .875rem;
     font-weight: 400;

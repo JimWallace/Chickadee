@@ -41,7 +41,7 @@ Submission #(submissionID)
 </div>
 
 #else:
-<p class="score">#(passCount) / #(totalTests) passed
+<p class="score">Grade: <span class="grade-pill">#(gradePercent)%</span> · #(passCount) / #(totalTests) scripts passed
     <span class="exec-time">(#(executionTimeMs) ms total)</span>
     #if(isBrowserComplete):
     <span class="result-source">(browser preview)</span>
@@ -49,12 +49,13 @@ Submission #(submissionID)
     <span class="result-source">(official)</span>
     #endif
 </p>
+<h2>Per-script marks</h2>
 <table class="results-table">
     <thead>
         <tr>
-            <th>Test</th>
+            <th>Script</th>
             <th>Tier</th>
-            <th>Result</th>
+            <th>Mark</th>
             <th>ms</th>
         </tr>
     </thead>
@@ -67,7 +68,7 @@ Submission #(submissionID)
                 #(outcome.shortResult)
                 #if(outcome.longResult):
                 <details>
-                    <summary>details</summary>
+                    <summary>View script output</summary>
                     <pre>#(outcome.longResult)</pre>
                 </details>
                 #endif

@@ -29,6 +29,7 @@ struct BrowserResultRoutes: RouteCollection {
 
     @Sendable
     func submitBrowserResult(req: Request) async throws -> BrowserResultResponse {
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(BrowserResultBody.self)
 
         // Validate the referenced test setup exists.
@@ -63,6 +64,7 @@ struct BrowserResultRoutes: RouteCollection {
         // Count prior submissions to derive the attempt number.
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setup.id!)
+            .filter(\.$userID == caller.id)
             .count()
         let attemptNumber = priorCount + 1
 
@@ -75,7 +77,8 @@ struct BrowserResultRoutes: RouteCollection {
             zipPath:       nbPath,
             attemptNumber: attemptNumber,
             status:        "browser-complete",
-            filename:      "\(subID).ipynb"
+            filename:      "\(subID).ipynb",
+            userID:        caller.id
         )
         try await submission.save(on: req.db)
 
@@ -101,7 +104,8 @@ struct BrowserResultRoutes: RouteCollection {
             zipPath:       nbPath,
             attemptNumber: attemptNumber,
             status:        "pending",
-            filename:      "\(subID).ipynb"
+            filename:      "\(subID).ipynb",
+            userID:        caller.id
         )
         try await workerSub.save(on: req.db)
 

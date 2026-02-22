@@ -190,7 +190,7 @@ struct AssignmentRoutes: RouteCollection {
             zipPath: zipPath
         )
         guard !suiteScripts.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=No%20test%20scripts%20(.sh)%20found%20in%20test%20suite"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=No%20supported%20test%20scripts%20found%20in%20test%20suite"
             return req.redirect(to: "/assignments/new?\(q)")
         }
 
@@ -603,9 +603,9 @@ private func createRunnerSetupZip(
     let notebookURL = tempDir.appendingPathComponent("assignment.ipynb")
     try assignmentNotebookData.write(to: notebookURL)
 
-    let discoveredScripts = discoverShellScripts(in: tempDir)
+    let discoveredScripts = discoverTestScripts(in: tempDir)
     guard !discoveredScripts.isEmpty else {
-        throw Abort(.badRequest, reason: "Test suite must include at least one .sh script")
+        throw Abort(.badRequest, reason: "Test suite must include at least one supported test script")
     }
     let scripts = try orderSuiteScripts(discoveredScripts)
 
@@ -629,7 +629,7 @@ private func sanitizeSuiteFilename(_ raw: String) -> String {
     return name
 }
 
-private func discoverShellScripts(in directory: URL) -> [String] {
+private func discoverTestScripts(in directory: URL) -> [String] {
     guard let enumerator = FileManager.default.enumerator(
         at: directory,
         includingPropertiesForKeys: [.isRegularFileKey],
@@ -638,11 +638,27 @@ private func discoverShellScripts(in directory: URL) -> [String] {
 
     var scripts: [String] = []
     for case let fileURL as URL in enumerator {
-        guard fileURL.pathExtension == "sh" else { continue }
+        guard isSupportedTestScript(fileURL) else { continue }
         let relative = fileURL.path.replacingOccurrences(of: directory.path + "/", with: "")
         scripts.append(relative)
     }
     return scripts.sorted()
+}
+
+private func isSupportedTestScript(_ fileURL: URL) -> Bool {
+    let ext = fileURL.pathExtension.lowercased()
+    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "rb", "pl", "js", "php"]
+    if supportedExtensions.contains(ext) { return true }
+
+    let filename = fileURL.lastPathComponent.lowercased()
+    if filename == "assignment.ipynb" { return false }
+    if FileManager.default.isExecutableFile(atPath: fileURL.path) { return true }
+
+    guard let data = try? Data(contentsOf: fileURL),
+          let text = String(data: data.prefix(256), encoding: .utf8) else {
+        return false
+    }
+    return text.hasPrefix("#!")
 }
 
 private func orderSuiteScripts(_ scripts: [String]) throws -> [String] {
@@ -655,7 +671,7 @@ private func orderSuiteScripts(_ scripts: [String]) throws -> [String] {
         let filename = (script as NSString).lastPathComponent
         let ns = filename as NSString
         let range = NSRange(location: 0, length: ns.length)
-        let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+\.sh$"#)
+        let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+$"#)
         guard let match = regex?.firstMatch(in: filename, options: [], range: range),
               match.numberOfRanges >= 2,
               let orderRange = Range(match.range(at: 1), in: filename),
@@ -670,7 +686,7 @@ private func orderSuiteScripts(_ scripts: [String]) throws -> [String] {
     if hasOrdered && hasUnordered {
         throw Abort(
             .badRequest,
-            reason: "When using numbered test scripts, every .sh script must start with an order prefix like 01_ or 02-."
+            reason: "When using numbered test scripts, every script must start with an order prefix like 01_ or 02-."
         )
     }
 
