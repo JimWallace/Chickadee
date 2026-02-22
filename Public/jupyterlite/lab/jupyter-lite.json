@@ -5,22 +5,6 @@
     "settingsUrl": "../build/schemas",
     "showLoadingIndicator": true,
     "themesUrl": "./build/themes",
-    "mode": "multiple-document",
-    "defaultKernelName": "python",
-    "fullLabextensionsUrl": "../extensions",
-    "federated_extensions": [
-      {
-        "extension": "./extension",
-        "load": "static/remoteEntry.a117bd216cefa0b341fe.js",
-        "name": "@jupyterlite/pyodide-kernel-extension"
-      }
-    ],
-    "litePluginSettings": {
-      "@jupyterlite/pyodide-kernel-extension:kernel": {
-        "pipliteUrls": [
-          "../extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc"
-        ]
-      }
-    }
+    "mode": "multiple-document"
   }
 }
