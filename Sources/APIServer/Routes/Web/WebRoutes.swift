@@ -171,10 +171,14 @@ struct WebRoutes: RouteCollection {
 
         // Detect whether the upload is a zip by checking PK magic bytes.
         let isZip     = body.files.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
-        let ext       = body.uploadFilename.flatMap { URL(fileURLWithPath: $0).pathExtension } ?? "zip"
+        let ext: String = {
+            if isZip { return "zip" }
+            return inferredRawSubmissionExtension(data: body.files, uploadFilename: body.uploadFilename)
+        }()
         let storedExt = isZip ? "zip" : ext
         let filePath  = subsDir + "\(subID).\(storedExt)"
         try body.files.write(to: URL(fileURLWithPath: filePath))
+        let fallbackFilename = isZip ? nil : (body.uploadFilename ?? "submission.\(storedExt)")
 
         // Attempt number is scoped to this student for this test setup.
         let priorCount = try await APISubmission.query(on: req.db)
@@ -187,10 +191,11 @@ struct WebRoutes: RouteCollection {
             testSetupID:   setupID,
             zipPath:       filePath,
             attemptNumber: priorCount + 1,
-            filename:      isZip ? nil : body.uploadFilename,
+            filename:      fallbackFilename,
             userID:        user.id
         )
         try await submission.save(on: req.db)
+        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return req.redirect(to: "/submissions/\(subID)")
     }
@@ -428,4 +433,21 @@ private struct SubmitFormBody: Content {
     var files: Data
     /// Original filename from the browser's multipart upload (nil for older clients).
     var uploadFilename: String?
+}
+
+private func inferredRawSubmissionExtension(data: Data, uploadFilename: String?) -> String {
+    if let uploadFilename {
+        let ext = URL(fileURLWithPath: uploadFilename).pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !ext.isEmpty {
+            return ext.lowercased()
+        }
+    }
+
+    // Heuristic: notebook uploads are JSON with "nbformat" key.
+    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       json["nbformat"] != nil {
+        return "ipynb"
+    }
+
+    return "txt"
 }

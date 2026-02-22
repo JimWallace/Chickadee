@@ -106,6 +106,7 @@ actor WorkerDaemon {
                     try await process(job)
                 } catch {
                     fputs("[\(workerID)] Error processing job \(job.submissionID): \(error)\n", stderr)
+                    try? await reportProcessingFailure(job: job, error: error)
                 }
             } else {
                 let delay = backoff.next()
@@ -148,6 +149,12 @@ actor WorkerDaemon {
         if let makefile = manifest.makefile {
             try runMake(in: testSetupDir, target: makefile.target)
         }
+
+        // Run repository-managed notebook prep build step before tests.
+        try runRepositoryPrepMakefile(in: testSetupDir)
+
+        // Install shared Python test runtime helpers for every run.
+        try writePythonRuntimeHelpers(in: testSetupDir)
 
         // Run each test script and collect outcomes.
         var outcomes: [TestOutcome] = []
@@ -213,7 +220,20 @@ actor WorkerDaemon {
             shortResult = status.defaultShortResult
         }
 
-        let longResult = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stderrText = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stdoutText = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let longResult: String? = {
+            guard status != .pass else { return stderrText.isEmpty ? nil : stderrText }
+            var sections: [String] = []
+            if !stdoutText.isEmpty {
+                sections.append("stdout:\n\(stdoutText)")
+            }
+            if !stderrText.isEmpty {
+                sections.append("stderr:\n\(stderrText)")
+            }
+            if sections.isEmpty { return nil }
+            return sections.joined(separator: "\n\n")
+        }()
         let baseName = (entry.script as NSString).deletingPathExtension
 
         return TestOutcome(
@@ -222,7 +242,7 @@ actor WorkerDaemon {
             tier:               entry.tier,
             status:             status,
             shortResult:        shortResult,
-            longResult:         longResult.isEmpty ? nil : longResult,
+            longResult:         longResult,
             executionTimeMs:    output.executionTimeMs,
             memoryUsageBytes:   nil,
             attemptNumber:      attemptNumber,
@@ -297,6 +317,61 @@ actor WorkerDaemon {
             throw WorkerDaemonError.makeFailed(target)
         }
     }
+
+    private func runRepositoryPrepMakefile(in directory: URL) throws {
+        let repoRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let sourceMakefile = repoRoot.appendingPathComponent("Tools/runner-support/Makefile")
+        guard FileManager.default.fileExists(atPath: sourceMakefile.path) else {
+            return
+        }
+
+        let localMakefile = directory.appendingPathComponent("ChickadeePrep.mk")
+        if FileManager.default.fileExists(atPath: localMakefile.path) {
+            try FileManager.default.removeItem(at: localMakefile)
+        }
+        try FileManager.default.copyItem(at: sourceMakefile, to: localMakefile)
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/make")
+        proc.arguments = ["-f", localMakefile.lastPathComponent]
+        proc.currentDirectoryURL = directory
+        try proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
+            throw WorkerDaemonError.prepMakeFailed
+        }
+    }
+
+    private func reportProcessingFailure(job: Job, error: Error) async throws {
+        let message = String(describing: error)
+        let collection = TestOutcomeCollection(
+            submissionID:    job.submissionID,
+            testSetupID:     job.testSetupID,
+            attemptNumber:   job.attemptNumber,
+            buildStatus:     .failed,
+            compilerOutput:  message,
+            outcomes:        [],
+            totalTests:      0,
+            passCount:       0,
+            failCount:       0,
+            errorCount:      1,
+            timeoutCount:    0,
+            executionTimeMs: 0,
+            runnerVersion:   "shell-runner/1.0",
+            timestamp:       Date()
+        )
+        try await reporter.report(collection)
+    }
+
+    private func writePythonRuntimeHelpers(in directory: URL) throws {
+        let runtimeURL = directory.appendingPathComponent("test_runtime.py")
+        try testRuntimePy.write(to: runtimeURL, atomically: true, encoding: .utf8)
+
+        // Python auto-imports sitecustomize (if present on sys.path), which
+        // lets helpers be available without explicit imports in each test file.
+        let sitecustomizeURL = directory.appendingPathComponent("sitecustomize.py")
+        try sitecustomizePy.write(to: sitecustomizeURL, atomically: true, encoding: .utf8)
+    }
 }
 
 // MARK: - Script result JSON (optional last-line protocol)
@@ -306,6 +381,134 @@ private struct ScriptResultJSON: Decodable {
     let score: Double?
     let shortResult: String?
 }
+
+private let testRuntimePy = """
+import inspect
+import json
+import traceback
+import importlib.util
+from pathlib import Path
+from typing import Dict, List, Optional
+
+
+def _caller_file(depth: int = 3) -> Path:
+    frame = inspect.stack()[depth]
+    return Path(frame.filename)
+
+
+def _first_comment_label() -> str:
+    path = _caller_file()
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s:
+                continue
+            if s.startswith("#!") or s.startswith("# -*-"):
+                continue
+            if s.startswith("#"):
+                label = s.lstrip("#").strip()
+                return label if label else path.stem
+            break
+    except Exception:
+        pass
+    return path.stem
+
+
+def _emit(payload: Dict[str, object]) -> None:
+    print(json.dumps(payload, ensure_ascii=False))
+
+
+def passed(message: Optional[str] = None):
+    label = _first_comment_label()
+    _emit({
+        "shortResult": message or f"{label}: passed",
+        "status": "pass",
+        "test": label,
+    })
+    raise SystemExit(0)
+
+
+def failed(message: str = "failed"):
+    label = _first_comment_label()
+    _emit({
+        "shortResult": f"{label}: failed",
+        "status": "fail",
+        "test": label,
+        "error": message,
+    })
+    raise SystemExit(1)
+
+
+def errored(message: str = "error", err: Optional[Exception] = None):
+    label = _first_comment_label()
+    payload = {
+        "shortResult": f"{label}: error",
+        "status": "error",
+        "test": label,
+        "error": message,
+    }
+    if err is not None:
+        payload["exception"] = repr(err)
+        payload["traceback"] = traceback.format_exc()
+    _emit(payload)
+    raise SystemExit(2)
+
+
+def _candidate_student_files() -> List[Path]:
+    cwd = Path(".")
+    files = []
+    for p in sorted(cwd.glob("*.py")):
+        name = p.name
+        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py"}:
+            continue
+        if name.startswith("publictest_") or name.startswith("secrettest_"):
+            continue
+        files.append(p)
+    return files
+
+
+def load_student_module():
+    for path in _candidate_student_files():
+        try:
+            spec = importlib.util.spec_from_file_location(f"student_{path.stem}", path)
+            if spec is None or spec.loader is None:
+                continue
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except Exception:
+            continue
+    return None
+
+
+def require_function(name: str):
+    module = load_student_module()
+    if module is None:
+        errored("Could not load a student Python module from submission.")
+    fn = getattr(module, name, None)
+    if fn is None or not callable(fn):
+        errored(f"Required function '{name}' was not found or is not callable.")
+    return fn
+"""
+
+private let sitecustomizePy = """
+import builtins
+import test_runtime as _tr
+
+builtins.passed = _tr.passed
+builtins.failed = _tr.failed
+builtins.errored = _tr.errored
+builtins.require_function = _tr.require_function
+
+_student_module = _tr.load_student_module()
+builtins.student_module = _student_module
+if _student_module is not None:
+    for _name, _value in vars(_student_module).items():
+        if _name.startswith("_"):
+            continue
+        if callable(_value) and not hasattr(builtins, _name):
+            setattr(builtins, _name, _value)
+"""
 
 // MARK: - Helpers
 
@@ -351,12 +554,14 @@ enum WorkerDaemonError: Error, LocalizedError {
     case downloadFailed(URL)
     case unzipFailed(URL)
     case makeFailed(String?)
+    case prepMakeFailed
 
     var errorDescription: String? {
         switch self {
         case .downloadFailed(let url):  return "Failed to download \(url)"
         case .unzipFailed(let url):     return "Failed to unzip \(url.lastPathComponent)"
         case .makeFailed(let target):   return "make \(target ?? "") failed"
+        case .prepMakeFailed:           return "Repository prep Makefile failed"
         }
     }
 }
