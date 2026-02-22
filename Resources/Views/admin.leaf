@@ -21,6 +21,15 @@ Admin
             </div>
         </label>
     </form>
+    <form method="post" action="/admin/runner-autostart" style="margin-top:.75rem;max-width:700px">
+        <label class="form-label" style="display:inline-flex;flex-direction:row;align-items:center;gap:.5rem;white-space:nowrap">
+            <input type="checkbox"
+                   name="localRunnerAutoStart"
+                   onchange="this.form.submit()"
+                   #if(localRunnerAutoStartEnabled):checked#endif>
+            <span>Auto-start one local runner when none are connected</span>
+        </label>
+    </form>
 
     <div style="margin-top:1rem">
         <p id="workers-empty" class="empty" #if(!workers.isEmpty):style="display:none"#endif>

@@ -77,6 +77,8 @@ struct AssignmentRoutes: RouteCollection {
             } else {
                 status = "unpublished"
             }
+            let validationStatus = assignment?.validationStatus ?? (assignment == nil ? "unpublished" : "passed")
+            let validationSubmissionID = assignment?.validationSubmissionID
 
             return AssignmentRow(
                 setupID:      setupID,
@@ -85,6 +87,8 @@ struct AssignmentRoutes: RouteCollection {
                 isOpen:       assignment?.isOpen,
                 dueAt:        assignment?.dueAt.map { fmt.string(from: $0) },
                 status:       status,
+                validationStatus: validationStatus,
+                validationSubmissionID: validationSubmissionID,
                 suiteCount:   suiteCount,
                 createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—"
             )
@@ -101,38 +105,28 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func newAssignmentPage(req: Request) async throws -> View {
-        let ctx = NewAssignmentContext(currentUser: req.currentUserContext)
+        struct NewQuery: Content {
+            var assignmentName: String?
+            var dueAt: String?
+            var error: String?
+            var notice: String?
+        }
+        let q = (try? req.query.decode(NewQuery.self))
+        let ctx = NewAssignmentContext(
+            currentUser: req.currentUserContext,
+            assignmentName: (q?.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+            dueAt: q?.dueAt ?? "",
+            notice: q?.notice,
+            error: q?.error
+        )
         return try await req.view.render("assignment-new", ctx)
     }
 
     // MARK: - GET /assignments/new/details
 
     @Sendable
-    func newAssignmentDetailsPage(req: Request) async throws -> View {
-        struct NewDetailsQuery: Content {
-            var gradingMode: String?
-            var assignmentName: String?
-            var dueAt: String?
-            var notice: String?
-            var error: String?
-        }
-        let query = try req.query.decode(NewDetailsQuery.self)
-        let mode = (query.gradingMode == "server") ? "server" : "browser"
-        let assignmentName = (query.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let dueAt = query.dueAt ?? ""
-        let notice = query.notice
-        let error = query.error
-
-        let ctx = NewAssignmentDetailsContext(
-            currentUser: req.currentUserContext,
-            gradingMode: mode,
-            requiresServerUpload: mode == "server",
-            assignmentName: assignmentName,
-            dueAt: dueAt,
-            notice: notice,
-            error: error
-        )
-        return try await req.view.render("assignment-new-details", ctx)
+    func newAssignmentDetailsPage(req: Request) async throws -> Response {
+        return req.redirect(to: "/assignments/new")
     }
 
     // MARK: - POST /assignments/new/save
@@ -142,49 +136,65 @@ struct AssignmentRoutes: RouteCollection {
         struct SaveBody: Content {
             var assignmentName: String?
             var dueAt: String?
-            var gradingMode: String?
-            var browserNotebookFile: File?
+            var assignmentNotebookFile: File?
+            var solutionNotebookFile: File?
+            var suiteFiles: [File]?
         }
 
         let body = try req.content.decode(SaveBody.self)
-        let mode = (body.gradingMode == "server") ? "server" : "browser"
         let title = (body.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(body.dueAt)
 
         guard !title.isEmpty else {
-            let q = "gradingMode=\(mode)&assignmentName=&dueAt=\(body.dueAt ?? "")&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/assignments/new/details?\(q)")
+            let q = "assignmentName=&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Assignment%20name%20is%20required"
+            return req.redirect(to: "/assignments/new?\(q)")
         }
 
-        // Phase 1 of this wizard save path: browser mode only.
-        guard mode == "browser" else {
-            let q = "gradingMode=\(mode)&assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Server-tested%20save%20is%20not%20wired%20yet"
-            return req.redirect(to: "/assignments/new/details?\(q)")
+        guard let assignmentNotebookFile = body.assignmentNotebookFile,
+              assignmentNotebookFile.data.readableBytes > 0 else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
+            return req.redirect(to: "/assignments/new?\(q)")
+        }
+        guard let solutionNotebookFile = body.solutionNotebookFile,
+              solutionNotebookFile.data.readableBytes > 0 else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required"
+            return req.redirect(to: "/assignments/new?\(q)")
+        }
+        let suiteFiles = (body.suiteFiles ?? []).filter { $0.data.readableBytes > 0 }
+        guard !suiteFiles.isEmpty else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=At%20least%20one%20test%20suite%20file%20is%20required"
+            return req.redirect(to: "/assignments/new?\(q)")
         }
 
-        let notebookData: Data
-        if let file = body.browserNotebookFile, file.data.readableBytes > 0 {
-            notebookData = Data(file.data.readableBytesView)
-        } else {
-            notebookData = defaultNotebookData(title: title)
+        let assignmentNotebookRaw = Data(assignmentNotebookFile.data.readableBytesView)
+        let solutionNotebookRaw = Data(solutionNotebookFile.data.readableBytesView)
+        guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
+            return req.redirect(to: "/assignments/new?\(q)")
+        }
+        guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
+            return req.redirect(to: "/assignments/new?\(q)")
         }
 
-        // Validate notebook JSON upfront.
-        guard (try? JSONSerialization.jsonObject(with: notebookData)) != nil else {
-            let q = "gradingMode=browser&assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=Uploaded%20file%20is%20not%20valid%20JSON%20(.ipynb)"
-            return req.redirect(to: "/assignments/new/details?\(q)")
-        }
+        let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
 
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
         let notebookPath = setupsDir + "\(setupID).ipynb"
         let zipPath = setupsDir + "\(setupID).zip"
-        let normalizedNotebook = normalizeNotebookForJupyterLite(notebookData)
+        try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
+        let suiteScripts = try createRunnerSetupZip(
+            assignmentNotebookData: assignmentNotebook,
+            suiteFiles: suiteFiles,
+            zipPath: zipPath
+        )
+        guard !suiteScripts.isEmpty else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(body.dueAt ?? ""))&error=No%20test%20scripts%20(.sh)%20found%20in%20test%20suite"
+            return req.redirect(to: "/assignments/new?\(q)")
+        }
 
-        try normalizedNotebook.write(to: URL(fileURLWithPath: notebookPath))
-        try createNotebookZip(notebookData: normalizedNotebook, zipPath: zipPath)
-
-        let manifest = #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+        let manifest = try makeWorkerManifestJSON(scripts: suiteScripts)
         let setup = APITestSetup(
             id: setupID,
             manifest: manifest,
@@ -197,11 +207,39 @@ struct AssignmentRoutes: RouteCollection {
             testSetupID: setupID,
             title: title,
             dueAt: due,
-            isOpen: false
+            isOpen: false,
+            validationStatus: "pending",
+            validationSubmissionID: nil
         )
         try await assignment.save(on: req.db)
 
-        return req.redirect(to: "/assignments")
+        let validationSubmissionID = try await enqueueRunnerValidationSubmission(
+            req: req,
+            setupID: setupID,
+            solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw)
+        )
+        assignment.validationSubmissionID = validationSubmissionID
+        try await assignment.save(on: req.db)
+
+        await ensureValidationRunnerAvailability(req: req)
+        let validation = try await waitForRunnerValidation(req: req, submissionID: validationSubmissionID)
+        switch validation {
+        case .passed(let summary):
+            assignment.validationStatus = "passed"
+            try await assignment.save(on: req.db)
+            let q = "notice=\(urlEncode("Runner validation passed (\(summary)). You can now open the assignment from the dashboard."))"
+            return req.redirect(to: "/assignments/new?\(q)")
+        case .failed(let summary):
+            assignment.validationStatus = "failed"
+            try await assignment.save(on: req.db)
+            let q = "notice=\(urlEncode("Assignment saved, but runner validation failed (\(summary)). Fix your solution/test suite and create a new assignment."))"
+            return req.redirect(to: "/assignments/new?\(q)")
+        case .timedOut:
+            assignment.validationStatus = "pending"
+            try await assignment.save(on: req.db)
+            let q = "notice=\(urlEncode("Assignment saved and validation started. It is still pending; refresh the dashboard shortly."))"
+            return req.redirect(to: "/assignments/new?\(q)")
+        }
     }
 
     // MARK: - POST /assignments
@@ -308,6 +346,9 @@ struct AssignmentRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
+        guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
+            throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
+        }
         assignment.isOpen = true
         try await assignment.save(on: req.db)
         return req.redirect(to: "/assignments")
@@ -332,6 +373,9 @@ struct AssignmentRoutes: RouteCollection {
         let body = try req.content.decode(StatusBody.self)
         switch body.status {
         case "open":
+            guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
+                throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
+            }
             assignment.isOpen = true
         case "closed":
             assignment.isOpen = false
@@ -441,6 +485,8 @@ struct AssignmentRow: Encodable {
     let isOpen:       Bool?     // nil if unpublished
     let dueAt:        String?
     let status:       String    // "unpublished" | "open" | "closed"
+    let validationStatus: String
+    let validationSubmissionID: String?
     let suiteCount:   Int
     let createdAt:    String
 }
@@ -461,12 +507,6 @@ private struct ValidateContext: Encodable {
 
 private struct NewAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
-}
-
-private struct NewAssignmentDetailsContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let gradingMode: String
-    let requiresServerUpload: Bool
     let assignmentName: String
     let dueAt: String
     let notice: String?
@@ -526,23 +566,222 @@ private func defaultNotebookData(title: String) -> Data {
     return Data(json.utf8)
 }
 
-private func createNotebookZip(notebookData: Data, zipPath: String) throws {
+private func createRunnerSetupZip(
+    assignmentNotebookData: Data,
+    suiteFiles: [File],
+    zipPath: String
+) throws -> [String] {
     let fm = FileManager.default
-    let tempDir = fm.temporaryDirectory.appendingPathComponent("chickadee_new_assignment_\(UUID().uuidString)")
+    let tempDir = fm.temporaryDirectory.appendingPathComponent("chickadee_runner_setup_\(UUID().uuidString)")
     try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: tempDir) }
 
-    let notebookURL = tempDir.appendingPathComponent("assignment.ipynb")
-    try notebookData.write(to: notebookURL)
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    process.arguments = ["-j", "-q", zipPath, notebookURL.path]
-    try process.run()
-    process.waitUntilExit()
-    if process.terminationStatus != 0 {
-        throw Abort(.internalServerError, reason: "Failed to package notebook zip")
+    var seenNames: Set<String> = []
+    for (index, file) in suiteFiles.enumerated() {
+        let data = Data(file.data.readableBytesView)
+        guard !data.isEmpty else { continue }
+        let rawName = file.filename.isEmpty ? "suite-file-\(index + 1)" : file.filename
+        let baseName = sanitizeSuiteFilename(rawName)
+        let finalName: String
+        if !seenNames.contains(baseName) {
+            finalName = baseName
+        } else {
+            let ext = URL(fileURLWithPath: baseName).pathExtension
+            let stem = (baseName as NSString).deletingPathExtension
+            var suffix = 2
+            var candidate = baseName
+            while seenNames.contains(candidate) {
+                candidate = ext.isEmpty ? "\(stem)-\(suffix)" : "\(stem)-\(suffix).\(ext)"
+                suffix += 1
+            }
+            finalName = candidate
+        }
+        seenNames.insert(finalName)
+        try data.write(to: tempDir.appendingPathComponent(finalName))
     }
+
+    let notebookURL = tempDir.appendingPathComponent("assignment.ipynb")
+    try assignmentNotebookData.write(to: notebookURL)
+
+    let discoveredScripts = discoverShellScripts(in: tempDir)
+    guard !discoveredScripts.isEmpty else {
+        throw Abort(.badRequest, reason: "Test suite must include at least one .sh script")
+    }
+    let scripts = try orderSuiteScripts(discoveredScripts)
+
+    let zip = Process()
+    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+    zip.currentDirectoryURL = tempDir
+    zip.arguments = ["-q", "-r", zipPath, "."]
+    try zip.run()
+    zip.waitUntilExit()
+    guard zip.terminationStatus == 0 else {
+        throw Abort(.internalServerError, reason: "Failed to package setup zip")
+    }
+    return scripts
+}
+
+private func sanitizeSuiteFilename(_ raw: String) -> String {
+    var name = (raw as NSString).lastPathComponent
+    if name.isEmpty { name = "suite-file" }
+    name = name.replacingOccurrences(of: "/", with: "-")
+    name = name.replacingOccurrences(of: "\\", with: "-")
+    return name
+}
+
+private func discoverShellScripts(in directory: URL) -> [String] {
+    guard let enumerator = FileManager.default.enumerator(
+        at: directory,
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: [.skipsHiddenFiles]
+    ) else { return [] }
+
+    var scripts: [String] = []
+    for case let fileURL as URL in enumerator {
+        guard fileURL.pathExtension == "sh" else { continue }
+        let relative = fileURL.path.replacingOccurrences(of: directory.path + "/", with: "")
+        scripts.append(relative)
+    }
+    return scripts.sorted()
+}
+
+private func orderSuiteScripts(_ scripts: [String]) throws -> [String] {
+    struct Entry {
+        let path: String
+        let order: Int?
+    }
+
+    let entries = scripts.map { script -> Entry in
+        let filename = (script as NSString).lastPathComponent
+        let ns = filename as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+\.sh$"#)
+        guard let match = regex?.firstMatch(in: filename, options: [], range: range),
+              match.numberOfRanges >= 2,
+              let orderRange = Range(match.range(at: 1), in: filename),
+              let order = Int(filename[orderRange]) else {
+            return Entry(path: script, order: nil)
+        }
+        return Entry(path: script, order: order)
+    }
+
+    let hasOrdered = entries.contains { $0.order != nil }
+    let hasUnordered = entries.contains { $0.order == nil }
+    if hasOrdered && hasUnordered {
+        throw Abort(
+            .badRequest,
+            reason: "When using numbered test scripts, every .sh script must start with an order prefix like 01_ or 02-."
+        )
+    }
+
+    if hasOrdered {
+        return entries
+            .sorted { lhs, rhs in
+                if lhs.order != rhs.order {
+                    return (lhs.order ?? 0) < (rhs.order ?? 0)
+                }
+                return lhs.path < rhs.path
+            }
+            .map(\.path)
+    }
+
+    return scripts.sorted()
+}
+
+private func makeWorkerManifestJSON(scripts: [String]) throws -> String {
+    let testSuites = scripts.map { ["tier": "public", "script": $0] }
+    let manifest: [String: Any] = [
+        "schemaVersion": 1,
+        "gradingMode": "worker",
+        "requiredFiles": [],
+        "testSuites": testSuites,
+        "timeLimitSeconds": 10,
+        "makefile": NSNull()
+    ]
+    let data = try JSONSerialization.data(withJSONObject: manifest)
+    return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+private func enqueueRunnerValidationSubmission(
+    req: Request,
+    setupID: String,
+    solutionNotebookData: Data
+) async throws -> String {
+    let submissionsDir = req.application.submissionsDirectory
+    let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+    let filePath = submissionsDir + "\(subID).ipynb"
+    try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
+
+    let priorCount = try await APISubmission.query(on: req.db)
+        .filter(\.$testSetupID == setupID)
+        .count()
+
+    let user = try req.auth.require(APIUser.self)
+    let submission = APISubmission(
+        id:            subID,
+        testSetupID:   setupID,
+        zipPath:       filePath,
+        attemptNumber: priorCount + 1,
+        filename:      "solution.ipynb",
+        userID:        user.id
+    )
+    try await submission.save(on: req.db)
+    return subID
+}
+
+private enum RunnerValidationOutcome {
+    case passed(summary: String)
+    case failed(summary: String)
+    case timedOut
+}
+
+private func waitForRunnerValidation(
+    req: Request,
+    submissionID: String,
+    timeoutSeconds: TimeInterval = 45
+) async throws -> RunnerValidationOutcome {
+    let started = Date()
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+
+    while Date().timeIntervalSince(started) < timeoutSeconds {
+        guard let submission = try await APISubmission.find(submissionID, on: req.db) else {
+            throw Abort(.notFound, reason: "Validation submission missing")
+        }
+
+        if submission.status == "complete" || submission.status == "failed" {
+            guard let result = try await APIResult.query(on: req.db)
+                .filter(\.$submissionID == submissionID)
+                .sort(\.$receivedAt, .descending)
+                .first(),
+                  let data = result.collectionJSON.data(using: .utf8) else {
+                return .failed(summary: "no result payload")
+            }
+
+            let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            let summary = "\(collection.passCount)/\(collection.totalTests) passed"
+            let passed = collection.buildStatus == .passed &&
+                collection.failCount == 0 &&
+                collection.errorCount == 0 &&
+                collection.timeoutCount == 0
+            return passed ? .passed(summary: summary) : .failed(summary: summary)
+        }
+
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+
+    return .timedOut
+}
+
+private func ensureValidationRunnerAvailability(req: Request) async {
+    let enabled = await req.application.localRunnerAutoStartStore.isEnabled()
+    guard enabled else { return }
+
+    let hasRecentRunner = await req.application.workerActivityStore.hasRecentActivity(within: 20)
+    guard !hasRecentRunner else { return }
+
+    await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+    try? await Task.sleep(nanoseconds: 1_000_000_000)
 }
 
 private struct EditContext: Encodable {

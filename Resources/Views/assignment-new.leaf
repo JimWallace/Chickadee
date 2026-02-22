@@ -4,31 +4,55 @@ Create Assignment
 #endexport
 #export("content"):
 <h1>Create new Assignment</h1>
-<p class="card-meta" style="margin-bottom:1.25rem">
-    Step 1 of 2 · Choose how this assignment will be graded.
-</p>
 
-<form class="form" method="get" action="/assignments/new/details">
+#if(error):
+<div class="error-box" style="margin-bottom:1rem">
+    <h2>Could not create assignment</h2>
+    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+</div>
+#endif
+
+#if(notice):
+<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:#F0FDF4">
+    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+</div>
+#endif
+
+<form class="form" method="post" action="/assignments/new/save" enctype="multipart/form-data">
     <label class="form-label">
         Assignment Name
-        <input class="form-input" type="text" name="assignmentName" required placeholder="e.g. Lab 2 - Linked Lists">
+        <input class="form-input" type="text" name="assignmentName" required
+               value="#(assignmentName)"
+               placeholder="e.g. Lab 2 - Linked Lists">
     </label>
 
     <label class="form-label">
         Due Date (optional)
-        <input class="form-input" type="datetime-local" name="dueAt">
+        <input class="form-input" type="datetime-local" name="dueAt" value="#(dueAt)">
     </label>
 
     <label class="form-label">
-        Grading Mode
-        <select class="form-input" name="gradingMode" required>
-            <option value="browser">Tested in browser</option>
-            <option value="server">Tested on server</option>
-        </select>
+        <span style="white-space:nowrap">Assignment Notebook (<code>assignment.ipynb</code>)</span>
+        <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb" required>
     </label>
 
+    <label class="form-label">
+        <span style="white-space:nowrap">Solution Notebook (<code>solution.ipynb</code>)</span>
+        <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb" required>
+    </label>
+
+    <label class="form-label">
+        <span style="white-space:nowrap">Test Suite Files (include one or more <code>.sh</code> scripts; use <code>01_</code>, <code>02_</code> prefixes to control order)</span>
+        <input class="form-input" type="file" name="suiteFiles" multiple required>
+    </label>
+
+    <p class="card-meta">
+        The uploaded solution is validated immediately by a runner. The assignment stays closed until validation passes.
+        Once it passes, open it from the Instructor dashboard.
+    </p>
+
     <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit">Continue</button>
+        <button class="btn btn-primary" type="submit">Create &amp; Validate</button>
         <a class="btn" href="/assignments">Cancel</a>
     </div>
 </form>
