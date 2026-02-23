@@ -22,6 +22,7 @@ Notebook
     id="jl-frame"
     class="jl-frame"
     data-setup-id="#(testSetupID)"
+    data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
     src="#(jupyterLiteEditorURL)"
     allow="cross-origin-isolated"

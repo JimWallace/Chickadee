@@ -21,8 +21,9 @@ import Foundation
 
 struct BrowserResultRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        routes.grouped("api", "v1", "submissions")
-            .post("browser-result", use: submitBrowserResult)
+        let submissions = routes.grouped("api", "v1", "submissions")
+        submissions.post("browser-result", use: submitBrowserResult)
+        submissions.post("runner-submit", use: submitRunnerSubmission)
     }
 
     // MARK: - POST /api/v1/submissions/browser-result
@@ -117,6 +118,47 @@ struct BrowserResultRoutes: RouteCollection {
             workerSubmissionID: workerSubID
         )
     }
+
+    // MARK: - POST /api/v1/submissions/runner-submit
+
+    @Sendable
+    func submitRunnerSubmission(req: Request) async throws -> RunnerSubmissionResponse {
+        let caller = try req.auth.require(APIUser.self)
+        let body = try req.content.decode(RunnerSubmitBody.self)
+
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
+            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+        }
+
+        let subsDir = req.application.submissionsDirectory
+        let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath  = subsDir + "\(subID).ipynb"
+
+        // Always merge with canonical instructor notebook so hidden tests are present.
+        let instructorData = (try? notebookData(for: setup)) ?? body.notebook
+        let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
+        try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
+
+        let priorCount = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setup.id!)
+            .filter(\.$userID == caller.id)
+            .count()
+
+        let submittedFilename = normalizedNotebookFilename(body.filename)
+        let submission = APISubmission(
+            id:            subID,
+            testSetupID:   setup.id!,
+            zipPath:       nbPath,
+            attemptNumber: priorCount + 1,
+            status:        "pending",
+            filename:      submittedFilename,
+            userID:        caller.id
+        )
+        try await submission.save(on: req.db)
+        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+
+        return RunnerSubmissionResponse(submissionID: subID)
+    }
 }
 
 // MARK: - Request / Response types
@@ -130,9 +172,32 @@ struct BrowserResultBody: Content {
     var testSetupID: String
 }
 
+struct RunnerSubmitBody: Content {
+    var notebook: Data
+    var testSetupID: String
+    var filename: String?
+}
+
 struct BrowserResultResponse: Content {
     /// ID of the record holding the browser preview result.
     let submissionID: String
     /// ID of the pending worker job (for polling the official result).
     let workerSubmissionID: String
+}
+
+struct RunnerSubmissionResponse: Content {
+    let submissionID: String
+}
+
+private func normalizedNotebookFilename(_ filename: String?) -> String {
+    guard var value = filename?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+        return "submission.ipynb"
+    }
+    value = URL(fileURLWithPath: value).lastPathComponent
+    value = value.replacingOccurrences(of: "/", with: "-")
+    value = value.replacingOccurrences(of: "\\", with: "-")
+    if !value.lowercased().hasSuffix(".ipynb") {
+        value += ".ipynb"
+    }
+    return value
 }

@@ -66,9 +66,12 @@ Submission #(submissionID)
             <td><span class="tier">#(outcome.tier)</span></td>
             <td>
                 #(outcome.shortResult)
+                #if(outcome.readableOutput):
+                <pre class="script-output-inline">#(outcome.readableOutput)</pre>
+                #endif
                 #if(outcome.longResult):
                 <details>
-                    <summary>View script output</summary>
+                    <summary>Raw output</summary>
                     <pre>#(outcome.longResult)</pre>
                 </details>
                 #endif

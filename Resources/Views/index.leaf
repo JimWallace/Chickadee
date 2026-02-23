@@ -13,6 +13,8 @@ Assignments
             <th>Name</th>
             <th>Status</th>
             <th class="due-col">Due</th>
+            <th>Grade</th>
+            <th>History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -39,13 +41,32 @@ Assignments
             </td>
             <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
             <td>
+                #if(setup.bestGradeText):
+                    <strong>#(setup.bestGradeText)</strong>
+                #else:
+                    <span class="empty">—</span>
+                #endif
+            </td>
+            <td>
+                #if(setup.submissionCount > 0):
+                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                        #if(setup.hasLatestSubmission):
+                            <a href="/submissions/#(setup.latestSubmissionID)" style="font-size:.82rem">#(setup.latestSubmittedAtText)</a>
+                        #endif
+                        #if(setup.additionalSubmissionCount > 0):
+                            <a href="/testsetups/#(setup.id)/history" style="font-size:.78rem;color:var(--gray-600)">+#(setup.additionalSubmissionCount) more</a>
+                        #endif
+                    </div>
+                #else:
+                    <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+            <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #endif
-                    <a class="btn" href="/api/v1/testsetups/#(setup.id)/assignment/download" download
-                       style="font-size:.8rem;padding:.25rem .6rem">Download</a>
                 </div>
             </td>
         </tr>

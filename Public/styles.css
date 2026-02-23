@@ -345,6 +345,18 @@ details pre {
     overflow-x: auto;
 }
 
+.script-output-inline {
+    margin-top: .45rem;
+    margin-bottom: 0;
+    font-size: .78rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    background: #F8FAFC;
+    padding: .55rem .7rem;
+    border-radius: .25rem;
+    border: 1px solid var(--gray-200);
+}
+
 /* ── Misc ────────────────────────────────────────────── */
 
 .empty { color: var(--gray-600); font-size: .95rem; }
