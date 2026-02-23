@@ -96,7 +96,7 @@ Assignments
                 </details>
                 #elseif(row.status == "closed"):
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit notebook</a>
+                    <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
                     <form method="post" action="/assignments/#(row.assignmentID)/delete"
                           onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                         <button class="btn action-btn action-danger" type="submit"
@@ -107,7 +107,7 @@ Assignments
                 </div>
                 #elseif(row.status == "open"):
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit notebook</a>
+                    <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
                     <form method="post" action="/assignments/#(row.assignmentID)/delete"
                           onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                         <button class="btn action-btn action-danger" type="submit"
