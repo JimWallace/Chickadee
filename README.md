@@ -4,15 +4,11 @@
 
 A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student code submission and autograding system. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
 
----
 
 ## What it does
 
 Chickadee accepts student code submissions, runs instructor-defined test suites, and returns structured JSON results. Test suites are plain shell scripts — no language-specific code paths exist in Swift. Adding support for a new language or framework means writing a new shell script; no Swift changes are required.
 
-Gamification fields (attempt tracking, leaderboards, partial credit) are present in the schema from day one so they never require a migration.
-
----
 
 ## Architecture
 
@@ -38,7 +34,7 @@ Three Swift targets share a clean dependency boundary:
 
 **Core** — shared models with no Vapor dependency. Both targets depend on this.
 
-**Shell scripts, not language runners.** Each test suite is a `.sh` file at the root of the instructor's test-setup zip. The runner executes them with `/bin/sh` and maps the exit code to a result. Any helper library (Python, Java, etc.) is bundled inside the zip by the instructor.
+**Shell scripts, not language runners.** Each test suite is a `.sh` file at the root of the instructor's test-setup zip. The runner executes them maps the exit code to a result. Any helper library (Python, Java, etc.) is bundled inside the zip by the instructor.
 
 ---
 
@@ -97,7 +93,3 @@ scripts/build-jupyterlite.sh
 ```
 
 The build script keeps runtime notebook storage directories (`Public/jupyterlite/files`, `Public/jupyterlite/lab/files`, `Public/jupyterlite/notebooks/files`) while refreshing generated assets.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
