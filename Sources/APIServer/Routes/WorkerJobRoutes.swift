@@ -40,9 +40,7 @@ struct WorkerJobRoutes: RouteCollection {
         let decoder      = JSONDecoder()
         let manifest     = try decoder.decode(TestProperties.self, from: manifestData)
 
-        let baseURL = req.application.http.server.configuration.hostname
-        let port    = req.application.http.server.configuration.port
-        let base    = "http://\(baseURL):\(port)"
+        let base = resolvedWorkerBaseURL(req: req)
 
         let job = Job(
             submissionID:       submission.id!,
@@ -69,4 +67,41 @@ struct WorkerJobRoutes: RouteCollection {
 struct WorkerRequestBody: Content {
     let workerID: String
     let hostname: String?
+}
+
+private func resolvedWorkerBaseURL(req: Request) -> String {
+    if let explicit = Environment.get("WORKER_PUBLIC_BASE_URL")?
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+       !explicit.isEmpty {
+        return explicit.hasSuffix("/") ? String(explicit.dropLast()) : explicit
+    }
+
+    // Prefer forwarded headers (proxy/LB), then Host from the runner request.
+    let forwardedHost = firstHeaderValue(req.headers, name: .init("X-Forwarded-Host"))
+    let hostHeader = firstHeaderValue(req.headers, name: .host)
+    let scheme = firstHeaderValue(req.headers, name: .init("X-Forwarded-Proto")) ?? "http"
+
+    if let host = forwardedHost ?? hostHeader, !host.isEmpty {
+        return "\(scheme)://\(host)"
+    }
+
+    // Last-resort fallback from server bind config.
+    let bindHost = normalizedWorkerBindHost(req.application.http.server.configuration.hostname)
+    let port     = req.application.http.server.configuration.port
+    return "\(scheme)://\(bindHost):\(port)"
+}
+
+private func firstHeaderValue(_ headers: HTTPHeaders, name: HTTPHeaders.Name) -> String? {
+    guard let value = headers.first(name: name) else { return nil }
+    let firstCSV = value.split(separator: ",").first.map(String.init) ?? value
+    let cleaned = firstCSV.trimmingCharacters(in: .whitespacesAndNewlines)
+    return cleaned.isEmpty ? nil : cleaned
+}
+
+private func normalizedWorkerBindHost(_ raw: String) -> String {
+    let host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if host.isEmpty || host == "0.0.0.0" || host == "::" {
+        return "localhost"
+    }
+    return host
 }
