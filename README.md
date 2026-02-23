@@ -9,6 +9,13 @@ A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student co
 
 Chickadee accepts student code submissions, runs instructor-defined test suites, and returns structured JSON results. Test suites are plain shell scripts — no language-specific code paths exist in Swift. Adding support for a new language or framework means writing a new shell script; no Swift changes are required.
 
+## Major improvements over Marmoset
+
+- **Improved UI.** Chickadee ships with a modern web UI for students and instructors, including dashboards, submission history, assignment management, and readable per-test results.
+- **More efficient networking path.** Runner communication is a focused JSON API with lightweight polling and artifact transfer, keeping the server/runner protocol simple and operationally efficient.
+- **Notebook workflow in-site.** Instructors and students can work with notebooks directly in Chickadee via embedded JupyterLite flows, instead of relying on separate external tooling.
+- **Runner safety by design.** Runners support sandboxed execution with resource constraints, helping isolate untrusted code and bound runtime usage.
+
 
 ## Architecture
 
