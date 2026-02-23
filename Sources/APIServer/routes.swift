@@ -8,7 +8,6 @@ func routes(_ app: Application) throws {
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: AuthRoutes())
-    try app.register(collection: JupyterLiteContentsRoutes())
     try app.register(collection: WorkerJobRoutes())
     try app.register(collection: WorkerArtifactRoutes())
     // Worker result reporting is called by the worker daemon, not the browser.
@@ -22,6 +21,7 @@ func routes(_ app: Application) throws {
     try auth.register(collection: SubmissionDownloadRoute())
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())
+    try auth.register(collection: JupyterLiteContentsRoutes())
     // TestSetupRoutes is in the auth group so students can fetch/download notebooks.
     // Instructor-only handlers (upload, zip-download, save) guard themselves inline.
     try auth.register(collection: TestSetupRoutes())

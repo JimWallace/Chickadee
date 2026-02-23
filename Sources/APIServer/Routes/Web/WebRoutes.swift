@@ -27,7 +27,9 @@ struct WebRoutes: RouteCollection {
         routes.post("testsetups", "new", use: createSetup)
         routes.get("testsetups", ":testSetupID", "submit", use: submitForm)
         routes.post("testsetups", ":testSetupID", "submit", use: createSubmission)
+        routes.get("testsetups", ":testSetupID", "history", use: submissionHistoryPage)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
+        routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         routes.get("submissions", ":submissionID", use: submissionPage)
     }
 
@@ -69,11 +71,81 @@ struct WebRoutes: RouteCollection {
                 .all()
         }
 
+        var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
+        var submissionCountBySetupID: [String: Int] = [:]
+        var bestGradePercentBySetupID: [String: Int] = [:]
+        if let userID = user.id {
+            let setupIDs = setups.compactMap(\.id)
+            if !setupIDs.isEmpty {
+                let submissions = try await APISubmission.query(on: req.db)
+                    .filter(\.$userID == userID)
+                    .filter(\.$testSetupID ~~ setupIDs)
+                    .sort(\.$submittedAt, .descending)
+                    .all()
+
+                var grouped: [String: [APISubmission]] = [:]
+                for submission in submissions {
+                    grouped[submission.testSetupID, default: []].append(submission)
+                }
+
+                for (setupID, items) in grouped {
+                    submissionCountBySetupID[setupID] = items.count
+                    if let latest = items.first {
+                        let when = latest.submittedAt.map { fmt.string(from: $0) } ?? "—"
+                        latestSubmissionBySetupID[setupID] = LatestSubmissionItem(
+                            submissionID: latest.id ?? "",
+                            submittedAtText: when
+                        )
+                    }
+                }
+
+                let submissionIDs = submissions.compactMap(\.id)
+                if !submissionIDs.isEmpty {
+                    let resultRows = try await APIResult.query(on: req.db)
+                        .filter(\.$submissionID ~~ submissionIDs)
+                        .sort(\.$receivedAt, .descending)
+                        .all()
+
+                    // Keep one preferred result per submission:
+                    // worker result first; browser result only if no worker exists.
+                    var preferredResultBySubmissionID: [String: APIResult] = [:]
+                    for row in resultRows {
+                        let key = row.submissionID
+                        if let existing = preferredResultBySubmissionID[key] {
+                            let existingSource = existing.source ?? "worker"
+                            let currentSource = row.source ?? "worker"
+                            if existingSource == "worker" { continue }
+                            if currentSource == "worker" {
+                                preferredResultBySubmissionID[key] = row
+                            }
+                        } else {
+                            preferredResultBySubmissionID[key] = row
+                        }
+                    }
+
+                    for submission in submissions {
+                        guard let subID = submission.id,
+                              let result = preferredResultBySubmissionID[subID],
+                              let gradePercent = gradePercentFromCollectionJSON(result.collectionJSON) else {
+                            continue
+                        }
+                        let setupID = submission.testSetupID
+                        let existing = bestGradePercentBySetupID[setupID] ?? 0
+                        if gradePercent > existing {
+                            bestGradePercentBySetupID[setupID] = gradePercent
+                        }
+                    }
+                }
+            }
+        }
+
         let rows = setups.map { setup -> TestSetupRow in
             let setupID    = setup.id ?? ""
             let data       = Data(setup.manifest.utf8)
             let props      = try? decoder.decode(TestProperties.self, from: data)
             let assignment = assignmentBySetup[setupID]
+            let latestSubmission = latestSubmissionBySetupID[setupID]
+            let submissionCount = submissionCountBySetupID[setupID] ?? 0
             let status: String
             if let assignment {
                 status = assignment.isOpen ? "open" : "closed"
@@ -87,7 +159,13 @@ struct WebRoutes: RouteCollection {
                 createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },
                 status:     status,
-                isOpen:     assignment?.isOpen ?? false
+                isOpen:     assignment?.isOpen ?? false,
+                submissionCount: submissionCount,
+                hasLatestSubmission: latestSubmission != nil,
+                latestSubmissionID: latestSubmission?.submissionID ?? "",
+                latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
+                additionalSubmissionCount: max(submissionCount - 1, 0),
+                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" }
             )
         }
 
@@ -200,6 +278,83 @@ struct WebRoutes: RouteCollection {
         return req.redirect(to: "/submissions/\(subID)")
     }
 
+    // MARK: - GET /testsetups/:id/history
+
+    @Sendable
+    func submissionHistoryPage(req: Request) async throws -> View {
+        let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let _ = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .first()
+        let title = assignment?.title ?? setupID
+
+        let submissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$userID == userID)
+            .sort(\.$submittedAt, .descending)
+            .all()
+
+        let submissionIDs = submissions.compactMap(\.id)
+        var preferredResultBySubmissionID: [String: APIResult] = [:]
+        if !submissionIDs.isEmpty {
+            let results = try await APIResult.query(on: req.db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .sort(\.$receivedAt, .descending)
+                .all()
+            for row in results {
+                let key = row.submissionID
+                if let existing = preferredResultBySubmissionID[key] {
+                    let existingSource = existing.source ?? "worker"
+                    let currentSource = row.source ?? "worker"
+                    if existingSource == "worker" { continue }
+                    if currentSource == "worker" {
+                        preferredResultBySubmissionID[key] = row
+                    }
+                } else {
+                    preferredResultBySubmissionID[key] = row
+                }
+            }
+        }
+
+        let rows = submissions.map { submission -> SubmissionHistoryRow in
+            let subID = submission.id ?? ""
+            let gradeText: String
+            if let result = preferredResultBySubmissionID[subID],
+               let pct = gradePercentFromCollectionJSON(result.collectionJSON) {
+                gradeText = "\(pct)%"
+            } else {
+                gradeText = "—"
+            }
+            return SubmissionHistoryRow(
+                submissionID: subID,
+                attemptNumber: submission.attemptNumber ?? 1,
+                status: submission.status,
+                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
+                gradeText: gradeText
+            )
+        }
+
+        return try await req.view.render("submission-history",
+            SubmissionHistoryContext(
+                testSetupID: setupID,
+                assignmentTitle: title,
+                rows: rows,
+                currentUser: req.currentUserContext
+            ))
+    }
+
     // MARK: - GET /testsetups/:id/notebook
 
     @Sendable
@@ -207,6 +362,8 @@ struct WebRoutes: RouteCollection {
         struct NotebookQuery: Content {
             var title: String?
         }
+        let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
@@ -224,6 +381,19 @@ struct WebRoutes: RouteCollection {
             if !dbTitle.isEmpty { return dbTitle }
             return "Assignment"
         }()
+        let fallbackNotebookFilename = notebookFilenameForJupyterLite(title: assignmentTitle)
+        let selectedNotebook = try await latestNotebookSubmissionData(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup
+        )
+        let displayFilename = safeNotebookFilename(
+            preferred: selectedNotebook.filename,
+            fallbackTitle: fallbackNotebookFilename
+        )
+        let userSlug = userID.uuidString.lowercased()
+        let jupyterLiteNotebookPath = "users/\(userSlug)/\(displayFilename)"
 
         // Materialize notebook into all likely JupyterLite file roots.
         // Different entrypoints may resolve baseUrl differently and look under
@@ -234,28 +404,51 @@ struct WebRoutes: RouteCollection {
             req.application.directory.publicDirectory + "jupyterlite/lab/files/",
             req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
         ]
-        let nbData = try notebookData(for: setup)
-        let jlNotebookFilename = notebookFilenameForJupyterLite(title: assignmentTitle)
-        let fallbackNotebookFilename = "assignment.ipynb"
+        let nbData = selectedNotebook.data
         for root in fileRoots {
-            try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
-            try nbData.write(to: URL(fileURLWithPath: root + jlNotebookFilename))
-            if jlNotebookFilename != fallbackNotebookFilename {
-                try nbData.write(to: URL(fileURLWithPath: root + fallbackNotebookFilename))
-            }
+            let userDir = root + "users/\(userSlug)/"
+            try FileManager.default.createDirectory(atPath: userDir, withIntermediateDirectories: true)
+            try nbData.write(to: URL(fileURLWithPath: userDir + displayFilename))
+            try nbData.write(to: URL(fileURLWithPath: userDir + "assignment.ipynb"))
         }
-        let encodedPath = jlNotebookFilename.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        let encodedPath = jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryAllowed)
             ?? "assignment.ipynb"
-        let workspaceID = "\(setupID)-student"
+        let workspaceID = "\(setupID)-\(userSlug)-student"
         let editorURL = "/jupyterlite/lab/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
 
         return try await req.view.render("notebook",
             NotebookContext(
                 testSetupID: setupID,
                 assignmentTitle: assignmentTitle,
+                notebookURL: "/testsetups/\(setupID)/notebook/source",
                 jupyterLiteEditorURL: editorURL,
                 currentUser: req.currentUserContext
             ))
+    }
+
+    // MARK: - GET /testsetups/:id/notebook/source
+
+    @Sendable
+    func notebookSource(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let payload = try await latestNotebookSubmissionData(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup
+        ).data
+
+        var headers = HTTPHeaders()
+        headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
+        return Response(status: .ok, headers: headers, body: .init(data: payload))
     }
 
     // MARK: - GET /submissions/:id
@@ -323,6 +516,7 @@ struct WebRoutes: RouteCollection {
                         tier:            o.tier.rawValue,
                         status:          o.status.rawValue,
                         shortResult:     o.shortResult,
+                        readableOutput:  readableScriptOutput(from: o.longResult),
                         longResult:      o.longResult,
                         executionTimeMs: o.executionTimeMs
                     )
@@ -365,6 +559,17 @@ private struct TestSetupRow: Encodable {
     let dueAt: String?      // formatted due date, nil if no assignment or no due date
     let status: String      // "unpublished" | "open" | "closed"
     let isOpen: Bool
+    let submissionCount: Int
+    let hasLatestSubmission: Bool
+    let latestSubmissionID: String
+    let latestSubmittedAtText: String
+    let additionalSubmissionCount: Int
+    let bestGradeText: String?
+}
+
+private struct LatestSubmissionItem: Encodable {
+    let submissionID: String
+    let submittedAtText: String
 }
 
 private struct IndexContext: Encodable {
@@ -380,8 +585,24 @@ private struct SubmitContext: Encodable {
 private struct NotebookContext: Encodable {
     let testSetupID: String
     let assignmentTitle: String
+    let notebookURL: String
     let jupyterLiteEditorURL: String
     let currentUser: CurrentUserContext?
+}
+
+private struct SubmissionHistoryContext: Encodable {
+    let testSetupID: String
+    let assignmentTitle: String
+    let rows: [SubmissionHistoryRow]
+    let currentUser: CurrentUserContext?
+}
+
+private struct SubmissionHistoryRow: Encodable {
+    let submissionID: String
+    let attemptNumber: Int
+    let status: String
+    let submittedAt: String
+    let gradeText: String
 }
 
 private struct OutcomeRow: Encodable {
@@ -389,6 +610,7 @@ private struct OutcomeRow: Encodable {
     let tier: String
     let status: String
     let shortResult: String
+    let readableOutput: String?
     let longResult: String?
     let executionTimeMs: Int
 }
@@ -423,6 +645,127 @@ private func notebookFilenameForJupyterLite(title: String) -> String {
     value = value.replacingOccurrences(of: "\r", with: " ")
     if !value.lowercased().hasSuffix(".ipynb") {
         value += ".ipynb"
+    }
+    return value
+}
+
+private func safeNotebookFilename(preferred: String?, fallbackTitle: String) -> String {
+    let fallback = notebookFilenameForJupyterLite(title: fallbackTitle)
+    guard var value = preferred?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+        return fallback
+    }
+    value = URL(fileURLWithPath: value).lastPathComponent
+    value = value.replacingOccurrences(of: "/", with: "-")
+    value = value.replacingOccurrences(of: "\\", with: "-")
+    value = value.replacingOccurrences(of: "\n", with: " ")
+    value = value.replacingOccurrences(of: "\r", with: " ")
+    if !value.lowercased().hasSuffix(".ipynb") {
+        value += ".ipynb"
+    }
+    return value
+}
+
+private func latestNotebookSubmissionData(
+    req: Request,
+    setupID: String,
+    userID: UUID,
+    fallbackSetup: APITestSetup
+) async throws -> (data: Data, filename: String?) {
+    let submissions = try await APISubmission.query(on: req.db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$userID == userID)
+        .sort(\.$submittedAt, .descending)
+        .all()
+
+    for submission in submissions {
+        let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
+        let nameExt = (submission.filename ?? "").lowercased()
+        guard pathExt == "ipynb" || nameExt.hasSuffix(".ipynb") else {
+            continue
+        }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: submission.zipPath)),
+              (try? JSONSerialization.jsonObject(with: data)) != nil else {
+            continue
+        }
+        return (data, submission.filename)
+    }
+
+    return (try notebookData(for: fallbackSetup), nil)
+}
+
+private func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
+    guard let data = collectionJSON.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let passCount = root["passCount"] as? Int,
+          let totalTests = root["totalTests"] as? Int,
+          totalTests > 0 else {
+        return nil
+    }
+    return Int((Double(passCount) / Double(totalTests) * 100).rounded())
+}
+
+private func readableScriptOutput(from raw: String?) -> String? {
+    guard let raw else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if let payload = firstJSONObject(in: trimmed) {
+        var lines: [String] = []
+        if let shortResult = payload["shortResult"] as? String,
+           !shortResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append(shortResult)
+        }
+        if let error = payload["error"] as? String,
+           !error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Error: \(error)")
+        }
+        if let test = payload["test"] as? String,
+           !test.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Script: \(test)")
+        }
+        if let status = payload["status"] as? String,
+           !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Status: \(status)")
+        }
+        if !lines.isEmpty {
+            return lines.joined(separator: "\n")
+        }
+        if let pretty = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]),
+           let text = String(data: pretty, encoding: .utf8) {
+            return text
+        }
+    }
+
+    // Fallback: show first few meaningful lines inline.
+    let lines = trimmed
+        .split(separator: "\n", omittingEmptySubsequences: true)
+        .map { String($0).trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+    guard !lines.isEmpty else { return nil }
+    let preview = Array(lines.prefix(3))
+    if lines.count > preview.count {
+        return preview.joined(separator: "\n") + "\n…"
+    }
+    return preview.joined(separator: "\n")
+}
+
+private func firstJSONObject(in text: String) -> [String: Any]? {
+    // Most runner JSON payloads are emitted as a single line near the end.
+    let lines = text
+        .split(separator: "\n", omittingEmptySubsequences: false)
+        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+    for line in lines.reversed() {
+        guard line.first == "{", line.last == "}" else { continue }
+        guard let data = line.data(using: .utf8),
+              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            continue
+        }
+        return value
+    }
+    guard text.first == "{", text.last == "}",
+          let data = text.data(using: .utf8),
+          let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return nil
     }
     return value
 }

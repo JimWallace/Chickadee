@@ -1,19 +1,15 @@
 // Public/notebook.js
 //
-// Chickadee in-browser grading engine.
+// Chickadee notebook submission page.
 //
 // Loads the assignment notebook, lets the student edit it in JupyterLite,
-// then on "Submit" runs the notebook via Pyodide, collects per-test outcomes,
-// and POSTs a TestOutcomeCollection to POST /api/v1/submissions/browser-result.
+// then on "Submit" sends the notebook directly to the server for runner-based
+// grading. No browser-side grading is performed here.
 //
-// "Upload & submit" (Phase 9): student picks a locally-edited .ipynb file;
-// the upload flow mirrors the Submit flow exactly — Pyodide runs against the
-// uploaded solution (merged with visible test cells from the server), results
-// are shown inline, and the submission is queued for an authoritative worker run.
+// "Upload & submit": if a file picker is present, uploaded notebook files are
+// submitted directly to the runner as well (no browser-side grading).
 //
-// Results are rendered inline on the same page so students can iterate
-// without navigating away. A "View official submission" link is shown
-// after each run for the permanent record.
+// After submission, the page redirects to the canonical submission detail view.
 
 (function () {
     'use strict';
@@ -35,7 +31,7 @@
     // Point the iframe at the embedded JupyterLite distribution.
     // The server provides a concrete JupyterLite file path via data-editor-url.
     // Fall back to a default lab path only if the attribute is missing.
-    const notebookURL = `/api/v1/testsetups/${setupID}/assignment`;
+    const notebookURL = frame.dataset.notebookUrl || `/api/v1/testsetups/${setupID}/assignment`;
     const editorURL = frame.dataset.editorUrl ||
         frame.getAttribute('src') ||
         `/jupyterlite/lab/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
@@ -65,30 +61,24 @@
     }, 5000);
 
     // -------------------------------------------------------------------------
-    // 2. Submit button — run via Pyodide, POST results, render inline
+    // 2. Submit button — queue runner grading
     // -------------------------------------------------------------------------
 
     if (submitBtn) {
         submitBtn.addEventListener('click', async () => {
             submitBtn.disabled = true;
             clearResults();
-            setStatus('loading', 'Loading grading engine…');
+            setStatus('loading', 'Preparing submission…');
 
             try {
-                // Fetch the notebook JSON directly (same file JupyterLite loaded).
-                const nbRes = await fetch(notebookURL);
-                if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
-                const notebook = await nbRes.json();
-
-                setStatus('loading', 'Running tests…');
-                const outcomes = await runNotebook(notebook);
+                setStatus('loading', 'Capturing notebook…');
+                const notebook = await loadNotebookForSubmit();
 
                 setStatus('loading', 'Submitting…');
-                const collection = buildCollection(outcomes, setupID);
-                const response   = await postBrowserResult(collection, notebook, setupID);
+                const response = await postRunnerSubmission(notebook, setupID);
 
                 setStatus('loading', 'Submission queued. Opening grade details…');
-                window.location.assign(`/submissions/${response.workerSubmissionID}`);
+                window.location.assign(`/submissions/${response.submissionID}`);
                 return;
             } catch (err) {
                 setStatus('error', `Error: ${err.message}`);
@@ -98,8 +88,94 @@
         });
     }
 
+    async function loadNotebookForSubmit() {
+        const liveNotebook = await readNotebookFromJupyterFrame();
+        if (liveNotebook) return liveNotebook;
+
+        const nbRes = await fetch(notebookURL);
+        if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
+        return nbRes.json();
+    }
+
+    async function readNotebookFromJupyterFrame() {
+        try {
+            const childWindow = frame.contentWindow;
+            const app = childWindow && childWindow.jupyterapp;
+            if (!app || !app.shell) return null;
+
+            // Best effort: flush edits to the notebook model/context before reading.
+            if (app.commands && typeof app.commands.execute === 'function') {
+                try { await app.commands.execute('docmanager:save'); } catch (_) {}
+            }
+
+            const widget = app.shell.currentWidget;
+            const modelNotebook = notebookFromWidget(widget);
+            if (modelNotebook) return modelNotebook;
+
+            const pathFromWidget = widget && widget.context && widget.context.path;
+            const pathFromURL = extractPathFromEditorURL(editorURL);
+            const notebookPath = pathFromWidget || pathFromURL;
+
+            const contents = app.serviceManager && app.serviceManager.contents;
+            if (!contents || typeof contents.get !== 'function' || !notebookPath) {
+                return null;
+            }
+
+            const contentModel = await contents.get(notebookPath, { content: true });
+            const contentNotebook = contentModel && contentModel.content;
+            if (looksLikeNotebook(contentNotebook)) {
+                return toPlainNotebook(contentNotebook);
+            }
+        } catch (_) {
+            // Fall back to server-provided notebook URL below.
+        }
+        return null;
+    }
+
+    function notebookFromWidget(widget) {
+        if (!widget) return null;
+
+        const candidates = [
+            widget.content && widget.content.model,
+            widget.context && widget.context.model,
+            widget.model
+        ];
+
+        for (const candidate of candidates) {
+            if (!candidate || typeof candidate.toJSON !== 'function') continue;
+            try {
+                const notebook = candidate.toJSON();
+                if (looksLikeNotebook(notebook)) return toPlainNotebook(notebook);
+            } catch (_) {
+                // Try next candidate.
+            }
+        }
+        return null;
+    }
+
+    function extractPathFromEditorURL(url) {
+        try {
+            const parsed = new URL(url, window.location.origin);
+            return parsed.searchParams.get('path');
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function looksLikeNotebook(value) {
+        return !!value && typeof value === 'object' && Array.isArray(value.cells);
+    }
+
+    function toPlainNotebook(notebook) {
+        try {
+            return JSON.parse(JSON.stringify(notebook));
+        } catch (_) {
+            return notebook;
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // 3. Upload & submit — read file → merge → Pyodide → POST → render
+    // 3. Upload & submit — read file → queue runner grading
     // -------------------------------------------------------------------------
 
     if (uploadFile) {
@@ -109,34 +185,22 @@
 
             if (submitBtn) submitBtn.disabled = true;
             clearResults();
-            setStatus('loading', 'Loading grading engine…');
+            setStatus('loading', 'Preparing submission…');
 
             try {
                 // Read the student's uploaded notebook.
                 const uploadedText     = await readFileAsText(file);
                 const uploadedNotebook = JSON.parse(uploadedText);
 
-                // Fetch the assignment notebook to get the visible test cells.
-                setStatus('loading', 'Fetching test definitions…');
-                const nbRes = await fetch(notebookURL);
-                if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
-                const assignmentNotebook = await nbRes.json();
-
-                // Build a merged notebook for Pyodide:
-                // solution cells from the upload + test cells from the assignment.
-                const mergedForPyodide = mergeNotebooksForRun(uploadedNotebook, assignmentNotebook);
-
-                setStatus('loading', 'Running tests…');
-                const outcomes = await runNotebook(mergedForPyodide);
-
                 setStatus('loading', 'Submitting…');
-                const collection = buildCollection(outcomes, setupID);
-                // POST the uploaded (unmerged) notebook as the submission artifact;
-                // the server will re-inject hidden test cells server-side.
-                const response = await postBrowserResult(collection, uploadedNotebook, setupID);
+                const response = await postRunnerSubmission(
+                    uploadedNotebook,
+                    setupID,
+                    file.name || 'submission.ipynb'
+                );
 
                 setStatus('loading', 'Submission queued. Opening grade details…');
-                window.location.assign(`/submissions/${response.workerSubmissionID}`);
+                window.location.assign(`/submissions/${response.submissionID}`);
                 return;
             } catch (err) {
                 setStatus('error', `Error: ${err.message}`);
@@ -366,16 +430,16 @@ else:
     }
 
     // -------------------------------------------------------------------------
-    // 8. POST to /api/v1/submissions/browser-result
+    // 8. POST to /api/v1/submissions/runner-submit
     // -------------------------------------------------------------------------
 
-    async function postBrowserResult(collection, notebook, testSetupID) {
+    async function postRunnerSubmission(notebook, testSetupID, filename = 'submission.ipynb') {
         const formData = new FormData();
-        formData.append('collection',  JSON.stringify(collection));
         formData.append('notebook',    new Blob([JSON.stringify(notebook)], { type: 'application/json' }), 'notebook.ipynb');
         formData.append('testSetupID', testSetupID);
+        formData.append('filename', filename);
 
-        const res = await fetch('/api/v1/submissions/browser-result', {
+        const res = await fetch('/api/v1/submissions/runner-submit', {
             method: 'POST',
             body:   formData,
         });

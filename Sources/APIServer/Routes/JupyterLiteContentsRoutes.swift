@@ -1,6 +1,6 @@
 // APIServer/Routes/JupyterLiteContentsRoutes.swift
 //
-// Public (unauthenticated) compatibility routes for JupyterLite's contents API.
+// Authenticated compatibility routes for JupyterLite's contents API.
 // JupyterLite resolves API base paths differently across app entrypoints
 // (`/jupyterlite/lab`, `/jupyterlite/notebooks`, or root), so we expose aliases
 // for all expected URL shapes.
@@ -40,15 +40,24 @@ struct JupyterLiteContentsRoutes: RouteCollection {
     }
 
     private func contentsResponse(req: Request, relativePath: String) throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         let fm = FileManager.default
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
         try fm.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
         let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL
 
-        let cleanRel = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let cleanRel = try scopedRelativePath(for: caller, requested: relativePath)
         let targetURL = baseURL.appendingPathComponent(cleanRel).standardizedFileURL
         guard targetURL.path.hasPrefix(baseURL.path) else {
             throw Abort(.forbidden)
+        }
+        if let userRoot = try userRootPath(for: caller) {
+            let userRootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true).standardizedFileURL
+            let withinUserRoot = targetURL.path == userRootURL.path
+                || targetURL.path.hasPrefix(userRootURL.path + "/")
+            guard withinUserRoot else {
+                throw Abort(.forbidden)
+            }
         }
 
         // JupyterLite 0.7 fetches directory manifests from
@@ -194,5 +203,37 @@ struct JupyterLiteContentsRoutes: RouteCollection {
 
     private func isoDate(_ date: Date) -> String {
         ISO8601DateFormatter().string(from: date)
+    }
+
+    private func userRootPath(for caller: APIUser) throws -> String? {
+        if caller.isInstructor {
+            return nil
+        }
+        guard let userID = caller.id else {
+            throw Abort(.unauthorized)
+        }
+        return "users/\(userID.uuidString.lowercased())"
+    }
+
+    private func scopedRelativePath(for caller: APIUser, requested: String) throws -> String {
+        let clean = requested.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if caller.isInstructor {
+            return clean
+        }
+
+        guard let userRoot = try userRootPath(for: caller) else {
+            return clean
+        }
+
+        if clean.isEmpty {
+            return userRoot
+        }
+        if clean == "all.json" {
+            return "\(userRoot)/all.json"
+        }
+        if clean == userRoot || clean.hasPrefix(userRoot + "/") {
+            return clean
+        }
+        throw Abort(.forbidden)
     }
 }
