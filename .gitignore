@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Swift / Xcode local build artifacts
+.build/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# Local tooling environments
+.claude/
+.venv-jlite/
+.jupyterlite.doit.db
+Tools/jupyterlite/.jupyterlite.doit.db
+
+# Local runtime state / secrets
+.local-runner-autostart
+.worker-secret
+chickadee.sqlite
+
+# Runtime-generated app data
+results/
+submissions/
+testsetups/
+
+# Runtime-generated JupyterLite file namespaces
+Public/files/
+Public/jupyterlite/files/
+Public/jupyterlite/lab/files/
+Public/jupyterlite/notebooks/files/
