@@ -1,0 +1,227 @@
+#extend("base"):
+#export("title"):
+Edit Assignment
+#endexport
+#export("content"):
+<h1>Edit Assignment</h1>
+
+#if(error):
+<div class="error-box" style="margin-bottom:1rem">
+    <h2>Could not update assignment</h2>
+    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+</div>
+#endif
+
+#if(notice):
+<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:#F0FDF4">
+    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+</div>
+#endif
+
+<form class="form" method="post" action="/assignments/#(assignmentID)/edit/save" enctype="multipart/form-data">
+    <label class="form-label">
+        Assignment Name
+        <input class="form-input" type="text" name="assignmentName" required
+               value="#(assignmentName)"
+               placeholder="e.g. Lab 2 - Linked Lists">
+    </label>
+
+    <label class="form-label">
+        Due Date (optional)
+        <input class="form-input" type="datetime-local" name="dueAt" value="#(dueAt)">
+    </label>
+
+    <label class="form-label">
+        <span style="white-space:nowrap">Assignment Notebook (<a href="#(currentAssignmentURL)"><code>#(currentAssignmentFile)</code></a>)</span>
+        <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb">
+    </label>
+
+    <label class="form-label">
+        #if(currentSolutionURL):
+        <span style="white-space:nowrap">Solution Notebook (<a href="#(currentSolutionURL)"><code>#(currentSolutionFile)</code></a>)</span>
+        #else:
+        <span style="white-space:nowrap">Solution Notebook (<code>not set</code>)</span>
+        #endif
+        <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb">
+    </label>
+
+    <label class="form-label">
+        <span style="white-space:nowrap">Add Test Suite Files (scripts/support files like <code>.sh</code> or <code>.py</code>)</span>
+        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple>
+    </label>
+    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>File</th>
+                <th>Test?</th>
+                <th>Tier</th>
+                <th class="time">Order</th>
+                <th class="time">Delete</th>
+            </tr>
+        </thead>
+        <tbody id="suite-config-body">
+            #for(row in existingSuiteRows):
+            <tr data-source="existing" data-name="#(row.name)">
+                <td><a href="#(row.url)"><code>#(row.name)</code></a></td>
+                <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
+                <td>
+                    <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
+                        <option value="support" #if(row.tier == "support"):selected#endif>support</option>
+                        <option value="public" #if(row.tier == "public"):selected#endif>public</option>
+                        <option value="secret" #if(row.tier == "secret"):selected#endif>secret</option>
+                        <option value="release" #if(row.tier == "release"):selected#endif>release</option>
+                    </select>
+                </td>
+                <td class="time"><input class="form-input suite-order" type="number" min="1" step="1" value="#(row.order)" style="width:6rem;padding:.25rem .5rem;font-size:.8rem"></td>
+                <td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+
+    <p class="card-meta">
+        Use Delete to remove a file. Add more files above; they will appear in this table. At least one row marked as a test is required.
+    </p>
+
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">Save &amp; Validate</button>
+        <a class="btn" href="/assignments">Cancel</a>
+    </div>
+</form>
+<script>
+(function () {
+    'use strict';
+
+    var filesInput = document.getElementById('suite-files-input');
+    var configField = document.getElementById('suite-config-field');
+    var body = document.getElementById('suite-config-body');
+    if (!filesInput || !configField || !body) return;
+
+    function isLikelyScript(name) {
+        var lower = (name || '').toLowerCase();
+        return lower.endsWith('.sh')
+            || lower.endsWith('.bash')
+            || lower.endsWith('.zsh')
+            || lower.endsWith('.py')
+            || lower.endsWith('.rb')
+            || lower.endsWith('.pl')
+            || lower.endsWith('.js')
+            || lower.endsWith('.php');
+    }
+
+    function inferredOrder(name, fallback) {
+        var match = (name || '').match(/^([0-9]+)[_-]/);
+        if (!match) return fallback;
+        var n = Number(match[1]);
+        return Number.isFinite(n) && n > 0 ? n : fallback;
+    }
+
+    function removeUploadedRows() {
+        body.querySelectorAll('tr[data-source="upload"]').forEach(function (row) { row.remove(); });
+    }
+
+    function renderRows() {
+        var files = Array.from(filesInput.files || []);
+        removeUploadedRows();
+        files.forEach(function (file, index) {
+            var likelyScript = isLikelyScript(file.name);
+            var checked = likelyScript;
+            var supportSelected = likelyScript ? '' : 'selected';
+            var publicSelected = likelyScript ? 'selected' : '';
+            var order = inferredOrder(file.name, index + 1);
+            var tr = document.createElement('tr');
+            tr.setAttribute('data-source', 'upload');
+            tr.setAttribute('data-index', String(index));
+            tr.innerHTML = '<td><code>' + escapeHtml(file.name) + '</code> <span class="card-meta">(new)</span></td>'
+                + '<td><input type="checkbox" class="suite-test-toggle" ' + (checked ? 'checked' : '') + '></td>'
+                + '<td>'
+                + '  <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+                + '    <option value="support" ' + supportSelected + '>support</option>'
+                + '    <option value="public" ' + publicSelected + '>public</option>'
+                + '    <option value="secret">secret</option>'
+                + '    <option value="release">release</option>'
+                + '  </select>'
+                + '</td>'
+                + '<td class="time"><input class="form-input suite-order" type="number" min="1" step="1" value="' + order + '" style="width:6rem;padding:.25rem .5rem;font-size:.8rem"></td>'
+                + '<td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>';
+            body.appendChild(tr);
+        });
+        syncConfig();
+    }
+
+    function syncConfig() {
+        var rows = Array.from(body.querySelectorAll('tr[data-source]'));
+        var config = rows.map(function (row) {
+            var source = row.getAttribute('data-source') || 'existing';
+            var tier = row.querySelector('.suite-tier')?.value || 'public';
+            var toggleEl = row.querySelector('.suite-test-toggle');
+            var toggleChecked = !!toggleEl?.checked;
+            var isTest = toggleChecked && tier !== 'support';
+            var orderRaw = row.querySelector('.suite-order')?.value || '';
+            var order = Number(orderRaw);
+
+            var tierEl = row.querySelector('.suite-tier');
+            var orderEl = row.querySelector('.suite-order');
+            if (toggleEl) toggleEl.checked = isTest;
+            if (tierEl) tierEl.disabled = false;
+            if (orderEl) orderEl.disabled = !isTest;
+
+            var base = {
+                source: source,
+                isIncluded: true,
+                isTest: isTest,
+                tier: tier,
+                order: Number.isFinite(order) && order > 0 ? Math.floor(order) : null
+            };
+            if (source === 'upload') {
+                base.index = Number(row.getAttribute('data-index'));
+            } else {
+                base.name = row.getAttribute('data-name') || '';
+            }
+            return base;
+        });
+        configField.value = JSON.stringify(config);
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    filesInput.addEventListener('change', renderRows);
+    body.addEventListener('change', syncConfig);
+    body.addEventListener('input', syncConfig);
+    body.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+        if (!target.classList.contains('suite-delete-btn')) return;
+        var row = target.closest('tr[data-source]');
+        if (!row) return;
+        row.remove();
+        syncConfig();
+    });
+    syncConfig();
+
+    var form = filesInput.closest('form');
+    if (form) {
+        form.addEventListener('submit', function (event) {
+            syncConfig();
+            var config = [];
+            try { config = JSON.parse(configField.value || '[]'); } catch (_) { config = []; }
+            var hasTest = config.some(function (row) { return !!row.isTest; });
+            if (!hasTest) {
+                event.preventDefault();
+                window.alert('Select at least one file as a test.');
+            }
+        });
+    }
+})();
+</script>
+#endexport
+#endextend

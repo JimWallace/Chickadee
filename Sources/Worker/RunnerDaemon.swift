@@ -140,6 +140,9 @@ actor WorkerDaemon {
         // Copy or unzip the submission depending on whether it is a raw file or a zip.
         if let filename = job.submissionFilename {
             let dest = testSetupDir.appendingPathComponent(filename)
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
             try FileManager.default.copyItem(at: submissionZip, to: dest)
         } else {
             try unzip(submissionZip, to: testSetupDir)
