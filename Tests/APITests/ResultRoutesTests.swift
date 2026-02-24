@@ -9,6 +9,7 @@ final class ResultRoutesTests: XCTestCase {
 
     private var app: Application!
     private var tmpResultsDir: String!
+    private let workerSecret = "test-worker-secret"
 
     override func setUp() async throws {
         app = Application(.testing)
@@ -27,18 +28,15 @@ final class ResultRoutesTests: XCTestCase {
         // Sessions are required because routes.swift now registers UserSessionAuthenticator.
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
+        app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(AddAttemptNumberToSubmissions())
-        app.migrations.add(AddFilenameToSubmissions())
-        app.migrations.add(AddSourceToResults())
         app.migrations.add(CreateUsers())
         app.migrations.add(CreateAssignments())
-        app.migrations.add(AddUserIDToSubmissions())
-        app.migrations.add(AddNotebookPathToTestSetups())
+        app.migrations.add(CreatePerformanceIndexes())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -81,14 +79,42 @@ final class ResultRoutesTests: XCTestCase {
         return ByteBuffer(data: data)
     }
 
+    private func ensureSubmissionExists(
+        submissionID: String,
+        testSetupID: String = "setup_001"
+    ) throws {
+        if try APITestSetup.find(testSetupID, on: app.db).wait() == nil {
+            let setup = APITestSetup(
+                id: testSetupID,
+                manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
+                zipPath: tmpResultsDir + "\(testSetupID).zip"
+            )
+            try setup.save(on: app.db).wait()
+        }
+
+        if try APISubmission.find(submissionID, on: app.db).wait() == nil {
+            let submission = APISubmission(
+                id: submissionID,
+                testSetupID: testSetupID,
+                zipPath: tmpResultsDir + "\(submissionID).zip",
+                attemptNumber: 1,
+                status: "pending",
+                kind: APISubmission.Kind.student
+            )
+            try submission.save(on: app.db).wait()
+        }
+    }
+
     // MARK: - Tests
 
     func testReportResultsReturnsReceived() throws {
         let collection = makeCollection()
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
         try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
             req.headers.contentType = .json
+            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
             req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -99,10 +125,12 @@ final class ResultRoutesTests: XCTestCase {
 
     func testReportResultsWritesFileToDisk() throws {
         let collection = makeCollection(submissionID: "sub_disktest")
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
         try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
             req.headers.contentType = .json
+            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
             req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -115,10 +143,12 @@ final class ResultRoutesTests: XCTestCase {
 
     func testReportResultsWithFailedBuild() throws {
         let collection = makeCollection(buildStatus: .failed, outcomes: [])
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
         try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
             req.headers.contentType = .json
+            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
             req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -130,6 +160,7 @@ final class ResultRoutesTests: XCTestCase {
     func testReportResultsRejectsMalformedJSON() throws {
         try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
             req.headers.contentType = .json
+            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
             req.body = ByteBuffer(string: "not valid json")
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .unprocessableEntity)
@@ -139,6 +170,7 @@ final class ResultRoutesTests: XCTestCase {
     func testReportResultsRejectsEmptyBody() throws {
         try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
             req.headers.contentType = .json
+            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
         }, afterResponse: { res in
             // Either 400 or 422 is acceptable for empty body
             XCTAssertTrue(

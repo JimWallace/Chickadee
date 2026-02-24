@@ -9,11 +9,24 @@ struct CreateAssignments: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("assignments")
             .id()
-            .field("test_setup_id", .string,   .required)
+            .field(
+                "test_setup_id",
+                .string,
+                .required,
+                .references("test_setups", "id", onDelete: .cascade)
+            )
             .field("title",         .string,   .required)
             .field("due_at",        .datetime)
             .field("is_open",       .bool,     .required)
+            .field("validation_status", .string)
+            .field(
+                "validation_submission_id",
+                .string,
+                .references("submissions", "id", onDelete: .setNull)
+            )
+            .field("sort_order",    .int)
             .field("created_at",    .datetime)
+            .unique(on: "test_setup_id")
             .create()
     }
 

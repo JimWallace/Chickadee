@@ -12,6 +12,7 @@ Runner daemon. Polls the API server for pending jobs, runs instructor-defined sh
 | `--worker-id` | `String` | Unique identifier for this runner instance |
 | `--max-jobs` | `Int` | Maximum number of concurrent jobs |
 | `--sandbox` | `Bool` (flag) | Run test scripts inside a network-isolated, privilege-dropped sandbox |
+| `--version` | (flag) | Print the runner version and exit |
 
 Example:
 

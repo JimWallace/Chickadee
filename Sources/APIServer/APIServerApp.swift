@@ -3,7 +3,9 @@
 import Vapor
 import Fluent
 import FluentSQLiteDriver
+import SQLKit
 import Leaf
+import Core
 import Foundation
 
 @main
@@ -14,6 +16,7 @@ struct APIServerApp {
         try LoggingSystem.bootstrap(from: &env)
 
         let app = try await Application.make(env)
+        app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
         
         do {
             try configure(app, cliWorkerSecret: cliWorkerSecret)
@@ -79,21 +82,23 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
 
     // MARK: - Database
 
-    app.databases.use(.sqlite(.file(workDir + "chickadee.sqlite")), as: .sqlite)
+    let sqliteConfig = SQLiteConfiguration(
+        storage: .file(path: workDir + "chickadee.sqlite"),
+        enableForeignKeys: true
+    )
+    app.databases.use(.sqlite(sqliteConfig), as: .sqlite)
+
+    // WAL improves mixed read/write behavior on the single-file SQLite store.
+    if let sql = app.db as? SQLDatabase {
+        _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
+    }
 
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
-    app.migrations.add(AddAttemptNumberToSubmissions())
-    app.migrations.add(AddFilenameToSubmissions())
-    app.migrations.add(AddSourceToResults())
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateAssignments())
-    app.migrations.add(AddValidationToAssignments())
-    app.migrations.add(AddSortOrderToAssignments())
-    app.migrations.add(AddUserIDToSubmissions())
-    app.migrations.add(AddKindToSubmissions())
-    app.migrations.add(AddNotebookPathToTestSetups())
+    app.migrations.add(CreatePerformanceIndexes())
 
     try app.autoMigrate().wait()
 

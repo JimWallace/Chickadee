@@ -5,9 +5,19 @@ import Vapor
 import Foundation
 
 final class JupyterLiteContentsRoutesTests: XCTestCase {
+    private struct InjectAuthMiddleware: AsyncMiddleware {
+        let user: APIUser
+
+        func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
+            request.auth.login(user)
+            return try await next.respond(to: request)
+        }
+    }
+
     private var app: Application!
     private var tmpRoot: String!
     private var publicDir: String!
+    private var instructorUser: APIUser!
 
     override func setUp() async throws {
         app = Application(.testing)
@@ -17,6 +27,13 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
             .path
         app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
         publicDir = app.directory.publicDirectory
+        instructorUser = APIUser(
+            id: UUID(),
+            username: "jlite-test-instructor",
+            passwordHash: "unused",
+            role: "admin"
+        )
+        app.middleware.use(InjectAuthMiddleware(user: instructorUser))
 
         try FileManager.default.createDirectory(atPath: publicDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(

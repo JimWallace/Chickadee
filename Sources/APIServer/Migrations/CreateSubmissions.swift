@@ -6,11 +6,23 @@ struct CreateSubmissions: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("submissions")
             .field("id",           .string, .identifier(auto: false))
-            .field("test_setup_id",.string, .required)
+            .field(
+                "test_setup_id",
+                .string,
+                .required,
+                .references("test_setups", "id", onDelete: .cascade)
+            )
             .field("kind",         .string, .required)
             .field("status",       .string, .required)
             .field("worker_id",    .string)
             .field("zip_path",     .string, .required)
+            .field("attempt_number", .int, .required)
+            .field("filename",     .string)
+            .field(
+                "user_id",
+                .uuid,
+                .references("users", "id", onDelete: .setNull)
+            )
             .field("submitted_at", .datetime)
             .field("assigned_at",  .datetime)
             .create()

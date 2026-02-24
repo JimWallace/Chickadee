@@ -8,6 +8,7 @@ struct CreateTestSetups: AsyncMigration {
             .field("id",         .string, .identifier(auto: false))
             .field("manifest",   .string, .required)
             .field("zip_path",   .string, .required)
+            .field("notebook_path", .string)
             .field("created_at", .datetime)
             .create()
     }

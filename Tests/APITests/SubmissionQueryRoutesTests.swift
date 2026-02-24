@@ -41,13 +41,9 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(AddAttemptNumberToSubmissions())
-        app.migrations.add(AddFilenameToSubmissions())
-        app.migrations.add(AddSourceToResults())
         app.migrations.add(CreateUsers())
         app.migrations.add(CreateAssignments())
-        app.migrations.add(AddUserIDToSubmissions())
-        app.migrations.add(AddNotebookPathToTestSetups())
+        app.migrations.add(CreatePerformanceIndexes())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -79,12 +75,28 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     // MARK: - Helpers
 
     @discardableResult
+    private func ensureSetup(id: String) async throws -> APITestSetup {
+        if let existing = try await APITestSetup.find(id, on: app.db) {
+            return existing
+        }
+        let setup = APITestSetup(
+            id: id,
+            manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
+            zipPath: tmpDir + "testsetups/\(id).zip"
+        )
+        try await setup.save(on: app.db)
+        return setup
+    }
+
+    @discardableResult
     private func insertSubmission(
         id: String,
         testSetupID: String = "setup_001",
         status: String = "pending",
         attemptNumber: Int = 1
     ) async throws -> APISubmission {
+        _ = try await ensureSetup(id: testSetupID)
+
         let sub = APISubmission(
             id: id,
             testSetupID: testSetupID,

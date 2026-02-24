@@ -10,7 +10,8 @@ import Core
 struct WorkerCommand: AsyncParsableCommand {
     static var configuration = CommandConfiguration(
         commandName: "chickadee-runner",
-        abstract: "Chickadee build runner — polls the API server and processes submissions"
+        abstract: "Chickadee build runner — polls the API server and processes submissions",
+        version: ChickadeeVersion.current
     )
 
     @Option(name: .long, help: "Base URL of the API server (e.g. http://localhost:8080)")

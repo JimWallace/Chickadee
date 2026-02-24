@@ -85,6 +85,29 @@ swift build -c release
 .build/release/chickadee-runner --api-base-url http://api:8080 --worker-id runner-1 --worker-secret your-secret --sandbox
 ```
 
+## Versioning
+
+Chickadee follows Semantic Versioning in the `0.y.z` phase:
+
+- `0.y.0`: feature or behavior milestones.
+- `0.y.z`: backward-compatible bug fixes.
+- Breaking changes may still occur between `0.x` releases, but are documented in `CHANGELOG.md`.
+
+Current project version: see [`VERSION`](VERSION).
+
+Release checklist:
+
+```bash
+# 1) Update VERSION, CHANGELOG.md, and any version references.
+# 2) Run tests.
+scripts/check-version.sh
+swift test
+
+# 3) Create an annotated release tag.
+git tag -a vX.Y.Z -m "Chickadee vX.Y.Z"
+git push origin vX.Y.Z
+```
+
 ## JupyterLite rebuilds
 
 `Public/jupyterlite` is generated output. The source-of-truth config and version pins live in:
