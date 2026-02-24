@@ -18,12 +18,19 @@ struct WorkerJobRoutes: RouteCollection {
         let body = try req.content.decode(WorkerRequestBody.self)
         await req.application.workerActivityStore.markActive(workerID: body.workerID)
 
-        guard
-            let submission = try await APISubmission.query(on: req.db)
-                .filter(\.$status == "pending")
-                .sort(\.$submittedAt, .ascending)
-                .first()
-        else {
+        let pendingStudent = try await APISubmission.query(on: req.db)
+            .filter(\.$status == "pending")
+            .filter(\.$kind == APISubmission.Kind.student)
+            .sort(\.$submittedAt, .ascending)
+            .first()
+
+        let pendingValidation = try await APISubmission.query(on: req.db)
+            .filter(\.$status == "pending")
+            .filter(\.$kind == APISubmission.Kind.validation)
+            .sort(\.$submittedAt, .ascending)
+            .first()
+
+        guard let submission = pendingStudent ?? pendingValidation else {
             return Response(status: .noContent)
         }
 

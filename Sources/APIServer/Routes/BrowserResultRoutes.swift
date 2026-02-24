@@ -66,6 +66,7 @@ struct BrowserResultRoutes: RouteCollection {
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setup.id!)
             .filter(\.$userID == caller.id)
+            .filter(\.$kind == APISubmission.Kind.student)
             .count()
         let attemptNumber = priorCount + 1
 
@@ -79,7 +80,8 @@ struct BrowserResultRoutes: RouteCollection {
             attemptNumber: attemptNumber,
             status:        "browser-complete",
             filename:      "\(subID).ipynb",
-            userID:        caller.id
+            userID:        caller.id,
+            kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
 
@@ -106,7 +108,8 @@ struct BrowserResultRoutes: RouteCollection {
             attemptNumber: attemptNumber,
             status:        "pending",
             filename:      "\(subID).ipynb",
-            userID:        caller.id
+            userID:        caller.id,
+            kind:          APISubmission.Kind.student
         )
         try await workerSub.save(on: req.db)
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
@@ -142,6 +145,7 @@ struct BrowserResultRoutes: RouteCollection {
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setup.id!)
             .filter(\.$userID == caller.id)
+            .filter(\.$kind == APISubmission.Kind.student)
             .count()
 
         let submittedFilename = normalizedNotebookFilename(body.filename)
@@ -152,7 +156,8 @@ struct BrowserResultRoutes: RouteCollection {
             attemptNumber: priorCount + 1,
             status:        "pending",
             filename:      submittedFilename,
-            userID:        caller.id
+            userID:        caller.id,
+            kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)

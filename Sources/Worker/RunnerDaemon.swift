@@ -158,6 +158,7 @@ actor WorkerDaemon {
 
         // Install shared Python test runtime helpers for every run.
         try writePythonRuntimeHelpers(in: testSetupDir)
+        try writeStudentModuleHint(in: testSetupDir, submissionFilename: job.submissionFilename)
 
         // Run each test script and collect outcomes.
         var outcomes: [TestOutcome] = []
@@ -375,6 +376,29 @@ actor WorkerDaemon {
         let sitecustomizeURL = directory.appendingPathComponent("sitecustomize.py")
         try sitecustomizePy.write(to: sitecustomizeURL, atomically: true, encoding: .utf8)
     }
+
+    private func writeStudentModuleHint(in directory: URL, submissionFilename: String?) throws {
+        let hintURL = directory.appendingPathComponent(".chickadee_student_module")
+        if FileManager.default.fileExists(atPath: hintURL.path) {
+            try FileManager.default.removeItem(at: hintURL)
+        }
+
+        guard let submissionFilename, !submissionFilename.isEmpty else { return }
+        let submittedName = URL(fileURLWithPath: submissionFilename).lastPathComponent
+        guard !submittedName.isEmpty else { return }
+
+        let ext = URL(fileURLWithPath: submittedName).pathExtension.lowercased()
+        let preferredModuleFile: String
+        if ext == "py" {
+            preferredModuleFile = submittedName
+        } else if ext == "ipynb" {
+            preferredModuleFile = (submittedName as NSString).deletingPathExtension + ".py"
+        } else {
+            return
+        }
+        guard !preferredModuleFile.isEmpty else { return }
+        try preferredModuleFile.write(to: hintURL, atomically: true, encoding: .utf8)
+    }
 }
 
 // MARK: - Script result JSON (optional last-line protocol)
@@ -387,11 +411,12 @@ private struct ScriptResultJSON: Decodable {
 
 private let testRuntimePy = """
 import inspect
-import json
-import traceback
 import importlib.util
+import json
+import sys
+import traceback
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 
 def _caller_file(depth: int = 3) -> Path:
@@ -459,39 +484,139 @@ def errored(message: str = "error", err: Optional[Exception] = None):
 
 def _candidate_student_files() -> List[Path]:
     cwd = Path(".")
-    files = []
-    for p in sorted(cwd.glob("*.py")):
+    files: List[Path] = []
+    for p in cwd.glob("*.py"):
         name = p.name
         if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py"}:
             continue
-        if name.startswith("publictest_") or name.startswith("secrettest_"):
+        lower = name.lower()
+        if lower.startswith("publictest") or lower.startswith("secrettest") or lower.startswith("releasetest"):
             continue
         files.append(p)
-    return files
+    return sorted(files, key=_student_file_sort_key)
+
+
+def _student_file_sort_key(path: Path):
+    lower = path.name.lower()
+    if lower == "assignment.py":
+        return (90, lower)
+    if lower in {"solution.py", "submission.py"}:
+        return (0, lower)
+    return (10, lower)
+
+
+def _preferred_student_module() -> Optional[Path]:
+    hint = Path(".chickadee_student_module")
+    if not hint.exists():
+        return None
+    try:
+        raw = hint.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None
+    if not raw:
+        return None
+    preferred = Path(raw).name
+    if not preferred.endswith(".py"):
+        return None
+    path = Path(preferred)
+    return path if path.exists() else None
+
+
+def _module_name_for_path(path: Path) -> str:
+    stem = path.stem
+    safe = "".join(ch if (ch.isalnum() or ch == "_") else "_" for ch in stem)
+    if not safe:
+        safe = "student"
+    if safe[0].isdigit():
+        safe = f"m_{safe}"
+    return f"student_{safe}"
+
+
+def _ordered_student_files() -> List[Path]:
+    preferred = _preferred_student_module()
+    ordered: List[Path] = []
+    if preferred is not None:
+        ordered.append(preferred)
+
+    for path in _candidate_student_files():
+        if preferred is not None and path.name == preferred.name:
+            continue
+        ordered.append(path)
+    return ordered
+
+
+_loaded_student_modules: Optional[Dict[str, Any]] = None
+_loaded_student_order: List[str] = []
+_student_module_errors: Dict[str, str] = {}
+
+
+def load_student_modules(force_reload: bool = False) -> Dict[str, Any]:
+    global _loaded_student_modules, _loaded_student_order, _student_module_errors
+    if _loaded_student_modules is not None and not force_reload:
+        return _loaded_student_modules
+
+    modules: Dict[str, Any] = {}
+    order: List[str] = []
+    errors: Dict[str, str] = {}
+
+    for path in _ordered_student_files():
+        key = path.name
+        try:
+            module_name = _module_name_for_path(path)
+            spec = importlib.util.spec_from_file_location(module_name, path)
+            if spec is None or spec.loader is None:
+                errors[key] = "Could not create import spec."
+                continue
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+            modules[key] = module
+            order.append(key)
+        except Exception:
+            errors[key] = traceback.format_exc()
+
+    _loaded_student_modules = modules
+    _loaded_student_order = order
+    _student_module_errors = errors
+    return modules
+
+
+def student_module_errors() -> Dict[str, str]:
+    return _student_module_errors
+
+
+def student_module_names_in_load_order() -> List[str]:
+    return list(_loaded_student_order)
 
 
 def load_student_module():
-    for path in _candidate_student_files():
-        try:
-            spec = importlib.util.spec_from_file_location(f"student_{path.stem}", path)
-            if spec is None or spec.loader is None:
-                continue
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return module
-        except Exception:
-            continue
-    return None
+    modules = load_student_modules()
+    if not _loaded_student_order:
+        return None
+    return modules.get(_loaded_student_order[0])
 
 
 def require_function(name: str):
-    module = load_student_module()
-    if module is None:
+    modules = load_student_modules()
+    for key in _loaded_student_order:
+        module = modules.get(key)
+        if module is None:
+            continue
+        fn = getattr(module, name, None)
+        if fn is not None and callable(fn):
+            return fn
+
+    if not modules:
+        errors = student_module_errors()
+        if errors:
+            first_name = next(iter(errors.keys()))
+            errored(
+                "Could not load any student Python module from submission. "
+                f"First load failure came from '{first_name}'."
+            )
         errored("Could not load a student Python module from submission.")
-    fn = getattr(module, name, None)
-    if fn is None or not callable(fn):
-        errored(f"Required function '{name}' was not found or is not callable.")
-    return fn
+
+    errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
 """
 
 private let sitecustomizePy = """
@@ -503,10 +628,15 @@ builtins.failed = _tr.failed
 builtins.errored = _tr.errored
 builtins.require_function = _tr.require_function
 
+_student_modules = _tr.load_student_modules()
+builtins.student_modules = _student_modules
 _student_module = _tr.load_student_module()
 builtins.student_module = _student_module
-if _student_module is not None:
-    for _name, _value in vars(_student_module).items():
+for _module_name in _tr.student_module_names_in_load_order():
+    _module = _student_modules.get(_module_name)
+    if _module is None:
+        continue
+    for _name, _value in vars(_module).items():
         if _name.startswith("_"):
             continue
         if callable(_value) and not hasattr(builtins, _name):

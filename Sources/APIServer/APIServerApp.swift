@@ -19,10 +19,12 @@ struct APIServerApp {
             try configure(app, cliWorkerSecret: cliWorkerSecret)
             try await app.execute()
         } catch {
+            await app.localRunnerManager.stopIfRunning(logger: app.logger)
             try await app.asyncShutdown()
             throw error
         }
         
+        await app.localRunnerManager.stopIfRunning(logger: app.logger)
         try await app.asyncShutdown()
     }
 }
@@ -89,6 +91,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.migrations.add(CreateAssignments())
     app.migrations.add(AddValidationToAssignments())
     app.migrations.add(AddUserIDToSubmissions())
+    app.migrations.add(AddKindToSubmissions())
     app.migrations.add(AddNotebookPathToTestSetups())
 
     try app.autoMigrate().wait()
@@ -248,6 +251,36 @@ actor LocalRunnerManager {
                 logHandle = nil
             }
         }
+    }
+
+    func stopIfRunning(logger: Logger) async {
+        guard let proc = process else {
+            if let handle = logHandle {
+                try? handle.close()
+                logHandle = nil
+            }
+            return
+        }
+
+        if proc.isRunning {
+            logger.info("Stopping local runner process...")
+            proc.terminate()
+            for _ in 0..<20 where proc.isRunning {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            if proc.isRunning {
+                proc.interrupt()
+                for _ in 0..<10 where proc.isRunning {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+            }
+        }
+
+        if let handle = logHandle {
+            try? handle.close()
+            logHandle = nil
+        }
+        process = nil
     }
 }
 

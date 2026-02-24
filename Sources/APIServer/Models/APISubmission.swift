@@ -6,6 +6,11 @@ import Vapor
 final class APISubmission: Model, Content, @unchecked Sendable {
     static let schema = "submissions"
 
+    enum Kind {
+        static let student = "student"
+        static let validation = "validation"
+    }
+
     @ID(custom: "id", generatedBy: .user)
     var id: String?
 
@@ -39,6 +44,10 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "user_id")
     var userID: UUID?
 
+    /// Distinguishes learner submissions from instructor validation runs.
+    @Field(key: "kind")
+    var kind: String
+
     init() {}
 
     init(
@@ -48,7 +57,8 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         attemptNumber: Int,
         status: String = "pending",
         filename: String? = nil,
-        userID: UUID? = nil
+        userID: UUID? = nil,
+        kind: String = Kind.student
     ) {
         self.id            = id
         self.testSetupID   = testSetupID
@@ -57,5 +67,6 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         self.status        = status
         self.filename      = filename
         self.userID        = userID
+        self.kind          = kind
     }
 }

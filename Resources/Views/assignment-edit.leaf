@@ -18,7 +18,7 @@ Edit Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/assignments/#(assignmentID)/edit/save" enctype="multipart/form-data">
+<form class="form" method="post" action="/assignments/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
     <label class="form-label">
         Assignment Name
         <input class="form-input" type="text" name="assignmentName" required
@@ -31,19 +31,19 @@ Edit Assignment
         <input class="form-input" type="datetime-local" name="dueAt" value="#(dueAt)">
     </label>
 
-    <label class="form-label">
+    <div class="form-label">
         <span style="white-space:nowrap">Assignment Notebook (<a href="#(currentAssignmentURL)"><code>#(currentAssignmentFile)</code></a>)</span>
         <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb">
-    </label>
+    </div>
 
-    <label class="form-label">
+    <div class="form-label">
         #if(currentSolutionURL):
         <span style="white-space:nowrap">Solution Notebook (<a href="#(currentSolutionURL)"><code>#(currentSolutionFile)</code></a>)</span>
         #else:
         <span style="white-space:nowrap">Solution Notebook (<code>not set</code>)</span>
         #endif
         <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb">
-    </label>
+    </div>
 
     <label class="form-label">
         <span style="white-space:nowrap">Add Test Suite Files (scripts/support files like <code>.sh</code> or <code>.py</code>)</span>
@@ -208,19 +208,8 @@ Edit Assignment
     });
     syncConfig();
 
-    var form = filesInput.closest('form');
-    if (form) {
-        form.addEventListener('submit', function (event) {
-            syncConfig();
-            var config = [];
-            try { config = JSON.parse(configField.value || '[]'); } catch (_) { config = []; }
-            var hasTest = config.some(function (row) { return !!row.isTest; });
-            if (!hasTest) {
-                event.preventDefault();
-                window.alert('Select at least one file as a test.');
-            }
-        });
-    }
+    // Native form submission is intentionally left unmodified.
+    // Hidden suiteConfig is kept in sync by change/input listeners above.
 })();
 </script>
 #endexport
