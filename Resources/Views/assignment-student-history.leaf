@@ -1,0 +1,39 @@
+#extend("base"):
+#export("title"):
+#(assignmentTitle) — #(studentID) History
+#endexport
+#export("content"):
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+    <h1 style="margin:0">#(assignmentTitle)</h1>
+    <a class="btn action-btn" href="/assignments/#(assignmentID)/submissions">Back to Assignment Summary</a>
+</div>
+<p style="margin-top:0;color:var(--gray-700)">Student ID: <strong>#(studentID)</strong></p>
+
+#if(rows.isEmpty):
+<p class="empty">No submissions yet.</p>
+#else:
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Attempt</th>
+            <th>Status</th>
+            <th>Submitted</th>
+            <th>Grade</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(row in rows):
+        <tr>
+            <td>#(row.attemptNumber)</td>
+            <td><span class="tier">#(row.status)</span></td>
+            <td>#(row.submittedAt)</td>
+            <td><strong>#(row.gradeText)</strong></td>
+            <td><a href="/submissions/#(row.submissionID)">Open</a></td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+#endexport
+#endextend

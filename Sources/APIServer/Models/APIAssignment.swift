@@ -34,6 +34,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @Field(key: "is_open")
     var isOpen: Bool
 
+    /// Instructor-defined ordering for dashboard display (lower first).
+    @OptionalField(key: "sort_order")
+    var sortOrder: Int?
+
     /// Runner validation state for instructor-created assignments.
     /// Values: "pending" | "passed" | "failed"
     @OptionalField(key: "validation_status")
@@ -50,6 +54,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
 
     init(id: UUID? = nil, testSetupID: String, title: String,
          dueAt: Date? = nil, isOpen: Bool = true,
+         sortOrder: Int? = nil,
          validationStatus: String? = nil,
          validationSubmissionID: String? = nil) {
         self.id          = id
@@ -57,6 +62,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.title       = title
         self.dueAt       = dueAt
         self.isOpen      = isOpen
+        self.sortOrder   = sortOrder
         self.validationStatus = validationStatus
         self.validationSubmissionID = validationSubmissionID
     }

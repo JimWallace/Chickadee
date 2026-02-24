@@ -140,7 +140,24 @@ struct WebRoutes: RouteCollection {
             }
         }
 
-        let rows = setups.map { setup -> TestSetupRow in
+        let sortedSetups = setups.sorted { lhs, rhs in
+            let lhsID = lhs.id ?? ""
+            let rhsID = rhs.id ?? ""
+            let lhsOrder = assignmentBySetup[lhsID]?.sortOrder
+            let rhsOrder = assignmentBySetup[rhsID]?.sortOrder
+
+            switch (lhsOrder, rhsOrder) {
+            case let (l?, r?) where l != r:
+                return l < r
+            default:
+                let lhsCreated = lhs.createdAt ?? .distantPast
+                let rhsCreated = rhs.createdAt ?? .distantPast
+                if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
+                return lhsID < rhsID
+            }
+        }
+
+        let rows = sortedSetups.map { setup -> TestSetupRow in
             let setupID    = setup.id ?? ""
             let data       = Data(setup.manifest.utf8)
             let props      = try? decoder.decode(TestProperties.self, from: data)

@@ -5,7 +5,10 @@ Assignments
 #export("content"):
 <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1.5rem">
     <h1 style="margin:0">Instructor</h1>
-    <a class="btn btn-primary" href="/assignments/new">Create New</a>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
+        <a class="btn btn-primary" href="/assignments/new">Create New</a>
+    </div>
 </div>
 
 #if(rows.isEmpty):
@@ -21,12 +24,20 @@ Assignments
             <th>Actions</th>
         </tr>
     </thead>
-    <tbody>
+    <tbody id="assignments-body">
     #for(row in rows):
-        <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif">
+        <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif"
+            #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
             <td>
+                #if(row.assignmentID):
+                <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+                #endif
                 #if(row.title):
+                #if(row.assignmentID):
+                <a href="/assignments/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                #else:
                 <strong>#(row.title)</strong>
+                #endif
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -135,5 +146,101 @@ Assignments
     </tbody>
 </table>
 #endif
+<style>
+.assignment-drag-handle {
+    display: inline-block;
+    margin-right: .45rem;
+    color: var(--gray-500);
+    font-weight: 700;
+    cursor: grab;
+    user-select: none;
+}
+tr.assignment-draggable.dragging {
+    opacity: .55;
+}
+tr.assignment-draggable td {
+    cursor: grab;
+}
+</style>
+<script>
+(function () {
+    var body = document.getElementById('assignments-body');
+    if (!body) return;
+
+    var draggableRows = Array.from(body.querySelectorAll('tr[data-assignment-id]'));
+    if (draggableRows.length < 2) return;
+
+    var dragged = null;
+    var dragStartOrder = '';
+
+    function currentOrder() {
+        return Array.from(body.querySelectorAll('tr[data-assignment-id]'))
+            .map(function (row) { return row.getAttribute('data-assignment-id'); })
+            .filter(function (v) { return !!v; });
+    }
+
+    async function persistOrderIfChanged() {
+        var order = currentOrder();
+        var joined = order.join(',');
+        if (joined === dragStartOrder) return;
+        try {
+            var res = await fetch('/assignments/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignmentIDs: order })
+            });
+            if (!res.ok) {
+                window.location.reload();
+            }
+        } catch (_) {
+            window.location.reload();
+        }
+    }
+
+    draggableRows.forEach(function (row) {
+        row.classList.add('assignment-draggable');
+        row.setAttribute('draggable', 'true');
+    });
+
+    body.addEventListener('dragstart', function (event) {
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+        var row = target.closest('tr[data-assignment-id]');
+        if (!row) return;
+        dragged = row;
+        dragStartOrder = currentOrder().join(',');
+        row.classList.add('dragging');
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', row.getAttribute('data-assignment-id') || '');
+        }
+    });
+
+    body.addEventListener('dragover', function (event) {
+        if (!dragged) return;
+        event.preventDefault();
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+        var overRow = target.closest('tr[data-assignment-id]');
+        if (!overRow || overRow === dragged) return;
+
+        var rect = overRow.getBoundingClientRect();
+        var after = event.clientY > rect.top + rect.height / 2;
+        body.insertBefore(dragged, after ? overRow.nextSibling : overRow);
+    });
+
+    body.addEventListener('drop', function (event) {
+        if (!dragged) return;
+        event.preventDefault();
+    });
+
+    body.addEventListener('dragend', function () {
+        if (!dragged) return;
+        dragged.classList.remove('dragging');
+        dragged = null;
+        persistOrderIfChanged();
+    });
+})();
+</script>
 #endexport
 #endextend

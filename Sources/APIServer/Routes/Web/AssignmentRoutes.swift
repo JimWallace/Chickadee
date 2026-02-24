@@ -26,9 +26,13 @@ struct AssignmentRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let r = routes.grouped("assignments")
         r.get(use: list)
+        r.get("grades.csv", use: exportGradesCSV)
+        r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
+        r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.get("new", use: newAssignmentPage)
         r.get("new", "details", use: newAssignmentDetailsPage)
         r.post("new", "save", use: saveNewAssignment)
+        r.post("reorder", use: reorderAssignments)
         r.post(use: publish)
         r.get(":assignmentID", "validate", use: validatePage)
         r.get(":assignmentID", "edit",     use: editPage)
@@ -63,7 +67,11 @@ struct AssignmentRoutes: RouteCollection {
 
         let decoder = JSONDecoder()
 
-        let rows: [AssignmentRow] = allSetups.map { setup in
+        let setupIndexByID: [String: Int] = Dictionary(
+            uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
+        )
+
+        let unsortedRows: [AssignmentRow] = allSetups.map { setup in
             let assignment = assignmentBySetup[setup.id ?? ""]
             let setupID    = setup.id ?? ""
             let suiteCount: Int = {
@@ -92,6 +100,7 @@ struct AssignmentRoutes: RouteCollection {
                 isOpen:       assignment?.isOpen,
                 dueAt:        assignment?.dueAt.map { fmt.string(from: $0) },
                 status:       status,
+                sortOrder:    assignment?.sortOrder,
                 validationStatus: validationStatus,
                 validationSubmissionID: validationSubmissionID,
                 suiteCount:   suiteCount,
@@ -99,11 +108,326 @@ struct AssignmentRoutes: RouteCollection {
             )
         }
 
+        let rows = unsortedRows.sorted { lhs, rhs in
+            let lhsPublished = lhs.assignmentID != nil
+            let rhsPublished = rhs.assignmentID != nil
+            if lhsPublished != rhsPublished {
+                return lhsPublished && !rhsPublished
+            }
+
+            if lhsPublished && rhsPublished {
+                switch (lhs.sortOrder, rhs.sortOrder) {
+                case let (l?, r?) where l != r:
+                    return l < r
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                default:
+                    break
+                }
+            }
+
+            let lhsIndex = setupIndexByID[lhs.setupID] ?? Int.max
+            let rhsIndex = setupIndexByID[rhs.setupID] ?? Int.max
+            return lhsIndex < rhsIndex
+        }
+
         let ctx = AssignmentsContext(
             currentUser: req.currentUserContext,
             rows: rows
         )
         return try await req.view.render("assignments", ctx)
+    }
+
+    // MARK: - GET /assignments/grades.csv
+
+    @Sendable
+    func exportGradesCSV(req: Request) async throws -> Response {
+        let students = try await APIUser.query(on: req.db)
+            .filter(\.$role == "student")
+            .sort(\.$username, .ascending)
+            .all()
+
+        let assignments = try await APIAssignment.query(on: req.db).all()
+        let setupIDs = Set(assignments.map(\.testSetupID))
+        let setups = setupIDs.isEmpty
+            ? []
+            : try await APITestSetup.query(on: req.db)
+                .filter(\.$id ~~ setupIDs)
+                .all()
+        let setupByID = Dictionary(uniqueKeysWithValues: setups.compactMap { setup in
+            setup.id.map { ($0, setup) }
+        })
+
+        let sortedAssignments = assignments.sorted { lhs, rhs in
+            switch (lhs.sortOrder, rhs.sortOrder) {
+            case let (l?, r?) where l != r:
+                return l < r
+            default:
+                let lhsCreated = setupByID[lhs.testSetupID]?.createdAt ?? .distantPast
+                let rhsCreated = setupByID[rhs.testSetupID]?.createdAt ?? .distantPast
+                if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
+                return lhs.testSetupID < rhs.testSetupID
+            }
+        }
+
+        let studentIDs = Set(students.compactMap(\.id))
+        let submissionRows = (setupIDs.isEmpty || studentIDs.isEmpty)
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .filter(\.$userID ~~ studentIDs)
+                .all()
+        let submissions = submissionRows.compactMap { row -> (id: String, userID: UUID, setupID: String)? in
+            guard let id = row.id, let userID = row.userID else { return nil }
+            return (id, userID, row.testSetupID)
+        }
+        let submissionIDs = submissions.map(\.id)
+
+        let results = submissionIDs.isEmpty
+            ? []
+            : try await APIResult.query(on: req.db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .sort(\.$receivedAt, .descending)
+                .all()
+        var preferredResultBySubmissionID: [String: APIResult] = [:]
+        for result in results {
+            let key = result.submissionID
+            if let existing = preferredResultBySubmissionID[key] {
+                let existingSource = existing.source ?? "worker"
+                let candidateSource = result.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if candidateSource == "worker" {
+                    preferredResultBySubmissionID[key] = result
+                }
+            } else {
+                preferredResultBySubmissionID[key] = result
+            }
+        }
+
+        var bestGradeByUserAndSetup: [String: Int] = [:]
+        for submission in submissions {
+            guard let result = preferredResultBySubmissionID[submission.id],
+                  let grade = gradePercentFromCollectionJSON(result.collectionJSON) else {
+                continue
+            }
+            let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
+            let prior = bestGradeByUserAndSetup[key] ?? -1
+            if grade > prior {
+                bestGradeByUserAndSetup[key] = grade
+            }
+        }
+
+        var lines: [String] = []
+        let header = ["student_id"] + sortedAssignments.map { $0.title }
+        lines.append(header.map(csvEscaped).joined(separator: ","))
+
+        for student in students {
+            guard let userID = student.id else { continue }
+            var row: [String] = [student.username]
+            for assignment in sortedAssignments {
+                let key = "\(userID.uuidString.lowercased())::\(assignment.testSetupID)"
+                if let grade = bestGradeByUserAndSetup[key] {
+                    row.append("\(grade)%")
+                } else {
+                    row.append("")
+                }
+            }
+            lines.append(row.map(csvEscaped).joined(separator: ","))
+        }
+
+        let csv = lines.joined(separator: "\n") + "\n"
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let response = Response(status: .ok)
+        response.headers.replaceOrAdd(name: .contentType, value: "text/csv; charset=utf-8")
+        response.headers.replaceOrAdd(
+            name: .contentDisposition,
+            value: "attachment; filename=\"grades-\(timestamp).csv\""
+        )
+        response.body = .init(string: csv)
+        return response
+    }
+
+    // MARK: - GET /assignments/:assignmentID/submissions
+
+    @Sendable
+    func assignmentSubmissionsPage(req: Request) async throws -> View {
+        guard
+            let assignmentIDRaw = req.parameters.get("assignmentID"),
+            let assignmentID = UUID(uuidString: assignmentIDRaw),
+            let assignment = try await APIAssignment.find(assignmentID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let students = try await APIUser.query(on: req.db)
+            .filter(\.$role == "student")
+            .sort(\.$username, .ascending)
+            .all()
+        let studentIDs = Set(students.compactMap(\.id))
+
+        let submissions = (studentIDs.isEmpty)
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID == assignment.testSetupID)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$userID ~~ studentIDs)
+                .sort(\.$submittedAt, .descending)
+                .all()
+
+        var submissionsByStudentID: [UUID: [APISubmission]] = [:]
+        for row in submissions {
+            guard let userID = row.userID else { continue }
+            submissionsByStudentID[userID, default: []].append(row)
+        }
+
+        let submissionIDs = submissions.compactMap(\.id)
+        let results = submissionIDs.isEmpty
+            ? []
+            : try await APIResult.query(on: req.db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .sort(\.$receivedAt, .descending)
+                .all()
+        var preferredResultBySubmissionID: [String: APIResult] = [:]
+        for result in results {
+            let key = result.submissionID
+            if let existing = preferredResultBySubmissionID[key] {
+                let existingSource = existing.source ?? "worker"
+                let candidateSource = result.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if candidateSource == "worker" {
+                    preferredResultBySubmissionID[key] = result
+                }
+            } else {
+                preferredResultBySubmissionID[key] = result
+            }
+        }
+
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+
+        let rows = students.compactMap { student -> AssignmentStudentRow? in
+            guard let studentID = student.id else { return nil }
+            let history = submissionsByStudentID[studentID] ?? []
+            let latest = history.first
+            let grade: String = {
+                var best = -1
+                for submission in history {
+                    guard let subID = submission.id,
+                          let result = preferredResultBySubmissionID[subID],
+                          let pct = gradePercentFromCollectionJSON(result.collectionJSON) else {
+                        continue
+                    }
+                    if pct > best { best = pct }
+                }
+                return best >= 0 ? "\(best)%" : "—"
+            }()
+            let inferredName = inferNameFromStudentID(student.username)
+            return AssignmentStudentRow(
+                studentID: student.username,
+                surname: inferredName.surname,
+                givenNames: inferredName.givenNames,
+                gradeText: grade,
+                submissionCount: history.count,
+                hasLatestSubmission: latest != nil,
+                latestSubmissionID: latest?.id ?? "",
+                latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
+                additionalSubmissionCount: max(history.count - 1, 0),
+                fullHistoryURL: "/assignments/\(assignmentIDRaw)/students/\(studentID.uuidString)/history"
+            )
+        }
+
+        return try await req.view.render(
+            "assignment-submissions",
+            AssignmentSubmissionsContext(
+                currentUser: req.currentUserContext,
+                assignmentID: assignmentIDRaw,
+                assignmentTitle: assignment.title,
+                rows: rows
+            )
+        )
+    }
+
+    // MARK: - GET /assignments/:assignmentID/students/:studentID/history
+
+    @Sendable
+    func studentSubmissionHistoryPage(req: Request) async throws -> View {
+        guard
+            let assignmentIDRaw = req.parameters.get("assignmentID"),
+            let assignmentID = UUID(uuidString: assignmentIDRaw),
+            let assignment = try await APIAssignment.find(assignmentID, on: req.db),
+            let studentIDRaw = req.parameters.get("studentID"),
+            let studentID = UUID(uuidString: studentIDRaw),
+            let student = try await APIUser.find(studentID, on: req.db),
+            student.role == "student"
+        else {
+            throw Abort(.notFound)
+        }
+
+        let submissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .filter(\.$userID == studentID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .sort(\.$submittedAt, .descending)
+            .all()
+        let submissionIDs = submissions.compactMap(\.id)
+        let results = submissionIDs.isEmpty
+            ? []
+            : try await APIResult.query(on: req.db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .sort(\.$receivedAt, .descending)
+                .all()
+
+        var preferredResultBySubmissionID: [String: APIResult] = [:]
+        for result in results {
+            let key = result.submissionID
+            if let existing = preferredResultBySubmissionID[key] {
+                let existingSource = existing.source ?? "worker"
+                let candidateSource = result.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if candidateSource == "worker" {
+                    preferredResultBySubmissionID[key] = result
+                }
+            } else {
+                preferredResultBySubmissionID[key] = result
+            }
+        }
+
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+
+        let rows = submissions.map { submission -> SubmissionHistoryRow in
+            let subID = submission.id ?? ""
+            let gradeText: String
+            if let result = preferredResultBySubmissionID[subID],
+               let pct = gradePercentFromCollectionJSON(result.collectionJSON) {
+                gradeText = "\(pct)%"
+            } else {
+                gradeText = "—"
+            }
+            return SubmissionHistoryRow(
+                submissionID: subID,
+                attemptNumber: submission.attemptNumber ?? 1,
+                status: submission.status,
+                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
+                gradeText: gradeText
+            )
+        }
+
+        return try await req.view.render(
+            "assignment-student-history",
+            AssignmentStudentHistoryContext(
+                currentUser: req.currentUserContext,
+                assignmentID: assignmentIDRaw,
+                assignmentTitle: assignment.title,
+                studentID: student.username,
+                rows: rows
+            )
+        )
     }
 
     // MARK: - GET /assignments/new
@@ -245,6 +569,7 @@ struct AssignmentRoutes: RouteCollection {
             title: title,
             dueAt: due,
             isOpen: false,
+            sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: "pending",
             validationSubmissionID: nil
         )
@@ -264,8 +589,8 @@ struct AssignmentRoutes: RouteCollection {
         case .passed(let summary):
             assignment.validationStatus = "passed"
             try await assignment.save(on: req.db)
-            let q = "notice=\(urlEncode("Runner validation passed (\(summary)). You can now open the assignment from the dashboard."))"
-            return req.redirect(to: "/assignments/new?\(q)")
+            req.logger.info("Assignment validation passed for setup \(setupID): \(summary)")
+            return req.redirect(to: "/assignments")
         case .failed(let summary):
             assignment.validationStatus = "failed"
             try await assignment.save(on: req.db)
@@ -274,8 +599,7 @@ struct AssignmentRoutes: RouteCollection {
         case .timedOut:
             assignment.validationStatus = "pending"
             try await assignment.save(on: req.db)
-            let q = "notice=\(urlEncode("Assignment saved and validation started. It is still pending; refresh the dashboard shortly."))"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/assignments")
         }
     }
 
@@ -326,7 +650,8 @@ struct AssignmentRoutes: RouteCollection {
             testSetupID: body.testSetupID,
             title:       body.title.isEmpty ? body.testSetupID : body.title,
             dueAt:       due,
-            isOpen:      false          // stays closed until instructor validates + opens
+            isOpen:      false,         // stays closed until instructor validates + opens
+            sortOrder:   try await nextAssignmentSortOrder(req: req)
         )
         try await assignment.save(on: req.db)
 
@@ -389,6 +714,40 @@ struct AssignmentRoutes: RouteCollection {
         assignment.isOpen = true
         try await assignment.save(on: req.db)
         return req.redirect(to: "/assignments")
+    }
+
+    // MARK: - POST /assignments/reorder
+
+    @Sendable
+    func reorderAssignments(req: Request) async throws -> HTTPStatus {
+        struct ReorderBody: Content {
+            var assignmentIDs: [String]
+        }
+        let body = try req.content.decode(ReorderBody.self)
+        let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
+        guard !orderedIDs.isEmpty else { return .ok }
+
+        let uuids = orderedIDs.compactMap(UUID.init(uuidString:))
+        guard uuids.count == orderedIDs.count else {
+            throw Abort(.badRequest, reason: "Invalid assignment ID in reorder payload.")
+        }
+
+        let assignments = try await APIAssignment.query(on: req.db)
+            .filter(\.$id ~~ uuids)
+            .all()
+        let byID = Dictionary(uniqueKeysWithValues: assignments.compactMap { assignment in
+            assignment.id.map { ($0.uuidString.lowercased(), assignment) }
+        })
+        guard byID.count == uuids.count else {
+            throw Abort(.badRequest, reason: "Assignment set mismatch in reorder payload.")
+        }
+
+        for (index, rawID) in orderedIDs.enumerated() {
+            guard let assignment = byID[rawID.lowercased()] else { continue }
+            assignment.sortOrder = index + 1
+            try await assignment.save(on: req.db)
+        }
+        return .ok
     }
 
     // MARK: - POST /assignments/:assignmentID/status
@@ -807,6 +1166,7 @@ struct AssignmentRow: Encodable {
     let isOpen:       Bool?     // nil if unpublished
     let dueAt:        String?
     let status:       String    // "unpublished" | "open" | "closed"
+    let sortOrder:    Int?
     let validationStatus: String
     let validationSubmissionID: String?
     let suiteCount:   Int
@@ -816,6 +1176,26 @@ struct AssignmentRow: Encodable {
 private struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
     let rows: [AssignmentRow]
+}
+
+private struct AssignmentSubmissionsContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let assignmentID: String
+    let assignmentTitle: String
+    let rows: [AssignmentStudentRow]
+}
+
+private struct AssignmentStudentRow: Encodable {
+    let studentID: String
+    let surname: String
+    let givenNames: String
+    let gradeText: String
+    let submissionCount: Int
+    let hasLatestSubmission: Bool
+    let latestSubmissionID: String
+    let latestSubmittedAtText: String
+    let additionalSubmissionCount: Int
+    let fullHistoryURL: String
 }
 
 private struct ValidateContext: Encodable {
@@ -860,6 +1240,22 @@ private struct EditableSuiteRow: Encodable {
     let isTest: Bool
     let tier: String
     let order: Int
+}
+
+private struct AssignmentStudentHistoryContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let assignmentID: String
+    let assignmentTitle: String
+    let studentID: String
+    let rows: [SubmissionHistoryRow]
+}
+
+private struct SubmissionHistoryRow: Encodable {
+    let submissionID: String
+    let attemptNumber: Int
+    let status: String
+    let submittedAt: String
+    let gradeText: String
 }
 
 private func parseDueDate(_ raw: String?) -> Date? {
@@ -1214,6 +1610,50 @@ private func urlEncode(_ s: String) -> String {
     var allowed = CharacterSet.alphanumerics
     allowed.insert(charactersIn: "-._~")
     return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+}
+
+private func nextAssignmentSortOrder(req: Request) async throws -> Int {
+    let maxOrder = try await APIAssignment.query(on: req.db)
+        .all()
+        .compactMap(\.sortOrder)
+        .max() ?? 0
+    return maxOrder + 1
+}
+
+private func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
+    guard let data = collectionJSON.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let passCount = root["passCount"] as? Int,
+          let totalTests = root["totalTests"] as? Int,
+          totalTests > 0 else {
+        return nil
+    }
+    return Int((Double(passCount) / Double(totalTests) * 100).rounded())
+}
+
+private func csvEscaped(_ value: String) -> String {
+    if value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r") {
+        return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+    return value
+}
+
+private func inferNameFromStudentID(_ studentID: String) -> (surname: String, givenNames: String) {
+    let raw = studentID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !raw.isEmpty else { return ("—", "—") }
+
+    if raw.contains(",") {
+        let parts = raw.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+        let surname = String(parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let given = parts.count > 1
+            ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
+        return (
+            surname.isEmpty ? "—" : surname,
+            given.isEmpty ? "—" : given
+        )
+    }
+    return ("—", "—")
 }
 
 private func defaultNotebookData(title: String) -> Data {
