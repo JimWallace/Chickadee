@@ -40,13 +40,15 @@ struct SubmissionRoutes: RouteCollection {
         // Count prior submissions for this test setup to determine attempt number.
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setup.id!)
+            .filter(\.$kind == APISubmission.Kind.student)
             .count()
 
         let submission = APISubmission(
             id:            subID,
             testSetupID:   setup.id!,
             zipPath:       zipPath,
-            attemptNumber: priorCount + 1
+            attemptNumber: priorCount + 1,
+            kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
@@ -85,6 +87,7 @@ struct SubmissionRoutes: RouteCollection {
 
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setup.id!)
+            .filter(\.$kind == APISubmission.Kind.student)
             .count()
 
         let submission = APISubmission(
@@ -92,7 +95,8 @@ struct SubmissionRoutes: RouteCollection {
             testSetupID:   setup.id!,
             zipPath:       filePath,
             attemptNumber: priorCount + 1,
-            filename:      body.filename
+            filename:      body.filename,
+            kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)

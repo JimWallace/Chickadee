@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
     <title>#import("title") — Chickadee</title>
-    <link rel="icon" type="image/png" href="/images/chickadee-icon-alt.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+    <link rel="shortcut icon" href="/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <nav class="nav">
     <a class="nav-brand" href="/">
-        <img class="nav-brand-logo" src="/images/chickadee-icon.png" alt="">
+        <img class="nav-brand-logo" src="/images/chickadee-icon-alt.png" alt="">
         <span>Chickadee</span>
     </a>
 

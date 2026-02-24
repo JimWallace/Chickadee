@@ -207,7 +207,13 @@ struct AssignmentRoutes: RouteCollection {
 
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
-        let notebookPath = setupsDir + "\(setupID).ipynb"
+        let notebookFilename = notebookFilenameForStorage(
+            uploadedName: assignmentNotebookFile.filename,
+            fallback: "assignment.ipynb"
+        )
+        let notebookDir = setupsDir + "notebooks/\(setupID)/"
+        try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
+        let notebookPath = notebookDir + notebookFilename
         let zipPath = setupsDir + "\(setupID).zip"
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
         let setupPackage = try createRunnerSetupZip(
@@ -607,6 +613,7 @@ struct AssignmentRoutes: RouteCollection {
 
         if let fallbackSubmission = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
+            .filter(\.$kind == APISubmission.Kind.validation)
             .filter(\.$filename == "solution.ipynb")
             .sort(\.$submittedAt, .descending)
             .first(),
@@ -674,8 +681,9 @@ struct AssignmentRoutes: RouteCollection {
 
         let uploadedSuiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
 
+        let hasUploadedAssignmentNotebook = assignmentNotebookFile?.data.readableBytes ?? 0 > 0
         let assignmentNotebookRaw: Data = {
-            guard let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 else {
+            guard let assignmentNotebookFile, hasUploadedAssignmentNotebook else {
                 return (try? notebookData(for: setup)) ?? Data()
             }
             return Data(assignmentNotebookFile.data.readableBytesView)
@@ -721,7 +729,20 @@ struct AssignmentRoutes: RouteCollection {
         }
 
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
-        let notebookPath = setup.notebookPath ?? (req.application.testSetupsDirectory + "\(setup.id!).ipynb")
+        let notebookPath: String = {
+            if hasUploadedAssignmentNotebook {
+                let fallbackName = setup.notebookPath
+                    .map { URL(fileURLWithPath: $0).lastPathComponent }
+                    .flatMap { $0.isEmpty ? nil : $0 }
+                    ?? "assignment.ipynb"
+                let uploadedName = assignmentNotebookFile?.filename
+                let filename = notebookFilenameForStorage(uploadedName: uploadedName, fallback: fallbackName)
+                let dir = req.application.testSetupsDirectory + "notebooks/\(setup.id!)/"
+                try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                return dir + filename
+            }
+            return setup.notebookPath ?? (req.application.testSetupsDirectory + "\(setup.id!).ipynb")
+        }()
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
 
         let setupPackage = try createRunnerSetupZip(
@@ -861,6 +882,25 @@ private func dueAtLocalInputString(_ date: Date?) -> String {
     return fmt.string(from: date)
 }
 
+private func notebookFilenameForStorage(uploadedName: String?, fallback: String) -> String {
+    var fileName = uploadedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if fileName.isEmpty {
+        fileName = fallback
+    }
+    fileName = URL(fileURLWithPath: fileName).lastPathComponent
+    fileName = fileName
+        .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r"))
+        .joined(separator: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if fileName.isEmpty {
+        fileName = fallback
+    }
+    if !fileName.lowercased().hasSuffix(".ipynb") {
+        fileName += ".ipynb"
+    }
+    return fileName
+}
+
 private func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidationSolution: Bool) -> (
     assignmentFile: CurrentFileLink,
     solutionFile: CurrentFileLink?,
@@ -891,9 +931,18 @@ private func currentSetupFiles(for setup: APITestSetup, assignmentID: String, ha
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
 
     let archiveFiles = listZipEntries(zipPath: setup.zipPath)
-    let solutionFile: CurrentFileLink? = (archiveFiles.contains("solution.ipynb") || hasValidationSolution)
-        ? CurrentFileLink(name: "solution.ipynb", url: "/assignments/\(assignmentID)/files/solution")
-        : nil
+    let solutionFile: CurrentFileLink? = {
+        if archiveFiles.contains("solution.ipynb") {
+            return CurrentFileLink(
+                name: "solution.ipynb",
+                url: "/assignments/\(assignmentID)/files/item?name=solution.ipynb"
+            )
+        }
+        if hasValidationSolution {
+            return CurrentFileLink(name: "solution.ipynb", url: "/assignments/\(assignmentID)/files/solution")
+        }
+        return nil
+    }()
 
     let nonNotebookFiles = archiveFiles
         .filter { $0 != "assignment.ipynb" && $0 != "solution.ipynb" }
@@ -929,13 +978,12 @@ private func listZipEntries(zipPath: String) -> [String] {
 
     do {
         try process.run()
-        process.waitUntilExit()
     } catch {
         return []
     }
-    guard process.terminationStatus == 0 else { return [] }
-
     let data = out.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return [] }
     guard let text = String(data: data, encoding: .utf8) else { return [] }
     return text
         .split(separator: "\n")
@@ -953,12 +1001,13 @@ private func extractZipEntry(zipPath: String, entryName: String) -> Data? {
     process.standardError = Pipe()
     do {
         try process.run()
-        process.waitUntilExit()
     } catch {
         return nil
     }
+    let data = out.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
     guard process.terminationStatus == 0 else { return nil }
-    return out.fileHandleForReading.readDataToEndOfFile()
+    return data
 }
 
 private func buildFileResponse(data: Data, filename: String) -> Response {
@@ -1149,6 +1198,7 @@ private func loadExistingSolutionNotebook(req: Request, assignment: APIAssignmen
 
     if let fallbackSubmission = try await APISubmission.query(on: req.db)
         .filter(\.$testSetupID == assignment.testSetupID)
+        .filter(\.$kind == APISubmission.Kind.validation)
         .filter(\.$filename == "solution.ipynb")
         .sort(\.$submittedAt, .descending)
         .first(),
@@ -1406,6 +1456,7 @@ private func enqueueRunnerValidationSubmission(
 
     let priorCount = try await APISubmission.query(on: req.db)
         .filter(\.$testSetupID == setupID)
+        .filter(\.$kind == APISubmission.Kind.validation)
         .count()
 
     let user = try req.auth.require(APIUser.self)
@@ -1415,7 +1466,8 @@ private func enqueueRunnerValidationSubmission(
         zipPath:       filePath,
         attemptNumber: priorCount + 1,
         filename:      "solution.ipynb",
-        userID:        user.id
+        userID:        user.id,
+        kind:          APISubmission.Kind.validation
     )
     try await submission.save(on: req.db)
     return subID
@@ -1437,7 +1489,8 @@ private func waitForRunnerValidation(
     decoder.dateDecodingStrategy = .iso8601
 
     while Date().timeIntervalSince(started) < timeoutSeconds {
-        guard let submission = try await APISubmission.find(submissionID, on: req.db) else {
+        guard let submission = try await APISubmission.find(submissionID, on: req.db),
+              submission.kind == APISubmission.Kind.validation else {
             throw Abort(.notFound, reason: "Validation submission missing")
         }
 

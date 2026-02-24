@@ -80,6 +80,7 @@ struct WebRoutes: RouteCollection {
                 let submissions = try await APISubmission.query(on: req.db)
                     .filter(\.$userID == userID)
                     .filter(\.$testSetupID ~~ setupIDs)
+                    .filter(\.$kind == APISubmission.Kind.student)
                     .sort(\.$submittedAt, .descending)
                     .all()
 
@@ -262,6 +263,7 @@ struct WebRoutes: RouteCollection {
         let priorCount = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .filter(\.$userID == user.id)
+            .filter(\.$kind == APISubmission.Kind.student)
             .count()
 
         let submission = APISubmission(
@@ -270,7 +272,8 @@ struct WebRoutes: RouteCollection {
             zipPath:       filePath,
             attemptNumber: priorCount + 1,
             filename:      fallbackFilename,
-            userID:        user.id
+            userID:        user.id,
+            kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
@@ -303,6 +306,7 @@ struct WebRoutes: RouteCollection {
         let submissions = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .filter(\.$userID == userID)
+            .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
             .all()
 
@@ -674,6 +678,7 @@ private func latestNotebookSubmissionData(
     let submissions = try await APISubmission.query(on: req.db)
         .filter(\.$testSetupID == setupID)
         .filter(\.$userID == userID)
+        .filter(\.$kind == APISubmission.Kind.student)
         .sort(\.$submittedAt, .descending)
         .all()
 
@@ -690,7 +695,12 @@ private func latestNotebookSubmissionData(
         return (data, submission.filename)
     }
 
-    return (try notebookData(for: fallbackSetup), nil)
+    let fallbackFilename: String? = {
+        guard let path = fallbackSetup.notebookPath, !path.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }()
+    return (try notebookData(for: fallbackSetup), fallbackFilename)
 }
 
 private func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {

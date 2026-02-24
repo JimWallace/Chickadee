@@ -25,6 +25,7 @@ struct SubmissionQueryRoutes: RouteCollection {
     func listSubmissions(req: Request) async throws -> SubmissionListResponse {
         let caller = try req.auth.require(APIUser.self)
         var query = APISubmission.query(on: req.db)
+            .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
 
         if let testSetupID = req.query[String.self, at: "testSetupID"] {

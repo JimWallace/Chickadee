@@ -155,8 +155,8 @@ func notebookData(for setup: APITestSetup) throws -> Data {
     proc.standardOutput = pipe
     proc.standardError  = Pipe()    // discard stderr
     try proc.run()
-    proc.waitUntilExit()
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    proc.waitUntilExit()
     guard proc.terminationStatus == 0, !data.isEmpty else {
         throw Abort(.notFound, reason: "No assignment.ipynb in this test setup")
     }
@@ -391,9 +391,9 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
     proc.standardOutput = pipe
     proc.standardError  = Pipe()
     guard (try? proc.run()) != nil else { return false }
+    let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()
-
-    let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let output = String(data: outputData, encoding: .utf8) ?? ""
     return output.contains(".ipynb")
 }
 
@@ -407,8 +407,8 @@ func extractNotebookFromZip(zipPath: String) -> Data? {
     proc.standardOutput = pipe
     proc.standardError  = Pipe()
     guard (try? proc.run()) != nil else { return nil }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()
     guard proc.terminationStatus == 0 else { return nil }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
     return data.isEmpty ? nil : data
 }
