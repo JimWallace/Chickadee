@@ -1,0 +1,140 @@
+#extend("base"):
+#export("title"):
+#(assignmentTitle) — Submissions
+#endexport
+#export("content"):
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+    <h1 style="margin:0">#(assignmentTitle)</h1>
+    <a class="btn action-btn" href="/assignments">Back to Instructor</a>
+</div>
+
+#if(rows.isEmpty):
+<p class="empty">No student users found.</p>
+#else:
+<table class="results-table" id="assignment-submissions-table">
+    <thead>
+        <tr>
+            <th data-sort-key="student_id" data-sort-type="text">Student ID</th>
+            <th data-sort-key="surname" data-sort-type="text">Surname</th>
+            <th data-sort-key="given_names" data-sort-type="text">Given Names</th>
+            <th data-sort-key="grade" data-sort-type="number">Grade</th>
+            <th data-sort-key="history" data-sort-type="text">History</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(row in rows):
+        <tr>
+            <td><strong>#(row.studentID)</strong></td>
+            <td>#(row.surname)</td>
+            <td>#(row.givenNames)</td>
+            <td>#(row.gradeText)</td>
+            <td>
+                #if(row.submissionCount > 0):
+                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                        #if(row.hasLatestSubmission):
+                            <a href="/submissions/#(row.latestSubmissionID)" style="font-size:.82rem">#(row.latestSubmittedAtText)</a>
+                        #endif
+                        #if(row.additionalSubmissionCount > 0):
+                            <a href="#(row.fullHistoryURL)" style="font-size:.78rem;color:var(--gray-600)">+#(row.additionalSubmissionCount) more</a>
+                        #endif
+                    </div>
+                #else:
+                    <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+<style>
+#assignment-submissions-table th[data-sort-key] {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+#assignment-submissions-table th[data-sort-key]::after {
+    content: "  ⇅";
+    color: var(--gray-500);
+    font-size: .75rem;
+}
+#assignment-submissions-table th[data-sort-key].sort-asc::after {
+    content: "  ↑";
+}
+#assignment-submissions-table th[data-sort-key].sort-desc::after {
+    content: "  ↓";
+}
+</style>
+<script>
+(function () {
+    var table = document.getElementById('assignment-submissions-table');
+    if (!table) return;
+    var tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    var headers = Array.from(table.querySelectorAll('th[data-sort-key]'));
+    if (!headers.length) return;
+    var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+    var activeHeader = null;
+    var activeDirection = 'asc';
+
+    function normalizeNumber(value) {
+        var match = (value || '').match(/-?\d+(\.\d+)?/);
+        return match ? Number(match[0]) : Number.NEGATIVE_INFINITY;
+    }
+
+    function readCellValue(row, index, type) {
+        var cell = row.children[index];
+        if (!cell) return '';
+        var text = (cell.textContent || '').trim();
+        if (type === 'number') {
+            return normalizeNumber(text);
+        }
+        return text;
+    }
+
+    function clearSortIndicators() {
+        headers.forEach(function (header) {
+            header.classList.remove('sort-asc', 'sort-desc');
+        });
+    }
+
+    function sortByHeader(header, direction) {
+        var index = headers.indexOf(header);
+        if (index < 0) return;
+        var type = header.getAttribute('data-sort-type') || 'text';
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (lhs, rhs) {
+            var lv = readCellValue(lhs, index, type);
+            var rv = readCellValue(rhs, index, type);
+            var result = 0;
+            if (type === 'number') {
+                result = lv - rv;
+            } else {
+                result = collator.compare(String(lv), String(rv));
+            }
+            if (result === 0) {
+                var lhsID = (lhs.children[0] && lhs.children[0].textContent || '').trim();
+                var rhsID = (rhs.children[0] && rhs.children[0].textContent || '').trim();
+                result = collator.compare(lhsID, rhsID);
+            }
+            return direction === 'asc' ? result : -result;
+        });
+        rows.forEach(function (row) { tbody.appendChild(row); });
+        clearSortIndicators();
+        header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        activeHeader = header;
+        activeDirection = direction;
+    }
+
+    headers.forEach(function (header) {
+        header.addEventListener('click', function () {
+            var nextDirection = (activeHeader === header && activeDirection === 'asc') ? 'desc' : 'asc';
+            sortByHeader(header, nextDirection);
+        });
+    });
+
+    sortByHeader(headers[0], 'asc');
+})();
+</script>
+#endexport
+#endextend

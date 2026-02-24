@@ -90,6 +90,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateAssignments())
     app.migrations.add(AddValidationToAssignments())
+    app.migrations.add(AddSortOrderToAssignments())
     app.migrations.add(AddUserIDToSubmissions())
     app.migrations.add(AddKindToSubmissions())
     app.migrations.add(AddNotebookPathToTestSetups())
