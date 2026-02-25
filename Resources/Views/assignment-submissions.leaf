@@ -19,6 +19,7 @@
             <th data-sort-key="given_names" data-sort-type="text">Given Names</th>
             <th data-sort-key="grade" data-sort-type="number">Grade</th>
             <th data-sort-key="history" data-sort-type="text">History</th>
+            <th>Action</th>
         </tr>
     </thead>
     <tbody>
@@ -40,6 +41,16 @@
                     </div>
                 #else:
                     <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+            <td>
+                #if(row.hasLatestSubmission):
+                    <form method="post" action="/assignments/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
+                        <input type="hidden" name="returnTo" value="/assignments/#(assignmentID)/submissions">
+                        <button class="btn action-btn" type="submit">Re-test</button>
+                    </form>
+                #else:
+                    <span class="empty">—</span>
                 #endif
             </td>
         </tr>

@@ -20,6 +20,7 @@
             <th>Submitted</th>
             <th>Grade</th>
             <th>Details</th>
+            <th>Action</th>
         </tr>
     </thead>
     <tbody>
@@ -30,6 +31,12 @@
             <td>#(row.submittedAt)</td>
             <td><strong>#(row.gradeText)</strong></td>
             <td><a href="/submissions/#(row.submissionID)">Open</a></td>
+            <td>
+                <form method="post" action="/assignments/#(assignmentID)/submissions/#(row.submissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
+                    <input type="hidden" name="returnTo" value="#(historyPath)">
+                    <button class="btn action-btn" type="submit">Re-test</button>
+                </form>
+            </td>
         </tr>
     #endfor
     </tbody>

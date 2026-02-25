@@ -17,13 +17,15 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
         static func fromEnvironment(_ env: Environment) -> Self {
             // Expected env vars:
-            // - WORKER_SHARED_SECRET (required)
+            // - RUNNER_SHARED_SECRET (required; WORKER_SHARED_SECRET accepted as legacy fallback)
             // - WORKER_MAX_CLOCK_SKEW_SECONDS (optional, default 60)
             // - WORKER_NONCE_TTL_SECONDS (optional, default 300)
             // - WORKER_REQUIRED_ID (optional)
             _ = env // placeholder in case you want env-specific defaults later.
             return Self(
-                sharedSecret: Environment.get("WORKER_SHARED_SECRET") ?? "",
+                sharedSecret: Environment.get("RUNNER_SHARED_SECRET")
+                    ?? Environment.get("WORKER_SHARED_SECRET")
+                    ?? "",
                 maxClockSkewSeconds: Int64(Environment.get("WORKER_MAX_CLOCK_SKEW_SECONDS") ?? "60") ?? 60,
                 nonceTTLSeconds: Int64(Environment.get("WORKER_NONCE_TTL_SECONDS") ?? "300") ?? 300,
                 requiredWorkerID: Environment.get("WORKER_REQUIRED_ID")
@@ -41,7 +43,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         guard !configuration.sharedSecret.isEmpty else {
-            request.logger.warning("Worker HMAC auth is enabled but WORKER_SHARED_SECRET is empty.")
+            request.logger.warning("Worker HMAC auth is enabled but RUNNER_SHARED_SECRET is empty.")
             throw Abort(.unauthorized, reason: "Worker auth is not configured.")
         }
 

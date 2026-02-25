@@ -26,7 +26,7 @@ struct WorkerCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Run test scripts inside a sandbox (network-isolated, privilege-dropped)")
     var sandbox: Bool = false
 
-    @Option(name: .long, help: "Runner shared secret for API auth (or WORKER_SHARED_SECRET env var)")
+    @Option(name: .long, help: "Runner shared secret for API auth (or RUNNER_SHARED_SECRET env var)")
     var workerSecret: String?
 
     mutating func run() async throws {
@@ -35,10 +35,13 @@ struct WorkerCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        let effectiveWorkerSecret = (workerSecret ?? ProcessInfo.processInfo.environment["WORKER_SHARED_SECRET"] ?? "")
+        let cliSecret = workerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let env = ProcessInfo.processInfo.environment
+        let envSecret = (env["RUNNER_SHARED_SECRET"] ?? env["WORKER_SHARED_SECRET"] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveWorkerSecret = cliSecret.isEmpty ? envSecret : cliSecret
         guard !effectiveWorkerSecret.isEmpty else {
-            fputs("Error: missing runner secret. Use --worker-secret or set WORKER_SHARED_SECRET.\n", stderr)
+            fputs("Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n", stderr)
             throw ExitCode.failure
         }
 

@@ -63,17 +63,16 @@ swift run chickadee-server serve --port 8080 --worker-secret your-secret
 Run the runner, pointing it at a running API server:
 
 ```bash
+export RUNNER_SHARED_SECRET=your-secret
 swift run chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
-  --worker-secret your-secret \
   --max-jobs     4
 
 # With sandboxing enabled (recommended for production):
 swift run chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
-  --worker-secret your-secret \
   --sandbox
 ```
 
@@ -82,7 +81,7 @@ swift run chickadee-runner \
 ```bash
 swift build -c release
 .build/release/chickadee-server serve --port 8080 --worker-secret your-secret
-.build/release/chickadee-runner --api-base-url http://api:8080 --worker-id runner-1 --worker-secret your-secret --sandbox
+RUNNER_SHARED_SECRET=your-secret .build/release/chickadee-runner --api-base-url http://api:8080 --worker-id runner-1 --sandbox
 ```
 
 ## Versioning

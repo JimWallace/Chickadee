@@ -29,6 +29,7 @@ struct AssignmentRoutes: RouteCollection {
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
+        r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.get("new", use: newAssignmentPage)
         r.get("new", "details", use: newAssignmentDetailsPage)
         r.post("new", "save", use: saveNewAssignment)
@@ -95,7 +96,7 @@ struct AssignmentRoutes: RouteCollection {
 
             return AssignmentRow(
                 setupID:      setupID,
-                assignmentID: assignment?.id?.uuidString,
+                assignmentID: assignment?.publicID,
                 title:        assignment?.title,
                 isOpen:       assignment?.isOpen,
                 dueAt:        assignment?.dueAt.map { fmt.string(from: $0) },
@@ -254,11 +255,8 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func assignmentSubmissionsPage(req: Request) async throws -> View {
-        guard
-            let assignmentIDRaw = req.parameters.get("assignmentID"),
-            let assignmentID = UUID(uuidString: assignmentIDRaw),
-            let assignment = try await APIAssignment.find(assignmentID, on: req.db)
-        else {
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
             throw Abort(.notFound)
         }
 
@@ -355,10 +353,9 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func studentSubmissionHistoryPage(req: Request) async throws -> View {
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
         guard
-            let assignmentIDRaw = req.parameters.get("assignmentID"),
-            let assignmentID = UUID(uuidString: assignmentIDRaw),
-            let assignment = try await APIAssignment.find(assignmentID, on: req.db),
+            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
             let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
             let student = try await APIUser.find(studentID, on: req.db),
@@ -425,9 +422,52 @@ struct AssignmentRoutes: RouteCollection {
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 studentID: student.username,
+                historyPath: "/assignments/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
                 rows: rows
             )
         )
+    }
+
+    // MARK: - POST /assignments/:assignmentID/submissions/:submissionID/retest
+
+    @Sendable
+    func retestSubmission(req: Request) async throws -> Response {
+        struct RetestBody: Content {
+            var returnTo: String?
+        }
+
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard
+            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
+            let submissionID = req.parameters.get("submissionID"),
+            let submission = try await APISubmission.find(submissionID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        guard submission.testSetupID == assignment.testSetupID else {
+            throw Abort(.notFound)
+        }
+        guard submission.kind == APISubmission.Kind.student else {
+            throw Abort(.badRequest, reason: "Only student submissions can be re-tested.")
+        }
+
+        // Prevent duplicate queue entries for in-flight jobs.
+        if submission.status != "pending" && submission.status != "assigned" {
+            submission.status = "pending"
+            submission.workerID = nil
+            submission.assignedAt = nil
+            try await submission.save(on: req.db)
+        }
+
+        let body = try? req.content.decode(RetestBody.self)
+        let fallbackPath = "/assignments/\(assignmentIDRaw)/submissions"
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body?.returnTo,
+            assignmentIDRaw: assignmentIDRaw,
+            fallbackPath: fallbackPath
+        )
+        return req.redirect(to: redirectPath)
     }
 
     // MARK: - GET /assignments/new
@@ -564,7 +604,8 @@ struct AssignmentRoutes: RouteCollection {
         )
         try await setup.save(on: req.db)
 
-        let assignment = APIAssignment(
+        let assignment = try await createAssignmentWithUniquePublicID(
+            req: req,
             testSetupID: setupID,
             title: title,
             dueAt: due,
@@ -573,7 +614,6 @@ struct AssignmentRoutes: RouteCollection {
             validationStatus: "pending",
             validationSubmissionID: nil
         )
-        try await assignment.save(on: req.db)
 
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
             req: req,
@@ -646,29 +686,24 @@ struct AssignmentRoutes: RouteCollection {
             due = nil
         }
 
-        let assignment = APIAssignment(
+        let assignment = try await createAssignmentWithUniquePublicID(
+            req: req,
             testSetupID: body.testSetupID,
-            title:       body.title.isEmpty ? body.testSetupID : body.title,
-            dueAt:       due,
-            isOpen:      false,         // stays closed until instructor validates + opens
-            sortOrder:   try await nextAssignmentSortOrder(req: req)
+            title: body.title.isEmpty ? body.testSetupID : body.title,
+            dueAt: due,
+            isOpen: false,         // stays closed until instructor validates + opens
+            sortOrder: try await nextAssignmentSortOrder(req: req)
         )
-        try await assignment.save(on: req.db)
-
-        guard let id = assignment.id?.uuidString else {
-            return req.redirect(to: "/assignments")
-        }
-        return req.redirect(to: "/assignments/\(id)/validate")
+        return req.redirect(to: "/assignments/\(assignment.publicID)/validate")
     }
 
     // MARK: - GET /assignments/:assignmentID/validate
 
     @Sendable
     func validatePage(req: Request) async throws -> View {
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr      = req.parameters.get("assignmentID"),
-            let uuid       = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
             throw Abort(.notFound)
@@ -701,10 +736,9 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr      = req.parameters.get("assignmentID"),
-            let uuid       = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db)
+            let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -726,24 +760,20 @@ struct AssignmentRoutes: RouteCollection {
         let body = try req.content.decode(ReorderBody.self)
         let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
         guard !orderedIDs.isEmpty else { return .ok }
-
-        let uuids = orderedIDs.compactMap(UUID.init(uuidString:))
-        guard uuids.count == orderedIDs.count else {
+        guard orderedIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
             throw Abort(.badRequest, reason: "Invalid assignment ID in reorder payload.")
         }
 
         let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$id ~~ uuids)
+            .filter(\.$publicID ~~ orderedIDs)
             .all()
-        let byID = Dictionary(uniqueKeysWithValues: assignments.compactMap { assignment in
-            assignment.id.map { ($0.uuidString.lowercased(), assignment) }
-        })
-        guard byID.count == uuids.count else {
+        let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
+        guard byID.count == orderedIDs.count else {
             throw Abort(.badRequest, reason: "Assignment set mismatch in reorder payload.")
         }
 
         for (index, rawID) in orderedIDs.enumerated() {
-            guard let assignment = byID[rawID.lowercased()] else { continue }
+            guard let assignment = byID[rawID] else { continue }
             assignment.sortOrder = index + 1
             try await assignment.save(on: req.db)
         }
@@ -758,10 +788,9 @@ struct AssignmentRoutes: RouteCollection {
             var status: String
         }
 
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr      = req.parameters.get("assignmentID"),
-            let uuid       = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db)
+            let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -786,10 +815,9 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr      = req.parameters.get("assignmentID"),
-            let uuid       = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db)
+            let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -802,10 +830,9 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr      = req.parameters.get("assignmentID"),
-            let uuid       = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db)
+            let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -846,10 +873,9 @@ struct AssignmentRoutes: RouteCollection {
         let user = try req.auth.require(APIUser.self)
         guard user.isInstructor else { throw Abort(.forbidden) }
 
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr      = req.parameters.get("assignmentID"),
-            let uuid       = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
             throw Abort(.notFound)
@@ -894,10 +920,9 @@ struct AssignmentRoutes: RouteCollection {
         let user = try req.auth.require(APIUser.self)
         guard user.isInstructor else { throw Abort(.forbidden) }
 
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr = req.parameters.get("assignmentID"),
-            let uuid = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
             throw Abort(.notFound)
@@ -919,10 +944,9 @@ struct AssignmentRoutes: RouteCollection {
         let user = try req.auth.require(APIUser.self)
         guard user.isInstructor else { throw Abort(.forbidden) }
 
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr = req.parameters.get("assignmentID"),
-            let uuid = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
             throw Abort(.notFound)
@@ -950,10 +974,9 @@ struct AssignmentRoutes: RouteCollection {
         let user = try req.auth.require(APIUser.self)
         guard user.isInstructor else { throw Abort(.forbidden) }
 
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr = req.parameters.get("assignmentID"),
-            let uuid = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
             throw Abort(.notFound)
@@ -991,10 +1014,9 @@ struct AssignmentRoutes: RouteCollection {
         let user = try req.auth.require(APIUser.self)
         guard user.isInstructor else { throw Abort(.forbidden) }
 
+        let idStr = try assignmentPublicIDParameter(from: req)
         guard
-            let idStr = req.parameters.get("assignmentID"),
-            let uuid = UUID(uuidString: idStr),
-            let assignment = try await APIAssignment.find(uuid, on: req.db),
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
             throw Abort(.notFound)
@@ -1247,6 +1269,7 @@ private struct AssignmentStudentHistoryContext: Encodable {
     let assignmentID: String
     let assignmentTitle: String
     let studentID: String
+    let historyPath: String
     let rows: [SubmissionHistoryRow]
 }
 
@@ -1268,6 +1291,82 @@ private func parseDueDate(_ raw: String?) -> Date? {
     fmt.locale = Locale(identifier: "en_US_POSIX")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.date(from: raw)
+}
+
+private func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> APIAssignment? {
+    try await APIAssignment.query(on: db)
+        .filter(\.$publicID == publicID)
+        .first()
+}
+
+private func isValidAssignmentPublicID(_ value: String) -> Bool {
+    value.count == APIAssignment.publicIDLength
+        && value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+}
+
+private func assignmentPublicIDParameter(from req: Request) throws -> String {
+    guard let raw = req.parameters.get("assignmentID"), isValidAssignmentPublicID(raw) else {
+        throw Abort(.notFound)
+    }
+    return raw
+}
+
+private func createAssignmentWithUniquePublicID(
+    req: Request,
+    testSetupID: String,
+    title: String,
+    dueAt: Date?,
+    isOpen: Bool,
+    sortOrder: Int?,
+    validationStatus: String? = nil,
+    validationSubmissionID: String? = nil
+) async throws -> APIAssignment {
+    for _ in 0..<32 {
+        let candidate = APIAssignment.generatePublicID()
+        let exists = try await APIAssignment.query(on: req.db)
+            .filter(\.$publicID == candidate)
+            .count() > 0
+        if exists { continue }
+
+        let assignment = APIAssignment(
+            publicID: candidate,
+            testSetupID: testSetupID,
+            title: title,
+            dueAt: dueAt,
+            isOpen: isOpen,
+            sortOrder: sortOrder,
+            validationStatus: validationStatus,
+            validationSubmissionID: validationSubmissionID
+        )
+        do {
+            try await assignment.save(on: req.db)
+        } catch {
+            let conflict = try await APIAssignment.query(on: req.db)
+                .filter(\.$publicID == candidate)
+                .count() > 0
+            if conflict { continue }
+            throw error
+        }
+        return assignment
+    }
+
+    throw Abort(.internalServerError, reason: "Unable to allocate assignment URL id")
+}
+
+private func sanitizedAssignmentReturnPath(
+    _ raw: String?,
+    assignmentIDRaw: String,
+    fallbackPath: String
+) -> String {
+    guard let path = raw?.trimmingCharacters(in: .whitespacesAndNewlines), path.hasPrefix("/") else {
+        return fallbackPath
+    }
+
+    let expectedPrefix = "/assignments/\(assignmentIDRaw)"
+    guard path == expectedPrefix || path.hasPrefix(expectedPrefix + "/") else {
+        return fallbackPath
+    }
+    return path
 }
 
 private func dueAtLocalInputString(_ date: Date?) -> String {

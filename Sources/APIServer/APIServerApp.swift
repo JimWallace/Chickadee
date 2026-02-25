@@ -35,6 +35,7 @@ struct APIServerApp {
 func configure(_ app: Application, cliWorkerSecret: String?) throws {
     let workDir = DirectoryConfiguration.detect().workingDirectory
     let workerSecretFile = workDir + ".worker-secret"
+    let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
 
     // MARK: - Directories
@@ -54,7 +55,8 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
     let startupWorkerSecret = resolveStartupWorkerSecret(
         cliWorkerSecret: cliWorkerSecret,
-        workerSecretFilePath: workerSecretFile
+        workerSecretFilePath: workerSecretFile,
+        workerSecretWordlistPath: workerSecretWordlistFile
     )
     let localRunnerAutoStartEnabled = readLocalRunnerAutoStartFromDisk(
         filePath: localRunnerAutoStartFile
@@ -153,7 +155,7 @@ actor WorkerSecretStore {
     }
 
     func effectiveSecret() -> String? {
-        runtimeOverride ?? Environment.get("WORKER_SHARED_SECRET")
+        runtimeOverride ?? runnerSharedSecretFromEnvironment()
     }
 }
 
@@ -228,10 +230,14 @@ actor LocalRunnerManager {
         proc.arguments = argsPrefix + [
             "--api-base-url", apiBaseURL,
             "--worker-id", workerID,
-            "--worker-secret", secret,
             "--max-jobs", "1",
             "--sandbox"
         ]
+        var childEnvironment = ProcessInfo.processInfo.environment
+        childEnvironment["RUNNER_SHARED_SECRET"] = secret
+        // Keep legacy name for older runners until all environments migrate.
+        childEnvironment["WORKER_SHARED_SECRET"] = secret
+        proc.environment = childEnvironment
         proc.currentDirectoryURL = URL(fileURLWithPath: workDir)
 
         let logPath = workDir + "results/local-runner.log"
@@ -296,6 +302,18 @@ private func normalizedHost(_ raw: String) -> String {
         return "localhost"
     }
     return host
+}
+
+private func runnerSharedSecretFromEnvironment() -> String? {
+    let primary = Environment.get("RUNNER_SHARED_SECRET")?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if let primary, !primary.isEmpty { return primary }
+
+    let legacy = Environment.get("WORKER_SHARED_SECRET")?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if let legacy, !legacy.isEmpty { return legacy }
+
+    return nil
 }
 
 extension Application {
@@ -415,15 +433,23 @@ private func extractWorkerSecretArgument(from env: inout Environment) -> String?
     return found
 }
 
-private func resolveStartupWorkerSecret(cliWorkerSecret: String?, workerSecretFilePath: String) -> String {
-    if let cli = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines), !cli.isEmpty {
+private func resolveStartupWorkerSecret(
+    cliWorkerSecret: String?,
+    workerSecretFilePath: String,
+    workerSecretWordlistPath: String
+) -> String {
+    if let cli = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines),
+       !cli.isEmpty,
+       !isPlaceholderWorkerSecret(cli) {
         writeWorkerSecretToDisk(secret: cli, workerSecretFilePath: workerSecretFilePath)
         return cli
     }
-    if let previous = readWorkerSecretFromDisk(workerSecretFilePath: workerSecretFilePath), !previous.isEmpty {
+    if let previous = readWorkerSecretFromDisk(workerSecretFilePath: workerSecretFilePath),
+       !previous.isEmpty,
+       !isPlaceholderWorkerSecret(previous) {
         return previous
     }
-    let generated = randomWorkerPassphrase()
+    let generated = randomWorkerPassphrase(workerSecretWordlistPath: workerSecretWordlistPath)
     writeWorkerSecretToDisk(secret: generated, workerSecretFilePath: workerSecretFilePath)
     return generated
 }
@@ -445,14 +471,39 @@ func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
     try? value.write(to: url, atomically: true, encoding: .utf8)
 }
 
-private func randomWorkerPassphrase() -> String {
-    let words = [
+private func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
+    let fallbackWords = [
         "oak", "river", "falcon", "amber", "lumen", "cedar", "thunder", "pebble",
         "meadow", "quartz", "north", "willow", "harbor", "maple", "breeze",
         "summit", "pixel", "cipher", "comet", "forest", "frost", "sparrow",
         "orbit", "cobalt", "dawn", "ember", "ridge", "tunnel", "canyon", "signal"
     ]
-    return (0..<3).compactMap { _ in words.randomElement() }.joined(separator: "-")
+    let words = loadDicewareWords(from: workerSecretWordlistPath)
+    let source = words.count >= 2048 ? words : fallbackWords
+    return (0..<3).compactMap { _ in source.randomElement() }.joined(separator: "-")
+}
+
+private func isPlaceholderWorkerSecret(_ value: String) -> Bool {
+    value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "cli-arg-secret"
+}
+
+private func loadDicewareWords(from path: String) -> [String] {
+    guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+        return []
+    }
+
+    var words: [String] = []
+    words.reserveCapacity(8000)
+    for line in raw.split(whereSeparator: \.isNewline) {
+        let trimmed = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { continue }
+        let parts = trimmed.split(maxSplits: 1, omittingEmptySubsequences: true, whereSeparator: \.isWhitespace)
+        guard parts.count == 2 else { continue }
+        let token = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { continue }
+        words.append(token)
+    }
+    return words
 }
 
 private func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
