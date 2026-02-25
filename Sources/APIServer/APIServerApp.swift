@@ -37,6 +37,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     let workerSecretFile = workDir + ".worker-secret"
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
+    let authMode = AuthMode.fromEnvironment() ?? .local
 
     // MARK: - Directories
 
@@ -67,6 +68,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
         initialEnabled: localRunnerAutoStartEnabled
     )
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
+    app.storage[AuthModeKey.self] = authMode
 
     // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
 
@@ -99,6 +101,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
     app.migrations.add(CreateUsers())
+    app.migrations.add(AddUserSSOFields())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())
 
@@ -137,6 +140,33 @@ struct LocalRunnerAutoStartStoreKey: StorageKey {
 }
 struct LocalRunnerManagerKey: StorageKey {
     typealias Value = LocalRunnerManager
+}
+struct AuthModeKey: StorageKey {
+    typealias Value = AuthMode
+}
+
+enum AuthMode: String, Sendable {
+    case local
+    case sso
+    case dual
+
+    static func fromEnvironment() -> Self? {
+        guard let raw = Environment.get("AUTH_MODE")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            !raw.isEmpty
+        else {
+            return nil
+        }
+        return Self(rawValue: raw)
+    }
+}
+
+extension Application {
+    var authMode: AuthMode {
+        get { storage[AuthModeKey.self] ?? .local }
+        set { storage[AuthModeKey.self] = newValue }
+    }
 }
 
 actor WorkerSecretStore {
