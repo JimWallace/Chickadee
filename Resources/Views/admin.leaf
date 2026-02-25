@@ -66,9 +66,9 @@ Admin
     <table class="results-table" id="users-table">
         <thead>
             <tr>
-                <th data-sort-key="username" data-sort-type="text">Username</th>
-                <th data-sort-key="role" data-sort-type="text">Role</th>
-                <th class="time" data-sort-key="joined" data-sort-type="date">Joined</th>
+                <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
+                <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
+                <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
                 <th></th>
             </tr>
         </thead>
@@ -223,6 +223,7 @@ Admin
             function clearUserSortIndicators() {
                 userHeaders.forEach(function (header) {
                     header.classList.remove('sort-asc', 'sort-desc');
+                    header.setAttribute('aria-sort', 'none');
                 });
             }
 
@@ -266,12 +267,19 @@ Admin
                 rows.forEach(function (row) { usersBody.appendChild(row); });
                 clearUserSortIndicators();
                 header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+                header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
                 activeUserHeader = header;
                 activeUserDirection = direction;
             }
 
             userHeaders.forEach(function (header) {
                 header.addEventListener('click', function () {
+                    var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
+                    sortUsersByHeader(header, nextDirection);
+                });
+                header.addEventListener('keydown', function (event) {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
                     var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
                     sortUsersByHeader(header, nextDirection);
                 });

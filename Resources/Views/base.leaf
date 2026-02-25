@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <nav class="nav">
     <a class="nav-brand" href="/">
         <img class="nav-brand-logo" src="/images/chickadee-icon-alt.png" alt="">
@@ -32,7 +33,7 @@
         <a class="nav-link" href="/login">Log in</a>
     #endif
 </nav>
-<main class="main">
+<main class="main" id="main-content">
     #import("content")
 </main>
 <script src="/app.js"></script>

@@ -30,6 +30,10 @@ Assignments
             #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
             <td>
                 #if(row.assignmentID):
+                <span class="reorder-controls">
+                    <button class="btn-link reorder-btn" type="button" data-reorder="up" aria-label="Move assignment up">↑</button>
+                    <button class="btn-link reorder-btn" type="button" data-reorder="down" aria-label="Move assignment down">↓</button>
+                </span>
                 <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
                 #endif
                 #if(row.title):
@@ -68,14 +72,14 @@ Assignments
                 <span class="tier tier-closed">failed</span>
                 #if(row.validationSubmissionID):
                 <div style="margin-top:.25rem">
-                    <a href="/submissions/#(row.validationSubmissionID)">view</a>
+                    <a href="/submissions/#(row.validationSubmissionID)">View results</a>
                 </div>
                 #endif
                 #elseif(row.validationStatus == "pending"):
                 <span class="tier">pending</span>
                 #if(row.validationSubmissionID):
                 <div style="margin-top:.25rem">
-                    <a href="/submissions/#(row.validationSubmissionID)">track</a>
+                    <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
                 </div>
                 #endif
                 #else:
@@ -232,6 +236,22 @@ tr.assignment-draggable td {
     body.addEventListener('drop', function (event) {
         if (!dragged) return;
         event.preventDefault();
+    });
+
+    body.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+        if (!target.classList.contains('reorder-btn')) return;
+        var row = target.closest('tr[data-assignment-id]');
+        if (!row) return;
+        var dir = target.getAttribute('data-reorder');
+        if (dir === 'up' && row.previousElementSibling) {
+            body.insertBefore(row, row.previousElementSibling);
+            persistOrderIfChanged();
+        } else if (dir === 'down' && row.nextElementSibling) {
+            body.insertBefore(row.nextElementSibling, row);
+            persistOrderIfChanged();
+        }
     });
 
     body.addEventListener('dragend', function () {

@@ -25,7 +25,7 @@ Submission History
             <td>#(row.status)</td>
             <td>#(row.gradeText)</td>
             <td>
-                <a class="btn action-btn" href="/submissions/#(row.submissionID)">View</a>
+                <a class="btn action-btn" href="/submissions/#(row.submissionID)">View results</a>
                 #if(row.canOpenInNotebook):
                 <a class="btn action-btn" href="#(row.openInNotebookURL)">Open</a>
                 #else:
