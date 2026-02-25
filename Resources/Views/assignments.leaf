@@ -31,8 +31,8 @@ Assignments
             <td>
                 #if(row.assignmentID):
                 <span class="reorder-controls">
-                    <button class="btn-link reorder-btn" type="button" data-reorder="up" aria-label="Move assignment up">↑</button>
-                    <button class="btn-link reorder-btn" type="button" data-reorder="down" aria-label="Move assignment down">↓</button>
+                    <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
+                    <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
                 </span>
                 <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
                 #endif
@@ -209,6 +209,10 @@ tr.assignment-draggable td {
     body.addEventListener('dragstart', function (event) {
         var target = event.target;
         if (!(target instanceof Element)) return;
+        if (target.closest('.reorder-btn')) {
+            event.preventDefault();
+            return;
+        }
         var row = target.closest('tr[data-assignment-id]');
         if (!row) return;
         dragged = row;
@@ -242,6 +246,8 @@ tr.assignment-draggable td {
         var target = event.target;
         if (!(target instanceof Element)) return;
         if (!target.classList.contains('reorder-btn')) return;
+        event.preventDefault();
+        event.stopPropagation();
         var row = target.closest('tr[data-assignment-id]');
         if (!row) return;
         var dir = target.getAttribute('data-reorder');
