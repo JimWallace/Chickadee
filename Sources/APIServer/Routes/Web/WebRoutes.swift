@@ -358,12 +358,20 @@ struct WebRoutes: RouteCollection {
             } else {
                 gradeText = "—"
             }
+            let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
+            let nameExt = (submission.filename ?? "").lowercased()
+            let canOpenInNotebook = pathExt == "ipynb" || nameExt.hasSuffix(".ipynb")
+            let openInNotebookURL = canOpenInNotebook
+                ? "/testsetups/\(setupID)/notebook?submissionID=\(subID)"
+                : nil
             return SubmissionHistoryRow(
                 submissionID: subID,
                 attemptNumber: submission.attemptNumber ?? 1,
                 status: submission.status,
                 submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText
+                gradeText: gradeText,
+                canOpenInNotebook: canOpenInNotebook,
+                openInNotebookURL: openInNotebookURL
             )
         }
 
@@ -382,6 +390,7 @@ struct WebRoutes: RouteCollection {
     func notebookPage(req: Request) async throws -> View {
         struct NotebookQuery: Content {
             var title: String?
+            var submissionID: String?
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
@@ -402,40 +411,35 @@ struct WebRoutes: RouteCollection {
             if !dbTitle.isEmpty { return dbTitle }
             return "Assignment"
         }()
-        let fallbackNotebookFilename = notebookFilenameForJupyterLite(title: assignmentTitle)
-        let selectedNotebook = try await latestNotebookSubmissionData(
-            req: req,
-            setupID: setupID,
-            userID: userID,
-            fallbackSetup: setup
-        )
-        let displayFilename = safeNotebookFilename(
-            preferred: selectedNotebook.filename,
-            fallbackTitle: fallbackNotebookFilename
-        )
-        let userSlug = userID.uuidString.lowercased()
-        let jupyterLiteNotebookPath = "users/\(userSlug)/\(displayFilename)"
-
-        // Materialize notebook into all likely JupyterLite file roots.
-        // Different entrypoints may resolve baseUrl differently and look under
-        // /files, /jupyterlite/files, /jupyterlite/lab/files, or /jupyterlite/notebooks/files.
-        let fileRoots = [
-            req.application.directory.publicDirectory + "files/",
-            req.application.directory.publicDirectory + "jupyterlite/files/",
-            req.application.directory.publicDirectory + "jupyterlite/lab/files/",
-            req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
-        ]
-        let nbData = selectedNotebook.data
-        for root in fileRoots {
-            let userDir = root + "users/\(userSlug)/"
-            try FileManager.default.createDirectory(atPath: userDir, withIntermediateDirectories: true)
-            try nbData.write(to: URL(fileURLWithPath: userDir + displayFilename))
-            try nbData.write(to: URL(fileURLWithPath: userDir + "assignment.ipynb"))
+        let requestedSubmissionID = (query?.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !requestedSubmissionID.isEmpty {
+            let notebookData = try await notebookDataForHistorySelection(
+                req: req,
+                submissionID: requestedSubmissionID,
+                setupID: setupID,
+                userID: userID
+            )
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setupID,
+                userID: userID,
+                fallbackSetup: setup,
+                overwriteWith: notebookData
+            )
+        } else {
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setupID,
+                userID: userID,
+                fallbackSetup: setup
+            )
         }
+        let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
         let encodedPath = jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryAllowed)
-            ?? "assignment.ipynb"
+            ?? jupyterLiteNotebookPath
+        let userSlug = userID.uuidString.lowercased()
         let workspaceID = "\(setupID)-\(userSlug)-student"
-        let editorURL = "/jupyterlite/lab/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
+        let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
 
         return try await req.view.render("notebook",
             NotebookContext(
@@ -460,12 +464,12 @@ struct WebRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        let payload = try await latestNotebookSubmissionData(
+        let payload = try await ensureUserNotebookWorkingCopy(
             req: req,
             setupID: setupID,
             userID: userID,
             fallbackSetup: setup
-        ).data
+        )
 
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
@@ -495,6 +499,11 @@ struct WebRoutes: RouteCollection {
         // "browser-complete" means the browser run finished but worker hasn't yet.
         let isPending         = submission.status == "pending" || submission.status == "assigned"
         let isBrowserComplete = submission.status == "browser-complete"
+        let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
+        let nameExt = (submission.filename ?? "").lowercased()
+        let openInNotebookURL: String? = (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))
+            ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(subID)"
+            : nil
 
         var buildFailed     = false
         var compilerOutput: String? = nil
@@ -537,9 +546,9 @@ struct WebRoutes: RouteCollection {
                         tier:            o.tier.rawValue,
                         status:          o.status.rawValue,
                         shortResult:     o.shortResult,
-                        readableOutput:  readableScriptOutput(from: o.longResult),
-                        longResult:      o.longResult,
-                        executionTimeMs: o.executionTimeMs
+                        stderrOutput:    stderrScriptOutput(from: o.longResult, status: o.status),
+                        markLabel:       (o.status == .pass) ? "Pass" : "Fail",
+                        markClass:       (o.status == .pass) ? "pass" : "fail"
                     )
                 }
             }
@@ -550,6 +559,7 @@ struct WebRoutes: RouteCollection {
             testSetupID:       submission.testSetupID,
             status:            submission.status,
             attemptNumber:     submission.attemptNumber ?? 1,
+            openInNotebookURL: openInNotebookURL,
             isPending:         isPending,
             isBrowserComplete: isBrowserComplete,
             resultSource:      resultSource,
@@ -624,6 +634,8 @@ private struct SubmissionHistoryRow: Encodable {
     let status: String
     let submittedAt: String
     let gradeText: String
+    let canOpenInNotebook: Bool
+    let openInNotebookURL: String?
 }
 
 private struct OutcomeRow: Encodable {
@@ -631,9 +643,9 @@ private struct OutcomeRow: Encodable {
     let tier: String
     let status: String
     let shortResult: String
-    let readableOutput: String?
-    let longResult: String?
-    let executionTimeMs: Int
+    let stderrOutput: String?
+    let markLabel: String
+    let markClass: String
 }
 
 private struct SubmissionContext: Encodable {
@@ -641,6 +653,7 @@ private struct SubmissionContext: Encodable {
     let testSetupID: String
     let status: String
     let attemptNumber: Int
+    let openInNotebookURL: String?
     let isPending: Bool
     /// True when the browser run is done but the worker hasn't reported yet.
     let isBrowserComplete: Bool
@@ -656,34 +669,119 @@ private struct SubmissionContext: Encodable {
     let currentUser: CurrentUserContext?
 }
 
-private func notebookFilenameForJupyterLite(title: String) -> String {
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    var value = trimmed.isEmpty ? "Assignment" : trimmed
-    value = value.replacingOccurrences(of: "/", with: "-")
-    value = value.replacingOccurrences(of: "\\", with: "-")
-    value = value.replacingOccurrences(of: ":", with: "-")
-    value = value.replacingOccurrences(of: "\n", with: " ")
-    value = value.replacingOccurrences(of: "\r", with: " ")
-    if !value.lowercased().hasSuffix(".ipynb") {
-        value += ".ipynb"
-    }
-    return value
+private func userNotebookWorkingCopyRelativePath(setupID: String, userID: UUID) -> String {
+    "users/\(userID.uuidString.lowercased())/\(setupID)/assignment.ipynb"
 }
 
-private func safeNotebookFilename(preferred: String?, fallbackTitle: String) -> String {
-    let fallback = notebookFilenameForJupyterLite(title: fallbackTitle)
-    guard var value = preferred?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-        return fallback
+private func userNotebookWorkingCopyAbsolutePath(req: Request, setupID: String, userID: UUID) -> String {
+    req.application.directory.publicDirectory
+        + "jupyterlite/files/"
+        + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
+}
+
+private func ensureUserNotebookWorkingCopy(
+    req: Request,
+    setupID: String,
+    userID: UUID,
+    fallbackSetup: APITestSetup,
+    overwriteWith: Data? = nil
+) async throws -> Data {
+    let fileManager = FileManager.default
+    let workingCopyPath = userNotebookWorkingCopyAbsolutePath(req: req, setupID: setupID, userID: userID)
+    let workingCopyDir = (workingCopyPath as NSString).deletingLastPathComponent
+
+    if let overwriteWith {
+        try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+        try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
+        removeLegacyUserNotebookCopies(req: req, userID: userID)
+        return overwriteWith
     }
-    value = URL(fileURLWithPath: value).lastPathComponent
-    value = value.replacingOccurrences(of: "/", with: "-")
-    value = value.replacingOccurrences(of: "\\", with: "-")
-    value = value.replacingOccurrences(of: "\n", with: " ")
-    value = value.replacingOccurrences(of: "\r", with: " ")
-    if !value.lowercased().hasSuffix(".ipynb") {
-        value += ".ipynb"
+
+    if let existingData = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
+       !existingData.isEmpty,
+       (try? JSONSerialization.jsonObject(with: existingData)) != nil {
+        removeLegacyUserNotebookCopies(req: req, userID: userID)
+        return existingData
     }
-    return value
+
+    let seedData = try await latestNotebookSubmissionData(
+        req: req,
+        setupID: setupID,
+        userID: userID,
+        fallbackSetup: fallbackSetup
+    ).data
+
+    try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+    try seedData.write(to: URL(fileURLWithPath: workingCopyPath))
+
+    removeLegacyUserNotebookCopies(req: req, userID: userID)
+    return seedData
+}
+
+private func notebookDataForHistorySelection(
+    req: Request,
+    submissionID: String,
+    setupID: String,
+    userID: UUID
+) async throws -> Data {
+    guard let submission = try await APISubmission.find(submissionID, on: req.db) else {
+        throw Abort(.notFound, reason: "Submission not found")
+    }
+    guard submission.kind == APISubmission.Kind.student else {
+        throw Abort(.forbidden)
+    }
+    guard submission.userID == userID else {
+        throw Abort(.forbidden)
+    }
+    guard submission.testSetupID == setupID else {
+        throw Abort(.badRequest, reason: "Submission does not belong to this assignment")
+    }
+
+    let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
+    let nameExt = (submission.filename ?? "").lowercased()
+    guard pathExt == "ipynb" || nameExt.hasSuffix(".ipynb") else {
+        throw Abort(.badRequest, reason: "Only notebook submissions can be opened in notebook view")
+    }
+
+    let dataURL = URL(fileURLWithPath: submission.zipPath)
+    guard let data = try? Data(contentsOf: dataURL),
+          (try? JSONSerialization.jsonObject(with: data)) != nil else {
+        throw Abort(.notFound, reason: "Notebook artifact is unavailable for this submission")
+    }
+    return normalizeNotebookForJupyterLite(data)
+}
+
+private func removeLegacyUserNotebookCopies(req: Request, userID: UUID) {
+    let userSlug = userID.uuidString.lowercased()
+    let roots = [
+        req.application.directory.publicDirectory + "files/",
+        req.application.directory.publicDirectory + "jupyterlite/files/",
+        req.application.directory.publicDirectory + "jupyterlite/lab/files/",
+        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
+    ]
+
+    let fileManager = FileManager.default
+    for root in roots {
+        let userDir = root + "users/\(userSlug)/"
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: userDir) else { continue }
+
+        for name in entries {
+            let path = userDir + name
+            var isDirectory = ObjCBool(false)
+            guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+                continue
+            }
+            guard URL(fileURLWithPath: name).pathExtension.lowercased() == "ipynb" else {
+                continue
+            }
+            let lower = name.lowercased()
+            let shouldRemove = lower == "assignment.ipynb"
+                || lower == "submission.ipynb"
+                || (lower.hasPrefix("sub_") && lower.hasSuffix(".ipynb"))
+            guard shouldRemove else { continue }
+            try? fileManager.removeItem(atPath: path)
+        }
+    }
 }
 
 private func latestNotebookSubmissionData(
@@ -731,70 +829,32 @@ private func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
     return Int((Double(passCount) / Double(totalTests) * 100).rounded())
 }
 
-private func readableScriptOutput(from raw: String?) -> String? {
+private func stderrScriptOutput(from raw: String?, status: TestStatus) -> String? {
+    guard status != .pass else { return nil }
     guard let raw else { return nil }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
-    if let payload = firstJSONObject(in: trimmed) {
-        var lines: [String] = []
-        if let shortResult = payload["shortResult"] as? String,
-           !shortResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append(shortResult)
-        }
-        if let error = payload["error"] as? String,
-           !error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("Error: \(error)")
-        }
-        if let test = payload["test"] as? String,
-           !test.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("Script: \(test)")
-        }
-        if let status = payload["status"] as? String,
-           !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("Status: \(status)")
-        }
-        if !lines.isEmpty {
-            return lines.joined(separator: "\n")
-        }
-        if let pretty = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]),
-           let text = String(data: pretty, encoding: .utf8) {
-            return text
-        }
+    if let stderr = extractLabeledOutputSection("stderr", in: trimmed) {
+        return stderr
     }
-
-    // Fallback: show first few meaningful lines inline.
-    let lines = trimmed
-        .split(separator: "\n", omittingEmptySubsequences: true)
-        .map { String($0).trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty }
-    guard !lines.isEmpty else { return nil }
-    let preview = Array(lines.prefix(3))
-    if lines.count > preview.count {
-        return preview.joined(separator: "\n") + "\n…"
-    }
-    return preview.joined(separator: "\n")
-}
-
-private func firstJSONObject(in text: String) -> [String: Any]? {
-    // Most runner JSON payloads are emitted as a single line near the end.
-    let lines = text
-        .split(separator: "\n", omittingEmptySubsequences: false)
-        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-    for line in lines.reversed() {
-        guard line.first == "{", line.last == "}" else { continue }
-        guard let data = line.data(using: .utf8),
-              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            continue
-        }
-        return value
-    }
-    guard text.first == "{", text.last == "}",
-          let data = text.data(using: .utf8),
-          let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+    if extractLabeledOutputSection("stdout", in: trimmed) != nil {
         return nil
     }
-    return value
+    return trimmed
+}
+
+private func extractLabeledOutputSection(_ label: String, in text: String) -> String? {
+    let marker = "\(label):\n"
+    guard let start = text.range(of: marker) else { return nil }
+    let body = text[start.upperBound...]
+
+    if let nextSection = body.range(of: #"\n\n[a-zA-Z_]+:\n"#, options: .regularExpression) {
+        let section = String(body[..<nextSection.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return section.isEmpty ? nil : section
+    }
+    let section = String(body).trimmingCharacters(in: .whitespacesAndNewlines)
+    return section.isEmpty ? nil : section
 }
 
 // MARK: - Multipart body for code submission
