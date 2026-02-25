@@ -9,7 +9,7 @@ Notebook
 </style>
 <div class="notebook-header">
     <div class="notebook-toolbar">
-        <span class="nb-status" id="nb-status"></span>
+        <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <div class="notebook-actions">
             <button class="btn btn-primary" id="nb-submit">Submit</button>
             <a class="btn"
@@ -21,6 +21,7 @@ Notebook
 <iframe
     id="jl-frame"
     class="jl-frame"
+    title="Notebook editor"
     data-setup-id="#(testSetupID)"
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
@@ -28,7 +29,7 @@ Notebook
     allow="cross-origin-isolated"
     loading="eager">
 </iframe>
-<p id="nb-frame-error" class="empty" style="display:none;margin-top:.6rem">
+<p id="nb-frame-error" class="empty" role="alert" style="display:none;margin-top:.6rem">
     The embedded editor did not load.
 </p>
 <div id="nb-results" class="nb-results" hidden></div>

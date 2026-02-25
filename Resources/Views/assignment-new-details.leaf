@@ -58,7 +58,7 @@ Create Assignment
 <div class="notebook-header">
     <h2 style="margin:0">Write Assignment in JupyterLite</h2>
     <div class="notebook-toolbar" style="gap:.5rem;flex-wrap:wrap">
-        <span class="nb-status" id="browser-notebook-status">Loading JupyterLite preview…</span>
+        <span class="nb-status" id="browser-notebook-status" role="status" aria-live="polite" aria-atomic="true">Loading JupyterLite preview…</span>
         <a class="btn" href="/jupyterlite/lab/index.html?path=assignment.ipynb" target="_blank" rel="noopener">Open JupyterLite in new tab</a>
     </div>
 </div>
@@ -66,6 +66,7 @@ Create Assignment
 <iframe
     id="jl-frame"
     class="jl-frame"
+    title="Assignment notebook preview editor"
     src="/jupyterlite/lab/index.html?path=assignment.ipynb"
     allow="cross-origin-isolated"
     loading="eager"

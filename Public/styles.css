@@ -20,6 +20,8 @@
     --hover-bg: #EFF6FF;
     --open-bg: #DCFCE7;
     --closed-bg: #FEE2E2;
+    --open-fg: #166534;
+    --closed-fg: #991B1B;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,6 +47,8 @@
         --hover-bg: #1E3A8A;
         --open-bg: #052E1A;
         --closed-bg: #3B1217;
+        --open-fg: #86EFAC;
+        --closed-fg: #FCA5A5;
     }
 }
 
@@ -58,6 +62,37 @@ body {
 }
 
 a { color: var(--blue); }
+
+:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+.skip-link {
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    padding: 0;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+    left: 1rem;
+    top: .75rem;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    z-index: 1000;
+    padding: .45rem .7rem;
+    border-radius: .35rem;
+    background: var(--surface);
+    border: 1px solid var(--gray-200);
+    color: var(--gray-900);
+    text-decoration: none;
+}
 
 /* ── Nav ─────────────────────────────────────────────── */
 
@@ -424,15 +459,15 @@ details pre {
 }
 
 .result-mark-pass {
-    color: var(--green);
+    color: var(--open-fg);
     background: var(--open-bg);
-    border-color: var(--green);
+    border-color: var(--open-fg);
 }
 
 .result-mark-fail {
-    color: var(--red);
+    color: var(--closed-fg);
     background: var(--danger-bg);
-    border-color: var(--danger-border);
+    border-color: var(--closed-fg);
 }
 
 /* ── Misc ────────────────────────────────────────────── */
@@ -535,12 +570,12 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 
 .tier-open {
     background: var(--open-bg);
-    color: var(--green);
+    color: var(--open-fg);
 }
 
 .tier-closed {
     background: var(--closed-bg);
-    color: var(--red);
+    color: var(--closed-fg);
 }
 
 .tier-unpublished {
@@ -551,6 +586,34 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 /* ── Inline publish form (inside <details>) ──────────── */
 
 .publish-details summary::-webkit-details-marker { display: none; }
+
+.reorder-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    margin-right: .35rem;
+}
+
+.reorder-btn {
+    border: 1px solid var(--gray-200);
+    background: var(--surface);
+    border-radius: .25rem;
+    color: var(--gray-600);
+    font-size: .75rem;
+    line-height: 1;
+    min-width: 1.2rem;
+    min-height: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+#users-table th[data-sort-key]:focus-visible,
+#assignment-submissions-table th[data-sort-key]:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: -2px;
+}
 
 .publish-form {
     margin-top: .75rem;

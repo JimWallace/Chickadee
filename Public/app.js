@@ -5,6 +5,12 @@ const fileNameEl = document.getElementById('drop-filename');
 
 if (dropZone && fileInput) {
     dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fileInput.click();
+        }
+    });
 
     dropZone.addEventListener('dragover', e => {
         e.preventDefault();

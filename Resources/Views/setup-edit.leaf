@@ -20,7 +20,7 @@ Edit — #(title)
             <input type="file" id="save-file" accept=".ipynb" style="display:none">
         </label>
         <button class="btn" id="run-btn" disabled title="Upload a .py solution file and run tests against the saved notebook">Run tests…</button>
-        <span id="edit-status" class="nb-status"></span>
+        <span id="edit-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <a class="btn" href="/assignments" style="margin-left:.5rem">← Assignments</a>
     </div>
 </div>
@@ -29,6 +29,7 @@ Edit — #(title)
 <iframe
     id="jl-frame"
     class="jl-frame"
+    title="Instructor notebook editor"
     data-setup-id="#(setupID)"
     data-assignment-id="#(assignmentID)"
     data-editor-url="#(editorURL)"
@@ -51,7 +52,7 @@ Edit — #(title)
     </label>
     <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="run-solution-btn" disabled>Run</button>
-        <span id="validate-status" class="nb-status"></span>
+        <span id="validate-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
     </div>
 </div>
 
