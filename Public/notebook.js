@@ -30,11 +30,15 @@
 
     // Point the iframe at the embedded JupyterLite distribution.
     // The server provides a concrete JupyterLite file path via data-editor-url.
-    // Fall back to a default lab path only if the attribute is missing.
+    // Fall back to the notebook-focused app only if the attribute is missing.
     const notebookURL = frame.dataset.notebookUrl || `/api/v1/testsetups/${setupID}/assignment`;
     const editorURL = frame.dataset.editorUrl ||
         frame.getAttribute('src') ||
-        `/jupyterlite/lab/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
+        `/jupyterlite/notebooks/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
+    const lockedNotebookPath = normalizeJupyterPath(extractPathFromEditorURL(editorURL));
+    let lastForcedEditorResetMs = 0;
+    let serverSyncInFlight = false;
+    let serverSyncComplete = false;
     frame.src = editorURL;
 
     // Quick reachability check helps explain blank/failed editor loads.
@@ -53,7 +57,16 @@
     frame.addEventListener('load', () => {
         loaded = true;
         if (frameError) frameError.style.display = 'none';
+        if (!serverSyncComplete && !serverSyncInFlight) {
+            void syncNotebookFromServerSnapshot();
+        }
+        applyLockedNotebookUI();
+        enforceLockedNotebookPath();
     });
+    setInterval(() => {
+        applyLockedNotebookUI();
+        enforceLockedNotebookPath();
+    }, 1500);
     setTimeout(() => {
         if (!loaded && frameError) {
             frameError.style.display = '';
@@ -92,9 +105,23 @@
         const liveNotebook = await readNotebookFromJupyterFrame();
         if (liveNotebook) return liveNotebook;
 
+        const snapshotNotebook = await fetchNotebookSnapshot();
+        const domNotebook = readNotebookFromVisibleDOM(snapshotNotebook);
+        if (domNotebook) return domNotebook;
+
+        const pathFromURL = lockedNotebookPath || extractPathFromEditorURL(editorURL);
+        const apiNotebook = await readNotebookViaContentsAPI(pathFromURL);
+        if (apiNotebook) return apiNotebook;
+
+        if (snapshotNotebook) return snapshotNotebook;
+        throw new Error('Failed to capture notebook contents');
+    }
+
+    async function fetchNotebookSnapshot() {
         const nbRes = await fetch(notebookURL);
-        if (!nbRes.ok) throw new Error(`Failed to fetch notebook: ${nbRes.status}`);
-        return nbRes.json();
+        if (!nbRes.ok) return null;
+        const notebook = await nbRes.json();
+        return looksLikeNotebook(notebook) ? notebook : null;
     }
 
     async function readNotebookFromJupyterFrame() {
@@ -106,22 +133,23 @@
             // Best effort: flush edits to the notebook model/context before reading.
             if (app.commands && typeof app.commands.execute === 'function') {
                 try { await app.commands.execute('docmanager:save'); } catch (_) {}
+                try { await app.commands.execute('docmanager:save-all'); } catch (_) {}
             }
+            // Allow save handlers to settle before reading back from contents.
+            await delay(125);
 
-            const widget = app.shell.currentWidget;
+            const widget = notebookWidgetFromShell(app.shell, lockedNotebookPath);
             const modelNotebook = notebookFromWidget(widget);
             if (modelNotebook) return modelNotebook;
 
-            const pathFromWidget = widget && widget.context && widget.context.path;
-            const pathFromURL = extractPathFromEditorURL(editorURL);
+            const pathFromWidget = normalizeJupyterPath(widget && widget.context && widget.context.path);
+            const pathFromURL = lockedNotebookPath || normalizeJupyterPath(extractPathFromEditorURL(editorURL));
             const notebookPath = pathFromWidget || pathFromURL;
 
             const contents = app.serviceManager && app.serviceManager.contents;
-            if (!contents || typeof contents.get !== 'function' || !notebookPath) {
-                return null;
-            }
+            if (!contents || typeof contents.get !== 'function' || !notebookPath) return null;
 
-            const contentModel = await contents.get(notebookPath, { content: true });
+            const contentModel = await contents.get(notebookPath, { content: true, format: 'json' });
             const contentNotebook = contentModel && contentModel.content;
             if (looksLikeNotebook(contentNotebook)) {
                 return toPlainNotebook(contentNotebook);
@@ -130,6 +158,37 @@
             // Fall back to server-provided notebook URL below.
         }
         return null;
+    }
+
+    function notebookWidgetFromShell(shell, preferredPath) {
+        if (!shell) return null;
+        const preferred = normalizeJupyterPath(preferredPath);
+        let firstNotebook = null;
+        const pathLooksNotebook = (path) => !!path && path.toLowerCase().endsWith('.ipynb');
+
+        try {
+            if (typeof shell.widgets === 'function') {
+                const widgets = shell.widgets('main');
+                for (const widget of widgets) {
+                    const path = normalizeJupyterPath(widget && widget.context && widget.context.path);
+                    const modelNotebook = notebookFromWidget(widget);
+                    const isNotebookWidget = pathLooksNotebook(path) || !!modelNotebook;
+                    if (!isNotebookWidget) continue;
+                    if (!firstNotebook) firstNotebook = widget;
+                    if (preferred && path === preferred) return widget;
+                }
+            }
+        } catch (_) {
+            // Ignore shell traversal errors.
+        }
+
+        const current = shell.currentWidget || null;
+        const currentPath = normalizeJupyterPath(current && current.context && current.context.path);
+        const currentNotebook = notebookFromWidget(current);
+        if (pathLooksNotebook(currentPath) || currentNotebook) {
+            return current;
+        }
+        return firstNotebook;
     }
 
     function notebookFromWidget(widget) {
@@ -162,6 +221,150 @@
         }
     }
 
+    function normalizeJupyterPath(path) {
+        if (!path) return '';
+        return String(path).replace(/^\/+/, '').trim();
+    }
+
+    function readNotebookFromVisibleDOM(baseNotebook) {
+        if (!baseNotebook || !looksLikeNotebook(baseNotebook) || !frame.contentDocument) return null;
+        try {
+            const doc = frame.contentDocument;
+            const codeCellNodes = Array.from(doc.querySelectorAll('.jp-CodeCell'));
+            if (!codeCellNodes.length) return null;
+
+            const visibleCodeSources = codeCellNodes.map(extractVisibleCodeCellText);
+            const notebook = toPlainNotebook(baseNotebook);
+            const codeCellIndexes = [];
+            for (let i = 0; i < notebook.cells.length; i += 1) {
+                const cell = notebook.cells[i];
+                if (cell && cell.cell_type === 'code') codeCellIndexes.push(i);
+            }
+            if (!codeCellIndexes.length || !visibleCodeSources.length) return null;
+
+            const pairCount = Math.min(codeCellIndexes.length, visibleCodeSources.length);
+            for (let i = 0; i < pairCount; i += 1) {
+                const cellIndex = codeCellIndexes[i];
+                notebook.cells[cellIndex].source = sourceArrayFromText(visibleCodeSources[i]);
+            }
+
+            for (let i = codeCellIndexes.length; i < visibleCodeSources.length; i += 1) {
+                notebook.cells.push({
+                    cell_type: 'code',
+                    execution_count: null,
+                    metadata: {},
+                    outputs: [],
+                    source: sourceArrayFromText(visibleCodeSources[i])
+                });
+            }
+            return notebook;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function extractVisibleCodeCellText(cellNode) {
+        if (!cellNode) return '';
+        const lineNodes = Array.from(cellNode.querySelectorAll('.cm-content .cm-line'));
+        if (!lineNodes.length) return '';
+        return lineNodes
+            .map(node => normalizeEditorText(node.textContent || ''))
+            .join('\n');
+    }
+
+    function normalizeEditorText(text) {
+        return String(text)
+            .replace(/\u200b/g, '')
+            .replace(/\r\n/g, '\n');
+    }
+
+    function sourceArrayFromText(text) {
+        const normalized = normalizeEditorText(text);
+        if (!normalized.length) return [];
+        const lines = normalized.split('\n');
+        return lines.map((line, idx) => (idx < lines.length - 1 ? `${line}\n` : line));
+    }
+
+    function enforceLockedNotebookPath() {
+        if (!lockedNotebookPath || !frame.contentWindow) return;
+        try {
+            const currentURL = new URL(frame.contentWindow.location.href, window.location.origin);
+            const currentPath = normalizeJupyterPath(currentURL.searchParams.get('path'));
+            const inNotebookApp = currentURL.pathname.includes('/jupyterlite/notebooks/');
+
+            if (inNotebookApp && currentPath === lockedNotebookPath) return;
+
+            const now = Date.now();
+            if (now - lastForcedEditorResetMs < 1000) return;
+            lastForcedEditorResetMs = now;
+            frame.src = editorURL;
+        } catch (_) {
+            // Ignore transient cross-frame navigation states.
+        }
+    }
+
+    async function syncNotebookFromServerSnapshot() {
+        if (!lockedNotebookPath || serverSyncInFlight || serverSyncComplete) return;
+        serverSyncInFlight = true;
+        try {
+            const snapshotRes = await fetch(notebookURL, { method: 'GET' });
+            if (!snapshotRes.ok) return;
+            const snapshotNotebook = await snapshotRes.json();
+            if (!looksLikeNotebook(snapshotNotebook)) return;
+
+            const app = await waitForJupyterApp(8000);
+            if (!app) return;
+
+            const contents = app.serviceManager && app.serviceManager.contents;
+            if (!contents || typeof contents.save !== 'function') return;
+
+            await contents.save(lockedNotebookPath, {
+                type: 'notebook',
+                format: 'json',
+                content: snapshotNotebook
+            });
+
+            if (app.commands && typeof app.commands.execute === 'function') {
+                try {
+                    await app.commands.execute('docmanager:open', { path: lockedNotebookPath });
+                } catch (_) {
+                    // Best-effort open only; save above is the critical sync step.
+                }
+            }
+
+            serverSyncComplete = true;
+        } catch (_) {
+            // Retry on the next load tick if synchronization fails.
+        } finally {
+            serverSyncInFlight = false;
+        }
+    }
+
+    async function waitForJupyterApp(timeoutMs) {
+        const started = Date.now();
+        while (Date.now() - started < timeoutMs) {
+            const app = frame.contentWindow && frame.contentWindow.jupyterapp;
+            const contents = app && app.serviceManager && app.serviceManager.contents;
+            if (app && contents) return app;
+            await delay(100);
+        }
+        return null;
+    }
+
+    function applyLockedNotebookUI() {
+        if (!frame.contentDocument) return;
+        const doc = frame.contentDocument;
+        if (doc.getElementById('chickadee-notebook-lock-style')) return;
+
+        const style = doc.createElement('style');
+        style.id = 'chickadee-notebook-lock-style';
+        style.textContent = [
+            '.jp-SideBar, .jp-SidePanel, .jp-FileBrowser, .jp-FileBrowser-Panel, .jp-DirListing { display: none !important; }',
+            '.lm-MenuBar, .jp-MenuBar, .jp-TopBar { display: none !important; }'
+        ].join('\n');
+        doc.head.appendChild(style);
+    }
+
     function looksLikeNotebook(value) {
         return !!value && typeof value === 'object' && Array.isArray(value.cells);
     }
@@ -172,6 +375,32 @@
         } catch (_) {
             return notebook;
         }
+    }
+
+    async function readNotebookViaContentsAPI(path) {
+        if (!path) return null;
+        const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+        const candidates = [
+            `/jupyterlite/api/contents/${encodedPath}?content=1`,
+            `/jupyterlite/lab/api/contents/${encodedPath}?content=1`,
+            `/jupyterlite/notebooks/api/contents/${encodedPath}?content=1`,
+            `/notebooks/api/contents/${encodedPath}?content=1`,
+            `/api/contents/${encodedPath}?content=1`
+        ];
+
+        for (const url of candidates) {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) continue;
+                const payload = await res.json();
+                if (looksLikeNotebook(payload && payload.content)) {
+                    return toPlainNotebook(payload.content);
+                }
+            } catch (_) {
+                // Try the next candidate URL.
+            }
+        }
+        return null;
     }
 
     // -------------------------------------------------------------------------
@@ -561,5 +790,9 @@ else:
             s.onerror = () => reject(new Error(`Failed to load ${src}`));
             document.head.appendChild(s);
         });
+    }
+
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 })();

@@ -473,11 +473,12 @@ def failed(message: str = "failed"):
 
 def errored(message: str = "error", err: Optional[Exception] = None):
     label = _first_comment_label()
+    summary = message.strip() if isinstance(message, str) and message.strip() else "error"
     payload = {
-        "shortResult": f"{label}: error",
+        "shortResult": f"{label}: {summary}",
         "status": "error",
         "test": label,
-        "error": message,
+        "error": summary,
     }
     if err is not None:
         payload["exception"] = repr(err)
@@ -538,15 +539,12 @@ def _module_name_for_path(path: Path) -> str:
 
 def _ordered_student_files() -> List[Path]:
     preferred = _preferred_student_module()
-    ordered: List[Path] = []
+    # When a specific submission module is hinted, only evaluate that file.
+    # This avoids accidentally resolving functions from setup-side helpers
+    # like solution.py/assignment.py.
     if preferred is not None:
-        ordered.append(preferred)
-
-    for path in _candidate_student_files():
-        if preferred is not None and path.name == preferred.name:
-            continue
-        ordered.append(path)
-    return ordered
+        return [preferred]
+    return _candidate_student_files()
 
 
 _loaded_student_modules: Optional[Dict[str, Any]] = None

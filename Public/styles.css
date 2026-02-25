@@ -278,6 +278,14 @@ textarea.form-input {
 
 .submission-header { margin-bottom: 1.25rem; }
 
+.submission-header-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
 .submission-meta {
     font-size: .875rem;
     color: var(--gray-600);
@@ -288,6 +296,12 @@ textarea.form-input {
     font-size: 1.2rem;
     font-weight: 600;
     margin-bottom: 1rem;
+}
+
+.score-header {
+    margin-top: .5rem;
+    margin-bottom: .6rem;
+    font-size: 1.05rem;
 }
 
 .grade-pill {
@@ -392,6 +406,33 @@ details pre {
     padding: .55rem .7rem;
     border-radius: .25rem;
     border: 1px solid var(--gray-200);
+}
+
+.script-output-error {
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
+}
+
+.result-mark {
+    display: inline-block;
+    font-size: .76rem;
+    font-weight: 600;
+    padding: .12rem .5rem;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.result-mark-pass {
+    color: var(--green);
+    background: var(--open-bg);
+    border-color: var(--green);
+}
+
+.result-mark-fail {
+    color: var(--red);
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
 }
 
 /* ── Misc ────────────────────────────────────────────── */

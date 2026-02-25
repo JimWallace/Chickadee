@@ -5,6 +5,7 @@ Submission History
 #export("content"):
 <h1>#(assignmentTitle)</h1>
 <p style="margin-top:-.35rem"><a href="/">← Back to assignments</a></p>
+<p class="empty" style="margin-top:.35rem">Use <em>Open in notebook</em> to load a past notebook submission, inspect it, edit it, and submit again.</p>
 #if(rows.isEmpty):
 <p class="empty">No submissions yet for this assignment.</p>
 #else:
@@ -16,6 +17,7 @@ Submission History
             <th>Status</th>
             <th>Grade</th>
             <th>Details</th>
+            <th>Notebook</th>
         </tr>
     </thead>
     <tbody>
@@ -26,6 +28,13 @@ Submission History
             <td>#(row.status)</td>
             <td>#(row.gradeText)</td>
             <td><a href="/submissions/#(row.submissionID)">View</a></td>
+            <td>
+                #if(row.canOpenInNotebook):
+                <a href="#(row.openInNotebookURL)">Open in notebook</a>
+                #else:
+                —
+                #endif
+            </td>
         </tr>
     #endfor
     </tbody>

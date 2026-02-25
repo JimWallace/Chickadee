@@ -9,11 +9,19 @@ Submission #(submissionID)
      data-browser-complete="#(isBrowserComplete)">
 
 <div class="submission-header">
-    <h1>Submission <code>#(submissionID)</code></h1>
-    <p class="submission-meta">
-        Attempt #(attemptNumber) ·
-        <a href="/testsetups/#(testSetupID)/submit">← Submit again</a>
-    </p>
+    <div class="submission-header-row">
+        <h1>Submission</h1>
+        #if(openInNotebookURL):
+        <a class="btn action-btn" href="#(openInNotebookURL)">Open in notebook</a>
+        #endif
+    </div>
+    #if(isPending):
+    #else:
+    #if(buildFailed):
+    #else:
+    <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #(passCount) / #(totalTests) tests passed</p>
+    #endif
+    #endif
 </div>
 
 #if(isPending):
@@ -41,22 +49,13 @@ Submission #(submissionID)
 </div>
 
 #else:
-<p class="score">Grade: <span class="grade-pill">#(gradePercent)%</span> · #(passCount) / #(totalTests) scripts passed
-    <span class="exec-time">(#(executionTimeMs) ms total)</span>
-    #if(isBrowserComplete):
-    <span class="result-source">(browser preview)</span>
-    #else:
-    <span class="result-source">(official)</span>
-    #endif
-</p>
-<h2>Per-script marks</h2>
 <table class="results-table">
     <thead>
         <tr>
             <th>Script</th>
             <th>Tier</th>
+            <th>Output</th>
             <th>Mark</th>
-            <th>ms</th>
         </tr>
     </thead>
     <tbody>
@@ -66,17 +65,13 @@ Submission #(submissionID)
             <td><span class="tier">#(outcome.tier)</span></td>
             <td>
                 #(outcome.shortResult)
-                #if(outcome.readableOutput):
-                <pre class="script-output-inline">#(outcome.readableOutput)</pre>
-                #endif
-                #if(outcome.longResult):
-                <details>
-                    <summary>Raw output</summary>
-                    <pre>#(outcome.longResult)</pre>
-                </details>
+                #if(outcome.stderrOutput):
+                <pre class="script-output-inline script-output-error">#(outcome.stderrOutput)</pre>
                 #endif
             </td>
-            <td class="time">#(outcome.executionTimeMs)</td>
+            <td>
+                <span class="result-mark result-mark-#(outcome.markClass)">#(outcome.markLabel)</span>
+            </td>
         </tr>
     #endfor
     </tbody>
