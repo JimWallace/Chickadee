@@ -16,6 +16,19 @@ chickadee-server serve --port 8080 --worker-secret your-secret
 
 ---
 
+## HTTPS / proxy settings
+
+For production SSO rollouts, run Chickadee behind HTTPS (typically terminated at a reverse proxy/load balancer) and set:
+
+- `PUBLIC_BASE_URL` (example: `https://chickadee.example.edu`) for externally-visible absolute URL construction.
+- `ENFORCE_HTTPS=true` to redirect plain-HTTP GET/HEAD requests to HTTPS and reject other insecure requests.
+- `TRUST_X_FORWARDED_PROTO=true` (default) when TLS is terminated upstream and `X-Forwarded-Proto` is forwarded.
+- `SESSION_COOKIE_SECURE=true` to force the session cookie `Secure` attribute.
+
+If unset, defaults preserve current local development behavior.
+
+---
+
 ## REST API
 
 Base path: `/api/v1`

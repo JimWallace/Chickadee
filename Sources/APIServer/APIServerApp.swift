@@ -38,6 +38,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
     let authMode = AuthMode.fromEnvironment() ?? .local
+    let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
 
     // MARK: - Directories
 
@@ -69,10 +70,28 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     )
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.storage[AuthModeKey.self] = authMode
+    app.storage[SecurityConfigurationKey.self] = securityConfiguration
 
     // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
 
     app.sessions.use(.memory)
+    var sessionConfig = app.sessions.configuration
+    sessionConfig.cookieFactory = { sessionID in
+        HTTPCookies.Value(
+            string: sessionID.string,
+            expires: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7), // one week
+            maxAge: nil,
+            domain: nil,
+            path: "/",
+            isSecure: securityConfiguration.sessionCookieSecure,
+            isHTTPOnly: true,
+            sameSite: .lax
+        )
+    }
+    app.sessions.configuration = sessionConfig
+    if securityConfiguration.enforceHTTPS {
+        app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
+    }
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     app.middleware.use(UserFileNamespaceMiddleware())
@@ -106,6 +125,18 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.migrations.add(CreatePerformanceIndexes())
 
     try app.autoMigrate().wait()
+
+    if authMode != .local {
+        if securityConfiguration.publicBaseURL == nil {
+            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not set.")
+        } else if securityConfiguration.publicBaseURL?.scheme?.lowercased() != "https" {
+            let configured = securityConfiguration.publicBaseURL?.absoluteString ?? "(unset)"
+            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not https: \(configured)")
+        }
+        if !securityConfiguration.sessionCookieSecure {
+            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but session cookies are not marked Secure.")
+        }
+    }
 
     // MARK: - Routes
 
@@ -144,6 +175,9 @@ struct LocalRunnerManagerKey: StorageKey {
 struct AuthModeKey: StorageKey {
     typealias Value = AuthMode
 }
+struct SecurityConfigurationKey: StorageKey {
+    typealias Value = AppSecurityConfiguration
+}
 
 enum AuthMode: String, Sendable {
     case local
@@ -166,6 +200,47 @@ extension Application {
     var authMode: AuthMode {
         get { storage[AuthModeKey.self] ?? .local }
         set { storage[AuthModeKey.self] = newValue }
+    }
+
+    var securityConfiguration: AppSecurityConfiguration {
+        get { storage[SecurityConfigurationKey.self] ?? .default }
+        set { storage[SecurityConfigurationKey.self] = newValue }
+    }
+}
+
+struct AppSecurityConfiguration: Sendable {
+    let publicBaseURL: URL?
+    let enforceHTTPS: Bool
+    let trustForwardedProto: Bool
+    let sessionCookieSecure: Bool
+
+    static let `default` = AppSecurityConfiguration(
+        publicBaseURL: nil,
+        enforceHTTPS: false,
+        trustForwardedProto: true,
+        sessionCookieSecure: false
+    )
+
+    static func fromEnvironment(authMode: AuthMode) -> Self {
+        let publicBaseURL = Environment.get("PUBLIC_BASE_URL")
+            .flatMap { raw -> URL? in
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : URL(string: trimmed)
+            }
+        let publicBaseIsHTTPS = (publicBaseURL?.scheme?.lowercased() == "https")
+
+        let enforceHTTPS = environmentBool("ENFORCE_HTTPS")
+            ?? (authMode != .local && publicBaseIsHTTPS)
+        let trustForwardedProto = environmentBool("TRUST_X_FORWARDED_PROTO") ?? true
+        let sessionCookieSecure = environmentBool("SESSION_COOKIE_SECURE")
+            ?? (publicBaseIsHTTPS || authMode != .local)
+
+        return AppSecurityConfiguration(
+            publicBaseURL: publicBaseURL,
+            enforceHTTPS: enforceHTTPS,
+            trustForwardedProto: trustForwardedProto,
+            sessionCookieSecure: sessionCookieSecure
+        )
     }
 }
 
@@ -344,6 +419,25 @@ private func runnerSharedSecretFromEnvironment() -> String? {
     if let legacy, !legacy.isEmpty { return legacy }
 
     return nil
+}
+
+private func environmentBool(_ key: String) -> Bool? {
+    guard let raw = Environment.get(key)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased(),
+        !raw.isEmpty
+    else {
+        return nil
+    }
+
+    switch raw {
+    case "1", "true", "yes", "on":
+        return true
+    case "0", "false", "no", "off":
+        return false
+    default:
+        return nil
+    }
 }
 
 extension Application {
