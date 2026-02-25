@@ -17,6 +17,7 @@ Tools/jupyterlite/.jupyterlite.doit.db
 chickadee.sqlite
 chickadee.sqlite-wal
 chickadee.sqlite-shm
+chickadee.backup_*.sqlite
 
 # Runtime-generated app data
 results/
