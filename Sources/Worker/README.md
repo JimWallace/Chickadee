@@ -12,17 +12,24 @@ Runner daemon. Polls the API server for pending jobs, runs instructor-defined sh
 | `--worker-id` | `String` | Unique identifier for this runner instance |
 | `--max-jobs` | `Int` | Maximum number of concurrent jobs |
 | `--sandbox` | `Bool` (flag) | Run test scripts inside a network-isolated, privilege-dropped sandbox |
+| `--worker-secret` | `String` | Runner shared secret for API auth (optional if env var is set) |
 | `--version` | (flag) | Print the runner version and exit |
 
 Example:
 
 ```bash
+export RUNNER_SHARED_SECRET=your-secret
 chickadee-runner \
   --api-base-url http://localhost:8080 \
   --worker-id    worker-1 \
   --max-jobs     4 \
   --sandbox
 ```
+
+Environment variables:
+
+- `RUNNER_SHARED_SECRET` (preferred) — shared secret used when `--worker-secret` is omitted.
+- `WORKER_SHARED_SECRET` (legacy fallback) — still accepted for compatibility.
 
 ---
 

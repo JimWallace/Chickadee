@@ -106,6 +106,14 @@ final class AssignmentRoutesTests: XCTestCase {
         return a
     }
 
+    @discardableResult
+    private func insertStudent(username: String = "student_retest") async throws -> APIUser {
+        let hash = try Bcrypt.hash("testpassword")
+        let student = APIUser(username: username, passwordHash: hash, role: "student")
+        try await student.save(on: app.db)
+        return student
+    }
+
     // MARK: - GET /assignments
 
     func testStudentCannotAccessAssignments() async throws {
@@ -200,7 +208,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_open")
         let a = try await insertAssignment(testSetupID: "setup_open", title: "Draft", isOpen: false)
-        let id = try XCTUnwrap(a.id?.uuidString)
+        let id = a.publicID
 
         try await app.test(.POST, "/assignments/\(id)/open", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
@@ -219,7 +227,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_close")
         let a = try await insertAssignment(testSetupID: "setup_close", title: "Open", isOpen: true)
-        let id = try XCTUnwrap(a.id?.uuidString)
+        let id = a.publicID
 
         try await app.test(.POST, "/assignments/\(id)/close", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
@@ -237,7 +245,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_del")
         let a = try await insertAssignment(testSetupID: "setup_del", title: "To Remove", isOpen: false)
-        let id = try XCTUnwrap(a.id?.uuidString)
+        let id = a.publicID
 
         try await app.test(.POST, "/assignments/\(id)/delete", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
@@ -251,7 +259,7 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testDeleteNonexistentAssignmentReturnsNotFound() async throws {
         let cookie = try await loginAsInstructor()
-        let fakeID = UUID().uuidString
+        let fakeID = "zzzzzz"
 
         try await app.test(.POST, "/assignments/\(fakeID)/delete", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
@@ -264,9 +272,72 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testOpenNonexistentAssignmentReturnsNotFound() async throws {
         let cookie = try await loginAsInstructor()
-        let fakeID = UUID().uuidString
+        let fakeID = "zzzzzz"
 
         try await app.test(.POST, "/assignments/\(fakeID)/open", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
+    // MARK: - POST /assignments/:assignmentID/submissions/:submissionID/retest
+
+    func testRetestSubmissionRequeuesCompletedSubmission() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_retest")
+        let assignment = try await insertAssignment(testSetupID: "setup_retest", title: "Lab Retest", isOpen: true)
+        let assignmentID = assignment.publicID
+        let student = try await insertStudent()
+
+        let submission = APISubmission(
+            id: "sub_retest_1",
+            testSetupID: "setup_retest",
+            zipPath: tmpDir + "submissions/sub_retest_1.zip",
+            attemptNumber: 1,
+            status: "complete",
+            userID: student.id
+        )
+        submission.workerID = "worker-a"
+        submission.assignedAt = Date()
+        try await submission.save(on: app.db)
+
+        try await app.test(.POST, "/assignments/\(assignmentID)/submissions/sub_retest_1/retest", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+            try req.content.encode(
+                ["returnTo": "/assignments/\(assignmentID)/submissions"],
+                as: .urlEncodedForm
+            )
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/assignments/\(assignmentID)/submissions")
+        })
+
+        let updated = try await APISubmission.find("sub_retest_1", on: app.db)
+        XCTAssertEqual(updated?.status, "pending")
+        XCTAssertNil(updated?.workerID)
+        XCTAssertNil(updated?.assignedAt)
+    }
+
+    func testRetestSubmissionRequiresMatchingAssignmentSetup() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_a")
+        try await insertSetup(id: "setup_b")
+        let assignment = try await insertAssignment(testSetupID: "setup_a", title: "Lab A", isOpen: true)
+        let assignmentID = assignment.publicID
+        let student = try await insertStudent(username: "student_other_setup")
+
+        let submission = APISubmission(
+            id: "sub_retest_mismatch",
+            testSetupID: "setup_b",
+            zipPath: tmpDir + "submissions/sub_retest_mismatch.zip",
+            attemptNumber: 1,
+            status: "complete",
+            userID: student.id
+        )
+        try await submission.save(on: app.db)
+
+        try await app.test(.POST, "/assignments/\(assignmentID)/submissions/sub_retest_mismatch/retest", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)

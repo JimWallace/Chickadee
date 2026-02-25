@@ -9,6 +9,7 @@ struct CreateAssignments: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("assignments")
             .id()
+            .field("public_id", .string, .required)
             .field(
                 "test_setup_id",
                 .string,
@@ -26,6 +27,7 @@ struct CreateAssignments: AsyncMigration {
             )
             .field("sort_order",    .int)
             .field("created_at",    .datetime)
+            .unique(on: "public_id")
             .unique(on: "test_setup_id")
             .create()
     }

@@ -14,9 +14,14 @@ import Vapor
 final class APIAssignment: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context.
     static let schema = "assignments"
+    static let publicIDLength = 6
 
     @ID(key: .id)
     var id: UUID?
+
+    /// Short public URL identifier (6-char base62 token).
+    @Field(key: "public_id")
+    var publicID: String
 
     /// Foreign reference to test_setups.id (string PK).
     @Field(key: "test_setup_id")
@@ -52,12 +57,19 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: UUID? = nil, testSetupID: String, title: String,
+    static func generatePublicID(length: Int = APIAssignment.publicIDLength) -> String {
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        var rng = SystemRandomNumberGenerator()
+        return String((0..<length).map { _ in alphabet.randomElement(using: &rng)! })
+    }
+
+    init(id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
          dueAt: Date? = nil, isOpen: Bool = true,
          sortOrder: Int? = nil,
          validationStatus: String? = nil,
          validationSubmissionID: String? = nil) {
         self.id          = id
+        self.publicID    = publicID
         self.testSetupID = testSetupID
         self.title       = title
         self.dueAt       = dueAt

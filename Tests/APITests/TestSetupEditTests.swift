@@ -321,7 +321,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "setup_ep1")
         let a = try await insertAssignment(testSetupID: "setup_ep1", title: "Lab")
-        let id = try XCTUnwrap(a.id?.uuidString)
+        let id = a.publicID
 
         try await app.test(.GET, "/assignments/\(id)/edit",
             beforeRequest: { req in
@@ -334,7 +334,7 @@ final class TestSetupEditTests: XCTestCase {
 
     func testEditPageNotFoundForUnknownAssignment() async throws {
         let cookie = try await loginAsInstructor()
-        let fakeID = UUID().uuidString
+        let fakeID = "zzzzzz"
 
         try await app.test(.GET, "/assignments/\(fakeID)/edit",
             beforeRequest: { req in
@@ -349,7 +349,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_ep2")
         let a = try await insertAssignment(testSetupID: "setup_ep2", title: "My Lab")
-        let id = try XCTUnwrap(a.id?.uuidString)
+        let id = a.publicID
 
         try await app.test(.GET, "/assignments/\(id)/edit",
             beforeRequest: { req in
