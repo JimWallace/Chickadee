@@ -22,6 +22,21 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @Field(key: "password_hash")
     var passwordHash: String
 
+    @OptionalField(key: "auth_provider")
+    var authProvider: String?
+
+    @OptionalField(key: "external_subject")
+    var externalSubject: String?
+
+    @OptionalField(key: "email")
+    var email: String?
+
+    @OptionalField(key: "display_name")
+    var displayName: String?
+
+    @OptionalField(key: "last_login_at")
+    var lastLoginAt: Date?
+
     /// "student" | "instructor" | "admin"
     @Field(key: "role")
     var role: String
@@ -31,10 +46,25 @@ final class APIUser: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: UUID? = nil, username: String, passwordHash: String, role: String) {
+    init(
+        id: UUID? = nil,
+        username: String,
+        passwordHash: String,
+        role: String,
+        authProvider: String? = nil,
+        externalSubject: String? = nil,
+        email: String? = nil,
+        displayName: String? = nil,
+        lastLoginAt: Date? = nil
+    ) {
         self.id           = id
         self.username     = username
         self.passwordHash = passwordHash
+        self.authProvider = authProvider
+        self.externalSubject = externalSubject
+        self.email = email
+        self.displayName = displayName
+        self.lastLoginAt = lastLoginAt
         self.role         = role
     }
 }

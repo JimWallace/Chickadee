@@ -40,6 +40,7 @@ final class TestSetupEditTests: XCTestCase {
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
         app.migrations.add(CreateUsers())
+        app.migrations.add(AddUserSSOFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
         try await app.autoMigrate().get()
