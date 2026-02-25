@@ -23,11 +23,7 @@ Assignments
         <tr>
             <td>
                 #if(setup.title):
-                    #if(setup.isOpen):
-                    <a href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"><strong>#(setup.title)</strong></a>
-                    #else:
                     <strong>#(setup.title)</strong>
-                    #endif
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -66,6 +62,8 @@ Assignments
                     #if(setup.isOpen):
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
                     #endif
                 </div>
             </td>
