@@ -2,8 +2,8 @@
 //
 // Verify that SSO routes are gated by authMode:
 //   - .local → /auth/sso/start and /auth/sso/callback return 404 (not registered)
-//   - .sso   → both routes return 501 (stub registered, provider not yet wired)
-//   - .dual  → same as .sso
+//   - .sso   → both routes return 303 redirect (registered; no oidcConfig → error redirect)
+//   - .dual  → same as .sso; local login routes still present
 
 import XCTest
 import XCTVapor
@@ -53,34 +53,42 @@ final class AuthModeGatingTests: XCTestCase {
         })
     }
 
-    // MARK: - SSO mode: routes present (501 until provider is wired)
+    // MARK: - SSO mode: routes present (redirect to error page when oidcConfig not loaded)
 
-    func testSSOMode_ssoStartReturns501() async throws {
+    func testSSOMode_ssoStartRedirectsWhenNotConfigured() async throws {
         let app = try makeApp(authMode: .sso)
         defer { app.shutdown() }
 
+        // oidcConfig is nil → handler redirects to error page (303, not 404)
         try await app.test(.GET, "/auth/sso/start", afterResponse: { res in
-            XCTAssertEqual(res.status, .notImplemented)
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertTrue(
+                res.headers.first(name: .location)?.contains("sso_not_configured") == true
+            )
         })
     }
 
-    func testSSOMode_ssoCallbackReturns501() async throws {
+    func testSSOMode_ssoCallbackRedirectsWhenNotConfigured() async throws {
         let app = try makeApp(authMode: .sso)
         defer { app.shutdown() }
 
         try await app.test(.GET, "/auth/sso/callback", afterResponse: { res in
-            XCTAssertEqual(res.status, .notImplemented)
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertTrue(
+                res.headers.first(name: .location)?.contains("sso_not_configured") == true
+            )
         })
     }
 
     // MARK: - Dual mode: SSO routes present alongside local login
 
-    func testDualMode_ssoStartReturns501() async throws {
+    func testDualMode_ssoStartRedirectsWhenNotConfigured() async throws {
         let app = try makeApp(authMode: .dual)
         defer { app.shutdown() }
 
         try await app.test(.GET, "/auth/sso/start", afterResponse: { res in
-            XCTAssertEqual(res.status, .notImplemented)
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertNotEqual(res.status, .notFound)
         })
     }
 

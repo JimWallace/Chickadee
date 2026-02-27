@@ -20,6 +20,13 @@ struct APIServerApp {
         
         do {
             try configure(app, cliWorkerSecret: cliWorkerSecret)
+
+            // Load OIDC configuration after configure() so app.client is ready.
+            if app.authMode != .local {
+                let oidcConfig = try await OIDCConfiguration.load(from: app)
+                app.oidcConfig = oidcConfig
+            }
+
             try await app.execute()
         } catch {
             await app.localRunnerManager.stopIfRunning(logger: app.logger)
@@ -136,6 +143,12 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
         }
         if !securityConfiguration.sessionCookieSecure {
             app.logger.warning("AUTH_MODE is \(authMode.rawValue), but session cookies are not marked Secure.")
+        }
+        if Environment.get("OIDC_CLIENT_ID")?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_ID is not set.")
+        }
+        if Environment.get("OIDC_CLIENT_SECRET")?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_SECRET is not set.")
         }
     }
 
