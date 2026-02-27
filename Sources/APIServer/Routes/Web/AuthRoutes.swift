@@ -43,17 +43,11 @@ struct AuthRoutes: RouteCollection {
     func login(req: Request) async throws -> Response {
         let body = try req.content.decode(LoginBody.self)
 
-        guard let user = try await APIUser.query(on: req.db)
-            .filter(\.$username == body.username)
-            .first()
-        else {
-            return req.redirect(to: "/login?error=invalid")
-        }
-
-        // Run BCrypt on a thread-pool thread — don't block the event loop.
-        let verified = try await req.password.async.verify(body.password,
-                                                           created: user.passwordHash)
-        guard verified else {
+        guard let user = try await req.application.authProvider.authenticate(
+            username: body.username,
+            password: body.password,
+            on: req
+        ) else {
             return req.redirect(to: "/login?error=invalid")
         }
 
