@@ -32,12 +32,12 @@ struct APIServerApp {
     }
 }
 
-func configure(_ app: Application, cliWorkerSecret: String?) throws {
+func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: AuthMode? = nil) throws {
     let workDir = DirectoryConfiguration.detect().workingDirectory
     let workerSecretFile = workDir + ".worker-secret"
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
-    let authMode = AuthMode.fromEnvironment() ?? .local
+    let authMode = authModeOverride ?? AuthMode.fromEnvironment() ?? .local
     let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
 
     // MARK: - Directories
@@ -71,6 +71,7 @@ func configure(_ app: Application, cliWorkerSecret: String?) throws {
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.storage[AuthModeKey.self] = authMode
     app.storage[SecurityConfigurationKey.self] = securityConfiguration
+    app.authProvider = LocalAuthProvider()
 
     // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
 
