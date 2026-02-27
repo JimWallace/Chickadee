@@ -32,10 +32,7 @@ Admin
     </form>
 
     <div style="margin-top:1rem">
-        <p id="workers-empty" class="empty" #if(!workers.isEmpty):style="display:none"#endif>
-            No runners have checked in yet.
-        </p>
-        <table id="workers-table" class="results-table" #if(workers.isEmpty):style="display:none"#endif>
+        <table id="workers-table" class="results-table">
             <thead>
                 <tr>
                     <th>Runner</th>
@@ -118,9 +115,7 @@ Admin
     'use strict';
 
     var workersBody = document.getElementById('workers-body');
-    var workersTable = document.getElementById('workers-table');
-    var workersEmpty = document.getElementById('workers-empty');
-    if (!workersBody || !workersTable || !workersEmpty) return;
+    if (!workersBody) return;
 
     function escapeHtml(value) {
         return String(value)
@@ -171,8 +166,6 @@ Admin
     function renderWorkers(workers) {
         if (!Array.isArray(workers) || workers.length === 0) {
             workersBody.innerHTML = '';
-            workersTable.style.display = 'none';
-            workersEmpty.style.display = '';
             return;
         }
 
@@ -191,8 +184,6 @@ Admin
                 + '</tr>';
         }).join('');
         applyRelativeTimes(workersBody);
-        workersTable.style.display = '';
-        workersEmpty.style.display = 'none';
     }
 
     async function refreshWorkers() {
