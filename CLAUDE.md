@@ -1,4 +1,4 @@
-# Marmoset Swift — Project Context
+# Chickadee — Project Context
 
 ## What This Is
 
@@ -14,31 +14,33 @@ needed, but the architecture has been redesigned from scratch.
 
 ## Architecture Overview
 
-Three components, each in its own Swift target:
+Three Swift targets share a clean dependency boundary:
 
-- **APIServer** — Vapor app. Exposes REST endpoints for workers and instructors.
-- **Worker** — Daemon process. Pulls jobs, runs shell-script test suites in
-  subprocesses, reports structured results back to the API server.
-- **Core** — Shared models and types. No Vapor dependency. Both APIServer and
-  Worker depend on this.
+- **`chickadee-server`** — Vapor app. REST API + Leaf web UI. Handles auth,
+  assignment management, submission intake, result storage, and the JupyterLite
+  notebook workflow.
+- **`chickadee-runner`** — Daemon process. Polls for jobs, runs shell-script
+  test suites in subprocesses (sandboxed or unsandboxed), reports structured
+  results back to the server.
+- **`Core`** — Shared models and types. No Vapor dependency. Both targets
+  depend on this.
 
 Test suites are **shell scripts** bundled by the instructor inside the test
-setup zip. The Swift worker runs each script generically — no language-specific
-code paths exist. Adding a new language means writing a new shell script; no
-Swift changes are required.
-
-Full project structure and component diagrams are in `docs/architecture.md`.
+setup zip. The runner executes them generically — no language-specific code
+paths exist in Swift. Adding a new language means writing a new shell script;
+no Swift changes are required.
 
 ---
 
 ## Key Design Decisions
 
 **Shell scripts, not language runners.** Each test suite is a `.sh` file at the
-root of the instructor's test setup zip. The worker runs them with `/bin/sh`
-and interprets the exit code. No per-language runners, no runner JSON protocol.
+root of the instructor's test setup zip. The runner runs them with `/bin/sh`
+and maps the exit code to a result status. No per-language runners, no runner
+JSON protocol.
 
 **Instructor bundles the helper library.** Any helper library (Swift, Python,
-etc.) is included in the test setup zip by the instructor. The worker does not
+etc.) is included in the test setup zip by the instructor. The runner does not
 inject anything.
 
 **Build failure lives at the collection level, not the test level.** If the
@@ -47,21 +49,44 @@ build fails (e.g. `make` step fails), `buildStatus` is `"failed"` and
 
 **Test outcomes have four states only:** `pass`, `fail`, `error`, `timeout`.
 
-**Three test tiers:** `public` (shown immediately), `release` (hidden until
+**Four test tiers:** `public` (shown immediately), `release` (hidden until
 deadline), `secret` (never shown), `student` (student-written tests).
 
 **Gamification fields are present from day one but nullable.** `memoryUsageBytes`,
 `attemptNumber`, `isFirstPassSuccess` are in the schema now so we never need a
-migration later. They can be null/zero until the feature is built. No partial
-credit — `score` is not used.
+migration later. They can be null/zero until the feature is built.
 
-**`ScriptRunner` is the sandbox boundary.** `UnsandboxedScriptRunner` is used
-in Phase 1. Phase 4 adds `SandboxedScriptRunner` implementing the same protocol
-without changing any callers.
+**`ScriptRunner` is the sandbox boundary.** `UnsandboxedScriptRunner` is the
+default in development. `SandboxedScriptRunner` implements the same protocol
+using platform sandboxing (macOS: `sandbox-exec`; Linux: `unshare` user/net
+namespaces). Enable with `--sandbox` on the runner.
 
 **Subprocess boundary for all language execution.** Swift never imports a JVM,
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
+
+**Three user roles.** `student`, `instructor`, `admin`. Role is stored on
+`APIUser` and enforced via `RoleMiddleware`. Admin implies instructor.
+
+**Auth is pluggable.** `AUTH_MODE` env var selects `.local` (username/password),
+`.sso` (future OIDC/OAuth), or `.dual` (both). `APIUser` carries
+`authProvider` + `externalSubject` for SSO identity. Currently only `.local`
+is implemented; the model is forward-compatible.
+
+**HTTPS enforcement is optional and proxy-aware.** `AppSecurityConfiguration`
+reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
+`SESSION_COOKIE_SECURE`. `HTTPSRedirectMiddleware` handles the enforcement and
+respects `X-Forwarded-Proto` from reverse proxies.
+
+**Worker secret is auto-generated.** If no secret is provided at startup, a
+random three-word diceware passphrase is generated from the EFF wordlist and
+persisted to `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET`.
+All runner↔server requests are HMAC-signed (`WorkerHMACAuthMiddleware`).
+
+**Local runner autostart.** The server can spawn a `chickadee-runner` subprocess
+automatically if `.local-runner-autostart` exists (or is toggled via the admin
+dashboard). This is a development convenience; production runs the runner
+separately.
 
 ---
 
@@ -84,8 +109,8 @@ attempted as JSON:
 ```
 If the last line is not valid JSON, it is used as the plain-text `shortResult`.
 If stdout is empty, `shortResult` is synthesized from the exit code
-("passed" / "failed" / "error"). `score` is reserved for Phase 5 (partial
-credit) and ignored for now.
+("passed" / "failed" / "error"). `score` is reserved for partial credit
+(not yet used).
 
 **stderr:** Captured verbatim as `longResult` (nil if empty).
 
@@ -111,7 +136,7 @@ enum TestTier: String, Codable {
 ```
 
 ### TestOutcome
-Single test case result. All fields present from day one.
+Single test case result.
 ```swift
 struct TestOutcome: Codable {
     let testName: String
@@ -176,12 +201,65 @@ scripts. If `target` is `null`, bare `make` is invoked; otherwise
 Base path: `/api/v1`
 
 ```
-POST /worker/request    — Worker pulls a job
-POST /worker/results    — Worker reports results
-POST /testsetups        — Instructor uploads a test setup (multipart)
+# Runner endpoints (HMAC-signed)
+POST /worker/request                    — Runner polls for a pending job
+POST /worker/results                    — Runner reports TestOutcomeCollection
+GET  /worker/artifacts/:submissionID    — Runner downloads submission zip
+
+# Test setups (instructor upload; download available to all authenticated users)
+POST /api/v1/testsetups                 — Instructor uploads test setup zip (multipart)
+GET  /api/v1/testsetups/:id/download    — Stream zip to runner
+
+# Submissions
+POST /api/v1/submissions                — Accept student submission zip
+GET  /api/v1/submissions                — List submissions (?testSetupID= filter)
+GET  /api/v1/submissions/:id            — Submission status
+GET  /api/v1/submissions/:id/results    — Full TestOutcomeCollection (?tiers= filter)
+
+# Web / browser results
+GET  /results/:id                       — Browser-rendered result view
 ```
 
-All endpoints use `application/json` except the multipart upload.
+Web routes (Leaf-rendered, session auth required) live under `/` and handle
+login, registration, the student dashboard, assignment pages, submission
+history, instructor assignment CRUD, and the admin panel.
+
+All JSON endpoints use `application/json`. The test setup upload is multipart.
+
+---
+
+## Auth & Roles
+
+Three roles in ascending order of privilege: `student` < `instructor` < `admin`.
+
+- **Unauthenticated:** login, register, runner endpoints (HMAC-signed separately)
+- **Authenticated (any role):** web UI, submission queries, result views,
+  JupyterLite content routes, notebook download
+- **Instructor+:** assignment CRUD, submission intake, test setup management
+- **Admin:** admin panel, worker secret/autostart management, runner dashboard
+
+Session auth uses Vapor's `SessionAuthenticator`. Sessions are in-memory
+(swap to `.fluent` for multi-process deployments). Session cookie is
+`HttpOnly; SameSite=Lax`; `Secure` flag is set automatically when
+`PUBLIC_BASE_URL` is `https://` or `AUTH_MODE` is non-local.
+
+---
+
+## JupyterLite
+
+Chickadee embeds a full JupyterLite instance at `Public/jupyterlite/`. This
+enables in-browser notebook editing for both students (submit) and instructors
+(create/validate assignments).
+
+Source-of-truth config lives in `Tools/jupyterlite/`. Rebuild:
+
+```bash
+scripts/setup-jupyterlite.sh
+scripts/build-jupyterlite.sh
+```
+
+`Public/jupyterlite` is generated output and is checked in; rebuild only when
+updating kernel versions or config.
 
 ---
 
@@ -189,59 +267,72 @@ All endpoints use `application/json` except the multipart upload.
 
 - Swift 6, strict concurrency. No `@unchecked Sendable` without a comment explaining why.
 - `async/await` throughout. No completion handlers.
-- Actors for any shared mutable state in the worker.
+- Actors for any shared mutable state (`WorkerSecretStore`, `WorkerActivityStore`,
+  `LocalRunnerAutoStartStore`, `LocalRunnerManager`).
 - All models in `Core/` must be `Codable`, `Sendable`, and have no Vapor imports.
 - Error types are explicit enums, not `String` or generic `Error` where avoidable.
 - No force unwraps except in tests.
-- `@CheckForNull` / optionals are preferred over sentinel values (no `-1` for "missing").
+- Optionals are preferred over sentinel values (no `-1` for "missing").
 - File names match the primary type they contain.
 - One type per file unless the types are trivially small and closely related.
 
 ---
 
-## Current Phase
+## Versioning
 
-**Phase 3 — Submission result retrieval API, student-facing endpoints.**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.1.0**
+(`VERSION` file + `ChickadeeVersion.current` in Core).
 
-Phase 2 complete ✓:
-1. `POST /api/v1/testsetups` — multipart upload, store zip + manifest in DB ✓
-2. `GET /api/v1/testsetups/:id/download` — stream zip to worker ✓
-3. `POST /api/v1/submissions` — accept student submission zip ✓
-4. `POST /api/v1/worker/request` — worker polls for pending jobs ✓
-5. `POST /api/v1/worker/results` — worker reports `TestOutcomeCollection` ✓
-6. `WorkerDaemon` pull loop with exponential backoff ✓
-7. `ScriptRunner` protocol + `UnsandboxedScriptRunner` ✓
-8. End-to-end: upload test setup → submit code → worker runs scripts → results stored ✓
+Release checklist:
 
-Goals for this phase:
-1. `GET /api/v1/submissions` — list submissions, optional `?testSetupID=` filter ✓
-2. `GET /api/v1/submissions/:id` — submission status (pending/assigned/complete/failed) ✓
-3. `GET /api/v1/submissions/:id/results` — full `TestOutcomeCollection`, optional `?tiers=` filter ✓
-4. Tests covering all three endpoints including tier filtering ✓
+```bash
+# 1) Update VERSION, CHANGELOG.md
+scripts/check-version.sh
+swift test
+# 2) Tag
+git tag -a vX.Y.Z -m "Chickadee vX.Y.Z"
+git push origin vX.Y.Z
+```
 
 ---
 
-## Phase Roadmap
+## Current State
 
-| Phase | Focus |
-|-------|-------|
-| 1 | Core models, basic worker loop, single result endpoint |
-| 2 | Full REST API, test setup upload and storage, worker pull loop, shell-script runner |
-| 3 | Submission result retrieval API, student-facing endpoints |
-| 4 | Sandboxing (macOS first via Sandbox profiles, then Linux) |
-| 5 | Gamification — attempt tracking, leaderboards, partial credit |
+All phases through 8 are complete:
+
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 1 | Core models, basic runner loop, single result endpoint | ✓ |
+| 2 | Full REST API, test setup upload, runner pull loop, shell-script runner | ✓ |
+| 3 | Submission result retrieval API, student-facing endpoints | ✓ |
+| 4 | Sandboxing (`SandboxedScriptRunner` — macOS `sandbox-exec`, Linux `unshare`) | ✓ |
+| 5 | Browser-based notebook grading (Pyodide in-browser, inline feedback) | ✓ |
+| 6 | Username/password auth, three roles, class management | ✓ |
+| 7 | Instructor assignment management UI, grade export, submission summaries | ✓ |
+| 8 | Instructor notebook editor (in-browser edit/save/validate via JupyterLite) | ✓ |
+
+Post-8 work also complete:
+- Worker HMAC auth, runner secret hardening
+- Local runner autostart
+- Short assignment IDs, retest actions
+- AODA accessibility pass
+- v0.1.0 schema hardening (canonical migrations, FK enforcement, WAL, performance indexes)
+- HTTPS/SSO scaffolding (`AuthMode`, `AppSecurityConfiguration`, `HTTPSRedirectMiddleware`,
+  `AddUserSSOFields` migration)
+
+**Next work:** SSO implementation (OIDC/OAuth provider integration), gamification
+(attempt tracking, leaderboards), containerized deployment.
 
 ---
 
 ## What Not To Do
 
-- Do not implement sandboxing in Phase 1 or 2.
-- Do not add authentication in Phase 1 or 2.
 - Do not import Vapor in `Core/`.
-- Do not add per-language build strategies — test suites are plain shell scripts.
 - Do not add `CouldNotRun` as a `TestOutcomeStatus`. Build failures are
-  represented at the collection level.
-- Do not write a runner JSON protocol — the worker interprets exit codes directly.
+  represented at the collection level (`buildStatus: "failed"`).
+- Do not write a runner JSON protocol — the runner interprets exit codes directly.
+- Do not add per-language build strategies in Swift — test suites are plain shell scripts.
+- Do not use `@unchecked Sendable` without a comment.
 
 ---
 
@@ -249,3 +340,4 @@ Goals for this phase:
 
 - `docs/architecture.md` — full architecture document with diagrams
 - `reference/` — original Java source for behavioural reference only
+- `CHANGELOG.md` — release history
