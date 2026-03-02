@@ -15,10 +15,10 @@ Edit — #(title)
     </div>
     <div class="notebook-toolbar" style="gap:.5rem;flex-wrap:wrap;align-items:center">
         <!-- Save: upload file from JupyterLite's Download → then upload here -->
-        <label class="btn btn-primary" id="save-label" title="Download the notebook from JupyterLite (File → Download), then upload it here to save to the server">
+        <button class="btn btn-primary" id="save-btn" type="button" title="Download the notebook from JupyterLite (File → Download), then upload it here to save to the server">
             Save notebook…
-            <input type="file" id="save-file" accept=".ipynb" style="display:none">
-        </label>
+        </button>
+        <input type="file" id="save-file" accept=".ipynb" class="visually-hidden" tabindex="-1">
         <button class="btn" id="run-btn" disabled title="Upload a .py solution file and run tests against the saved notebook">Run tests…</button>
         <span id="edit-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <a class="btn" href="/assignments" style="margin-left:.5rem">← Assignments</a>

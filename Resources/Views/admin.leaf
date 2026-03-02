@@ -25,10 +25,10 @@ Admin
         <label class="form-label" style="display:inline-flex;flex-direction:row;align-items:center;gap:.5rem;white-space:nowrap">
             <input type="checkbox"
                    name="localRunnerAutoStart"
-                   onchange="this.form.submit()"
                    #if(localRunnerAutoStartEnabled):checked#endif>
             <span>Auto-start one local runner when none are connected</span>
         </label>
+        <button class="btn" type="submit" style="margin-top:.5rem">Save</button>
     </form>
 
     <div style="margin-top:1rem">
@@ -78,7 +78,8 @@ Admin
                 <td>
                     <form method="post" action="/admin/users/#(user.id)/role"
                           style="display:flex;gap:.4rem;align-items:center">
-                        <select name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
+                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
                             <option value="student"    #if(user.role == "student"):selected#endif>student</option>
                             <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
                             <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>

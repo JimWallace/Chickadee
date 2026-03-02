@@ -49,11 +49,13 @@ Assignments
             <td>
                 #if(row.assignmentID && row.validationStatus == "passed"):
                 <form method="post" action="/assignments/#(row.assignmentID)/status">
-                    <select class="form-input" name="status" onchange="this.form.submit()"
+                    <label class="visually-hidden" for="status-#(row.assignmentID)">Status for #(row.title)</label>
+                    <select id="status-#(row.assignmentID)" class="form-input" name="status"
                             style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                         <option value="open" #if(row.status == "open"):selected#endif>open</option>
                         <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                     </select>
+                    <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                 </form>
                 #elseif(row.assignmentID):
                 <span class="tier tier-closed">closed</span>
