@@ -4,18 +4,19 @@ Admin
 #endexport
 #export("content"):
 <section class="admin-section">
+<<<<<<< HEAD
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
         <div style="display:flex;align-items:center;gap:.75rem">
             <h2 style="margin:0">Runners</h2>
-            <form method="post" action="/admin/runner-autostart">
+            <form method="post" action="/admin/runner-autostart" style="display:flex;align-items:center;gap:.4rem">
                 #csrfFormField()
                 <label style="display:inline-flex;align-items:center;gap:.4rem;white-space:nowrap;font-size:.875rem;cursor:pointer">
                     <input type="checkbox"
                            name="localRunnerAutoStart"
-                           onchange="this.form.submit()"
                            #if(localRunnerAutoStartEnabled):checked#endif>
                     Auto-start local
                 </label>
+                <button class="btn" type="submit" style="font-size:.8rem;padding:.2rem .5rem">Save</button>
             </form>
         </div>
         <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
@@ -30,6 +31,32 @@ Admin
             <button class="btn" type="submit">Save secret</button>
         </form>
     </div>
+=======
+    <h2>Runners</h2>
+    <form method="post" action="/admin/runner-secret" style="max-width:700px">
+        <label class="form-label">
+            Runner shared secret
+            <div style="display:flex;gap:.5rem;align-items:center">
+                <input class="form-input"
+                       type="text"
+                       name="secret"
+                       value="#(workerSecret)"
+                       autocomplete="off"
+                       style="flex:1">
+                <button class="btn" type="submit">Save</button>
+            </div>
+        </label>
+    </form>
+    <form method="post" action="/admin/runner-autostart" style="margin-top:.75rem;max-width:700px">
+        <label class="form-label" style="display:inline-flex;flex-direction:row;align-items:center;gap:.5rem;white-space:nowrap">
+            <input type="checkbox"
+                   name="localRunnerAutoStart"
+                   #if(localRunnerAutoStartEnabled):checked#endif>
+            <span>Auto-start one local runner when none are connected</span>
+        </label>
+        <button class="btn" type="submit" style="margin-top:.5rem">Save</button>
+    </form>
+>>>>>>> 30c9a0f (Fix WCAG quick-audit issues in instructor/admin flows)
 
     <table id="workers-table" class="results-table">
             <thead>
@@ -158,8 +185,14 @@ Admin
                 <td>
                     <form method="post" action="/admin/users/#(user.id)/role"
                           style="display:flex;gap:.4rem;align-items:center">
+<<<<<<< HEAD
                         #csrfFormField()
-                        <select name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
+                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+=======
+                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
+                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+>>>>>>> 30c9a0f (Fix WCAG quick-audit issues in instructor/admin flows)
                             <option value="student"    #if(user.role == "student"):selected#endif>student</option>
                             <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
                             <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>
