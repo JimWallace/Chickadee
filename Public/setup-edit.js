@@ -6,7 +6,7 @@
 //
 // 1. SAVE — The instructor edits the notebook in JupyterLite, downloads it via
 //    JupyterLite's built-in "File → Download" menu, then uploads the .ipynb
-//    here. Clicking the "Save notebook…" label opens a file picker; on change
+//    here. Clicking the "Save notebook…" button opens a file picker; on change
 //    the file is PUT to /api/v1/testsetups/:id/assignment.
 //
 // 2. RUN TESTS — Re-uses the full Pyodide engine from assignment-validate.js.
@@ -25,6 +25,7 @@
 
     // ── DOM refs ─────────────────────────────────────────────────────────────
     const frame          = document.getElementById('jl-frame');
+    const saveBtn        = document.getElementById('save-btn');
     const saveFile       = document.getElementById('save-file');
     const editStatus     = document.getElementById('edit-status');
     const runBtn         = document.getElementById('run-btn');
@@ -46,8 +47,14 @@
     // Workflow:
     //   a. Instructor edits in JupyterLite.
     //   b. Instructor chooses File → Download in JupyterLite to get the .ipynb.
-    //   c. Instructor clicks "Save notebook…" label → file picker opens.
+    //   c. Instructor clicks "Save notebook…" button → file picker opens.
     //   d. On file selected: PUT raw JSON to /api/v1/testsetups/:id/assignment.
+
+    if (saveBtn && saveFile) {
+        saveBtn.addEventListener('click', () => {
+            saveFile.click();
+        });
+    }
 
     if (saveFile) {
         saveFile.addEventListener('change', async () => {
