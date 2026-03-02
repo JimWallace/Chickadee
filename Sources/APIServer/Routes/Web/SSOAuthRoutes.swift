@@ -19,6 +19,7 @@ struct SSOAuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         routes.get("auth", "sso", "start",    use: ssoStart)
         routes.get("auth", "sso", "callback", use: ssoCallback)
+        registerConfiguredCallbackRoute(on: routes)
     }
 
     // MARK: - GET /auth/sso/start
@@ -99,27 +100,18 @@ struct SSOAuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=sso_failed")
         }
 
-        // Exchange authorization code for tokens
+        // Exchange authorization code for tokens.
         let tokenResponse: OIDCTokenResponse
         do {
-            let response = try await req.client.post(
-                URI(string: config.discovery.tokenEndpoint)
-            ) { tokenReq in
-                tokenReq.headers.contentType = .urlEncodedForm
-                try tokenReq.content.encode([
-                    "grant_type":    "authorization_code",
-                    "code":          code,
-                    "redirect_uri":  config.redirectURI,
-                    "client_id":     config.clientID,
-                    "client_secret": config.clientSecret,
-                    "code_verifier": codeVerifier,
-                ] as [String: String])
-            }
-            guard response.status == .ok else {
-                req.logger.error("Token exchange returned HTTP \(response.status.code)")
+            guard let exchanged = try await exchangeToken(
+                code: code,
+                codeVerifier: codeVerifier,
+                config: config,
+                on: req
+            ) else {
                 return req.redirect(to: "/login?error=sso_failed")
             }
-            tokenResponse = try response.content.decode(OIDCTokenResponse.self)
+            tokenResponse = exchanged
         } catch {
             req.logger.error("Token exchange failed: \(error)")
             return req.redirect(to: "/login?error=sso_failed")
@@ -201,6 +193,109 @@ struct SSOAuthRoutes: RouteCollection {
         )
         try await newUser.save(on: req.db)
         return newUser
+    }
+
+    /// Tries a small set of OAuth token request shapes for provider compatibility.
+    /// Returns nil only when all attempts fail.
+    private func exchangeToken(
+        code: String,
+        codeVerifier: String,
+        config: OIDCConfiguration,
+        on req: Request
+    ) async throws -> OIDCTokenResponse? {
+        let endpoint = URI(string: config.discovery.tokenEndpoint)
+        var lastStatus: HTTPResponseStatus = .internalServerError
+        var lastBody = "(empty)"
+
+        // 1) client_secret_basic + PKCE code_verifier
+        do {
+            let response = try await req.client.post(endpoint) { tokenReq in
+                tokenReq.headers.contentType = .urlEncodedForm
+                tokenReq.headers.basicAuthorization = BasicAuthorization(
+                    username: config.clientID,
+                    password: config.clientSecret
+                )
+                try tokenReq.content.encode([
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  config.redirectURI,
+                    "code_verifier": codeVerifier,
+                ] as [String: String], as: .urlEncodedForm)
+            }
+            if response.status == .ok {
+                return try response.content.decode(OIDCTokenResponse.self)
+            }
+            lastStatus = response.status
+            var bodyBuffer = response.body ?? ByteBuffer()
+            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+        }
+
+        // 2) client_secret_post + PKCE code_verifier
+        do {
+            let response = try await req.client.post(endpoint) { tokenReq in
+                tokenReq.headers.contentType = .urlEncodedForm
+                try tokenReq.content.encode([
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  config.redirectURI,
+                    "client_id":     config.clientID,
+                    "client_secret": config.clientSecret,
+                    "code_verifier": codeVerifier,
+                ] as [String: String], as: .urlEncodedForm)
+            }
+            if response.status == .ok {
+                return try response.content.decode(OIDCTokenResponse.self)
+            }
+            lastStatus = response.status
+            var bodyBuffer = response.body ?? ByteBuffer()
+            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+        }
+
+        // 3) client_secret_post without PKCE verifier (provider-specific fallback)
+        do {
+            let response = try await req.client.post(endpoint) { tokenReq in
+                tokenReq.headers.contentType = .urlEncodedForm
+                try tokenReq.content.encode([
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  config.redirectURI,
+                    "client_id":     config.clientID,
+                    "client_secret": config.clientSecret,
+                ] as [String: String], as: .urlEncodedForm)
+            }
+            if response.status == .ok {
+                return try response.content.decode(OIDCTokenResponse.self)
+            }
+            lastStatus = response.status
+            var bodyBuffer = response.body ?? ByteBuffer()
+            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+        }
+
+        req.logger.error("Token exchange returned HTTP \(lastStatus.code): \(lastBody)")
+        return nil
+    }
+}
+
+private extension SSOAuthRoutes {
+    func registerConfiguredCallbackRoute(on routes: RoutesBuilder) {
+        guard
+            let raw = Environment.get("OIDC_CALLBACK")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            !raw.isEmpty
+        else {
+            return
+        }
+
+        let components = raw
+            .split(separator: "/")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+
+        guard !components.isEmpty else { return }
+        guard components != ["auth", "sso", "callback"] else { return }
+
+        let grouped = routes.grouped(components.map { .constant($0) })
+        grouped.get(use: ssoCallback)
     }
 }
 

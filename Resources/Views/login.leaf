@@ -7,9 +7,25 @@ Log in
     <h1>Log in to Chickadee</h1>
     #if(error):
     <div class="error-box" style="margin-bottom:1rem">
+        #if(error == "invalid"):
         <p>Invalid username or password.</p>
+        #elseif(error == "sso_denied"):
+        <p>UWaterloo sign-in was canceled or denied.</p>
+        #elseif(error == "sso_not_configured"):
+        <p>UWaterloo sign-in is not configured on this server.</p>
+        #elseif(error == "sso_failed"):
+        <p>UWaterloo sign-in failed. Please try again.</p>
+        #else:
+        <p>Sign-in failed. Please try again.</p>
+        #endif
     </div>
     #endif
+    #if(showSSOLogin):
+    <form class="form" method="get" action="/auth/sso/start">
+        <button class="btn btn-primary" type="submit">Login with UWaterloo</button>
+    </form>
+    #endif
+    #if(showLocalLogin):
     <form class="form" method="post" action="/login">
         <label class="form-label">
             Username
@@ -23,7 +39,10 @@ Log in
         </label>
         <button class="btn btn-primary" type="submit">Log in</button>
     </form>
+    #endif
+    #if(showRegisterLink):
     <p class="auth-alt">No account? <a href="/register">Register</a></p>
+    #endif
 </div>
 #endexport
 #endextend
