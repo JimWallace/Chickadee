@@ -31,6 +31,15 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "email")
     var email: String?
 
+    @OptionalField(key: "preferred_name")
+    var preferredName: String?
+
+    @OptionalField(key: "user_id")
+    var userIdentifier: String?
+
+    @OptionalField(key: "student_id")
+    var studentID: String?
+
     @OptionalField(key: "display_name")
     var displayName: String?
 
@@ -54,6 +63,9 @@ final class APIUser: Model, Content, @unchecked Sendable {
         authProvider: String? = nil,
         externalSubject: String? = nil,
         email: String? = nil,
+        preferredName: String? = nil,
+        userIdentifier: String? = nil,
+        studentID: String? = nil,
         displayName: String? = nil,
         lastLoginAt: Date? = nil
     ) {
@@ -63,6 +75,9 @@ final class APIUser: Model, Content, @unchecked Sendable {
         self.authProvider = authProvider
         self.externalSubject = externalSubject
         self.email = email
+        self.preferredName = preferredName
+        self.userIdentifier = userIdentifier
+        self.studentID = studentID
         self.displayName = displayName
         self.lastLoginAt = lastLoginAt
         self.role         = role
@@ -110,12 +125,28 @@ extension Request {
 /// Encodable snapshot of the authenticated user, safe to embed in any Leaf context.
 struct CurrentUserContext: Encodable {
     let username: String
+    let preferredName: String?
+    let displayName: String?
+    let email: String?
     let role: String
     let isAdmin: Bool
     let isInstructor: Bool
 
     init(user: APIUser) {
+        let normalizedPreferredName = user.preferredName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preferredName = (normalizedPreferredName?.isEmpty == false) ? normalizedPreferredName : nil
+        let normalizedDisplayName = user.displayName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = (normalizedDisplayName?.isEmpty == false) ? normalizedDisplayName : nil
+        let normalizedEmail = user.email?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = (normalizedEmail?.isEmpty == false) ? normalizedEmail : nil
+
         self.username     = user.username
+        self.preferredName = preferredName
+        self.displayName  = displayName
+        self.email        = email
         self.role         = user.role
         self.isAdmin      = user.isAdmin
         self.isInstructor = user.isInstructor

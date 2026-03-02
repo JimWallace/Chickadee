@@ -7,10 +7,10 @@
 // This prevents form resubmission on refresh and avoids Leaf rendering
 // inside the POST handler (which simplifies testing).
 //
-//   GET  /login      → login.leaf
-//   POST /login      → verify credentials, set session, redirect to /
-//   GET  /register   → register.leaf
-//   POST /register   → create account (first user becomes admin), redirect to /
+//   GET  /login      → login.leaf (local form and/or SSO button by AUTH_MODE)
+//   POST /login      → verify local credentials, set session, redirect to / (local/dual only)
+//   GET  /register   → register.leaf (local/dual only)
+//   POST /register   → create account (first user becomes admin), redirect to / (local/dual only)
 //   POST /logout     → clear session, redirect to /login
 
 import Vapor
@@ -34,13 +34,26 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/")
         }
         let error = req.query[String.self, at: "error"]
-        return try await req.view.render("login", LoginContext(error: error)).encodeResponse(for: req)
+        let authMode = req.application.authMode
+        return try await req.view.render(
+            "login",
+            LoginContext(
+                error: error,
+                showLocalLogin: authMode != .sso,
+                showRegisterLink: authMode != .sso,
+                showSSOLogin: authMode != .local
+            )
+        ).encodeResponse(for: req)
     }
 
     // MARK: - POST /login
 
     @Sendable
     func login(req: Request) async throws -> Response {
+        if req.application.authMode == .sso {
+            throw Abort(.notFound)
+        }
+
         let body = try req.content.decode(LoginBody.self)
 
         guard let user = try await req.application.authProvider.authenticate(
@@ -60,6 +73,9 @@ struct AuthRoutes: RouteCollection {
 
     @Sendable
     func registerForm(req: Request) async throws -> Response {
+        if req.application.authMode == .sso {
+            throw Abort(.notFound)
+        }
         if req.auth.has(APIUser.self) {
             return req.redirect(to: "/")
         }
@@ -72,6 +88,9 @@ struct AuthRoutes: RouteCollection {
 
     @Sendable
     func register(req: Request) async throws -> Response {
+        if req.application.authMode == .sso {
+            throw Abort(.notFound)
+        }
         let body = try req.content.decode(RegisterBody.self)
 
         // Basic length validation.
@@ -131,7 +150,21 @@ private struct RegisterBody: Content {
 
 private struct LoginContext: Encodable {
     var error: String?
-    init(error: String? = nil) { self.error = error }
+    var showLocalLogin: Bool
+    var showRegisterLink: Bool
+    var showSSOLogin: Bool
+
+    init(
+        error: String? = nil,
+        showLocalLogin: Bool,
+        showRegisterLink: Bool,
+        showSSOLogin: Bool
+    ) {
+        self.error = error
+        self.showLocalLogin = showLocalLogin
+        self.showRegisterLink = showRegisterLink
+        self.showSSOLogin = showSSOLogin
+    }
 }
 
 private struct RegisterContext: Encodable {

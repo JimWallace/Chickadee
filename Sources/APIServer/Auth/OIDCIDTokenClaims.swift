@@ -31,8 +31,17 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
     /// Display name, e.g. "Jane Doe"
     var name: String?
 
+    /// Preferred name, e.g. "Jane"
+    var preferredName: String? // "preferred_name"
+
     var givenName: String?   // "given_name"
     var familyName: String?  // "family_name"
+
+    /// Institution account/user identifier.
+    var userID: String? // "user_id"
+
+    /// Student identifier.
+    var studentID: String? // "student_id"
 
     var email: String?
 
@@ -42,8 +51,11 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         case sub, iss, aud, exp, iat
         case winaccountname
         case name
+        case preferredName = "preferred_name"
         case givenName   = "given_name"
         case familyName  = "family_name"
+        case userID      = "user_id"
+        case studentID   = "student_id"
         case email
     }
 

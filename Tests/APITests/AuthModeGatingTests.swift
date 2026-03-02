@@ -25,6 +25,7 @@ final class AuthModeGatingTests: XCTestCase {
         app.migrations.add(CreateResults())
         app.migrations.add(CreateUsers())
         app.migrations.add(AddUserSSOFields())
+        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
         try app.autoMigrate().wait()
@@ -80,6 +81,39 @@ final class AuthModeGatingTests: XCTestCase {
         })
     }
 
+    func testSSOMode_localLoginPostNotRegistered() async throws {
+        let app = try makeApp(authMode: .sso)
+        defer { app.shutdown() }
+
+        try await app.test(.POST, "/login", afterResponse: { res in
+            XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
+    func testSSOMode_registerNotRegistered() async throws {
+        let app = try makeApp(authMode: .sso)
+        defer { app.shutdown() }
+
+        try await app.test(.GET, "/register", afterResponse: { res in
+            XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
+    func testSSOMode_customCallbackRouteRegisteredFromEnv() async throws {
+        setenv("OIDC_CALLBACK", "/oidc/duo/callback/", 1)
+        defer { unsetenv("OIDC_CALLBACK") }
+
+        let app = try makeApp(authMode: .sso)
+        defer { app.shutdown() }
+
+        try await app.test(.GET, "/oidc/duo/callback", afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertTrue(
+                res.headers.first(name: .location)?.contains("sso_not_configured") == true
+            )
+        })
+    }
+
     // MARK: - Dual mode: SSO routes present alongside local login
 
     func testDualMode_ssoStartRedirectsWhenNotConfigured() async throws {
@@ -99,6 +133,15 @@ final class AuthModeGatingTests: XCTestCase {
         // GET /login should still exist in dual mode.
         try await app.test(.GET, "/login", afterResponse: { res in
             // 500 expected (Leaf not configured in tests) but not 404.
+            XCTAssertNotEqual(res.status, .notFound)
+        })
+    }
+
+    func testDualMode_localLoginPostStillRegistered() async throws {
+        let app = try makeApp(authMode: .dual)
+        defer { app.shutdown() }
+
+        try await app.test(.POST, "/login", afterResponse: { res in
             XCTAssertNotEqual(res.status, .notFound)
         })
     }

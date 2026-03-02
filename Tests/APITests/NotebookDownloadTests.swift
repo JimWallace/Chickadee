@@ -52,6 +52,7 @@ final class NotebookDownloadTests: XCTestCase {
         app.migrations.add(CreateResults())
         app.migrations.add(CreateUsers())
         app.migrations.add(AddUserSSOFields())
+        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
         try await app.autoMigrate().get()

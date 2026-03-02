@@ -29,6 +29,14 @@ If unset, defaults preserve current local development behavior.
 
 ---
 
+## Auth mode defaults
+
+- Chickadee now defaults to `sso` auth mode when `AUTH_MODE` is unset.
+- To allow non-SSO modes (`local` or `dual`), set `ENABLE_NON_SSO_AUTH_MODES=true`.
+- With the flag disabled, `AUTH_MODE=local` or `AUTH_MODE=dual` is ignored and `sso` is used.
+
+---
+
 ## REST API
 
 Base path: `/api/v1`

@@ -34,9 +34,11 @@ struct AdminRoutes: RouteCollection {
         let userRows = users.map { u in
             AdminUserRow(
                 id:        u.id?.uuidString ?? "",
+                displayName: u.displayName,
                 username:  u.username,
                 role:      u.role,
-                createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
+                createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                lastLoginAt: u.lastLoginAt.map { ISO8601DateFormatter().string(from: $0) }
             )
         }
 
@@ -171,9 +173,11 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
 
 private struct AdminUserRow: Encodable {
     let id: String
+    let displayName: String?
     let username: String
     let role: String
     let createdAt: String
+    let lastLoginAt: String?
 }
 
 struct AdminWorkerRow: Content {

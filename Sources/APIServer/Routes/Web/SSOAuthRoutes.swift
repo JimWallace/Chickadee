@@ -19,6 +19,7 @@ struct SSOAuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         routes.get("auth", "sso", "start",    use: ssoStart)
         routes.get("auth", "sso", "callback", use: ssoCallback)
+        registerConfiguredCallbackRoute(on: routes)
     }
 
     // MARK: - GET /auth/sso/start
@@ -99,27 +100,18 @@ struct SSOAuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=sso_failed")
         }
 
-        // Exchange authorization code for tokens
+        // Exchange authorization code for tokens.
         let tokenResponse: OIDCTokenResponse
         do {
-            let response = try await req.client.post(
-                URI(string: config.discovery.tokenEndpoint)
-            ) { tokenReq in
-                tokenReq.headers.contentType = .urlEncodedForm
-                try tokenReq.content.encode([
-                    "grant_type":    "authorization_code",
-                    "code":          code,
-                    "redirect_uri":  config.redirectURI,
-                    "client_id":     config.clientID,
-                    "client_secret": config.clientSecret,
-                    "code_verifier": codeVerifier,
-                ] as [String: String])
-            }
-            guard response.status == .ok else {
-                req.logger.error("Token exchange returned HTTP \(response.status.code)")
+            guard let exchanged = try await exchangeToken(
+                code: code,
+                codeVerifier: codeVerifier,
+                config: config,
+                on: req
+            ) else {
                 return req.redirect(to: "/login?error=sso_failed")
             }
-            tokenResponse = try response.content.decode(OIDCTokenResponse.self)
+            tokenResponse = exchanged
         } catch {
             req.logger.error("Token exchange failed: \(error)")
             return req.redirect(to: "/login?error=sso_failed")
@@ -165,25 +157,48 @@ struct SSOAuthRoutes: RouteCollection {
     // MARK: - User upsert
 
     /// Look up a user by (auth_provider, external_subject); create if not found.
-    /// Updates mutable profile fields (email, display_name, last_login_at) on every login.
+    /// Updates mutable profile fields on every login.
     private func upsertUser(claims: OIDCIDTokenClaims, on req: Request) async throws -> APIUser {
         let subject = claims.sub.value
-        let username = claims.winaccountname?.nilIfEmpty() ?? subject
+        let username = claims.winaccountname?.nilIfBlank() ?? subject
+
+        let preferredName = claims.preferredName?.nilIfBlank()
 
         // Prefer full name from 'name' claim; fall back to given + family
         let displayName: String? = {
-            if let n = claims.name?.nilIfEmpty() { return n }
-            let parts = [claims.givenName, claims.familyName].compactMap { $0?.nilIfEmpty() }
+            if let n = claims.name?.nilIfBlank() { return n }
+            let parts = [claims.givenName, claims.familyName].compactMap { $0?.nilIfBlank() }
             return parts.isEmpty ? nil : parts.joined(separator: " ")
         }()
+
+        // Prefer explicit user_id claim, then provider username, then stable subject.
+        let userIdentifier =
+            claims.userID?.nilIfBlank()
+            ?? claims.winaccountname?.nilIfBlank()
+            ?? subject
+        let studentID = claims.studentID?.nilIfBlank()
+        let email = claims.email?.nilIfBlank()
+        let mappedRole = mappedSSORole(
+            username: username,
+            userIdentifier: userIdentifier,
+            email: email,
+            adminAllowlist: req.application.ssoAdminUsers,
+            instructorAllowlist: req.application.ssoInstructorUsers
+        )
 
         if let existing = try await APIUser.query(on: req.db)
             .filter(\.$authProvider == "duo-oidc")
             .filter(\.$externalSubject == subject)
             .first()
         {
-            existing.email        = claims.email
+            existing.preferredName = preferredName ?? existing.preferredName
+            existing.userIdentifier = userIdentifier
+            existing.studentID     = studentID ?? existing.studentID
+            existing.email        = email ?? existing.email
             existing.displayName  = displayName ?? existing.displayName
+            if let mappedRole {
+                existing.role = mappedRole
+            }
             existing.lastLoginAt  = Date()
             try await existing.save(on: req.db)
             return existing
@@ -192,23 +207,165 @@ struct SSOAuthRoutes: RouteCollection {
         let newUser = APIUser(
             username:        username,
             passwordHash:    "",            // SSO users have no local password
-            role:            "student",
+            role:            mappedRole ?? "student",
             authProvider:    "duo-oidc",
             externalSubject: subject,
-            email:           claims.email,
+            email:           email,
+            preferredName:   preferredName,
+            userIdentifier:  userIdentifier,
+            studentID:       studentID,
             displayName:     displayName,
             lastLoginAt:     Date()
         )
         try await newUser.save(on: req.db)
         return newUser
     }
+
+    /// Tries a small set of OAuth token request shapes for provider compatibility.
+    /// Returns nil only when all attempts fail.
+    private func exchangeToken(
+        code: String,
+        codeVerifier: String,
+        config: OIDCConfiguration,
+        on req: Request
+    ) async throws -> OIDCTokenResponse? {
+        let endpoint = URI(string: config.discovery.tokenEndpoint)
+        var lastStatus: HTTPResponseStatus = .internalServerError
+        var lastBody = "(empty)"
+
+        // 1) client_secret_basic + PKCE code_verifier
+        do {
+            let response = try await req.client.post(endpoint) { tokenReq in
+                tokenReq.headers.contentType = .urlEncodedForm
+                tokenReq.headers.basicAuthorization = BasicAuthorization(
+                    username: config.clientID,
+                    password: config.clientSecret
+                )
+                try tokenReq.content.encode([
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  config.redirectURI,
+                    "code_verifier": codeVerifier,
+                ] as [String: String], as: .urlEncodedForm)
+            }
+            if response.status == .ok {
+                return try response.content.decode(OIDCTokenResponse.self)
+            }
+            lastStatus = response.status
+            var bodyBuffer = response.body ?? ByteBuffer()
+            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+        }
+
+        // 2) client_secret_post + PKCE code_verifier
+        do {
+            let response = try await req.client.post(endpoint) { tokenReq in
+                tokenReq.headers.contentType = .urlEncodedForm
+                try tokenReq.content.encode([
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  config.redirectURI,
+                    "client_id":     config.clientID,
+                    "client_secret": config.clientSecret,
+                    "code_verifier": codeVerifier,
+                ] as [String: String], as: .urlEncodedForm)
+            }
+            if response.status == .ok {
+                return try response.content.decode(OIDCTokenResponse.self)
+            }
+            lastStatus = response.status
+            var bodyBuffer = response.body ?? ByteBuffer()
+            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+        }
+
+        // 3) client_secret_post without PKCE verifier (provider-specific fallback)
+        do {
+            let response = try await req.client.post(endpoint) { tokenReq in
+                tokenReq.headers.contentType = .urlEncodedForm
+                try tokenReq.content.encode([
+                    "grant_type":    "authorization_code",
+                    "code":          code,
+                    "redirect_uri":  config.redirectURI,
+                    "client_id":     config.clientID,
+                    "client_secret": config.clientSecret,
+                ] as [String: String], as: .urlEncodedForm)
+            }
+            if response.status == .ok {
+                return try response.content.decode(OIDCTokenResponse.self)
+            }
+            lastStatus = response.status
+            var bodyBuffer = response.body ?? ByteBuffer()
+            lastBody = bodyBuffer.readString(length: bodyBuffer.readableBytes) ?? "(empty)"
+        }
+
+        req.logger.error("Token exchange returned HTTP \(lastStatus.code): \(lastBody)")
+        return nil
+    }
+}
+
+private extension SSOAuthRoutes {
+    func mappedSSORole(
+        username: String,
+        userIdentifier: String,
+        email: String?,
+        adminAllowlist: Set<String>,
+        instructorAllowlist: Set<String>
+    ) -> String? {
+        guard !adminAllowlist.isEmpty || !instructorAllowlist.isEmpty else {
+            return nil
+        }
+
+        let candidates = Set(
+            [
+                username.normalizedIdentityKey(),
+                userIdentifier.normalizedIdentityKey(),
+                email?.normalizedIdentityKey(),
+            ]
+            .compactMap { $0 }
+        )
+
+        if !adminAllowlist.isDisjoint(with: candidates) {
+            return "admin"
+        }
+        if !instructorAllowlist.isDisjoint(with: candidates) {
+            return "instructor"
+        }
+        return nil
+    }
+
+    func registerConfiguredCallbackRoute(on routes: RoutesBuilder) {
+        guard
+            let raw = Environment.get("OIDC_CALLBACK")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            !raw.isEmpty
+        else {
+            return
+        }
+
+        let components = raw
+            .split(separator: "/")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+
+        guard !components.isEmpty else { return }
+        guard components != ["auth", "sso", "callback"] else { return }
+
+        let grouped = routes.grouped(components.map { .constant($0) })
+        grouped.get(use: ssoCallback)
+    }
 }
 
 // MARK: - Helpers
 
 private extension String {
-    /// Returns nil when the string is empty, self otherwise.
-    func nilIfEmpty() -> String? { isEmpty ? nil : self }
+    /// Returns nil when the string is blank/whitespace-only, trimmed self otherwise.
+    func nilIfBlank() -> String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func normalizedIdentityKey() -> String? {
+        nilIfBlank()?.lowercased()
+    }
 }
 
 private extension Data {

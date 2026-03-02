@@ -25,7 +25,13 @@
         #if(currentUser.isAdmin):
             <a class="nav-link" href="/admin">Admin</a>
         #endif
-        <span class="nav-username">#(currentUser.username)</span>
+        #if(currentUser.preferredName):
+            <span class="nav-username" title="#(currentUser.username)">#(currentUser.preferredName)</span>
+        #elseif(currentUser.displayName):
+            <span class="nav-username" title="#(currentUser.username)">#(currentUser.displayName)</span>
+        #else:
+            <span class="nav-username">#(currentUser.username)</span>
+        #endif
         <form method="post" action="/logout" style="display:inline;margin:0">
             <button class="btn-link nav-link" type="submit">Log out</button>
         </form>

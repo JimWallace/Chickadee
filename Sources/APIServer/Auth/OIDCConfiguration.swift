@@ -4,8 +4,10 @@
 // Loaded once at startup (from main()) and stored in app.oidcConfig.
 //
 // Environment variables:
+//   OIDC_AUTH_SERVER   — optional; auth server base URL used for discovery
 //   OIDC_CLIENT_ID     — required when AUTH_MODE is 'sso' or 'dual'
 //   OIDC_CLIENT_SECRET — required when AUTH_MODE is 'sso' or 'dual'
+//   OIDC_CALLBACK      — optional; callback path (default: /auth/sso/callback)
 //
 // Discovery URL pattern (DUO OIDC at UWaterloo):
 //   https://sso-4ccc589b.sso.duosecurity.com/oidc/{CLIENT_ID}/.well-known/openid-configuration
@@ -92,10 +94,23 @@ struct OIDCConfiguration: Sendable {
         let baseURL = app.securityConfiguration.publicBaseURL?.absoluteString
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             ?? "http://localhost:8080"
-        let redirectURI = baseURL + "/auth/sso/callback"
+        let callbackPath = normalizedCallbackPath(Environment.get("OIDC_CALLBACK"))
+        let redirectURI = baseURL + callbackPath
 
         // Fetch discovery document
-        let discoveryURL = "https://sso-4ccc589b.sso.duosecurity.com/oidc/\(clientID)/.well-known/openid-configuration"
+        let discoveryURL: String = {
+            if let configured = Environment.get("OIDC_AUTH_SERVER")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !configured.isEmpty
+            {
+                let trimmed = configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if trimmed.hasSuffix(".well-known/openid-configuration") {
+                    return trimmed
+                }
+                return trimmed + "/.well-known/openid-configuration"
+            }
+            return "https://sso-4ccc589b.sso.duosecurity.com/oidc/\(clientID)/.well-known/openid-configuration"
+        }()
         app.logger.info("Fetching OIDC discovery document: \(discoveryURL)")
         let discoveryResponse = try await app.client.get(URI(string: discoveryURL))
         guard discoveryResponse.status == .ok else {
@@ -128,6 +143,13 @@ struct OIDCConfiguration: Sendable {
             discovery: discovery
         )
     }
+}
+
+private func normalizedCallbackPath(_ raw: String?) -> String {
+    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmed.isEmpty else { return "/auth/sso/callback" }
+    let withLeadingSlash = trimmed.hasPrefix("/") ? trimmed : "/" + trimmed
+    return withLeadingSlash
 }
 
 // MARK: - Application Storage
