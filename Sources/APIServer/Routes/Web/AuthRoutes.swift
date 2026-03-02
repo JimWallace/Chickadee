@@ -35,6 +35,14 @@ struct AuthRoutes: RouteCollection {
         }
         let error = req.query[String.self, at: "error"]
         let authMode = req.application.authMode
+
+        // In SSO-only mode, start the SSO flow immediately so users do not
+        // need to click a button. Keep error states on /login so the message
+        // can be shown instead of creating a redirect loop.
+        if authMode == .sso, error == nil {
+            return req.redirect(to: "/auth/sso/start")
+        }
+
         return try await req.view.render(
             "login",
             LoginContext(
