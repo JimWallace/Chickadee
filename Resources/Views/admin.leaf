@@ -63,18 +63,24 @@ Admin
     <table class="results-table" id="users-table">
         <thead>
             <tr>
+                <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
                 <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
                 <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
+                <th class="time" data-sort-key="last-login" data-sort-type="date" tabindex="0" aria-sort="none">Last Login</th>
                 <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
-                <th></th>
             </tr>
         </thead>
         <tbody>
         #for(user in users):
             <tr>
+                <td>
+                    #if(user.displayName):
+                        #(user.displayName)
+                    #else:
+                        —
+                    #endif
+                </td>
                 <td><code>#(user.username)</code></td>
-                <td><span class="tier">#(user.role)</span></td>
-                <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
                 <td>
                     <form method="post" action="/admin/users/#(user.id)/role"
                           style="display:flex;gap:.4rem;align-items:center">
@@ -87,6 +93,14 @@ Admin
                                 style="padding:.25rem .6rem;font-size:.8rem">Save</button>
                     </form>
                 </td>
+                <td class="time js-relative-time" data-iso="#(user.lastLoginAt)">
+                    #if(user.lastLoginAt):
+                        #(user.lastLoginAt)
+                    #else:
+                        —
+                    #endif
+                </td>
+                <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
             </tr>
         #endfor
         </tbody>
@@ -225,11 +239,15 @@ Admin
                 return Number.isNaN(date.getTime()) ? 0 : date.getTime();
             }
 
-            function readUserCellValue(row, index, type) {
+            function readUserCellValue(row, index, type, sortKey) {
                 var cell = row.children[index];
                 if (!cell) return '';
                 if (type === 'date') {
                     return dateValueFromCell(cell);
+                }
+                if (sortKey === 'role') {
+                    var roleSelect = cell.querySelector('select[name="role"]');
+                    if (roleSelect) return roleSelect.value || '';
                 }
                 return (cell.textContent || '').trim();
             }
@@ -238,10 +256,11 @@ Admin
                 var index = userHeaders.indexOf(header);
                 if (index < 0) return;
                 var type = header.getAttribute('data-sort-type') || 'text';
+                var sortKey = header.getAttribute('data-sort-key') || '';
                 var rows = Array.from(usersBody.querySelectorAll('tr'));
                 rows.sort(function (lhs, rhs) {
-                    var lv = readUserCellValue(lhs, index, type);
-                    var rv = readUserCellValue(rhs, index, type);
+                    var lv = readUserCellValue(lhs, index, type, sortKey);
+                    var rv = readUserCellValue(rhs, index, type, sortKey);
                     var result = 0;
                     if (type === 'date') {
                         result = lv - rv;
@@ -249,9 +268,9 @@ Admin
                         result = collator.compare(String(lv), String(rv));
                     }
                     if (result === 0) {
-                        var lhsID = (lhs.children[0] && lhs.children[0].textContent || '').trim();
-                        var rhsID = (rhs.children[0] && rhs.children[0].textContent || '').trim();
-                        result = collator.compare(lhsID, rhsID);
+                        var lhsUsername = (lhs.children[1] && lhs.children[1].textContent || '').trim();
+                        var rhsUsername = (rhs.children[1] && rhs.children[1].textContent || '').trim();
+                        result = collator.compare(lhsUsername, rhsUsername);
                     }
                     return direction === 'asc' ? result : -result;
                 });

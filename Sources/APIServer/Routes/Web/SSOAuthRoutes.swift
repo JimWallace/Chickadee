@@ -157,25 +157,48 @@ struct SSOAuthRoutes: RouteCollection {
     // MARK: - User upsert
 
     /// Look up a user by (auth_provider, external_subject); create if not found.
-    /// Updates mutable profile fields (email, display_name, last_login_at) on every login.
+    /// Updates mutable profile fields on every login.
     private func upsertUser(claims: OIDCIDTokenClaims, on req: Request) async throws -> APIUser {
         let subject = claims.sub.value
-        let username = claims.winaccountname?.nilIfEmpty() ?? subject
+        let username = claims.winaccountname?.nilIfBlank() ?? subject
+
+        let preferredName = claims.preferredName?.nilIfBlank()
 
         // Prefer full name from 'name' claim; fall back to given + family
         let displayName: String? = {
-            if let n = claims.name?.nilIfEmpty() { return n }
-            let parts = [claims.givenName, claims.familyName].compactMap { $0?.nilIfEmpty() }
+            if let n = claims.name?.nilIfBlank() { return n }
+            let parts = [claims.givenName, claims.familyName].compactMap { $0?.nilIfBlank() }
             return parts.isEmpty ? nil : parts.joined(separator: " ")
         }()
+
+        // Prefer explicit user_id claim, then provider username, then stable subject.
+        let userIdentifier =
+            claims.userID?.nilIfBlank()
+            ?? claims.winaccountname?.nilIfBlank()
+            ?? subject
+        let studentID = claims.studentID?.nilIfBlank()
+        let email = claims.email?.nilIfBlank()
+        let mappedRole = mappedSSORole(
+            username: username,
+            userIdentifier: userIdentifier,
+            email: email,
+            adminAllowlist: req.application.ssoAdminUsers,
+            instructorAllowlist: req.application.ssoInstructorUsers
+        )
 
         if let existing = try await APIUser.query(on: req.db)
             .filter(\.$authProvider == "duo-oidc")
             .filter(\.$externalSubject == subject)
             .first()
         {
-            existing.email        = claims.email
+            existing.preferredName = preferredName ?? existing.preferredName
+            existing.userIdentifier = userIdentifier
+            existing.studentID     = studentID ?? existing.studentID
+            existing.email        = email ?? existing.email
             existing.displayName  = displayName ?? existing.displayName
+            if let mappedRole {
+                existing.role = mappedRole
+            }
             existing.lastLoginAt  = Date()
             try await existing.save(on: req.db)
             return existing
@@ -184,10 +207,13 @@ struct SSOAuthRoutes: RouteCollection {
         let newUser = APIUser(
             username:        username,
             passwordHash:    "",            // SSO users have no local password
-            role:            "student",
+            role:            mappedRole ?? "student",
             authProvider:    "duo-oidc",
             externalSubject: subject,
-            email:           claims.email,
+            email:           email,
+            preferredName:   preferredName,
+            userIdentifier:  userIdentifier,
+            studentID:       studentID,
             displayName:     displayName,
             lastLoginAt:     Date()
         )
@@ -277,6 +303,35 @@ struct SSOAuthRoutes: RouteCollection {
 }
 
 private extension SSOAuthRoutes {
+    func mappedSSORole(
+        username: String,
+        userIdentifier: String,
+        email: String?,
+        adminAllowlist: Set<String>,
+        instructorAllowlist: Set<String>
+    ) -> String? {
+        guard !adminAllowlist.isEmpty || !instructorAllowlist.isEmpty else {
+            return nil
+        }
+
+        let candidates = Set(
+            [
+                username.normalizedIdentityKey(),
+                userIdentifier.normalizedIdentityKey(),
+                email?.normalizedIdentityKey(),
+            ]
+            .compactMap { $0 }
+        )
+
+        if !adminAllowlist.isDisjoint(with: candidates) {
+            return "admin"
+        }
+        if !instructorAllowlist.isDisjoint(with: candidates) {
+            return "instructor"
+        }
+        return nil
+    }
+
     func registerConfiguredCallbackRoute(on routes: RoutesBuilder) {
         guard
             let raw = Environment.get("OIDC_CALLBACK")?
@@ -302,8 +357,15 @@ private extension SSOAuthRoutes {
 // MARK: - Helpers
 
 private extension String {
-    /// Returns nil when the string is empty, self otherwise.
-    func nilIfEmpty() -> String? { isEmpty ? nil : self }
+    /// Returns nil when the string is blank/whitespace-only, trimmed self otherwise.
+    func nilIfBlank() -> String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func normalizedIdentityKey() -> String? {
+        nilIfBlank()?.lowercased()
+    }
 }
 
 private extension Data {

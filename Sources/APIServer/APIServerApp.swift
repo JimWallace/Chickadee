@@ -44,8 +44,15 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     let workerSecretFile = workDir + ".worker-secret"
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
-    let authMode = authModeOverride ?? AuthMode.fromEnvironment() ?? .local
+    let requestedAuthMode = AuthMode.fromEnvironment()
+    let nonSSOModesEnabled = environmentBool("ENABLE_NON_SSO_AUTH_MODES") ?? false
+    let authMode = authModeOverride ?? resolvedAuthMode(
+        requestedMode: requestedAuthMode,
+        nonSSOModesEnabled: nonSSOModesEnabled
+    )
     let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
+    let ssoAdminUsers = parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
+    let ssoInstructorUsers = parseSSOIdentityAllowlist(Environment.get("SSO_INSTRUCTOR_USERS"))
 
     // MARK: - Directories
 
@@ -78,6 +85,8 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.storage[AuthModeKey.self] = authMode
     app.storage[SecurityConfigurationKey.self] = securityConfiguration
+    app.storage[SSOAdminUsersKey.self] = ssoAdminUsers
+    app.storage[SSOInstructorUsersKey.self] = ssoInstructorUsers
     app.authProvider = LocalAuthProvider()
 
     // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
@@ -129,12 +138,25 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.migrations.add(CreateResults())
     app.migrations.add(CreateUsers())
     app.migrations.add(AddUserSSOFields())
+    app.migrations.add(AddUserProfileFields())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())
 
     try app.autoMigrate().wait()
 
     if authMode != .local {
+        if !nonSSOModesEnabled {
+            app.logger.info(
+                "Default auth mode is SSO. Set ENABLE_NON_SSO_AUTH_MODES=true to allow local/dual AUTH_MODE values."
+            )
+        }
+        if let requestedAuthMode,
+           requestedAuthMode != .sso,
+           !nonSSOModesEnabled {
+            app.logger.warning(
+                "AUTH_MODE=\(requestedAuthMode.rawValue) ignored because ENABLE_NON_SSO_AUTH_MODES is not enabled; using sso."
+            )
+        }
         if securityConfiguration.publicBaseURL == nil {
             app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not set.")
         } else if securityConfiguration.publicBaseURL?.scheme?.lowercased() != "https" {
@@ -192,6 +214,12 @@ struct AuthModeKey: StorageKey {
 struct SecurityConfigurationKey: StorageKey {
     typealias Value = AppSecurityConfiguration
 }
+struct SSOAdminUsersKey: StorageKey {
+    typealias Value = Set<String>
+}
+struct SSOInstructorUsersKey: StorageKey {
+    typealias Value = Set<String>
+}
 
 enum AuthMode: String, Sendable {
     case local
@@ -210,6 +238,15 @@ enum AuthMode: String, Sendable {
     }
 }
 
+func resolvedAuthMode(
+    requestedMode: AuthMode?,
+    nonSSOModesEnabled: Bool
+) -> AuthMode {
+    let requested = requestedMode ?? .sso
+    guard requested != .sso else { return .sso }
+    return nonSSOModesEnabled ? requested : .sso
+}
+
 extension Application {
     var authMode: AuthMode {
         get { storage[AuthModeKey.self] ?? .local }
@@ -219,6 +256,16 @@ extension Application {
     var securityConfiguration: AppSecurityConfiguration {
         get { storage[SecurityConfigurationKey.self] ?? .default }
         set { storage[SecurityConfigurationKey.self] = newValue }
+    }
+
+    var ssoAdminUsers: Set<String> {
+        get { storage[SSOAdminUsersKey.self] ?? [] }
+        set { storage[SSOAdminUsersKey.self] = newValue }
+    }
+
+    var ssoInstructorUsers: Set<String> {
+        get { storage[SSOInstructorUsersKey.self] ?? [] }
+        set { storage[SSOInstructorUsersKey.self] = newValue }
     }
 }
 
@@ -452,6 +499,15 @@ private func environmentBool(_ key: String) -> Bool? {
     default:
         return nil
     }
+}
+
+private func parseSSOIdentityAllowlist(_ raw: String?) -> Set<String> {
+    guard let raw else { return [] }
+    let values = raw
+        .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isNewline })
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        .filter { !$0.isEmpty }
+    return Set(values)
 }
 
 extension Application {
