@@ -164,6 +164,9 @@ actor WorkerDaemon {
         try writePythonRuntimeHelpers(in: testSetupDir)
         try writeStudentModuleHint(in: testSetupDir, submissionFilename: job.submissionFilename)
 
+        // Install shared R test runtime helpers for every run.
+        try writeRRuntimeHelper(in: testSetupDir)
+
         // Run each test script and collect outcomes.
         var outcomes: [TestOutcome] = []
         for entry in manifest.testSuites {
@@ -369,6 +372,11 @@ actor WorkerDaemon {
             timestamp:       Date()
         )
         try await reporter.report(collection)
+    }
+
+    private func writeRRuntimeHelper(in directory: URL) throws {
+        let rRuntimeURL = directory.appendingPathComponent("test_runtime.R")
+        try testRuntimeR.write(to: rRuntimeURL, atomically: true, encoding: .utf8)
     }
 
     private func writePythonRuntimeHelpers(in directory: URL) throws {
@@ -644,6 +652,29 @@ for _module_name in _tr.student_module_names_in_load_order():
         if callable(_value) and not hasattr(builtins, _name):
             setattr(builtins, _name, _value)
 """
+
+// MARK: - R test runtime
+
+// Injected into every test working directory alongside the Python helpers.
+// Hand-formatted JSON output avoids any dependency on jsonlite or other packages
+// that may not be present on a bare R install.
+private let testRuntimeR = #"""
+passed <- function(message = NULL) {
+    msg <- if (is.null(message)) "passed" else as.character(message)
+    cat(paste0('{"shortResult":"', msg, '"}'), "\n")
+    quit(status = 0)
+}
+
+failed <- function(message = "failed") {
+    cat(paste0('{"shortResult":"', as.character(message), '"}'), "\n")
+    quit(status = 1)
+}
+
+errored <- function(message = "error") {
+    cat(paste0('{"shortResult":"', as.character(message), '"}'), "\n")
+    quit(status = 2)
+}
+"""#
 
 // MARK: - Helpers
 

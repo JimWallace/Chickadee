@@ -8,7 +8,7 @@ Submit Code
     action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
     <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-controls="file-input" aria-describedby="drop-zone-help">
         <p id="drop-zone-help">Drag your file here, or press Enter/Space to choose</p>
-        <input type="file" name="files" id="file-input" accept=".zip,.ipynb,.py" required>
+        <input type="file" name="files" id="file-input" accept=".zip,.ipynb,.py,.r" required>
     </div>
     <p class="drop-filename" id="drop-filename"></p>
     <div>
