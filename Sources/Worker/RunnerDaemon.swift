@@ -658,7 +658,7 @@ for _module_name in _tr.student_module_names_in_load_order():
 // Injected into every test working directory alongside the Python helpers.
 // Hand-formatted JSON output avoids any dependency on jsonlite or other packages
 // that may not be present on a bare R install.
-private let testRuntimeR = #"""
+let testRuntimeR = #"""
 passed <- function(message = NULL) {
     msg <- if (is.null(message)) "passed" else as.character(message)
     cat(paste0('{"shortResult":"', msg, '"}'), "\n")

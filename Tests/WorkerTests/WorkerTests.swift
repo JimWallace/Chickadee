@@ -181,6 +181,88 @@ final class WorkerTests: XCTestCase {
         )
     }
 
+    // MARK: - ScriptInvocation: R extension
+
+    func testScriptInvocationRExtensionUsesRscript() {
+        let url = URL(fileURLWithPath: "/tmp/test.r")
+        let inv = scriptInvocation(for: url)
+        XCTAssertEqual(inv.executableURL, URL(fileURLWithPath: "/usr/bin/env"))
+        XCTAssertEqual(inv.arguments, ["Rscript", "/tmp/test.r"])
+    }
+
+    // MARK: - R runtime helpers
+
+    private func rscriptAvailable() -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        proc.arguments = ["Rscript", "--version"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        try? proc.run()
+        proc.waitUntilExit()
+        return proc.terminationStatus == 0
+    }
+
+    private func writeRRuntime() throws {
+        let url = tmpDir.appendingPathComponent("test_runtime.R")
+        try testRuntimeR.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func testRRuntimePassedExitsZeroWithJSON() async throws {
+        try XCTSkipUnless(rscriptAvailable(), "Rscript not available")
+        try writeRRuntime()
+        let script = try writeScript(
+            "source('test_runtime.R')\npassed('all good')",
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertTrue(output.stdout.contains("all good"), "stdout should contain the passed message")
+        XCTAssertTrue(output.stdout.contains("shortResult"), "stdout should contain shortResult JSON key")
+    }
+
+    func testRRuntimeFailedExitsOneWithJSON() async throws {
+        try XCTSkipUnless(rscriptAvailable(), "Rscript not available")
+        try writeRRuntime()
+        let script = try writeScript(
+            "source('test_runtime.R')\nfailed('wrong answer')",
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        XCTAssertEqual(output.exitCode, 1)
+        XCTAssertTrue(output.stdout.contains("wrong answer"))
+        XCTAssertTrue(output.stdout.contains("shortResult"))
+    }
+
+    func testRRuntimeErroredExitsTwoWithJSON() async throws {
+        try XCTSkipUnless(rscriptAvailable(), "Rscript not available")
+        try writeRRuntime()
+        let script = try writeScript(
+            "source('test_runtime.R')\nerrored('unexpected')",
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        XCTAssertEqual(output.exitCode, 2)
+        XCTAssertTrue(output.stdout.contains("unexpected"))
+        XCTAssertTrue(output.stdout.contains("shortResult"))
+    }
+
+    func testRRuntimePassedDefaultMessage() async throws {
+        try XCTSkipUnless(rscriptAvailable(), "Rscript not available")
+        try writeRRuntime()
+        let script = try writeScript(
+            "source('test_runtime.R')\npassed()",
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertTrue(output.stdout.contains("passed"), "default passed() message should be 'passed'")
+    }
+
     // MARK: - ExponentialBackoff
 
     func testBackoffResetsToInitial() {
