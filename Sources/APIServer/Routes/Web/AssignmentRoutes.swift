@@ -1516,7 +1516,7 @@ private func contentType(for filename: String) -> HTTPMediaType {
     switch URL(fileURLWithPath: filename).pathExtension.lowercased() {
     case "ipynb", "json":
         return .json
-    case "py", "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
+    case "py", "r", "sh", "bash", "zsh", "rb", "pl", "js", "php", "txt", "md", "csv":
         return .plainText
     default:
         return HTTPMediaType(type: "application", subType: "octet-stream")
@@ -1925,7 +1925,7 @@ private func buildSuiteEntries(
     }
 
     // Backward-compatible fallback when no suite config JSON is submitted.
-    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "rb", "pl", "js", "php"]
+    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "r", "rb", "pl", "js", "php"]
     var defaults: [ConfiguredSuiteEntry] = []
     for index in suiteFiles.indices {
         guard let script = storedNameByIndex[index], !script.isEmpty else { continue }

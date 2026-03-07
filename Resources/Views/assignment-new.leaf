@@ -87,6 +87,7 @@ Create Assignment
             || lower.endsWith('.bash')
             || lower.endsWith('.zsh')
             || lower.endsWith('.py')
+            || lower.endsWith('.r')
             || lower.endsWith('.rb')
             || lower.endsWith('.pl')
             || lower.endsWith('.js')

@@ -55,6 +55,8 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
         return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node", script.path])
     case "php":
         return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["php", script.path])
+    case "r":
+        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["Rscript", script.path])
     default:
         if let shebang = shebangLine(for: script) {
             if shebang.contains("python") {

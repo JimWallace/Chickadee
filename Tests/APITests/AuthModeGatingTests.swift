@@ -99,6 +99,16 @@ final class AuthModeGatingTests: XCTestCase {
         })
     }
 
+    func testSSOMode_loginAutoRedirectsToSSOStart() async throws {
+        let app = try makeApp(authMode: .sso)
+        defer { app.shutdown() }
+
+        try await app.test(.GET, "/login", afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/auth/sso/start")
+        })
+    }
+
     func testSSOMode_customCallbackRouteRegisteredFromEnv() async throws {
         setenv("OIDC_CALLBACK", "/oidc/duo/callback/", 1)
         defer { unsetenv("OIDC_CALLBACK") }
