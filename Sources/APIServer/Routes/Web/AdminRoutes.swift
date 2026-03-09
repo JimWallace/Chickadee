@@ -23,8 +23,10 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
         admin.post("courses", use: createCourse)
         admin.get("courses", ":courseID", use: courseDetail)
+        admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
+        admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.get("users", ":userID", use: userDetail)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)
         admin.post("users", ":userID", "unenroll", ":courseID", use: adminUnenrollUser)
@@ -196,6 +198,62 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 
+    // MARK: - POST /admin/courses/:courseID/edit
+
+    @Sendable
+    func editCourse(req: Request) async throws -> Response {
+        struct EditCourseBody: Content { var code: String; var name: String }
+
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course   = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let body = try req.content.decode(EditCourseBody.self)
+        let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty, !name.isEmpty else {
+            return req.redirect(to: "/admin/courses/\(idString)?error=fields_required")
+        }
+
+        // Reject duplicate code (excluding this course itself).
+        let existing = try await APICourse.query(on: req.db)
+            .filter(\.$code == code)
+            .first()
+        if let existing, existing.id != courseID {
+            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
+        }
+
+        course.code = code
+        course.name = name
+        try await course.save(on: req.db)
+        return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
+    // MARK: - POST /admin/courses/:courseID/unenroll/:userID
+
+    @Sendable
+    func unenrollUserFromCourse(req: Request) async throws -> Response {
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID       = UUID(uuidString: courseIDString),
+            let userIDString   = req.parameters.get("userID"),
+            let userID         = UUID(uuidString: userIDString)
+        else {
+            throw Abort(.badRequest)
+        }
+
+        try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID == userID)
+            .delete()
+
+        return req.redirect(to: "/admin/courses/\(courseIDString)")
+    }
+
     // MARK: - GET /admin/users/:userID
 
     @Sendable
@@ -290,10 +348,27 @@ struct AdminRoutes: RouteCollection {
             }
         }
 
+        // Load assignments for this course.
+        let cid: UUID? = courseID
+        let assignmentModels = try await APIAssignment.query(on: req.db)
+            .filter(\.$courseID == cid)
+            .sort(\.$dueAt)
+            .all()
+        let iso = ISO8601DateFormatter()
+        let assignments = assignmentModels.map { a in
+            AdminCourseAssignmentRow(
+                id:     a.publicID,
+                title:  a.title,
+                dueAt:  a.dueAt.map { iso.string(from: $0) },
+                isOpen: a.isOpen
+            )
+        }
+
         return try await req.view.render("admin-course", AdminCourseDetailContext(
             currentUser:   req.currentUserContext,
             course:        courseRow,
-            enrolledUsers: enrolledUsers
+            enrolledUsers: enrolledUsers,
+            assignments:   assignments
         ))
     }
 
@@ -572,6 +647,8 @@ private struct AdminCourseDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let course: AdminCourseRow
     let enrolledUsers: [AdminCourseEnrolledUserRow]
+    let assignments: [AdminCourseAssignmentRow]
+    var assignmentCount: Int { assignments.count }
 }
 
 private struct AdminCourseEnrolledUserRow: Encodable {
@@ -579,4 +656,11 @@ private struct AdminCourseEnrolledUserRow: Encodable {
     let username: String
     let displayName: String?
     let role: String
+}
+
+private struct AdminCourseAssignmentRow: Encodable {
+    let id: String      // publicID — used in /assignments/:id/... URLs
+    let title: String
+    let dueAt: String?
+    let isOpen: Bool
 }

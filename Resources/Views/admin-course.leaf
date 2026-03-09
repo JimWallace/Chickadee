@@ -24,6 +24,25 @@
     </form>
 </div>
 
+<!-- ── Edit course ─────────────────────────────────────── -->
+<section class="admin-section">
+    <h2>Edit course</h2>
+    <form method="post" action="/admin/courses/#(course.id)/edit"
+          style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px">
+        <label class="form-label" style="flex:0 0 auto">
+            Code
+            <input class="form-input" type="text" name="code" value="#(course.code)"
+                   required style="width:9rem;display:block">
+        </label>
+        <label class="form-label" style="flex:1 1 200px">
+            Name
+            <input class="form-input" type="text" name="name" value="#(course.name)"
+                   required style="display:block;width:100%">
+        </label>
+        <button class="btn btn-primary" type="submit" style="align-self:flex-end">Save</button>
+    </form>
+</section>
+
 <!-- ── Enrolled students ───────────────────────────────── -->
 <section class="admin-section">
     <h2>Enrolled students (#(course.enrollmentCount))</h2>
@@ -51,10 +70,61 @@
                 </td>
                 <td><code>#(user.username)</code></td>
                 <td>#(user.role)</td>
-                <td>
+                <td style="display:flex;gap:.4rem;flex-wrap:wrap">
                     <a href="/admin/users/#(user.id)"
                        class="btn"
                        style="padding:.25rem .6rem;font-size:.8rem">Manage</a>
+                    <form method="post" action="/admin/courses/#(course.id)/unenroll/#(user.id)"
+                          style="display:inline;margin:0">
+                        <button class="btn" type="submit"
+                                style="padding:.25rem .6rem;font-size:.8rem;color:var(--error)"
+                                onclick="return confirm('Remove @#(user.username) from #(course.code)?')">Remove</button>
+                    </form>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+<!-- ── Assignments ─────────────────────────────────────── -->
+<section class="admin-section">
+    <h2>Assignments (#(assignmentCount))</h2>
+    #if(assignments.isEmpty):
+    <p class="empty">No assignments for this course.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th class="time">Due</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(assignment in assignments):
+            <tr>
+                <td>#(assignment.title)</td>
+                <td class="time">
+                    #if(assignment.dueAt):
+                        #(assignment.dueAt)
+                    #else:
+                        —
+                    #endif
+                </td>
+                <td>
+                    #if(assignment.isOpen):
+                    <span class="tier tier-open">open</span>
+                    #else:
+                    <span class="tier tier-closed">closed</span>
+                    #endif
+                </td>
+                <td>
+                    <a href="/assignments/#(assignment.id)/submissions"
+                       class="btn"
+                       style="padding:.25rem .6rem;font-size:.8rem">Submissions</a>
                 </td>
             </tr>
         #endfor

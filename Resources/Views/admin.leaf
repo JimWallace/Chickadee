@@ -123,6 +123,11 @@ Admin
 <!-- ── Users ──────────────────────────────────────────── -->
 <section class="admin-section">
     <h2>Users</h2>
+    <div style="margin-bottom:.75rem">
+        <input id="users-filter" class="form-input" type="search"
+               placeholder="Filter by name, username or role…"
+               style="max-width:340px" aria-label="Filter users">
+    </div>
     <table class="results-table" id="users-table">
         <thead>
             <tr>
@@ -366,6 +371,21 @@ Admin
 
             sortUsersByHeader(userHeaders[0], 'asc');
         }
+    }
+
+    var usersFilter = document.getElementById('users-filter');
+    if (usersFilter && usersBody) {
+        usersFilter.addEventListener('input', function () {
+            var query = usersFilter.value.trim().toLowerCase();
+            Array.from(usersBody.querySelectorAll('tr')).forEach(function (row) {
+                if (!query) { row.hidden = false; return; }
+                var name     = ((row.children[0] && row.children[0].textContent) || '').toLowerCase();
+                var username = ((row.children[1] && row.children[1].textContent) || '').toLowerCase();
+                var roleEl   = row.children[2] && row.children[2].querySelector('select[name="role"]');
+                var role     = roleEl ? roleEl.value.toLowerCase() : '';
+                row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
+            });
+        });
     }
 
     setInterval(function () {
