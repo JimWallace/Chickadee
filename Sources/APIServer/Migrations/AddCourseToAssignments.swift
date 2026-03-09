@@ -1,7 +1,9 @@
 // APIServer/Migrations/AddCourseToAssignments.swift
 //
-// Adds course_id to both test_setups and assignments, then seeds a default
-// course and migrates all existing rows and user enrollments into it.
+// Adds course_id to both test_setups and assignments. If there is existing
+// data (users, test setups, or assignments), seeds a default course and
+// migrates those rows and user enrollments into it. On a fresh database with
+// no existing data the seeding step is skipped entirely.
 //
 // The default course code is read from the DEFAULT_COURSE_CODE environment
 // variable (fallback: "DEFAULT"). Set DEFAULT_COURSE_NAME for the full name
@@ -29,6 +31,19 @@ struct AddCourseToAssignments: AsyncMigration {
         //    which is necessary for a data migration inside a schema migration.
         guard let sql = database as? SQLDatabase else {
             // Non-SQL backends (tests using in-memory stores) — skip seeding.
+            return
+        }
+
+        // On a fresh database there is nothing to migrate, so skip seeding.
+        // Check for any pre-existing rows across the three affected tables.
+        struct CountRow: Decodable { let n: Int }
+        let hasUsers      = try await sql.raw("SELECT COUNT(*) AS n FROM users").first(decoding: CountRow.self).map { $0.n > 0 } ?? false
+        let hasSetups     = try await sql.raw("SELECT COUNT(*) AS n FROM test_setups").first(decoding: CountRow.self).map { $0.n > 0 } ?? false
+        let hasAssignments = try await sql.raw("SELECT COUNT(*) AS n FROM assignments").first(decoding: CountRow.self).map { $0.n > 0 } ?? false
+
+        guard hasUsers || hasSetups || hasAssignments else {
+            // Fresh database — no existing data to migrate; first course will
+            // be created by the admin through the normal UI.
             return
         }
 
