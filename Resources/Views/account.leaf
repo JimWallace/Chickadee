@@ -1,0 +1,98 @@
+#extend("base"):
+#export("title"):
+My Account
+#endexport
+#export("content"):
+<h1>My Account</h1>
+
+#if(error == "invalid"):
+<p class="form-error" role="alert">That course is not available.</p>
+#endif
+
+<!-- ── User info ──────────────────────────────────────────── -->
+<section class="admin-section">
+    <h2>Account info</h2>
+    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:.4rem 1.25rem;max-width:480px">
+        <dt style="color:var(--gray-600)">Username</dt>
+        <dd style="margin:0"><strong>#(username)</strong></dd>
+        #if(preferredName):
+        <dt style="color:var(--gray-600)">Preferred name</dt>
+        <dd style="margin:0">#(preferredName)</dd>
+        #endif
+        #if(studentID):
+        <dt style="color:var(--gray-600)">Student ID</dt>
+        <dd style="margin:0">#(studentID)</dd>
+        #endif
+        #if(email):
+        <dt style="color:var(--gray-600)">Email</dt>
+        <dd style="margin:0">#(email)</dd>
+        #endif
+    </dl>
+</section>
+
+<!-- ── My Courses ─────────────────────────────────────────── -->
+<section class="admin-section">
+    <h2>My courses</h2>
+    #if(enrolledCourses.isEmpty):
+    <p class="empty">You are not enrolled in any courses.
+        <a href="/enroll">Browse available courses</a>
+    </p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(course in enrolledCourses):
+            <tr>
+                <td><strong>#(course.code)</strong></td>
+                <td>#(course.name)</td>
+                <td>
+                    <form method="post" action="/account/unenroll/#(course.id)" style="display:inline">
+                        <button class="btn" type="submit"
+                                onclick="return confirm('Leave #(course.code)?')">Leave</button>
+                    </form>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+<!-- ── Available Courses ──────────────────────────────────── -->
+#if(!availableCourses.isEmpty):
+<section class="admin-section">
+    <h2>Available courses</h2>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(course in availableCourses):
+            <tr>
+                <td><strong>#(course.code)</strong></td>
+                <td>#(course.name)</td>
+                <td>
+                    <form method="post" action="/account/enroll" style="display:inline">
+                        <input type="hidden" name="courseID" value="#(course.id)">
+                        <button class="btn btn-primary" type="submit">Join</button>
+                    </form>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+</section>
+#endif
+
+#endexport
+#endextend

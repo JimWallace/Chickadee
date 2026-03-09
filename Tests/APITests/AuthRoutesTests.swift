@@ -39,6 +39,9 @@ final class AuthRoutesTests: XCTestCase {
         app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
+        app.migrations.add(AddCourses())
+        app.migrations.add(AddCourseEnrollments())
+        app.migrations.add(AddCourseToAssignments())
         try await app.autoMigrate().get()
 
         try routes(app)

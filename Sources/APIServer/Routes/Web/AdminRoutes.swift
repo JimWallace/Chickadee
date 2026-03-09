@@ -21,6 +21,8 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
+        admin.post("courses", use: createCourse)
+        admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
     }
 
     // MARK: - GET /admin
@@ -46,12 +48,30 @@ struct AdminRoutes: RouteCollection {
         let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
         let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
 
+        // Course management data.
+        let allCourses = try await APICourse.query(on: req.db)
+            .sort(\.$createdAt)
+            .all()
+        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
+        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
+            guard let id = course.id else { return nil }
+            return AdminCourseRow(
+                id: id.uuidString,
+                code: course.code,
+                name: course.name,
+                isArchived: course.isArchived,
+                enrollmentCount: enrollmentCounts[id] ?? 0,
+                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
+            )
+        }
+
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             users:       userRows,
             workers:     workerRows,
             workerSecret: effectiveSecret,
-            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled
+            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
+            courses: courseRows
         )
         return try await req.view.render("admin", ctx)
     }
@@ -136,6 +156,41 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+    // MARK: - POST /admin/courses
+
+    @Sendable
+    func createCourse(req: Request) async throws -> Response {
+        struct CourseBody: Content {
+            var code: String
+            var name: String
+        }
+        let body = try req.content.decode(CourseBody.self)
+        let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty, !name.isEmpty else {
+            return req.redirect(to: "/admin?error=course_fields_required")
+        }
+        let course = APICourse(code: code, name: name)
+        try await course.save(on: req.db)
+        return req.redirect(to: "/admin")
+    }
+
+    // MARK: - POST /admin/courses/:courseID/archive
+
+    @Sendable
+    func toggleCourseArchive(req: Request) async throws -> Response {
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course   = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        course.isArchived.toggle()
+        try await course.save(on: req.db)
+        return req.redirect(to: "/admin")
+    }
+
 }
 
 private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
@@ -169,6 +224,15 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
     }
 }
 
+private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+    let enrollments = try await APICourseEnrollment.query(on: db).all()
+    var counts: [UUID: Int] = [:]
+    for e in enrollments {
+        counts[e.$course.id, default: 0] += 1
+    }
+    return counts
+}
+
 // MARK: - View context types
 
 private struct AdminUserRow: Encodable {
@@ -188,10 +252,20 @@ struct AdminWorkerRow: Content {
     let jobsProcessed: Int
 }
 
+private struct AdminCourseRow: Encodable {
+    let id: String
+    let code: String
+    let name: String
+    let isArchived: Bool
+    let enrollmentCount: Int
+    let createdAt: String
+}
+
 private struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let users: [AdminUserRow]
     let workers: [AdminWorkerRow]
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
+    let courses: [AdminCourseRow]
 }

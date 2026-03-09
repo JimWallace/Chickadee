@@ -21,6 +21,8 @@ func routes(_ app: Application) throws {
 
     let auth = app.grouped(sessionAuth, RoleMiddleware(required: .authenticated))
     try auth.register(collection: WebRoutes())
+    try auth.register(collection: EnrollmentRoutes())
+    try auth.register(collection: AccountRoutes())
     try auth.register(collection: SubmissionDownloadRoute())
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())

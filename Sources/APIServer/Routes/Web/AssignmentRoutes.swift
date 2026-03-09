@@ -50,12 +50,45 @@ struct AssignmentRoutes: RouteCollection {
     // MARK: - GET /assignments
 
     @Sendable
-    func list(req: Request) async throws -> View {
-        let allSetups = try await APITestSetup.query(on: req.db)
-            .sort(\.$createdAt, .descending)
-            .all()
+    func list(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
 
-        let allAssignments = try await APIAssignment.query(on: req.db).all()
+        // Resolve active course for tab strip and scoped queries.
+        let courseState = try await req.resolveActiveCourse(for: user)
+        let userContext = CurrentUserContext(
+            user: user,
+            activeCourse: courseState.active,
+            enrolledCourses: courseState.all
+        )
+
+        // If multiple courses exist but user has no enrollments → redirect to /enroll.
+        if courseState.active == nil {
+            let courseCount = try await APICourse.query(on: req.db).count()
+            if courseCount > 0 {
+                return req.redirect(to: "/enroll")
+            }
+        }
+
+        let allSetups: [APITestSetup]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            allSetups = try await APITestSetup.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .sort(\.$createdAt, .descending)
+                .all()
+        } else {
+            allSetups = try await APITestSetup.query(on: req.db)
+                .sort(\.$createdAt, .descending)
+                .all()
+        }
+
+        let allAssignments: [APIAssignment]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            allAssignments = try await APIAssignment.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .all()
+        } else {
+            allAssignments = try await APIAssignment.query(on: req.db).all()
+        }
         // Map testSetupID → assignment for quick lookup
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
@@ -135,22 +168,47 @@ struct AssignmentRoutes: RouteCollection {
         }
 
         let ctx = AssignmentsContext(
-            currentUser: req.currentUserContext,
+            currentUser: userContext,
             rows: rows
         )
-        return try await req.view.render("assignments", ctx)
+        return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
 
     // MARK: - GET /assignments/grades.csv
 
     @Sendable
     func exportGradesCSV(req: Request) async throws -> Response {
-        let students = try await APIUser.query(on: req.db)
-            .filter(\.$role == "student")
-            .sort(\.$username, .ascending)
-            .all()
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
 
-        let assignments = try await APIAssignment.query(on: req.db).all()
+        // Only include students enrolled in the active course (if one is set).
+        let students: [APIUser]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == activeCourseUUID)
+                .all()
+                .map { $0.userID }
+            let enrolledSet = Set(enrolledUserIDs)
+            let allStudents = try await APIUser.query(on: req.db)
+                .filter(\.$role == "student")
+                .sort(\.$username, .ascending)
+                .all()
+            students = allStudents.filter { u in u.id.map { enrolledSet.contains($0) } ?? false }
+        } else {
+            students = try await APIUser.query(on: req.db)
+                .filter(\.$role == "student")
+                .sort(\.$username, .ascending)
+                .all()
+        }
+
+        let assignments: [APIAssignment]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            assignments = try await APIAssignment.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .all()
+        } else {
+            assignments = try await APIAssignment.query(on: req.db).all()
+        }
         let setupIDs = Set(assignments.map(\.testSetupID))
         let setups = setupIDs.isEmpty
             ? []
@@ -654,6 +712,8 @@ struct AssignmentRoutes: RouteCollection {
             var dueAt: String?      // ISO8601 string from datetime-local input, or empty
         }
 
+        let publishUser = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: publishUser)
         let body = try req.content.decode(PublishBody.self)
 
         guard let _ = try await APITestSetup.find(body.testSetupID, on: req.db) else {
@@ -692,7 +752,8 @@ struct AssignmentRoutes: RouteCollection {
             title: body.title.isEmpty ? body.testSetupID : body.title,
             dueAt: due,
             isOpen: false,         // stays closed until instructor validates + opens
-            sortOrder: try await nextAssignmentSortOrder(req: req)
+            sortOrder: try await nextAssignmentSortOrder(req: req),
+            courseID: courseState.activeCourseUUID
         )
         return req.redirect(to: "/assignments/\(assignment.publicID)/validate")
     }
@@ -1319,7 +1380,8 @@ private func createAssignmentWithUniquePublicID(
     isOpen: Bool,
     sortOrder: Int?,
     validationStatus: String? = nil,
-    validationSubmissionID: String? = nil
+    validationSubmissionID: String? = nil,
+    courseID: UUID? = nil
 ) async throws -> APIAssignment {
     for _ in 0..<32 {
         let candidate = APIAssignment.generatePublicID()
@@ -1336,7 +1398,8 @@ private func createAssignmentWithUniquePublicID(
             isOpen: isOpen,
             sortOrder: sortOrder,
             validationStatus: validationStatus,
-            validationSubmissionID: validationSubmissionID
+            validationSubmissionID: validationSubmissionID,
+            courseID: courseID
         )
         do {
             try await assignment.save(on: req.db)

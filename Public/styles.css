@@ -548,12 +548,59 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     margin-left: auto;
 }
 
+/* ── Course tabs ─────────────────────────────────────── */
+
+.course-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 1.5rem;
+    background: var(--surface);
+    border-bottom: 2px solid var(--gray-200);
+    overflow-x: auto;
+}
+
+.course-tab {
+    padding: .5rem 1.1rem;
+    font-size: .875rem;
+    font-weight: 500;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    color: var(--gray-600);
+    white-space: nowrap;
+    transition: color .12s, border-color .12s;
+}
+
+.course-tab:hover {
+    color: var(--gray-900);
+    border-bottom-color: var(--gray-400);
+}
+
+.course-tab-active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
+    font-weight: 600;
+}
+
 .btn-link {
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
     font-family: inherit;
+}
+
+/* ── Form error messages ─────────────────────────────── */
+
+.form-error {
+    padding: .5rem .875rem;
+    border-left: 3px solid var(--red);
+    background: color-mix(in srgb, var(--red) 8%, var(--surface));
+    color: var(--red);
+    border-radius: 0 .25rem .25rem 0;
+    margin-bottom: 1rem;
 }
 
 /* ── Admin dashboard ─────────────────────────────────── */
