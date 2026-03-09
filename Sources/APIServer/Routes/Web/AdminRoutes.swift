@@ -60,6 +60,7 @@ struct AdminRoutes: RouteCollection {
             .sort(\.$createdAt)
             .all()
         let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
+        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
             guard let id = course.id else { return nil }
             return AdminCourseRow(
@@ -68,6 +69,7 @@ struct AdminRoutes: RouteCollection {
                 name: course.name,
                 isArchived: course.isArchived,
                 enrollmentCount: enrollmentCounts[id] ?? 0,
+                assignmentCount: assignmentCounts[id] ?? 0,
                 createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
             )
         }
@@ -314,12 +316,14 @@ struct AdminRoutes: RouteCollection {
         }
 
         let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
+        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
         let courseRow = AdminCourseRow(
             id:              idString,
             code:            course.code,
             name:            course.name,
             isArchived:      course.isArchived,
             enrollmentCount: enrollmentCounts[courseID] ?? 0,
+            assignmentCount: assignmentCounts[courseID] ?? 0,
             createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
         )
 
@@ -536,6 +540,16 @@ private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: In
     return counts
 }
 
+private func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+    let assignments = try await APIAssignment.query(on: db).all()
+    var counts: [UUID: Int] = [:]
+    for a in assignments {
+        guard let cid = a.courseID else { continue }
+        counts[cid, default: 0] += 1
+    }
+    return counts
+}
+
 // MARK: - View context types
 
 private struct AdminUserRow: Encodable {
@@ -561,6 +575,7 @@ private struct AdminCourseRow: Encodable {
     let name: String
     let isArchived: Bool
     let enrollmentCount: Int
+    let assignmentCount: Int
     let createdAt: String
 }
 

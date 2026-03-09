@@ -84,6 +84,7 @@ Admin
                 <th>Code</th>
                 <th>Name</th>
                 <th>Students</th>
+                <th>Assignments</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -94,6 +95,7 @@ Admin
                 <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
+                <td>#(course.assignmentCount)</td>
                 <td>
                     #if(course.isArchived):
                     <span class="tier tier-closed">archived</span>
