@@ -40,7 +40,7 @@ struct AddCourseToAssignments: AsyncMigration {
             .nilIfEmpty ?? "Default Course"
 
         let courseID = UUID()
-        let courseIDStr = courseID.uuidString.lowercased()
+        let courseIDStr = courseID.uuidString          // uppercase — must match Fluent's UUID storage convention
         let now = ISO8601DateFormatter().string(from: Date())
 
         // Insert default course.
@@ -65,7 +65,7 @@ struct AddCourseToAssignments: AsyncMigration {
         struct UserIDRow: Decodable { let id: String }
         let users = try await sql.raw("SELECT id FROM users").all(decoding: UserIDRow.self)
         for user in users {
-            let enrollmentID = UUID().uuidString.lowercased()
+            let enrollmentID = UUID().uuidString          // uppercase — consistent with Fluent convention
             try await sql.raw("""
                 INSERT OR IGNORE INTO course_enrollments (id, user_id, course_id, enrolled_at)
                 VALUES (\(literal: enrollmentID), \(literal: user.id), \(literal: courseIDStr), \(literal: now))
