@@ -113,6 +113,35 @@ Admin
         </tbody>
     </table>
     #endif
+
+    <div style="margin-top:1.5rem">
+        <h3 style="margin:.5rem 0">Bulk enroll from CSV</h3>
+        <p style="font-size:.875rem;color:var(--gray-600);margin:.25rem 0 .75rem">
+            Upload a plain-text or CSV file with one username per line. A header row is detected and skipped automatically.
+        </p>
+        #if(activeCourses.isEmpty):
+        <p class="empty">No active courses to enroll into.</p>
+        #else:
+        <form method="post" action="/admin/courses/enroll-csv"
+              enctype="multipart/form-data"
+              style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px">
+            <label class="form-label" style="flex:0 0 auto">
+                Course
+                <select name="courseID" class="form-input" style="display:block">
+                    #for(course in activeCourses):
+                    <option value="#(course.id)">#(course.code) — #(course.name)</option>
+                    #endfor
+                </select>
+            </label>
+            <label class="form-label" style="flex:1 1 220px">
+                CSV file
+                <input type="file" name="file" accept=".csv,.txt" required
+                       class="form-input" style="display:block">
+            </label>
+            <button class="btn btn-primary" type="submit" style="align-self:flex-end">Enroll from CSV</button>
+        </form>
+        #endif
+    </div>
 </section>
 
 <!-- ── Users ──────────────────────────────────────────── -->
@@ -126,6 +155,7 @@ Admin
                 <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
                 <th class="time" data-sort-key="last-login" data-sort-type="date" tabindex="0" aria-sort="none">Last Login</th>
                 <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
+                <th>Courses</th>
             </tr>
         </thead>
         <tbody>
@@ -159,6 +189,11 @@ Admin
                     #endif
                 </td>
                 <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
+                <td>
+                    <a href="/admin/users/#(user.id)"
+                       class="btn"
+                       style="padding:.25rem .6rem;font-size:.8rem">Manage</a>
+                </td>
             </tr>
         #endfor
         </tbody>

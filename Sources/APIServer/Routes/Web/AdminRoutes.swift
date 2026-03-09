@@ -22,7 +22,11 @@ struct AdminRoutes: RouteCollection {
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
         admin.post("courses", use: createCourse)
+        admin.post("courses", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
+        admin.get("users", ":userID", use: userDetail)
+        admin.post("users", ":userID", "enroll", use: adminEnrollUser)
+        admin.post("users", ":userID", "unenroll", ":courseID", use: adminUnenrollUser)
     }
 
     // MARK: - GET /admin
@@ -65,13 +69,16 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
+        let activeCourseRows = courseRows.filter { !$0.isArchived }
+
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             users:       userRows,
             workers:     workerRows,
             workerSecret: effectiveSecret,
             localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
-            courses: courseRows
+            courses: courseRows,
+            activeCourses: activeCourseRows
         )
         return try await req.view.render("admin", ctx)
     }
@@ -191,6 +198,174 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+    // MARK: - GET /admin/users/:userID
+
+    @Sendable
+    func userDetail(req: Request) async throws -> View {
+        guard
+            let idString = req.parameters.get("userID"),
+            let userID   = UUID(uuidString: idString),
+            let user     = try await APIUser.find(userID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let allCourses = try await APICourse.query(on: req.db)
+            .filter(\.$isArchived == false)
+            .sort(\.$code)
+            .all()
+
+        let enrollments = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .with(\.$course)
+            .all()
+
+        let enrolledIDs = Set(enrollments.map { $0.$course.id })
+
+        let enrolledRows = enrollments
+            .compactMap { e -> AdminUserCourseRow? in
+                guard let id = e.course.id else { return nil }
+                return AdminUserCourseRow(id: id.uuidString, code: e.course.code, name: e.course.name)
+            }
+            .sorted { $0.code < $1.code }
+
+        let availableRows = allCourses.compactMap { c -> AdminUserCourseRow? in
+            guard let id = c.id, !enrolledIDs.contains(id) else { return nil }
+            return AdminUserCourseRow(id: id.uuidString, code: c.code, name: c.name)
+        }
+
+        return try await req.view.render("admin-user", AdminUserDetailContext(
+            currentUser:      req.currentUserContext,
+            targetUserID:     idString,
+            displayName:      user.displayName,
+            username:         user.username,
+            role:             user.role,
+            enrolledCourses:  enrolledRows,
+            availableCourses: availableRows
+        ))
+    }
+
+    // MARK: - POST /admin/users/:userID/enroll
+
+    @Sendable
+    func adminEnrollUser(req: Request) async throws -> Response {
+        guard
+            let idString = req.parameters.get("userID"),
+            let userID   = UUID(uuidString: idString),
+            let _        = try await APIUser.find(userID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        struct EnrollBody: Content { var courseID: String }
+        let body = try req.content.decode(EnrollBody.self)
+
+        guard
+            let courseID = UUID(uuidString: body.courseID),
+            let course   = try await APICourse.find(courseID, on: req.db),
+            !course.isArchived
+        else {
+            return req.redirect(to: "/admin/users/\(idString)?error=invalid_course")
+        }
+
+        let existing = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == courseID)
+            .count()
+
+        if existing == 0 {
+            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+            try await enrollment.save(on: req.db)
+        }
+
+        return req.redirect(to: "/admin/users/\(idString)")
+    }
+
+    // MARK: - POST /admin/users/:userID/unenroll/:courseID
+
+    @Sendable
+    func adminUnenrollUser(req: Request) async throws -> Response {
+        guard
+            let idString       = req.parameters.get("userID"),
+            let userID         = UUID(uuidString: idString),
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID       = UUID(uuidString: courseIDString)
+        else {
+            throw Abort(.badRequest)
+        }
+
+        try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == courseID)
+            .delete()
+
+        return req.redirect(to: "/admin/users/\(idString)")
+    }
+
+    // MARK: - POST /admin/courses/enroll-csv
+
+    @Sendable
+    func adminBulkEnrollCSV(req: Request) async throws -> View {
+        struct BulkEnrollForm: Content {
+            var courseID: String
+            var file: Data
+        }
+
+        let form = try req.content.decode(BulkEnrollForm.self)
+
+        guard
+            let courseID = UUID(uuidString: form.courseID),
+            let course   = try await APICourse.find(courseID, on: req.db),
+            !course.isArchived
+        else {
+            throw Abort(.badRequest, reason: "Invalid or archived course.")
+        }
+
+        // Parse unique, non-empty usernames from the CSV (first column, header auto-skipped).
+        let rawUsernames = parseUsernamesFromCSV(form.file)
+        var seen = Set<String>()
+        let uniqueUsernames = rawUsernames.filter { seen.insert($0).inserted }
+
+        // Match against APIUser.username in-memory (simpler than a Fluent IN query).
+        let usernameSet = Set(uniqueUsernames)
+        let allUsers = try await APIUser.query(on: req.db).all()
+        let matchedUsers = allUsers.filter { usernameSet.contains($0.username) }
+
+        let matchedUsernameSet = Set(matchedUsers.map { $0.username })
+        let notFoundUsernames = uniqueUsernames
+            .filter { !matchedUsernameSet.contains($0) }
+            .sorted()
+
+        // Load existing enrollments for this course to detect already-enrolled users.
+        let existingEnrollments = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == courseID)
+            .all()
+        let alreadyEnrolledUserIDs = Set(existingEnrollments.map { $0.userID })
+
+        var enrolledCount = 0
+        var alreadyEnrolledCount = 0
+
+        for user in matchedUsers {
+            guard let userID = user.id else { continue }
+            if alreadyEnrolledUserIDs.contains(userID) {
+                alreadyEnrolledCount += 1
+            } else {
+                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+                try await enrollment.save(on: req.db)
+                enrolledCount += 1
+            }
+        }
+
+        return try await req.view.render("admin-enroll-csv-result", AdminEnrollCSVResultContext(
+            currentUser:          req.currentUserContext,
+            courseCode:           course.code,
+            courseName:           course.name,
+            enrolledCount:        enrolledCount,
+            alreadyEnrolledCount: alreadyEnrolledCount,
+            notFoundUsernames:    notFoundUsernames
+        ))
+    }
+
 }
 
 private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
@@ -268,4 +443,75 @@ private struct AdminContext: Encodable {
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
+    /// Non-archived courses only; used for the bulk-enroll CSV dropdown.
+    let activeCourses: [AdminCourseRow]
+}
+
+/// Parses a flat list of usernames from a CSV upload.
+/// - Takes the first column of every non-blank line.
+/// - Strips surrounding quotes and whitespace.
+/// - Auto-detects and skips a header row when the first column matches a known keyword.
+private func parseUsernamesFromCSV(_ data: Data) -> [String] {
+    guard let text = String(data: data, encoding: .utf8)
+                  ?? String(data: data, encoding: .isoLatin1) else {
+        return []
+    }
+
+    var lines = text.components(separatedBy: .newlines)
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+
+    // Skip an obvious header row.
+    if let firstLine = lines.first {
+        let firstCol = firstLine
+            .components(separatedBy: ",").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            ?? ""
+        let headerKeywords = ["username", "user", "login", "id", "studentid", "userid", "loginid"]
+        if headerKeywords.contains(firstCol) {
+            lines.removeFirst()
+        }
+    }
+
+    // Extract first column, strip surrounding quotes/whitespace.
+    return lines.compactMap { line -> String? in
+        let col = line
+            .components(separatedBy: ",").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard let col, !col.isEmpty else { return nil }
+        return col
+    }
+}
+
+private struct AdminUserDetailContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let targetUserID: String
+    let displayName: String?
+    let username: String
+    let role: String
+    let enrolledCourses: [AdminUserCourseRow]
+    let availableCourses: [AdminUserCourseRow]
+}
+
+private struct AdminUserCourseRow: Encodable {
+    let id: String
+    let code: String
+    let name: String
+}
+
+private struct AdminEnrollCSVResultContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let courseCode: String
+    let courseName: String
+    let enrolledCount: Int
+    let alreadyEnrolledCount: Int
+    let notFoundUsernames: [String]
+    // Precomputed for easy Leaf truthiness check.
+    var hasNotFound: Bool { !notFoundUsernames.isEmpty }
+    var notFoundCount: Int { notFoundUsernames.count }
 }

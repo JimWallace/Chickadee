@@ -1,0 +1,38 @@
+#extend("base"):
+#export("title"):
+CSV Enrollment Result
+#endexport
+#export("content"):
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
+    <a href="/admin" class="btn">← Admin</a>
+    <h1 style="margin:0">CSV Enrollment — #(courseCode)</h1>
+</div>
+<p style="color:var(--gray-600);margin-top:-.75rem;margin-bottom:1.5rem">#(courseName)</p>
+
+<section class="admin-section">
+    <h2>Results</h2>
+    <dl style="display:grid;grid-template-columns:auto 1fr;gap:.4rem 1.5rem;max-width:400px;margin:0">
+        <dt style="font-weight:600">Enrolled</dt>
+        <dd style="margin:0">#(enrolledCount)</dd>
+        <dt style="font-weight:600">Already enrolled (skipped)</dt>
+        <dd style="margin:0">#(alreadyEnrolledCount)</dd>
+        <dt style="font-weight:600">Not found</dt>
+        <dd style="margin:0">#(notFoundCount)</dd>
+    </dl>
+</section>
+
+#if(hasNotFound):
+<section class="admin-section">
+    <h2>Usernames not found</h2>
+    <p style="font-size:.875rem;color:var(--gray-600);margin-top:0">
+        These usernames from the CSV did not match any account in the system:
+    </p>
+    <ul style="font-family:monospace;margin:.25rem 0 0 1.25rem;padding:0">
+    #for(name in notFoundUsernames):
+        <li>#(name)</li>
+    #endfor
+    </ul>
+</section>
+#endif
+#endexport
+#endextend
