@@ -1,0 +1,73 @@
+#extend("base"):
+#export("title"):
+Courses — #if(displayName):#(displayName)#else:#(username)#endif
+#endexport
+#export("content"):
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
+    <a href="/admin" class="btn">← Admin</a>
+    <h1 style="margin:0">
+        #if(displayName):#(displayName)#else:#(username)#endif — Courses
+    </h1>
+</div>
+<p style="color:var(--gray-600);margin-top:-.75rem;margin-bottom:1.5rem">
+    @#(username) · #(role)
+</p>
+
+<section class="admin-section">
+    <h2>Enrolled courses</h2>
+    #if(enrolledCourses.isEmpty):
+    <p class="empty">Not enrolled in any courses.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(course in enrolledCourses):
+            <tr>
+                <td><strong>#(course.code)</strong></td>
+                <td>#(course.name)</td>
+                <td>
+                    <form method="post"
+                          action="/admin/users/#(targetUserID)/unenroll/#(course.id)"
+                          style="display:inline">
+                        <button class="btn" type="submit"
+                                style="padding:.25rem .6rem;font-size:.8rem">Remove</button>
+                    </form>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+<section class="admin-section">
+    <h2>Add to course</h2>
+    #if(availableCourses.isEmpty):
+    <p class="empty">
+        #if(enrolledCourses.isEmpty):
+        No active courses are available.
+        #else:
+        Enrolled in all active courses.
+        #endif
+    </p>
+    #else:
+    <form method="post"
+          action="/admin/users/#(targetUserID)/enroll"
+          style="display:flex;gap:.5rem;align-items:center;max-width:500px">
+        <select name="courseID" class="form-input" style="flex:1">
+            #for(course in availableCourses):
+            <option value="#(course.id)">#(course.code) — #(course.name)</option>
+            #endfor
+        </select>
+        <button class="btn btn-primary" type="submit">Add</button>
+    </form>
+    #endif
+</section>
+#endexport
+#endextend
