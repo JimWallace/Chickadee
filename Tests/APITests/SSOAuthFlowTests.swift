@@ -33,6 +33,9 @@ final class SSOAuthFlowTests: XCTestCase {
         app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
+        app.migrations.add(AddCourses())
+        app.migrations.add(AddCourseEnrollments())
+        app.migrations.add(AddCourseToAssignments())
         try app.autoMigrate().wait()
 
         // Inject mock OIDC config — no network calls needed

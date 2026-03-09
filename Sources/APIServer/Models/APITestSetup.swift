@@ -23,15 +23,22 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
     @OptionalField(key: "notebook_path")
     var notebookPath: String?
 
+    /// The course this test setup belongs to. Set when the instructor creates
+    /// the setup while enrolled in a course. Inherited by the assignment on publish.
+    @OptionalField(key: "course_id")
+    var courseID: UUID?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
     init() {}
 
-    init(id: String, manifest: String, zipPath: String, notebookPath: String? = nil) {
+    init(id: String, manifest: String, zipPath: String, notebookPath: String? = nil,
+         courseID: UUID? = nil) {
         self.id           = id
         self.manifest     = manifest
         self.zipPath      = zipPath
         self.notebookPath = notebookPath
+        self.courseID     = courseID
     }
 }

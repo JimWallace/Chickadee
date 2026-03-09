@@ -116,10 +116,102 @@ struct UserSessionAuthenticator: AsyncSessionAuthenticator {
 
 extension Request {
     /// Returns a Leaf-encodable snapshot of the current user for view contexts.
+    /// Does not include course information; use `courseAwareUserContext()` for pages with tabs.
     var currentUserContext: CurrentUserContext? {
         guard let user = auth.get(APIUser.self) else { return nil }
         return CurrentUserContext(user: user)
     }
+
+    /// Builds a `CurrentUserContext` populated with course information from the DB.
+    /// Call this from any route that needs course tabs or active-course filtering.
+    func courseAwareUserContext() async throws -> CurrentUserContext? {
+        guard let user = auth.get(APIUser.self) else { return nil }
+        let state = try await resolveActiveCourse(for: user)
+        return CurrentUserContext(user: user, activeCourse: state.active, enrolledCourses: state.all)
+    }
+
+    private static let activeCourseSessionKey = "activeCourseID"
+
+    /// Resolves the active course for `user`, consulting the session and DB.
+    /// Auto-enrolls the user when exactly one non-archived course exists.
+    /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
+    func resolveActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
+        guard let userID = user.id else {
+            return ResolvedCourseState(active: nil, all: [], activeCourseUUID: nil)
+        }
+
+        // Count all non-archived courses so we know if auto-enroll applies.
+        let allCourses = try await APICourse.query(on: db)
+            .filter(\.$isArchived == false)
+            .sort(\.$createdAt)
+            .all()
+
+        guard !allCourses.isEmpty else {
+            return ResolvedCourseState(active: nil, all: [], activeCourseUUID: nil)
+        }
+
+        // Fetch current enrollments.
+        var enrolledContexts = try await loadEnrolledCourseContexts(userID: userID)
+
+        // Auto-enroll when there is exactly one non-archived course.
+        if enrolledContexts.isEmpty, allCourses.count == 1,
+           let onlyCourse = allCourses.first, let courseID = onlyCourse.id {
+            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+            try? await enrollment.save(on: db)
+            enrolledContexts = try await loadEnrolledCourseContexts(userID: userID)
+        }
+
+        guard !enrolledContexts.isEmpty else {
+            return ResolvedCourseState(active: nil, all: [], activeCourseUUID: nil)
+        }
+
+        // Determine active course from session, or fall back to first enrolled.
+        let sessionID = session.data[Request.activeCourseSessionKey]
+        let activeCourseID: String
+        if let sid = sessionID, enrolledContexts.contains(where: { $0.id == sid }) {
+            activeCourseID = sid
+        } else {
+            activeCourseID = enrolledContexts[0].id
+            session.data[Request.activeCourseSessionKey] = activeCourseID
+        }
+
+        let activeCourseUUID = UUID(uuidString: activeCourseID)
+        let markedCourses = enrolledContexts.map {
+            CourseContext(id: $0.id, code: $0.code, name: $0.name, isActive: $0.id == activeCourseID)
+        }
+        let active = markedCourses.first(where: \.isActive)
+        return ResolvedCourseState(active: active, all: markedCourses, activeCourseUUID: activeCourseUUID)
+    }
+
+    private func loadEnrolledCourseContexts(userID: UUID) async throws -> [CourseContext] {
+        let enrollments = try await APICourseEnrollment.query(on: db)
+            .filter(\.$userID == userID)
+            .with(\.$course)
+            .all()
+        return enrollments
+            .compactMap { e -> CourseContext? in
+                guard let id = e.course.id else { return nil }
+                return CourseContext(id: id.uuidString, code: e.course.code, name: e.course.name, isActive: false)
+            }
+            .sorted { $0.code < $1.code }
+    }
+}
+
+// MARK: - Course context types
+
+/// Lightweight course info safe to embed in Leaf view contexts.
+struct CourseContext: Encodable {
+    let id: String
+    let code: String
+    let name: String
+    var isActive: Bool
+}
+
+/// The result of resolving which course is "active" for the current request.
+struct ResolvedCourseState {
+    let active: CourseContext?        // nil → user is not enrolled anywhere
+    let all: [CourseContext]          // all enrolled courses (isActive set on one)
+    let activeCourseUUID: UUID?       // for DB query filters; nil → no active course
 }
 
 /// Encodable snapshot of the authenticated user, safe to embed in any Leaf context.
@@ -131,8 +223,14 @@ struct CurrentUserContext: Encodable {
     let role: String
     let isAdmin: Bool
     let isInstructor: Bool
+    /// The course the user is currently viewing (nil if no course info was resolved).
+    let activeCourse: CourseContext?
+    /// All courses the user is enrolled in (empty if no course info was resolved).
+    let enrolledCourses: [CourseContext]
+    /// True when the user is enrolled in more than one course (tab strip should show).
+    let showCourseTabs: Bool
 
-    init(user: APIUser) {
+    init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let preferredName = (normalizedPreferredName?.isEmpty == false) ? normalizedPreferredName : nil
@@ -143,12 +241,15 @@ struct CurrentUserContext: Encodable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let email = (normalizedEmail?.isEmpty == false) ? normalizedEmail : nil
 
-        self.username     = user.username
+        self.username      = user.username
         self.preferredName = preferredName
-        self.displayName  = displayName
-        self.email        = email
-        self.role         = user.role
-        self.isAdmin      = user.isAdmin
-        self.isInstructor = user.isInstructor
+        self.displayName   = displayName
+        self.email         = email
+        self.role          = user.role
+        self.isAdmin       = user.isAdmin
+        self.isInstructor  = user.isInstructor
+        self.activeCourse  = activeCourse
+        self.enrolledCourses = enrolledCourses
+        self.showCourseTabs  = enrolledCourses.count > 1
     }
 }

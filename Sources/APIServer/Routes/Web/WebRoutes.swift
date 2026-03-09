@@ -36,16 +36,39 @@ struct WebRoutes: RouteCollection {
     // MARK: - GET /
 
     @Sendable
-    func index(req: Request) async throws -> View {
+    func index(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
+
+        // Resolve active course and build course-aware user context for tabs.
+        let courseState = try await req.resolveActiveCourse(for: user)
+        let userContext = CurrentUserContext(
+            user: user,
+            activeCourse: courseState.active,
+            enrolledCourses: courseState.all
+        )
+
+        // If multiple courses exist but user has no enrollments → redirect to /enroll.
+        if courseState.active == nil {
+            let courseCount = try await APICourse.query(on: req.db).count()
+            if courseCount > 0 {
+                return req.redirect(to: "/enroll")
+            }
+        }
 
         let decoder = JSONDecoder()
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
 
-        // Load assignments so home can show status/due information in table rows.
-        let allAssignments = try await APIAssignment.query(on: req.db).all()
+        // Load assignments, filtering by active course when one is resolved.
+        let allAssignments: [APIAssignment]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            allAssignments = try await APIAssignment.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .all()
+        } else {
+            allAssignments = try await APIAssignment.query(on: req.db).all()
+        }
         let openAssignments = allAssignments.filter(\.isOpen)
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
@@ -54,16 +77,23 @@ struct WebRoutes: RouteCollection {
 
         let setups: [APITestSetup]
         if user.isInstructor {
-            // Instructors and admins see all test setups.
-            setups = try await APITestSetup.query(on: req.db)
-                .sort(\.$createdAt, .descending)
-                .all()
+            // Instructors and admins see test setups for the active course.
+            if let activeCourseUUID = courseState.activeCourseUUID {
+                setups = try await APITestSetup.query(on: req.db)
+                    .filter(\.$courseID == activeCourseUUID)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+            } else {
+                setups = try await APITestSetup.query(on: req.db)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+            }
         } else {
             // Students see only test setups that have an open published assignment.
             let publishedIDs = Set(openAssignments.map(\.testSetupID))
             guard !publishedIDs.isEmpty else {
                 return try await req.view.render("index",
-                    IndexContext(setups: [], currentUser: req.currentUserContext))
+                    IndexContext(setups: [], currentUser: userContext)).encodeResponse(for: req)
             }
             setups = try await APITestSetup.query(on: req.db)
                 .filter(\.$id ~~ publishedIDs)
@@ -188,7 +218,7 @@ struct WebRoutes: RouteCollection {
         }
 
         return try await req.view.render("index",
-            IndexContext(setups: rows, currentUser: req.currentUserContext))
+            IndexContext(setups: rows, currentUser: userContext)).encodeResponse(for: req)
     }
 
     // MARK: - GET /testsetups/new
@@ -228,7 +258,11 @@ struct WebRoutes: RouteCollection {
 
         let encoder = JSONEncoder()
         let stored  = String(data: try encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
-        let setup   = APITestSetup(id: setupID, manifest: stored, zipPath: zipPath)
+
+        // Associate the setup with the instructor's active course (if any).
+        let courseState = try await req.resolveActiveCourse(for: setupUser)
+        let setup = APITestSetup(id: setupID, manifest: stored, zipPath: zipPath,
+                                  courseID: courseState.activeCourseUUID)
         try await setup.save(on: req.db)
 
         return req.redirect(to: "/")

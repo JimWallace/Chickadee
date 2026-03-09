@@ -1,0 +1,41 @@
+#extend("base"):
+#export("title"):
+Choose Your Courses
+#endexport
+#export("content"):
+<h1>Choose your courses</h1>
+
+#if(error == "none_selected"):
+<p class="form-error" role="alert">Please select at least one course to continue.</p>
+#endif
+
+#if(courses.isEmpty):
+<p class="empty">No courses are available to enroll in right now. Please check back later or contact your instructor.</p>
+#else:
+<form method="post" action="/enroll">
+    <p style="margin-bottom:1.25rem;color:var(--gray-600)">
+        Select the courses you are enrolled in. You can change your enrollment later on your
+        <a href="/account">account page</a>.
+    </p>
+    <fieldset style="border:none;padding:0;margin:0 0 1.5rem">
+        <legend class="form-label" style="margin-bottom:.75rem;font-weight:600">Available courses</legend>
+        <div style="display:flex;flex-direction:column;gap:.6rem">
+        #for(course in courses):
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+                <input type="checkbox"
+                       name="courseIDs[]"
+                       value="#(course.id)"
+                       #if(course.isEnrolled):checked#endif>
+                <span>
+                    <strong>#(course.code)</strong>
+                    #if(course.name):— #(course.name)#endif
+                </span>
+            </label>
+        #endfor
+        </div>
+    </fieldset>
+    <button class="btn btn-primary" type="submit">Save and continue</button>
+</form>
+#endif
+#endexport
+#endextend

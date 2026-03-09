@@ -74,7 +74,7 @@ struct AuthRoutes: RouteCollection {
 
         req.auth.login(user)
         req.session.authenticate(user)
-        return req.redirect(to: "/")
+        return try await postLoginRedirect(for: user, req: req)
     }
 
     // MARK: - GET /register
@@ -129,7 +129,7 @@ struct AuthRoutes: RouteCollection {
 
         req.auth.login(user)
         req.session.authenticate(user)
-        return req.redirect(to: "/")
+        return try await postLoginRedirect(for: user, req: req)
     }
 
     // MARK: - POST /logout
@@ -140,6 +140,29 @@ struct AuthRoutes: RouteCollection {
         req.session.unauthenticate(APIUser.self)
         return req.redirect(to: "/login")
     }
+}
+
+// MARK: - Post-login redirect helper
+
+/// Redirects to /enroll when multiple courses exist and the user has no enrollments;
+/// otherwise redirects to /.
+private func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
+    guard let userID = user.id else { return req.redirect(to: "/") }
+
+    let courseCount = try await APICourse.query(on: req.db)
+        .filter(\.$isArchived == false)
+        .count()
+
+    if courseCount > 1 {
+        let enrollmentCount = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .count()
+        if enrollmentCount == 0 {
+            return req.redirect(to: "/enroll")
+        }
+    }
+
+    return req.redirect(to: "/")
 }
 
 // MARK: - Request body types

@@ -57,6 +57,64 @@ Admin
     </div>
 </section>
 
+<!-- ── Courses ────────────────────────────────────────── -->
+<section class="admin-section">
+    <h2>Courses</h2>
+
+    <form method="post" action="/admin/courses" style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px;margin-bottom:1rem">
+        <label class="form-label" style="flex:0 0 auto">
+            Code
+            <input class="form-input" type="text" name="code" placeholder="e.g. CMSC131" required
+                   style="width:9rem;display:block">
+        </label>
+        <label class="form-label" style="flex:1 1 200px">
+            Name
+            <input class="form-input" type="text" name="name" placeholder="e.g. Introduction to OOP" required
+                   style="display:block;width:100%">
+        </label>
+        <button class="btn btn-primary" type="submit" style="align-self:flex-end">Create course</button>
+    </form>
+
+    #if(courses.isEmpty):
+    <p class="empty">No courses yet. Use the form above to create one.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Students</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(course in courses):
+            <tr>
+                <td><strong>#(course.code)</strong></td>
+                <td>#(course.name)</td>
+                <td>#(course.enrollmentCount)</td>
+                <td>
+                    #if(course.isArchived):
+                    <span class="tier tier-closed">archived</span>
+                    #else:
+                    <span class="tier tier-open">active</span>
+                    #endif
+                </td>
+                <td>
+                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline">
+                        <button class="btn" type="submit">
+                            #if(course.isArchived):Unarchive#else:Archive#endif
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
 <!-- ── Users ──────────────────────────────────────────── -->
 <section class="admin-section">
     <h2>Users</h2>
