@@ -1,0 +1,84 @@
+#extend("base"):
+#export("title"):
+#(course.code) — Admin
+#endexport
+#export("content"):
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:.5rem">
+    <a href="/admin" class="btn">← Admin</a>
+    <h1 style="margin:0">#(course.code) — #(course.name)</h1>
+</div>
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem">
+    #if(course.isArchived):
+    <span class="tier tier-closed">archived</span>
+    #else:
+    <span class="tier tier-open">active</span>
+    #endif
+    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
+        <button class="btn" type="submit" style="padding:.25rem .6rem;font-size:.8rem">
+            #if(course.isArchived):Unarchive#else:Archive#endif
+        </button>
+    </form>
+</div>
+
+<!-- ── Enrolled students ───────────────────────────────── -->
+<section class="admin-section">
+    <h2>Enrolled students (#(course.enrollmentCount))</h2>
+    #if(enrolledUsers.isEmpty):
+    <p class="empty">No students enrolled yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(user in enrolledUsers):
+            <tr>
+                <td>
+                    #if(user.displayName):
+                        #(user.displayName)
+                    #else:
+                        —
+                    #endif
+                </td>
+                <td><code>#(user.username)</code></td>
+                <td>#(user.role)</td>
+                <td>
+                    <a href="/admin/users/#(user.id)"
+                       class="btn"
+                       style="padding:.25rem .6rem;font-size:.8rem">Manage</a>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+<!-- ── Bulk enroll from CSV ───────────────────────────── -->
+<section class="admin-section">
+    <h2>Bulk enroll from CSV</h2>
+    <p style="font-size:.875rem;color:var(--gray-600);margin:.25rem 0 .75rem">
+        Upload a plain-text or CSV file with one username per line. A header row is detected and skipped automatically.
+    </p>
+    #if(course.isArchived):
+    <p class="empty">Cannot enroll into an archived course.</p>
+    #else:
+    <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
+          enctype="multipart/form-data"
+          style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:600px">
+        <label class="form-label" style="flex:1 1 220px">
+            CSV file
+            <input type="file" name="file" accept=".csv,.txt" required
+                   class="form-input" style="display:block">
+        </label>
+        <button class="btn btn-primary" type="submit" style="align-self:flex-end">Enroll from CSV</button>
+    </form>
+    #endif
+</section>
+#endexport
+#endextend

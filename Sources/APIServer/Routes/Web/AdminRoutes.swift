@@ -22,8 +22,9 @@ struct AdminRoutes: RouteCollection {
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
         admin.post("courses", use: createCourse)
-        admin.post("courses", "enroll-csv", use: adminBulkEnrollCSV)
+        admin.get("courses", ":courseID", use: courseDetail)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
+        admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.get("users", ":userID", use: userDetail)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)
         admin.post("users", ":userID", "unenroll", ":courseID", use: adminUnenrollUser)
@@ -69,16 +70,13 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
-        let activeCourseRows = courseRows.filter { !$0.isArchived }
-
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             users:       userRows,
             workers:     workerRows,
             workerSecret: effectiveSecret,
             localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
-            courses: courseRows,
-            activeCourses: activeCourseRows
+            courses: courseRows
         )
         return try await req.view.render("admin", ctx)
     }
@@ -195,7 +193,7 @@ struct AdminRoutes: RouteCollection {
         }
         course.isArchived.toggle()
         try await course.save(on: req.db)
-        return req.redirect(to: "/admin")
+        return req.redirect(to: "/admin/courses/\(idString)")
     }
 
     // MARK: - GET /admin/users/:userID
@@ -242,6 +240,60 @@ struct AdminRoutes: RouteCollection {
             role:             user.role,
             enrolledCourses:  enrolledRows,
             availableCourses: availableRows
+        ))
+    }
+
+    // MARK: - GET /admin/courses/:courseID
+
+    @Sendable
+    func courseDetail(req: Request) async throws -> View {
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course   = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
+        let courseRow = AdminCourseRow(
+            id:              idString,
+            code:            course.code,
+            name:            course.name,
+            isArchived:      course.isArchived,
+            enrollmentCount: enrollmentCounts[courseID] ?? 0,
+            createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
+        )
+
+        // Load enrollments for this course, then fetch the corresponding users.
+        let enrollments = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == courseID)
+            .all()
+
+        let enrolledUserIDs = enrollments.map { $0.userID }
+        let enrolledUsers: [AdminCourseEnrolledUserRow]
+        if enrolledUserIDs.isEmpty {
+            enrolledUsers = []
+        } else {
+            let users = try await APIUser.query(on: req.db)
+                .filter(\.$id ~~ enrolledUserIDs)
+                .sort(\.$username)
+                .all()
+            enrolledUsers = users.compactMap { u in
+                guard let uid = u.id else { return nil }
+                return AdminCourseEnrolledUserRow(
+                    id:          uid.uuidString,
+                    username:    u.username,
+                    displayName: u.displayName,
+                    role:        u.role
+                )
+            }
+        }
+
+        return try await req.view.render("admin-course", AdminCourseDetailContext(
+            currentUser:   req.currentUserContext,
+            course:        courseRow,
+            enrolledUsers: enrolledUsers
         ))
     }
 
@@ -302,24 +354,24 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin/users/\(idString)")
     }
 
-    // MARK: - POST /admin/courses/enroll-csv
+    // MARK: - POST /admin/courses/:courseID/enroll-csv
 
     @Sendable
     func adminBulkEnrollCSV(req: Request) async throws -> View {
         struct BulkEnrollForm: Content {
-            var courseID: String
             var file: Data
         }
 
-        let form = try req.content.decode(BulkEnrollForm.self)
-
         guard
-            let courseID = UUID(uuidString: form.courseID),
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
             let course   = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
             throw Abort(.badRequest, reason: "Invalid or archived course.")
         }
+
+        let form = try req.content.decode(BulkEnrollForm.self)
 
         // Parse unique, non-empty usernames from the CSV (first column, header auto-skipped).
         let rawUsernames = parseUsernamesFromCSV(form.file)
@@ -358,6 +410,7 @@ struct AdminRoutes: RouteCollection {
 
         return try await req.view.render("admin-enroll-csv-result", AdminEnrollCSVResultContext(
             currentUser:          req.currentUserContext,
+            courseID:             idString,
             courseCode:           course.code,
             courseName:           course.name,
             enrolledCount:        enrolledCount,
@@ -443,8 +496,6 @@ private struct AdminContext: Encodable {
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
-    /// Non-archived courses only; used for the bulk-enroll CSV dropdown.
-    let activeCourses: [AdminCourseRow]
 }
 
 /// Parses a flat list of usernames from a CSV upload.
@@ -506,6 +557,7 @@ private struct AdminUserCourseRow: Encodable {
 
 private struct AdminEnrollCSVResultContext: Encodable {
     let currentUser: CurrentUserContext?
+    let courseID: String
     let courseCode: String
     let courseName: String
     let enrolledCount: Int
@@ -514,4 +566,17 @@ private struct AdminEnrollCSVResultContext: Encodable {
     // Precomputed for easy Leaf truthiness check.
     var hasNotFound: Bool { !notFoundUsernames.isEmpty }
     var notFoundCount: Int { notFoundUsernames.count }
+}
+
+private struct AdminCourseDetailContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let course: AdminCourseRow
+    let enrolledUsers: [AdminCourseEnrolledUserRow]
+}
+
+private struct AdminCourseEnrolledUserRow: Encodable {
+    let id: String
+    let username: String
+    let displayName: String?
+    let role: String
 }

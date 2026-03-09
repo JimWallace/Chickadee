@@ -91,7 +91,7 @@ Admin
         <tbody>
         #for(course in courses):
             <tr>
-                <td><strong>#(course.code)</strong></td>
+                <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
                 <td>
@@ -114,34 +114,6 @@ Admin
     </table>
     #endif
 
-    <div style="margin-top:1.5rem">
-        <h3 style="margin:.5rem 0">Bulk enroll from CSV</h3>
-        <p style="font-size:.875rem;color:var(--gray-600);margin:.25rem 0 .75rem">
-            Upload a plain-text or CSV file with one username per line. A header row is detected and skipped automatically.
-        </p>
-        #if(activeCourses.isEmpty):
-        <p class="empty">No active courses to enroll into.</p>
-        #else:
-        <form method="post" action="/admin/courses/enroll-csv"
-              enctype="multipart/form-data"
-              style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px">
-            <label class="form-label" style="flex:0 0 auto">
-                Course
-                <select name="courseID" class="form-input" style="display:block">
-                    #for(course in activeCourses):
-                    <option value="#(course.id)">#(course.code) — #(course.name)</option>
-                    #endfor
-                </select>
-            </label>
-            <label class="form-label" style="flex:1 1 220px">
-                CSV file
-                <input type="file" name="file" accept=".csv,.txt" required
-                       class="form-input" style="display:block">
-            </label>
-            <button class="btn btn-primary" type="submit" style="align-self:flex-end">Enroll from CSV</button>
-        </form>
-        #endif
-    </div>
 </section>
 
 <!-- ── Users ──────────────────────────────────────────── -->
