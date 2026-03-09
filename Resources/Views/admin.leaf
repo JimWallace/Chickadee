@@ -103,9 +103,13 @@ Admin
                 </td>
                 <td>
                     <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline">
-                        <button class="btn" type="submit">
-                            #if(course.isArchived):Unarchive#else:Archive#endif
-                        </button>
+                        #if(course.isArchived):
+                        <button class="btn" type="submit"
+                                onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>
+                        #else:
+                        <button class="btn" type="submit"
+                                onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">Archive</button>
+                        #endif
                     </form>
                 </td>
             </tr>
