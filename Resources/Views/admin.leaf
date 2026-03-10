@@ -101,8 +101,12 @@ Admin
                     <span class="tier tier-open">active</span>
                     #endif
                 </td>
-                <td>
-                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline">
+                <td style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    <form method="post" action="/admin/courses/#(course.id)/copy" style="display:inline;margin:0">
+                        <button class="btn action-btn" type="submit"
+                                onclick="return confirm('Copy #(course.code)? All test setups and assignments will be duplicated into a new course.')">Copy</button>
+                    </form>
+                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
                         #if(course.isArchived):
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>

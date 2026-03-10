@@ -4,12 +4,14 @@
 // Assignment publishing/open/close/delete have moved to AssignmentRoutes (instructor+).
 // All routes here require admin role (enforced in routes.swift).
 //
-//   GET  /admin                        → admin.leaf  (user management dashboard)
-//   POST /admin/users/:id/role         → change a user's role
-//   POST /admin/runner-secret          → set/clear runtime runner secret
+//   GET  /admin                              → admin.leaf  (user management dashboard)
+//   POST /admin/users/:id/role               → change a user's role
+//   POST /admin/runner-secret                → set/clear runtime runner secret
+//   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
 import Vapor
 import Fluent
+import Foundation
 
 struct AdminRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -26,6 +28,7 @@ struct AdminRoutes: RouteCollection {
         admin.get("courses", ":courseID", use: courseDetail)
         admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
+        admin.post("courses", ":courseID", "copy",    use: copyCourse)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.get("users", ":userID", use: userDetail)
@@ -223,6 +226,92 @@ struct AdminRoutes: RouteCollection {
         course.isArchived.toggle()
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
+    // MARK: - POST /admin/courses/:courseID/copy
+
+    @Sendable
+    func copyCourse(req: Request) async throws -> Response {
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let source   = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let sourceID  = try source.requireID()
+        let newCode   = try await uniqueCopyCode(base: source.code, db: req.db)
+        let setupsDir = req.application.testSetupsDirectory
+
+        // Load source data before the transaction (read-only queries).
+        let setups = try await APITestSetup.query(on: req.db)
+            .filter(\.$courseID == sourceID)
+            .all()
+        let assignments = try await APIAssignment.query(on: req.db)
+            .filter(\.$courseID == sourceID)
+            .sort(\.$sortOrder)
+            .all()
+
+        var newCourseID = UUID()
+
+        try await req.db.transaction { db in
+            // 1. Create the new course.
+            let newCourse = APICourse(code: newCode, name: "\(source.name) (Copy)")
+            try await newCourse.save(on: db)
+            newCourseID = try newCourse.requireID()
+
+            // 2. Copy each test setup (zip + optional notebook) to a new ID.
+            var setupIDMap: [String: String] = [:]
+            for setup in setups {
+                guard let oldID = setup.id else { continue }
+                let newID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+                setupIDMap[oldID] = newID
+
+                let srcZip = URL(fileURLWithPath: setupsDir + "\(oldID).zip")
+                let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
+                try FileManager.default.copyItem(at: srcZip, to: dstZip)
+
+                var newNotebookPath: String? = nil
+                if setup.notebookPath != nil {
+                    let srcNb = URL(fileURLWithPath: setupsDir + "\(oldID).ipynb")
+                    if FileManager.default.fileExists(atPath: srcNb.path) {
+                        let dstNb = URL(fileURLWithPath: setupsDir + "\(newID).ipynb")
+                        try FileManager.default.copyItem(at: srcNb, to: dstNb)
+                        newNotebookPath = dstNb.path
+                    }
+                }
+
+                let newSetup = APITestSetup(
+                    id:           newID,
+                    manifest:     setup.manifest,
+                    zipPath:      dstZip.path,
+                    notebookPath: newNotebookPath,
+                    courseID:     newCourseID
+                )
+                try await newSetup.save(on: db)
+            }
+
+            // 3. Copy each assignment, remapping to the new test setup IDs.
+            //    Validation state is reset so the instructor re-validates before opening.
+            for (idx, a) in assignments.enumerated() {
+                guard let newSetupID = setupIDMap[a.testSetupID] else { continue }
+                let newAssignment = APIAssignment(
+                    testSetupID:          newSetupID,
+                    title:                a.title,
+                    dueAt:                a.dueAt,
+                    isOpen:               false,
+                    sortOrder:            a.sortOrder ?? idx,
+                    validationStatus:     nil,
+                    validationSubmissionID: nil,
+                    courseID:             newCourseID
+                )
+                try await newAssignment.save(on: db)
+            }
+        }
+
+        req.logger.info("Admin copied course \(source.code) → \(newCode) (new ID: \(newCourseID))")
+        return req.redirect(to: "/admin/courses/\(newCourseID.uuidString)")
     }
 
     // MARK: - POST /admin/courses/:courseID/edit
@@ -524,6 +613,22 @@ struct AdminRoutes: RouteCollection {
         ))
     }
 
+}
+
+/// Returns a course code derived from `base` that doesn't already exist in the DB.
+/// Tries `{BASE}-COPY`, then `{BASE}-COPY-2` … `{BASE}-COPY-10`.
+private func uniqueCopyCode(base: String, db: Database) async throws -> String {
+    let first = "\(base)-COPY"
+    if try await APICourse.query(on: db).filter(\.$code == first).count() == 0 {
+        return first
+    }
+    for n in 2...10 {
+        let candidate = "\(base)-COPY-\(n)"
+        if try await APICourse.query(on: db).filter(\.$code == candidate).count() == 0 {
+            return candidate
+        }
+    }
+    throw Abort(.conflict, reason: "Could not generate a unique course code. Rename an existing copy first.")
 }
 
 private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
