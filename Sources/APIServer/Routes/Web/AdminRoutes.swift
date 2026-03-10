@@ -240,11 +240,11 @@ struct AdminRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(EditCourseBody.self)
-        let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty, !name.isEmpty else {
-            return req.redirect(to: "/admin/courses/\(idString)?error=fields_required")
-        }
+        let rawCode = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawName = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Fall back to the existing value if the field was submitted blank.
+        let code = rawCode.isEmpty ? course.code : rawCode
+        let name = rawName.isEmpty ? course.name : rawName
 
         // Reject duplicate code (excluding this course itself).
         let existing = try await APICourse.query(on: req.db)
