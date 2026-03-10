@@ -38,7 +38,7 @@ actor UWImportantDatesCache {
             }
             var body = response.body ?? ByteBuffer()
             let text = body.readString(length: body.readableBytes) ?? ""
-            let parsed = parseICS(text)
+            let parsed = parseICS(text).filter { isRelevantEvent($0.title) }
             cached = parsed
             cachedAt = Date()
             return parsed
@@ -121,6 +121,26 @@ actor UWImportantDatesCache {
             .replacingOccurrences(of: "\\N", with: " ")
             .replacingOccurrences(of: "\\\\", with: "\\")
         return unescaped.isEmpty ? nil : unescaped
+    }
+
+    /// Returns true if the event title represents a closure, holiday, break, or exam period
+    /// that would make it unreasonable to set an assignment due date on or near that date.
+    private func isRelevantEvent(_ title: String) -> Bool {
+        let lower = title.lowercased()
+        let keywords: [String] = [
+            // Statutory holidays
+            "good friday", "easter", "victoria day", "canada day", "civic holiday",
+            "labour day", "thanksgiving", "remembrance day", "christmas", "boxing day",
+            "new year",
+            // University closures
+            "university closed", "holiday", "closure",
+            // Academic breaks
+            "reading week", "spring vacation", "spring break", "winter break",
+            "study break", "intersession",
+            // Exam periods
+            "final examination", "final exam", "exam period",
+        ]
+        return keywords.contains { lower.contains($0) }
     }
 
     private func nextDay(_ isoDate: String) -> String {
