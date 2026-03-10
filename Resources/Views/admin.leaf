@@ -75,6 +75,17 @@ Admin
         <button class="btn btn-primary" type="submit" style="align-self:flex-end">Create course</button>
     </form>
 
+    <form method="post" action="/admin/courses/import"
+          enctype="multipart/form-data"
+          style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem">
+        <label class="btn" style="cursor:pointer;margin:0">
+            Import bundle
+            <input type="file" name="file" accept=".zip" required
+                   style="display:none" onchange="this.closest('form').submit()">
+        </label>
+        <span style="font-size:.85rem;color:var(--text-secondary)">Upload a <code>.zip</code> bundle exported from another Chickadee instance.</span>
+    </form>
+
     #if(courses.isEmpty):
     <p class="empty">No courses yet. Use the form above to create one.</p>
     #else:

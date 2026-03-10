@@ -42,4 +42,5 @@ func routes(_ app: Application) throws {
 
     let admin = app.grouped(sessionAuth, RoleMiddleware(required: .admin))
     try admin.register(collection: AdminRoutes())
+    try admin.register(collection: CourseBundleRoutes())
 }

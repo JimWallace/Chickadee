@@ -1,0 +1,53 @@
+#extend("base"):
+#export("title"):
+Import result — Admin
+#endexport
+#export("content"):
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem">
+    <h1 style="margin:0">Bundle imported</h1>
+    <span class="tier tier-open">success</span>
+</div>
+
+<section class="admin-section">
+    <h2>#(courseCode) — #(courseName)</h2>
+    <table class="results-table" style="max-width:480px">
+        <tbody>
+            <tr>
+                <td>Test setups</td>
+                <td><strong>#(testSetupsImported)</strong></td>
+            </tr>
+            <tr>
+                <td>Assignments</td>
+                <td><strong>#(assignmentsImported)</strong></td>
+            </tr>
+            <tr>
+                <td>Users matched</td>
+                <td><strong>#(usersMatched)</strong></td>
+            </tr>
+            <tr>
+                <td>Users created</td>
+                <td><strong>#(usersCreated)</strong></td>
+            </tr>
+            <tr>
+                <td>Submissions</td>
+                <td><strong>#(submissionsImported)</strong></td>
+            </tr>
+            <tr>
+                <td>Results</td>
+                <td><strong>#(resultsImported)</strong></td>
+            </tr>
+        </tbody>
+    </table>
+    <p style="margin-top:1rem;color:var(--text-secondary);font-size:.9rem">
+        Assignments have been imported as-is (open/closed state preserved).
+        Validation status has been reset — re-run validation from the assignment page if needed.
+        Newly created user accounts have no password and must log in via SSO or use password reset.
+    </p>
+    <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap">
+        <a href="/admin/courses/#(courseID)" class="btn btn-primary">View course</a>
+        <a href="/admin" class="btn">Admin dashboard</a>
+    </div>
+</section>
+
+#endexport
+#endextend
