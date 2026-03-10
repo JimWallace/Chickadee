@@ -281,11 +281,13 @@ struct CourseBundleRoutes: RouteCollection {
         // ── 1. Receive the uploaded bundle ────────────────────────────────
 
         struct BundleUpload: Content {
-            let file: ByteBuffer
+            let file: File
         }
         let upload = try req.content.decode(BundleUpload.self)
-        var buffer = upload.file
-        guard let fileBytes = buffer.readBytes(length: buffer.readableBytes) else {
+        var buffer = upload.file.data
+        guard buffer.readableBytes > 0,
+              let fileBytes = buffer.readBytes(length: buffer.readableBytes)
+        else {
             throw Abort(.badRequest, reason: "Empty bundle upload")
         }
 
