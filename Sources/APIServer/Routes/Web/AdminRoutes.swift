@@ -21,6 +21,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
+        admin.get("courses", "new", use: newCourseForm)
         admin.post("courses", use: createCourse)
         admin.get("courses", ":courseID", use: courseDetail)
         admin.post("courses", ":courseID", "edit", use: editCourse)
@@ -165,6 +166,29 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+    // MARK: - GET /admin/courses/new
+
+    @Sendable
+    func newCourseForm(req: Request) async throws -> View {
+        let emptyCourse = AdminCourseRow(
+            id:              "",
+            code:            "",
+            name:            "",
+            isArchived:      false,
+            enrollmentCount: 0,
+            assignmentCount: 0,
+            createdAt:       ""
+        )
+        return try await req.view.render("admin-course", AdminCourseDetailContext(
+            currentUser:   req.currentUserContext,
+            course:        emptyCourse,
+            enrolledUsers: [],
+            assignments:   [],
+            isNew:         true,
+            error:         req.query[String.self, at: "error"]
+        ))
+    }
+
     // MARK: - POST /admin/courses
 
     @Sendable
@@ -177,11 +201,12 @@ struct AdminRoutes: RouteCollection {
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, !name.isEmpty else {
-            return req.redirect(to: "/admin?error=course_fields_required")
+            return req.redirect(to: "/admin/courses/new?error=course_fields_required")
         }
         let course = APICourse(code: code, name: name)
         try await course.save(on: req.db)
-        return req.redirect(to: "/admin")
+        let id = try course.requireID().uuidString
+        return req.redirect(to: "/admin/courses/\(id)")
     }
 
     // MARK: - POST /admin/courses/:courseID/archive
@@ -215,11 +240,11 @@ struct AdminRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(EditCourseBody.self)
-        let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty, !name.isEmpty else {
-            return req.redirect(to: "/admin/courses/\(idString)?error=fields_required")
-        }
+        let rawCode = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawName = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Fall back to the existing value if the field was submitted blank.
+        let code = rawCode.isEmpty ? course.code : rawCode
+        let name = rawName.isEmpty ? course.name : rawName
 
         // Reject duplicate code (excluding this course itself).
         let existing = try await APICourse.query(on: req.db)
@@ -371,7 +396,9 @@ struct AdminRoutes: RouteCollection {
             currentUser:   req.currentUserContext,
             course:        courseRow,
             enrolledUsers: enrolledUsers,
-            assignments:   assignments
+            assignments:   assignments,
+            isNew:         false,
+            error:         nil
         ))
     }
 
@@ -662,6 +689,8 @@ private struct AdminCourseDetailContext: Encodable {
     let course: AdminCourseRow
     let enrolledUsers: [AdminCourseEnrolledUserRow]
     let assignments: [AdminCourseAssignmentRow]
+    let isNew: Bool
+    let error: String?
     var assignmentCount: Int { assignments.count }
 }
 

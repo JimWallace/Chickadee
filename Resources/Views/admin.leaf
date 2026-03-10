@@ -59,35 +59,22 @@ Admin
 
 <!-- ── Courses ────────────────────────────────────────── -->
 <section class="admin-section">
-    <h2>Courses</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h2 style="margin:0">Courses</h2>
+        <div style="display:flex;gap:.5rem">
+            <a href="/admin/courses/new" class="btn">Create course</a>
+            <button class="btn btn-primary" id="importCourseBtn">Import course</button>
+        </div>
+    </div>
 
-    <form method="post" action="/admin/courses" style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px;margin-bottom:1rem">
-        <label class="form-label" style="flex:0 0 auto">
-            Code
-            <input class="form-input" type="text" name="code" placeholder="e.g. CMSC131" required
-                   style="width:9rem;display:block">
-        </label>
-        <label class="form-label" style="flex:1 1 200px">
-            Name
-            <input class="form-input" type="text" name="name" placeholder="e.g. Introduction to OOP" required
-                   style="display:block;width:100%">
-        </label>
-        <button class="btn btn-primary" type="submit" style="align-self:flex-end">Create course</button>
-    </form>
-
-    <form method="post" action="/admin/courses/import"
-          enctype="multipart/form-data"
-          style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem">
-        <label class="btn" style="cursor:pointer;margin:0">
-            Import bundle
-            <input type="file" name="file" accept=".zip" required
-                   style="display:none" onchange="this.closest('form').submit()">
-        </label>
-        <span style="font-size:.85rem;color:var(--text-secondary)">Upload a <code>.zip</code> bundle exported from another Chickadee instance.</span>
+    <!-- Hidden import form — triggered by the button above -->
+    <form method="post" action="/admin/courses/import" enctype="multipart/form-data"
+          id="importCourseForm">
+        <input type="file" name="file" accept=".zip" id="importCourseFile" style="display:none">
     </form>
 
     #if(courses.isEmpty):
-    <p class="empty">No courses yet. Use the form above to create one.</p>
+    <p class="empty">No courses yet.</p>
     #else:
     <table class="results-table">
         <thead>
@@ -405,6 +392,16 @@ Admin
         applyRelativeTimes(document);
         refreshWorkers();
     }, 5000);
+
+    // ── Import course ────────────────────────────────────────────────
+    var importFile = document.getElementById('importCourseFile');
+    var importForm = document.getElementById('importCourseForm');
+    document.getElementById('importCourseBtn').addEventListener('click', function() {
+        importFile.click();
+    });
+    importFile.addEventListener('change', function() {
+        if (importFile.files.length > 0) importForm.submit();
+    });
 })();
 </script>
 #endexport
