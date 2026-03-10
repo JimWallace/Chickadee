@@ -28,8 +28,9 @@ Edit Assignment
 
     <label class="form-label">
         Due Date (optional)
-        <input class="form-input" type="datetime-local" name="dueAt" value="#(dueAt)">
+        <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
     </label>
+    <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:-.5rem;margin-bottom:.5rem"></div>
 
     <div class="form-label">
         <span style="white-space:nowrap">Assignment Notebook (<a href="#(currentAssignmentURL)"><code>#(currentAssignmentFile)</code></a>)</span>
@@ -211,7 +212,45 @@ Edit Assignment
 
     // Native form submission is intentionally left unmodified.
     // Hidden suiteConfig is kept in sync by change/input listeners above.
+
+    // UWaterloo important-date proximity warning
+    (function () {
+        var dueAtInput = document.getElementById('dueAt');
+        var warning = document.getElementById('uw-date-warning');
+        if (!dueAtInput || !warning) return;
+        dueAtInput.addEventListener('change', function () {
+            checkUWDates(dueAtInput.value, warning);
+        });
+        // Check the pre-filled value on page load
+        if (dueAtInput.value) { checkUWDates(dueAtInput.value, warning); }
+    })();
 })();
+</script>
+<script>
+function checkUWDates(dateTimeValue, warningEl) {
+    if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
+    var selected = new Date(dateTimeValue);
+    if (isNaN(selected.getTime())) { warningEl.style.display = 'none'; return; }
+    fetch('/api/v1/uw-dates').then(function (resp) {
+        if (!resp.ok) return;
+        return resp.json();
+    }).then(function (dates) {
+        if (!dates) return;
+        var threeDays = 3 * 86400000;
+        var near = dates.filter(function (d) {
+            var start = new Date(d.startDate);
+            var end = new Date(d.endDate);
+            return selected >= new Date(start.getTime() - threeDays)
+                && selected < new Date(end.getTime() + threeDays);
+        });
+        if (near.length > 0) {
+            warningEl.textContent = '\u26a0 Due date is near: ' + near.map(function (d) { return d.title; }).join(', ');
+            warningEl.style.display = '';
+        } else {
+            warningEl.style.display = 'none';
+        }
+    }).catch(function () { /* silently ignore */ });
+}
 </script>
 #endexport
 #endextend

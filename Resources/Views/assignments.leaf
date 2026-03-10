@@ -102,9 +102,10 @@ Assignments
                         </label>
                         <label class="form-label" style="font-size:.8rem">
                             Due date (optional)
-                            <input class="form-input" type="datetime-local" name="dueAt"
+                            <input class="form-input publish-due-date" type="datetime-local" name="dueAt"
                                    style="font-size:.85rem;padding:.3rem .5rem">
                         </label>
+                        <div class="publish-uw-warning card-meta" style="display:none;color:#c05000;font-size:.8rem;margin-top:-.25rem;margin-bottom:.25rem"></div>
                         <button class="btn btn-primary" type="submit"
                                 style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
                     </form>
@@ -265,6 +266,40 @@ tr.assignment-draggable td {
         dragged.classList.remove('dragging');
         dragged = null;
         persistOrderIfChanged();
+    });
+})();
+
+// UWaterloo important-date proximity warning for inline publish forms
+(function () {
+    function checkUWDates(dateTimeValue, warningEl) {
+        if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
+        var selected = new Date(dateTimeValue);
+        if (isNaN(selected.getTime())) { warningEl.style.display = 'none'; return; }
+        fetch('/api/v1/uw-dates').then(function (resp) {
+            if (!resp.ok) return;
+            return resp.json();
+        }).then(function (dates) {
+            if (!dates) return;
+            var threeDays = 3 * 86400000;
+            var near = dates.filter(function (d) {
+                var start = new Date(d.startDate);
+                var end = new Date(d.endDate);
+                return selected >= new Date(start.getTime() - threeDays)
+                    && selected < new Date(end.getTime() + threeDays);
+            });
+            if (near.length > 0) {
+                warningEl.textContent = '\u26a0 Near: ' + near.map(function (d) { return d.title; }).join(', ');
+                warningEl.style.display = '';
+            } else {
+                warningEl.style.display = 'none';
+            }
+        }).catch(function () { /* silently ignore */ });
+    }
+
+    document.querySelectorAll('.publish-due-date').forEach(function (input) {
+        var warning = input.closest('form')?.querySelector('.publish-uw-warning');
+        if (!warning) return;
+        input.addEventListener('change', function () { checkUWDates(input.value, warning); });
     });
 })();
 </script>
