@@ -1,3 +1,12 @@
 jupyterlite==0.7.1
 jupyterlite-core==0.7.1
 jupyterlite-pyodide-kernel==0.7.0
+# R kernel (WebR) — BLOCKED: jupyterlite-webr 0.6.0 (latest) requires
+# jupyterlite-core<0.7, which conflicts with our 0.7.1 pin.  Additionally,
+# WebR requires COOP/COEP HTTP headers (Cross-Origin-Opener-Policy: same-origin
+# + Cross-Origin-Embedder-Policy: require-corp) that Chickadee does not yet
+# send.  Uncomment and pin once a jupyterlite-webr release targeting core 0.7.x
+# is available, then run scripts/build-jupyterlite.sh.
+# Package: jupyterlite-webr (CDN-hosted WASM — no self-build required)
+# Tracker: #77
+# jupyterlite-webr

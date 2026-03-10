@@ -34,8 +34,12 @@ import Foundation
 
 /// Tiers that students cannot see in the notebook or in downloads.
 let hiddenTiersForStudents: Set<String> = ["secret", "release"]
-let jupyterLiteKernelName = "python"
-let jupyterLiteKernelDisplayName = "Python (Pyodide)"
+
+// JupyterLite kernel identifiers used when normalizing notebook metadata.
+let jupyterLitePythonKernelName        = "python"
+let jupyterLitePythonKernelDisplayName = "Python (Pyodide)"
+let jupyterLiteRKernelName             = "webr"
+let jupyterLiteRKernelDisplayName      = "R (WebR)"
 
 /// Extracts the joined source string for a notebook cell dictionary.
 func cellSource(_ cell: [String: Any]) -> String? {
@@ -104,12 +108,14 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
     return (try? JSONSerialization.data(withJSONObject: studentNB)) ?? studentData
 }
 
-/// Normalizes notebook metadata so JupyterLite can attach the browser kernel.
+/// Normalizes notebook metadata so JupyterLite can attach the right browser kernel.
 ///
-/// - For Python notebooks (`python3`/`python` or missing kernelspec), forces
-///   kernelspec.name = "python" and display_name = "Python (Pyodide)".
-/// - Leaves non-Python kernelspecs untouched.
-/// - Returns original data unchanged if parsing fails.
+/// - Python notebooks (`python`/`python3` or missing kernelspec) →
+///   kernelspec.name = "python", display_name = "Python (Pyodide)".
+/// - R notebooks (`ir`, `r`) →
+///   kernelspec.name = "webr", display_name = "R (WebR)".
+/// - Any other explicit kernelspec → returned unchanged.
+/// - Returns original data unchanged if JSON parsing fails.
 func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     guard var notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     else { return data }
@@ -118,22 +124,32 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     let existingKernelSpec = metadata["kernelspec"] as? [String: Any]
     let existingName = (existingKernelSpec?["name"] as? String)?.lowercased()
 
-    // Skip explicit non-Python kernelspecs.
-    if let existingName, !existingName.isEmpty,
-       existingName != "python", existingName != "python3" {
-        return data
-    }
-
-    var kernelSpec = existingKernelSpec ?? [:]
-    kernelSpec["name"] = jupyterLiteKernelName
-    kernelSpec["display_name"] = jupyterLiteKernelDisplayName
-    metadata["kernelspec"] = kernelSpec
-
+    var kernelSpec   = existingKernelSpec ?? [:]
     var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
-    if (languageInfo["name"] as? String)?.isEmpty != false {
-        languageInfo["name"] = "python"
+
+    if let name = existingName, name == "ir" || name == "r" {
+        // R notebook (IRkernel) → normalize to the JupyterLite webR kernel.
+        kernelSpec["name"]         = jupyterLiteRKernelName
+        kernelSpec["display_name"] = jupyterLiteRKernelDisplayName
+        metadata["kernelspec"] = kernelSpec
+        if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
+            languageInfo["name"] = "r"
+        }
+        metadata["language_info"] = languageInfo
+    } else if let name = existingName, !name.isEmpty,
+              name != "python", name != "python3" {
+        // Unknown non-Python, non-R kernel → leave unchanged.
+        return data
+    } else {
+        // Python kernel (or missing kernelspec) → normalize to Python (Pyodide).
+        kernelSpec["name"]         = jupyterLitePythonKernelName
+        kernelSpec["display_name"] = jupyterLitePythonKernelDisplayName
+        metadata["kernelspec"] = kernelSpec
+        if (languageInfo["name"] as? String)?.isEmpty != false {
+            languageInfo["name"] = "python"
+        }
+        metadata["language_info"] = languageInfo
     }
-    metadata["language_info"] = languageInfo
 
     notebook["metadata"] = metadata
     return (try? JSONSerialization.data(withJSONObject: notebook)) ?? data

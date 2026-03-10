@@ -9,8 +9,10 @@
 //    here. Clicking the "Save notebook…" label opens a file picker; on change
 //    the file is PUT to /api/v1/testsetups/:id/assignment.
 //
-// 2. RUN TESTS — Re-uses the full Pyodide engine from assignment-validate.js.
-//    The instructor uploads a .py solution file and the saved version of the
+// 2. RUN TESTS — Re-uses the Pyodide engine from assignment-validate.js for
+//    Python notebooks.  For R notebooks, in-browser execution is skipped and
+//    a notice directs the instructor to use the worker runner instead.
+//    The instructor uploads a solution file and the saved version of the
 //    notebook is fetched from the server (so they always test the saved state,
 //    not an in-memory draft).
 
@@ -126,6 +128,12 @@
                 }
                 const notebook = await nbRes.json();
 
+                // R notebooks: skip Pyodide — worker-side grading is authoritative.
+                if (notebookKernelLanguage(notebook) === 'r') {
+                    setStatus(validateStatus, 'ok', 'R notebooks are validated by the runner — submit a test run to verify.');
+                    return;
+                }
+
                 setStatus(validateStatus, 'loading', 'Running tests…');
                 const outcomes = await runSolutionAgainstNotebook(solutionSource, notebook);
 
@@ -137,6 +145,21 @@
                 runSolutionBtn.disabled = false;
             }
         });
+    }
+
+    // ── Kernel language detection ────────────────────────────────────────────
+
+    // Returns 'r' for R notebooks (ir / r / webr kernelspec) or 'python' otherwise.
+    function notebookKernelLanguage(notebook) {
+        const ks = notebook.metadata && notebook.metadata.kernelspec;
+        if (ks) {
+            const name = (ks.name || '').toLowerCase();
+            const lang = (ks.language || '').toLowerCase();
+            if (name === 'ir' || name === 'r' || name === 'webr' || lang === 'r') return 'r';
+        }
+        const li = notebook.metadata && notebook.metadata.language_info;
+        if (li && (li.name || '').toLowerCase() === 'r') return 'r';
+        return 'python';
     }
 
     // ── Pyodide execution engine ─────────────────────────────────────────────

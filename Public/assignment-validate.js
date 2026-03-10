@@ -2,13 +2,19 @@
 //
 // In-browser solution validator for the assignment validation page.
 //
-// Workflow:
-//   1. Instructor selects a .py solution file via the file input.
+// Workflow (Python notebooks):
+//   1. Instructor selects a .py / .ipynb solution file via the file input.
 //   2. Clicking "Run tests" fetches the assignment notebook to get # TEST: cells.
 //   3. The solution file is injected into a fresh Pyodide interpreter.
 //   4. Each # TEST: cell from the notebook is run against the solution's namespace.
 //   5. Results are rendered inline (same CSS classes as submission.leaf).
 //   6. If all tests pass, the "Go live" panel is revealed.
+//
+// Workflow (R notebooks):
+//   Browser-side R execution is not yet supported (WebR startup overhead is
+//   significant; worker-side Rscript grading is authoritative).  When the
+//   notebook reports an R kernel the page skips in-browser execution, shows
+//   an explanatory notice, and reveals the "Go live" panel directly.
 //
 // No submission is posted to the server — this is purely local validation.
 
@@ -53,6 +59,15 @@
             if (!nbRes.ok) throw new Error(`Could not fetch assignment notebook: ${nbRes.status}. Make sure this test setup includes an assignment.ipynb.`);
             const notebook = await nbRes.json();
 
+            // For R notebooks, in-browser execution is not yet available.
+            // Worker-side Rscript grading is authoritative; skip Pyodide and
+            // reveal Go Live so the instructor can proceed after a worker run.
+            if (notebookKernelLanguage(notebook) === 'r') {
+                setStatus('ok', 'R notebooks are validated by the runner — submit a test run first, then go live when satisfied.');
+                goLivePanel.hidden = false;
+                return;
+            }
+
             setStatus('loading', 'Running tests…');
             const outcomes = await runSolutionAgainstNotebook(solutionSource, notebook);
 
@@ -69,6 +84,23 @@
             runBtn.disabled = false;
         }
     });
+
+    // -------------------------------------------------------------------------
+    // Kernel language detection
+    // -------------------------------------------------------------------------
+
+    // Returns 'r' for R notebooks (ir / r / webr kernelspec) or 'python' otherwise.
+    function notebookKernelLanguage(notebook) {
+        const ks = notebook.metadata && notebook.metadata.kernelspec;
+        if (ks) {
+            const name = (ks.name || '').toLowerCase();
+            const lang = (ks.language || '').toLowerCase();
+            if (name === 'ir' || name === 'r' || name === 'webr' || lang === 'r') return 'r';
+        }
+        const li = notebook.metadata && notebook.metadata.language_info;
+        if (li && (li.name || '').toLowerCase() === 'r') return 'r';
+        return 'python';
+    }
 
     // -------------------------------------------------------------------------
     // Pyodide execution engine
