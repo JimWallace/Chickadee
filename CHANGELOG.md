@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows Semantic Versioning.
 
+## [0.3.0] - 2026-03-10
+
+### Added
+
+- **Course bundle export/import** (closes #68): instructors can export a course as a `.chickadee` zip bundle containing all assignments and test setups, and re-import it on another instance.
+- Admin course detail page with bulk CSV enroll, unenroll, and per-student assignment view.
+- Admin users table with course filter.
+- Archive/unarchive course action with confirmation dialog.
+- Assignment count per course displayed in the admin courses table.
+
+### Changed
+
+- Admin courses section reworked: course list and create/edit pages consolidated into a single `admin-course.leaf` template with an `isNew` flag.
+- Edit course falls back to existing values when submitted with blank fields.
+- Removed dead `GET /assignments/new/details` route (was an immediate redirect; template deleted).
+- Removed abandoned `BuildStrategy` / `PythonBuildStrategy` scaffolding (superseded by shell-script runner architecture).
+
 ## [0.2.0] - 2026-03-10
 
 ### Changed

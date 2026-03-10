@@ -280,7 +280,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.1.0**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.3.0**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -319,6 +319,11 @@ Post-8 work also complete:
 - v0.1.0 schema hardening (canonical migrations, FK enforcement, WAL, performance indexes)
 - HTTPS/SSO scaffolding (`AuthMode`, `AppSecurityConfiguration`, `HTTPSRedirectMiddleware`,
   `AddUserSSOFields` migration)
+- v0.2.0 schema consolidation (all patch migrations folded into canonical `Create*` files;
+  `course_id` NOT NULL with FK on `test_setups` and `assignments`)
+- v0.3.0 admin course management UI (course detail, bulk CSV enroll, unenroll, archive)
+- v0.3.0 course bundle export/import (`.chickadee` zip)
+- v0.3.0 admin courses section rework (create/edit page consolidation)
 
 **Next work:** SSO implementation (OIDC/OAuth provider integration), gamification
 (attempt tracking, leaderboards), containerized deployment.

@@ -5,6 +5,8 @@ import Vapor
 import Core
 
 final class APITestSetup: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: all mutations happen within Vapor's request context,
+    // never across unstructured concurrency.
     static let schema = "test_setups"
 
     @ID(custom: "id", generatedBy: .user)
