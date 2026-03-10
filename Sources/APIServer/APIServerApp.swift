@@ -133,17 +133,14 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
         _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
     }
 
+    app.migrations.add(CreateUsers())
+    app.migrations.add(CreateCourses())
+    app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
-    app.migrations.add(CreateUsers())
-    app.migrations.add(AddUserSSOFields())
-    app.migrations.add(AddUserProfileFields())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourses())
-    app.migrations.add(AddCourseEnrollments())
-    app.migrations.add(AddCourseToAssignments())
 
     try app.autoMigrate().wait()
 

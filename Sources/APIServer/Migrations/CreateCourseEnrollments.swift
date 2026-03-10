@@ -1,12 +1,17 @@
-// APIServer/Migrations/AddCourseEnrollments.swift
+// APIServer/Migrations/CreateCourseEnrollments.swift
 
 import Fluent
 
-struct AddCourseEnrollments: AsyncMigration {
+struct CreateCourseEnrollments: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("course_enrollments")
             .id()
-            .field("user_id",     .uuid,     .required)
+            .field(
+                "user_id",
+                .uuid,
+                .required,
+                .references("users", "id", onDelete: .cascade)
+            )
             .field(
                 "course_id",
                 .uuid,

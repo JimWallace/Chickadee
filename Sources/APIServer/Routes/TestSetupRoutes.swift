@@ -226,7 +226,8 @@ struct TestSetupRoutes: RouteCollection {
         let setup = APITestSetup(
             id:       setupID,
             manifest: storedManifest,
-            zipPath:  zipPath
+            zipPath:  zipPath,
+            courseID: upload.courseID
         )
         try await setup.save(on: req.db)
 
@@ -371,6 +372,8 @@ struct TestSetupUpload: Content {
     var manifest: String
     /// Raw bytes of the test-setup zip file.
     var files: Data
+    /// UUID of the course this test setup belongs to.
+    var courseID: UUID
 }
 
 // MARK: - Zip inspection helpers

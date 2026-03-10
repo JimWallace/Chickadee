@@ -31,17 +31,14 @@ final class ResultRoutesTests: XCTestCase {
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(CreateUsers())
-        app.migrations.add(AddUserSSOFields())
-        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourses())
-        app.migrations.add(AddCourseEnrollments())
-        app.migrations.add(AddCourseToAssignments())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -89,10 +86,14 @@ final class ResultRoutesTests: XCTestCase {
         testSetupID: String = "setup_001"
     ) throws {
         if try APITestSetup.find(testSetupID, on: app.db).wait() == nil {
+            let course = APICourse(code: "TEST101", name: "Test Course")
+            try course.save(on: app.db).wait()
+            let courseID = try course.requireID()
             let setup = APITestSetup(
                 id: testSetupID,
                 manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
-                zipPath: tmpResultsDir + "\(testSetupID).zip"
+                zipPath: tmpResultsDir + "\(testSetupID).zip",
+                courseID: courseID
             )
             try setup.save(on: app.db).wait()
         }

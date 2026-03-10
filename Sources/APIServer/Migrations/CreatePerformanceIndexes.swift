@@ -32,11 +32,29 @@ struct CreatePerformanceIndexes: AsyncMigration {
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_users_role_username ON users(role, username)"
         ).run()
+
+        // Course FK lookups.
+        try await sql.raw(
+            "CREATE INDEX IF NOT EXISTS idx_assignments_course_id ON assignments(course_id)"
+        ).run()
+        try await sql.raw(
+            "CREATE INDEX IF NOT EXISTS idx_test_setups_course_id ON test_setups(course_id)"
+        ).run()
+        try await sql.raw(
+            "CREATE INDEX IF NOT EXISTS idx_course_enrollments_course_id ON course_enrollments(course_id)"
+        ).run()
+        try await sql.raw(
+            "CREATE INDEX IF NOT EXISTS idx_course_enrollments_user_id ON course_enrollments(user_id)"
+        ).run()
     }
 
     func revert(on database: Database) async throws {
         guard let sql = database as? SQLDatabase else { return }
 
+        try await sql.raw("DROP INDEX IF EXISTS idx_course_enrollments_user_id").run()
+        try await sql.raw("DROP INDEX IF EXISTS idx_course_enrollments_course_id").run()
+        try await sql.raw("DROP INDEX IF EXISTS idx_test_setups_course_id").run()
+        try await sql.raw("DROP INDEX IF EXISTS idx_assignments_course_id").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_users_role_username").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_results_submission_received_at").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_submissions_setup_kind_filename_submitted_at").run()

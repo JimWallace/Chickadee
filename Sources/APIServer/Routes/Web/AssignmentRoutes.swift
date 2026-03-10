@@ -560,6 +560,12 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func saveNewAssignment(req: Request) async throws -> Response {
+        let saveUser = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: saveUser)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected. Please select a course before creating an assignment.")
+        }
+
         struct SaveBodyMany: Content {
             var assignmentName: String?
             var dueAt: String?
@@ -658,7 +664,8 @@ struct AssignmentRoutes: RouteCollection {
             id: setupID,
             manifest: manifest,
             zipPath: zipPath,
-            notebookPath: notebookPath
+            notebookPath: notebookPath,
+            courseID: courseID
         )
         try await setup.save(on: req.db)
 
@@ -670,7 +677,8 @@ struct AssignmentRoutes: RouteCollection {
             isOpen: false,
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: "pending",
-            validationSubmissionID: nil
+            validationSubmissionID: nil,
+            courseID: courseID
         )
 
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
@@ -746,6 +754,10 @@ struct AssignmentRoutes: RouteCollection {
             due = nil
         }
 
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected. Please select a course before publishing an assignment.")
+        }
+
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
             testSetupID: body.testSetupID,
@@ -753,7 +765,7 @@ struct AssignmentRoutes: RouteCollection {
             dueAt: due,
             isOpen: false,         // stays closed until instructor validates + opens
             sortOrder: try await nextAssignmentSortOrder(req: req),
-            courseID: courseState.activeCourseUUID
+            courseID: courseID
         )
         return req.redirect(to: "/assignments/\(assignment.publicID)/validate")
     }
@@ -1381,7 +1393,7 @@ private func createAssignmentWithUniquePublicID(
     sortOrder: Int?,
     validationStatus: String? = nil,
     validationSubmissionID: String? = nil,
-    courseID: UUID? = nil
+    courseID: UUID
 ) async throws -> APIAssignment {
     for _ in 0..<32 {
         let candidate = APIAssignment.generatePublicID()

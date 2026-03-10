@@ -259,10 +259,13 @@ struct WebRoutes: RouteCollection {
         let encoder = JSONEncoder()
         let stored  = String(data: try encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
 
-        // Associate the setup with the instructor's active course (if any).
+        // Associate the setup with the instructor's active course.
         let courseState = try await req.resolveActiveCourse(for: setupUser)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
+        }
         let setup = APITestSetup(id: setupID, manifest: stored, zipPath: zipPath,
-                                  courseID: courseState.activeCourseUUID)
+                                  courseID: courseID)
         try await setup.save(on: req.db)
 
         return req.redirect(to: "/")

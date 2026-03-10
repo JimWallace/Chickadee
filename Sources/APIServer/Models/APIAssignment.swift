@@ -53,8 +53,8 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     var validationSubmissionID: String?
 
     /// The course this assignment belongs to.
-    @OptionalField(key: "course_id")
-    var courseID: UUID?
+    @Field(key: "course_id")
+    var courseID: UUID
 
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
@@ -72,7 +72,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
          sortOrder: Int? = nil,
          validationStatus: String? = nil,
          validationSubmissionID: String? = nil,
-         courseID: UUID? = nil) {
+         courseID: UUID) {
         self.id          = id
         self.publicID    = publicID
         self.testSetupID = testSetupID

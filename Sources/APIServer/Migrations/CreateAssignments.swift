@@ -26,6 +26,12 @@ struct CreateAssignments: AsyncMigration {
                 .references("submissions", "id", onDelete: .setNull)
             )
             .field("sort_order",    .int)
+            .field(
+                "course_id",
+                .uuid,
+                .required,
+                .references("courses", "id", onDelete: .cascade)
+            )
             .field("created_at",    .datetime)
             .unique(on: "public_id")
             .unique(on: "test_setup_id")

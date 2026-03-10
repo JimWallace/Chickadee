@@ -39,17 +39,14 @@ final class AssignmentRoutesTests: XCTestCase {
         app.middleware.use(app.sessions.middleware)
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(CreateUsers())
-        app.migrations.add(AddUserSSOFields())
-        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourses())
-        app.migrations.add(AddCourseEnrollments())
-        app.migrations.add(AddCourseToAssignments())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -94,19 +91,30 @@ final class AssignmentRoutesTests: XCTestCase {
 
     // MARK: - Setup helper
 
+    private func makeTestCourseID() async throws -> UUID {
+        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
+            return try existing.requireID()
+        }
+        let course = APICourse(code: "TEST101", name: "Test Course")
+        try await course.save(on: app.db)
+        return try course.requireID()
+    }
+
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
         {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
         """
-        let setup = APITestSetup(id: id, manifest: manifest, zipPath: tmpDir + "testsetups/\(id).zip")
+        let courseID = try await makeTestCourseID()
+        let setup = APITestSetup(id: id, manifest: manifest, zipPath: tmpDir + "testsetups/\(id).zip", courseID: courseID)
         try await setup.save(on: app.db)
         return setup
     }
 
     @discardableResult
     private func insertAssignment(testSetupID: String, title: String, isOpen: Bool) async throws -> APIAssignment {
-        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: isOpen)
+        let courseID = try await makeTestCourseID()
+        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: isOpen, courseID: courseID)
         try await a.save(on: app.db)
         return a
     }
