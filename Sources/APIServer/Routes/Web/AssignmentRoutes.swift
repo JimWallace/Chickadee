@@ -5,7 +5,6 @@
 //
 //   GET  /assignments                        → assignments.leaf (all setups + status)
 //   GET  /assignments/new                    → assignment-new.leaf
-//   GET  /assignments/new/details            → assignment-new-details.leaf
 //   POST /assignments/new/save               → save draft assignment, redirect to /assignments
 //   POST /assignments                        → create draft assignment → redirect to validate
 //   GET  /assignments/:assignmentID/validate → assignment-validate.leaf
@@ -31,7 +30,6 @@ struct AssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.get("new", use: newAssignmentPage)
-        r.get("new", "details", use: newAssignmentDetailsPage)
         r.post("new", "save", use: saveNewAssignment)
         r.post("reorder", use: reorderAssignments)
         r.post(use: publish)
@@ -547,13 +545,6 @@ struct AssignmentRoutes: RouteCollection {
             error: q?.error
         )
         return try await req.view.render("assignment-new", ctx)
-    }
-
-    // MARK: - GET /assignments/new/details
-
-    @Sendable
-    func newAssignmentDetailsPage(req: Request) async throws -> Response {
-        return req.redirect(to: "/assignments/new")
     }
 
     // MARK: - POST /assignments/new/save

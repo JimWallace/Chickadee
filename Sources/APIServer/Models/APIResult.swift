@@ -4,6 +4,8 @@ import Fluent
 import Vapor
 
 final class APIResult: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: all mutations happen within Vapor's request context,
+    // never across unstructured concurrency.
     static let schema = "results"
 
     @ID(custom: "id", generatedBy: .user)

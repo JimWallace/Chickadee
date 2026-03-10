@@ -4,6 +4,8 @@ import Fluent
 import Vapor
 
 final class APISubmission: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: all mutations happen within Vapor's request context,
+    // never across unstructured concurrency.
     static let schema = "submissions"
 
     enum Kind {
