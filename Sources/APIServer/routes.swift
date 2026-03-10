@@ -37,6 +37,7 @@ func routes(_ app: Application) throws {
     try instructor.register(collection: AssignmentRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())
+    try instructor.register(collection: UWDatesRoute())
 
     // MARK: - Admin only
 
