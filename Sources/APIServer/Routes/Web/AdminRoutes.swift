@@ -21,6 +21,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
+        admin.get("courses", "new", use: newCourseForm)
         admin.post("courses", use: createCourse)
         admin.get("courses", ":courseID", use: courseDetail)
         admin.post("courses", ":courseID", "edit", use: editCourse)
@@ -165,6 +166,21 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+    // MARK: - GET /admin/courses/new
+
+    @Sendable
+    func newCourseForm(req: Request) async throws -> View {
+        struct Context: Encodable {
+            let username: String
+            let error: String?
+        }
+        let user = try req.auth.require(APIUser.self)
+        return try await req.view.render("admin-course-new", Context(
+            username: user.username,
+            error:    req.query[String.self, at: "error"]
+        ))
+    }
+
     // MARK: - POST /admin/courses
 
     @Sendable
@@ -177,11 +193,12 @@ struct AdminRoutes: RouteCollection {
         let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, !name.isEmpty else {
-            return req.redirect(to: "/admin?error=course_fields_required")
+            return req.redirect(to: "/admin/courses/new?error=course_fields_required")
         }
         let course = APICourse(code: code, name: name)
         try await course.save(on: req.db)
-        return req.redirect(to: "/admin")
+        let id = try course.requireID().uuidString
+        return req.redirect(to: "/admin/courses/\(id)")
     }
 
     // MARK: - POST /admin/courses/:courseID/archive
