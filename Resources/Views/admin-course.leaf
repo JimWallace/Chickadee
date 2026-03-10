@@ -1,8 +1,37 @@
 #extend("base"):
 #export("title"):
-#(course.code) — Admin
+#if(isNew):New Course — Admin#else:#(course.code) — Admin#endif
 #endexport
 #export("content"):
+#if(isNew):
+<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
+    <h1 style="margin:0">New Course</h1>
+    <a href="/admin" class="btn">Cancel</a>
+</div>
+
+#if(error == "course_fields_required"):
+<div class="form-error" style="margin-bottom:1rem">Course code and name are required.</div>
+#endif
+
+<!-- ── Create course ───────────────────────────────────── -->
+<section class="admin-section">
+    <h2>Course details</h2>
+    <form method="post" action="/admin/courses"
+          style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px">
+        <label class="form-label" style="flex:0 0 auto">
+            Code
+            <input class="form-input" type="text" name="code" placeholder="e.g. CMSC131" required autofocus
+                   style="width:9rem;display:block">
+        </label>
+        <label class="form-label" style="flex:1 1 200px">
+            Name
+            <input class="form-input" type="text" name="name" placeholder="e.g. Introduction to OOP" required
+                   style="display:block;width:100%">
+        </label>
+        <button class="btn btn-primary" type="submit" style="align-self:flex-end">Create course</button>
+    </form>
+</section>
+#else:
 <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
     <div style="display:flex;align-items:center;gap:.75rem">
         <h1 style="margin:0">#(course.code) — #(course.name)</h1>
@@ -54,6 +83,7 @@
         <button class="btn btn-primary" type="submit" style="align-self:flex-end">Save</button>
     </form>
 </section>
+#endif
 
 <!-- ── Enrolled students ───────────────────────────────── -->
 <section class="admin-section">

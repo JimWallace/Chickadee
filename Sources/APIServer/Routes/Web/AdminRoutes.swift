@@ -170,14 +170,22 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func newCourseForm(req: Request) async throws -> View {
-        struct Context: Encodable {
-            let username: String
-            let error: String?
-        }
-        let user = try req.auth.require(APIUser.self)
-        return try await req.view.render("admin-course-new", Context(
-            username: user.username,
-            error:    req.query[String.self, at: "error"]
+        let emptyCourse = AdminCourseRow(
+            id:              "",
+            code:            "",
+            name:            "",
+            isArchived:      false,
+            enrollmentCount: 0,
+            assignmentCount: 0,
+            createdAt:       ""
+        )
+        return try await req.view.render("admin-course", AdminCourseDetailContext(
+            currentUser:   req.currentUserContext,
+            course:        emptyCourse,
+            enrolledUsers: [],
+            assignments:   [],
+            isNew:         true,
+            error:         req.query[String.self, at: "error"]
         ))
     }
 
@@ -388,7 +396,9 @@ struct AdminRoutes: RouteCollection {
             currentUser:   req.currentUserContext,
             course:        courseRow,
             enrolledUsers: enrolledUsers,
-            assignments:   assignments
+            assignments:   assignments,
+            isNew:         false,
+            error:         nil
         ))
     }
 
@@ -679,6 +689,8 @@ private struct AdminCourseDetailContext: Encodable {
     let course: AdminCourseRow
     let enrolledUsers: [AdminCourseEnrolledUserRow]
     let assignments: [AdminCourseAssignmentRow]
+    let isNew: Bool
+    let error: String?
     var assignmentCount: Int { assignments.count }
 }
 
