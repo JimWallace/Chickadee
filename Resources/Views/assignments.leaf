@@ -134,7 +134,7 @@ Assignments
                 #else:
                 <!-- draft — not yet validated/opened -->
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a class="btn btn-primary action-btn" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                    <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
                     <form method="post" action="/assignments/#(row.assignmentID)/delete"
                           onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                         <button class="btn action-btn action-danger" type="submit"
