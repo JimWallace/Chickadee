@@ -9,6 +9,12 @@ struct CreateTestSetups: AsyncMigration {
             .field("manifest",   .string, .required)
             .field("zip_path",   .string, .required)
             .field("notebook_path", .string)
+            .field(
+                "course_id",
+                .uuid,
+                .required,
+                .references("courses", "id", onDelete: .cascade)
+            )
             .field("created_at", .datetime)
             .create()
     }

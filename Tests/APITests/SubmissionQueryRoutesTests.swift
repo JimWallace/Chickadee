@@ -38,17 +38,14 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         app.middleware.use(app.sessions.middleware)
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(CreateUsers())
-        app.migrations.add(AddUserSSOFields())
-        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourses())
-        app.migrations.add(AddCourseEnrollments())
-        app.migrations.add(AddCourseToAssignments())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -79,15 +76,26 @@ final class SubmissionQueryRoutesTests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func makeTestCourseID() async throws -> UUID {
+        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
+            return try existing.requireID()
+        }
+        let course = APICourse(code: "TEST101", name: "Test Course")
+        try await course.save(on: app.db)
+        return try course.requireID()
+    }
+
     @discardableResult
     private func ensureSetup(id: String) async throws -> APITestSetup {
         if let existing = try await APITestSetup.find(id, on: app.db) {
             return existing
         }
+        let courseID = try await makeTestCourseID()
         let setup = APITestSetup(
             id: id,
             manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
-            zipPath: tmpDir + "testsetups/\(id).zip"
+            zipPath: tmpDir + "testsetups/\(id).zip",
+            courseID: courseID
         )
         try await setup.save(on: app.db)
         return setup

@@ -25,17 +25,14 @@ final class SSOAuthFlowTests: XCTestCase {
         app.middleware.use(UserSessionAuthenticator())
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(CreateUsers())
-        app.migrations.add(AddUserSSOFields())
-        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourses())
-        app.migrations.add(AddCourseEnrollments())
-        app.migrations.add(AddCourseToAssignments())
         try app.autoMigrate().wait()
 
         // Inject mock OIDC config — no network calls needed

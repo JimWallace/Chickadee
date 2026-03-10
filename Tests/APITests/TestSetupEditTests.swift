@@ -36,17 +36,14 @@ final class TestSetupEditTests: XCTestCase {
         app.middleware.use(app.sessions.middleware)
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(CreateUsers())
-        app.migrations.add(AddUserSSOFields())
-        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourses())
-        app.migrations.add(AddCourseEnrollments())
-        app.migrations.add(AddCourseToAssignments())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -91,16 +88,27 @@ final class TestSetupEditTests: XCTestCase {
 
     // MARK: - Setup helpers
 
+    private func makeTestCourseID() async throws -> UUID {
+        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
+            return try existing.requireID()
+        }
+        let course = APICourse(code: "TEST101", name: "Test Course")
+        try await course.save(on: app.db)
+        return try course.requireID()
+    }
+
     /// Creates a test setup record in the DB (no real zip on disk).
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
         {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
         """
+        let courseID = try await makeTestCourseID()
         let setup = APITestSetup(
             id: id,
             manifest: manifest,
-            zipPath: tmpDir + "testsetups/\(id).zip"
+            zipPath: tmpDir + "testsetups/\(id).zip",
+            courseID: courseID
         )
         try await setup.save(on: app.db)
         return setup
@@ -108,7 +116,8 @@ final class TestSetupEditTests: XCTestCase {
 
     @discardableResult
     private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
-        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true)
+        let courseID = try await makeTestCourseID()
+        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true, courseID: courseID)
         try await a.save(on: app.db)
         return a
     }

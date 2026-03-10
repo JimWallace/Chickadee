@@ -353,9 +353,8 @@ struct AdminRoutes: RouteCollection {
         }
 
         // Load assignments for this course.
-        let cid: UUID? = courseID
         let assignmentModels = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == cid)
+            .filter(\.$courseID == courseID)
             .sort(\.$dueAt)
             .all()
         let iso = ISO8601DateFormatter()
@@ -544,7 +543,7 @@ private func assignmentCountsByCourse(on db: Database) async throws -> [UUID: In
     let assignments = try await APIAssignment.query(on: db).all()
     var counts: [UUID: Int] = [:]
     for a in assignments {
-        guard let cid = a.courseID else { continue }
+        let cid = a.courseID
         counts[cid, default: 0] += 1
     }
     return counts

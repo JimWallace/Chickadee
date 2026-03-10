@@ -47,17 +47,14 @@ final class NotebookDownloadTests: XCTestCase {
         app.middleware.use(app.sessions.middleware)
 
         app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
         app.migrations.add(CreateTestSetups())
         app.migrations.add(CreateSubmissions())
         app.migrations.add(CreateResults())
-        app.migrations.add(CreateUsers())
-        app.migrations.add(AddUserSSOFields())
-        app.migrations.add(AddUserProfileFields())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourses())
-        app.migrations.add(AddCourseEnrollments())
-        app.migrations.add(AddCourseToAssignments())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -102,6 +99,15 @@ final class NotebookDownloadTests: XCTestCase {
 
     // MARK: - Setup helper
 
+    private func makeTestCourseID() async throws -> UUID {
+        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
+            return try existing.requireID()
+        }
+        let course = APICourse(code: "TEST101", name: "Test Course")
+        try await course.save(on: app.db)
+        return try course.requireID()
+    }
+
     /// Saves a notebook JSON directly as a flat .ipynb file and returns the setup ID.
     private func insertSetupWithNotebook(notebookJSON: String) async throws -> String {
         let setupID      = "setup_test_\(UUID().uuidString.lowercased().prefix(6))"
@@ -114,7 +120,8 @@ final class NotebookDownloadTests: XCTestCase {
         try Data().write(to: URL(fileURLWithPath: dummyZipPath))
         try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
 
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: dummyZipPath)
+        let courseID = try await makeTestCourseID()
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: dummyZipPath, courseID: courseID)
         setup.notebookPath = notebookPath
         try await setup.save(on: app.db)
         return setupID
@@ -193,7 +200,8 @@ final class NotebookDownloadTests: XCTestCase {
         let cookie  = try await loginAsStudent()
 
         // Create an assignment record with a title.
-        let a = APIAssignment(testSetupID: setupID, title: "Lab 1 Warmup", dueAt: nil, isOpen: true)
+        let courseID = try await makeTestCourseID()
+        let a = APIAssignment(testSetupID: setupID, title: "Lab 1 Warmup", dueAt: nil, isOpen: true, courseID: courseID)
         try await a.save(on: app.db)
 
         try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
