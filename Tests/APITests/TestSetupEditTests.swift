@@ -163,6 +163,32 @@ final class TestSetupEditTests: XCTestCase {
     }
     """
 
+    /// An R notebook exported from IRkernel (kernelspec.name = "ir").
+    private let irNotebookJSON = """
+    {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "R",
+                "language": "R",
+                "name": "ir"
+            },
+            "language_info": {
+                "name": "R"
+            }
+        },
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": ["x <- 1"],
+                "metadata": {},
+                "outputs": []
+            }
+        ]
+    }
+    """
+
     // MARK: - PUT /api/v1/testsetups/:id/assignment
 
     func testPutAssignmentSavesFileToDisk() async throws {
@@ -375,5 +401,80 @@ final class TestSetupEditTests: XCTestCase {
                 XCTAssertNotEqual(res.status, .notFound)
             }
         )
+    }
+
+    // MARK: - R kernel normalization (Issue #77)
+
+    func testPutAssignmentNormalizesIRKernelToWebR() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_put_ir")
+
+        try await app.test(.PUT, "/api/v1/testsetups/setup_put_ir/assignment",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: irNotebookJSON)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .noContent)
+            }
+        )
+
+        let expectedPath = tmpDir + "testsetups/setup_put_ir.ipynb"
+        let savedData    = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
+        let savedJSON    = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
+        let metadata     = savedJSON?["metadata"]  as? [String: Any]
+        let kernelspec   = metadata?["kernelspec"] as? [String: Any]
+        XCTAssertEqual(kernelspec?["name"]         as? String, "webr",     "ir kernel should be normalized to webr")
+        XCTAssertEqual(kernelspec?["display_name"] as? String, "R (WebR)", "display_name should be R (WebR)")
+    }
+
+    func testGetAssignmentNormalizesIRKernelToWebR() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_flat_ir")
+
+        let flatPath = tmpDir + "testsetups/setup_flat_ir.ipynb"
+        try irNotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
+
+        let setup = try await APITestSetup.find("setup_flat_ir", on: app.db)!
+        setup.notebookPath = flatPath
+        try await setup.save(on: app.db)
+
+        try await app.test(.GET, "/api/v1/testsetups/setup_flat_ir/assignment",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let data       = Data(res.body.readableBytesView)
+                let json       = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let metadata   = json?["metadata"]  as? [String: Any]
+                let kernelspec = metadata?["kernelspec"] as? [String: Any]
+                XCTAssertEqual(kernelspec?["name"]         as? String, "webr",     "ir kernel should be normalized to webr on GET")
+                XCTAssertEqual(kernelspec?["display_name"] as? String, "R (WebR)", "display_name should be R (WebR) on GET")
+            }
+        )
+    }
+
+    func testNormalizationPreservesPythonKernelUnchanged() async throws {
+        // PUT a Python notebook and verify it still normalizes to Pyodide (not webr).
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_put_py_check")
+
+        try await app.test(.PUT, "/api/v1/testsetups/setup_put_py_check/assignment",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: python3NotebookJSON)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .noContent)
+            }
+        )
+
+        let expectedPath = tmpDir + "testsetups/setup_put_py_check.ipynb"
+        let savedData    = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
+        let savedJSON    = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
+        let metadata     = savedJSON?["metadata"]  as? [String: Any]
+        let kernelspec   = metadata?["kernelspec"] as? [String: Any]
+        XCTAssertEqual(kernelspec?["name"]         as? String, "python",          "python3 kernel should still normalize to python")
+        XCTAssertEqual(kernelspec?["display_name"] as? String, "Python (Pyodide)","display_name should still be Python (Pyodide)")
     }
 }

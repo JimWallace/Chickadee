@@ -16,8 +16,8 @@ Validate — #(title)
 <!-- ── Solution upload ──────────────────────────────── -->
 <div style="margin-bottom:1.5rem">
     <label class="form-label" style="max-width:480px">
-        Solution file (.py)
-        <input class="form-input" id="solution-file" type="file" accept=".py,.ipynb">
+        Solution file (.py, .R, or .ipynb)
+        <input class="form-input" id="solution-file" type="file" accept=".py,.r,.R,.ipynb">
     </label>
     <div style="margin-top:.75rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="run-btn" disabled>Run tests</button>
