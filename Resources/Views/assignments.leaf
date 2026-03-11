@@ -6,7 +6,7 @@ Assignments
 <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
     <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
     <!-- Add Section inline form -->
-    <details class="add-section-details" id="add-section-details" style="position:relative;display:flex;align-items:center">
+    <details class="add-section-details" id="add-section-details" style="position:relative">
         <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
         <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
             <form method="post" action="/assignments/sections" class="form" style="margin:0;gap:.6rem">
@@ -403,6 +403,19 @@ tr.assignment-draggable td {
 }
 .section-empty-row td {
     cursor: default !important;
+}
+.add-section-details {
+    margin: 0;
+    padding: 0;
+}
+.add-section-details > summary {
+    margin: 0;
+}
+.add-section-details > summary::-webkit-details-marker {
+    display: none;
+}
+.add-section-details > summary::marker {
+    content: "";
 }
 .add-section-details[open] .add-section-popup {
     display: block;
