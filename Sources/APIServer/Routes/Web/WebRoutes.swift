@@ -93,7 +93,7 @@ struct WebRoutes: RouteCollection {
             let publishedIDs = Set(openAssignments.map(\.testSetupID))
             guard !publishedIDs.isEmpty else {
                 return try await req.view.render("index",
-                    IndexContext(setups: [], currentUser: userContext)).encodeResponse(for: req)
+                    IndexContext(sections: [], ungroupedSetups: [], hasSections: false, currentUser: userContext)).encodeResponse(for: req)
             }
             setups = try await APITestSetup.query(on: req.db)
                 .filter(\.$id ~~ publishedIDs)
@@ -217,8 +217,52 @@ struct WebRoutes: RouteCollection {
             )
         }
 
+        // Fetch sections for the active course to enable grouped display.
+        let allSections: [APICourseSection]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            allSections = try await APICourseSection.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .sort(\.$sortOrder, .ascending)
+                .all()
+        } else {
+            allSections = []
+        }
+
+        // Build lookup: testSetupID → section UUID
+        let sectionBySetupID: [String: UUID] = Dictionary(
+            allAssignments.compactMap { a -> (String, UUID)? in
+                guard let sid = a.sectionID else { return nil }
+                return (a.testSetupID, sid)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        // Group rows by section; rows without a matching section → ungrouped.
+        var rowsBySectionID: [UUID: [TestSetupRow]] = [:]
+        var ungroupedSetups: [TestSetupRow] = []
+        for row in rows {
+            if let sID = sectionBySetupID[row.id] {
+                rowsBySectionID[sID, default: []].append(row)
+            } else {
+                ungroupedSetups.append(row)
+            }
+        }
+
+        // Build per-section contexts, skipping sections with no visible items.
+        let sectionContexts: [IndexSectionContext] = allSections.compactMap { section in
+            guard let sID = section.id else { return nil }
+            let sectionRows = rowsBySectionID[sID] ?? []
+            guard !sectionRows.isEmpty else { return nil }
+            return IndexSectionContext(sectionID: sID.uuidString, name: section.name, setups: sectionRows)
+        }
+
         return try await req.view.render("index",
-            IndexContext(setups: rows, currentUser: userContext)).encodeResponse(for: req)
+            IndexContext(
+                sections: sectionContexts,
+                ungroupedSetups: ungroupedSetups,
+                hasSections: !allSections.isEmpty,
+                currentUser: userContext
+            )).encodeResponse(for: req)
     }
 
     // MARK: - GET /testsetups/new
@@ -651,8 +695,16 @@ private struct LatestSubmissionItem: Encodable {
     let submittedAtText: String
 }
 
-private struct IndexContext: Encodable {
+private struct IndexSectionContext: Encodable {
+    let sectionID: String
+    let name: String
     let setups: [TestSetupRow]
+}
+
+private struct IndexContext: Encodable {
+    let sections: [IndexSectionContext]     // named sections with their visible items
+    let ungroupedSetups: [TestSetupRow]     // items not assigned to any section
+    let hasSections: Bool                   // true if the course has any defined sections
     let currentUser: CurrentUserContext?
 }
 

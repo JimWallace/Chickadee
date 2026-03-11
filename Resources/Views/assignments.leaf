@@ -7,149 +7,389 @@ Assignments
     <h1 style="margin:0">Instructor</h1>
     <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
         <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
+        <!-- Add Section inline form -->
+        <details class="add-section-details" id="add-section-details">
+            <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
+            <div class="add-section-popup card" style="position:absolute;z-index:100;right:0;margin-top:.5rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
+                <form method="post" action="/assignments/sections" class="form" style="margin:0;gap:.6rem">
+                    <label class="form-label" style="margin:0">
+                        Section name
+                        <input class="form-input" type="text" name="name" placeholder="e.g. Labs" required
+                               style="font-size:.85rem;padding:.3rem .5rem">
+                    </label>
+                    <label class="form-label" style="margin:0">
+                        Default grading mode
+                        <select class="form-input" name="defaultGradingMode"
+                                style="font-size:.85rem;padding:.3rem .5rem">
+                            <option value="worker">worker (server-side)</option>
+                            <option value="browser">browser (in-browser)</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary" type="submit"
+                            style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                </form>
+            </div>
+        </details>
         <a class="btn btn-primary" href="/assignments/new">Create New</a>
     </div>
 </div>
 
-#if(rows.isEmpty):
+#if(!hasSections && ungroupedRows.isEmpty):
 <p class="empty">No assignments yet. <a href="/assignments/new">Create one to get started.</a></p>
 #else:
-<table class="results-table">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Validation</th>
-            <th class="due-col">Due</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody id="assignments-body">
-    #for(row in rows):
-        <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif"
-            #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
-            <td>
-                #if(row.assignmentID):
-                <span class="reorder-controls">
-                    <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
-                    <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
-                </span>
-                <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
-                #endif
-                #if(row.title):
-                #if(row.assignmentID):
-                <a href="/assignments/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
-                #else:
-                <strong>#(row.title)</strong>
-                #endif
-                #else:
-                <span style="color:var(--gray-600)">Unpublished</span>
-                #endif
-            </td>
-            <td>
-                #if(row.assignmentID && row.validationStatus == "passed"):
-                <form method="post" action="/assignments/#(row.assignmentID)/status">
-                    <select class="form-input" name="status" onchange="this.form.submit()"
-                            style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
-                        <option value="open" #if(row.status == "open"):selected#endif>open</option>
-                        <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
-                    </select>
+
+<!-- Sections -->
+<div id="sections-container">
+#for(section in sections):
+<div class="section-block" data-section-id="#(section.sectionID)" style="margin-bottom:1.5rem">
+    <div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
+        <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
+              style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem">⋮⋮</span>
+        <strong style="flex:1;min-width:0">#(section.name)</strong>
+        <span class="tier" style="font-size:.75rem">#(section.defaultGradingMode)</span>
+        <!-- Rename -->
+        <details class="rename-details">
+            <summary class="btn action-btn" style="list-style:none;cursor:pointer;font-size:.8rem;padding:.2rem .5rem">Rename…</summary>
+            <div class="rename-popup card" style="position:absolute;z-index:50;margin-top:.25rem;padding:.75rem;min-width:16rem;box-shadow:0 4px 12px rgba(0,0,0,.12)">
+                <form method="post" action="/assignments/sections/#(section.sectionID)/rename" class="form" style="margin:0;gap:.5rem">
+                    <label class="form-label" style="margin:0;font-size:.85rem">
+                        Name
+                        <input class="form-input" type="text" name="name" value="#(section.name)" required
+                               style="font-size:.85rem;padding:.25rem .45rem">
+                    </label>
+                    <label class="form-label" style="margin:0;font-size:.85rem">
+                        Default grading mode
+                        <select class="form-input" name="defaultGradingMode"
+                                style="font-size:.85rem;padding:.25rem .45rem">
+                            <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>worker (server-side)</option>
+                            <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>browser (in-browser)</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary" type="submit"
+                            style="font-size:.8rem;padding:.25rem .5rem">Save</button>
                 </form>
-                #elseif(row.assignmentID):
-                <span class="tier tier-closed">closed</span>
-                #else:
-                <span class="tier
-                    #if(row.status == "open"):tier-open
-                    #elseif(row.status == "closed"):tier-closed
-                    #elseif(row.status == "unpublished"):tier-unpublished
-                #endif">#(row.status)</span>
-                #endif
-            </td>
-            <td>
-                #if(row.validationStatus == "passed"):
-                <span class="tier tier-open">passed</span>
-                #elseif(row.validationStatus == "failed"):
-                <span class="tier tier-closed">failed</span>
-                #if(row.validationSubmissionID):
-                <div style="margin-top:.25rem">
-                    <a href="/submissions/#(row.validationSubmissionID)">View results</a>
-                </div>
-                #endif
-                #elseif(row.validationStatus == "pending"):
-                <span class="tier">pending</span>
-                #if(row.validationSubmissionID):
-                <div style="margin-top:.25rem">
-                    <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
-                </div>
-                #endif
-                #else:
-                <span class="tier">—</span>
-                #endif
-            </td>
-            <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-            <td>
-                #if(row.status == "unpublished"):
-                <!-- Publish inline form, toggled open with <details> (no JS needed) -->
-                <details class="publish-details">
-                    <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
-                    <form class="publish-form" method="post" action="/assignments">
-                        <input type="hidden" name="testSetupID" value="#(row.setupID)">
-                        <label class="form-label" style="font-size:.8rem">
-                            Title
-                            <input class="form-input" type="text" name="title"
-                                   placeholder="e.g. Lab 1 — Warmup" required
-                                   style="font-size:.85rem;padding:.3rem .5rem">
-                        </label>
-                        <label class="form-label" style="font-size:.8rem">
-                            Due date (optional)
-                            <input class="form-input publish-due-date" type="datetime-local" name="dueAt"
-                                   style="font-size:.85rem;padding:.3rem .5rem">
-                        </label>
-                        <div class="publish-uw-warning card-meta" style="display:none;color:#c05000;font-size:.8rem;margin-top:-.25rem;margin-bottom:.25rem"></div>
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
+            </div>
+        </details>
+        <!-- Delete -->
+        <form method="post" action="/assignments/sections/#(section.sectionID)/delete"
+              onsubmit="return confirm('Delete section \u201c#(section.name)\u201d? Its assignments will become ungrouped.')">
+            <button class="btn action-btn action-danger" type="submit"
+                    style="font-size:.8rem;padding:.2rem .5rem">Delete</button>
+        </form>
+    </div>
+
+    #if(section.rows.isEmpty):
+    <p class="empty" style="margin:.25rem 0 .5rem">No items in this section yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Validation</th>
+                <th class="due-col">Due</th>
+                <th>Move</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody class="assignments-body" data-section-id="#(section.sectionID)">
+        #for(row in section.rows):
+            <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif"
+                #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
+                <td>
+                    #if(row.assignmentID):
+                    <span class="reorder-controls">
+                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
+                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
+                    </span>
+                    <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+                    #endif
+                    #if(row.title):
+                    #if(row.assignmentID):
+                    <a href="/assignments/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                    #else:
+                    <strong>#(row.title)</strong>
+                    #endif
+                    #else:
+                    <span style="color:var(--gray-600)">Unpublished</span>
+                    #endif
+                </td>
+                <td>
+                    #if(row.assignmentID && row.validationStatus == "passed"):
+                    <form method="post" action="/assignments/#(row.assignmentID)/status">
+                        <select class="form-input" name="status" onchange="this.form.submit()"
+                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
+                            <option value="open" #if(row.status == "open"):selected#endif>open</option>
+                            <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
+                        </select>
                     </form>
-                </details>
-                #elseif(row.status == "closed"):
-                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
-                    <form method="post" action="/assignments/#(row.assignmentID)/delete"
-                          onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
-                        <button class="btn action-btn action-danger" type="submit"
-                                aria-label="Delete assignment"
-                                title="Delete assignment">Delete
-                        </button>
+                    #elseif(row.assignmentID):
+                    <span class="tier tier-closed">closed</span>
+                    #else:
+                    <span class="tier
+                        #if(row.status == "open"):tier-open
+                        #elseif(row.status == "closed"):tier-closed
+                        #elseif(row.status == "unpublished"):tier-unpublished
+                    #endif">#(row.status)</span>
+                    #endif
+                </td>
+                <td>
+                    #if(row.validationStatus == "passed"):
+                    <span class="tier tier-open">passed</span>
+                    #elseif(row.validationStatus == "failed"):
+                    <span class="tier tier-closed">failed</span>
+                    #if(row.validationSubmissionID):
+                    <div style="margin-top:.25rem">
+                        <a href="/submissions/#(row.validationSubmissionID)">View results</a>
+                    </div>
+                    #endif
+                    #elseif(row.validationStatus == "pending"):
+                    <span class="tier">pending</span>
+                    #if(row.validationSubmissionID):
+                    <div style="margin-top:.25rem">
+                        <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
+                    </div>
+                    #endif
+                    #else:
+                    <span class="tier">—</span>
+                    #endif
+                </td>
+                <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td>
+                    #if(row.assignmentID):
+                    <select class="form-input move-section-select" data-assignment-id="#(row.assignmentID)"
+                            style="font-size:.75rem;padding:.15rem .35rem;min-width:6rem"
+                            aria-label="Move to section">
+                        <option value="#(section.sectionID)" selected>#(section.name)</option>
+                        #for(s in sections):
+                        #if(s.sectionID != section.sectionID):
+                        <option value="#(s.sectionID)">#(s.name)</option>
+                        #endif
+                        #endfor
+                        <option value="">Ungrouped</option>
+                    </select>
+                    #else:
+                    <span style="color:var(--gray-400)">—</span>
+                    #endif
+                </td>
+                <td>
+                    #if(row.status == "unpublished"):
+                    <details class="publish-details">
+                        <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
+                        <form class="publish-form" method="post" action="/assignments">
+                            <input type="hidden" name="testSetupID" value="#(row.setupID)">
+                            <label class="form-label" style="font-size:.8rem">
+                                Title
+                                <input class="form-input" type="text" name="title"
+                                       placeholder="e.g. Lab 1 — Warmup" required
+                                       style="font-size:.85rem;padding:.3rem .5rem">
+                            </label>
+                            <label class="form-label" style="font-size:.8rem">
+                                Due date (optional)
+                                <input class="form-input publish-due-date" type="datetime-local" name="dueAt"
+                                       style="font-size:.85rem;padding:.3rem .5rem">
+                            </label>
+                            <div class="publish-uw-warning card-meta" style="display:none;color:#c05000;font-size:.8rem;margin-top:-.25rem;margin-bottom:.25rem"></div>
+                            <button class="btn btn-primary" type="submit"
+                                    style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
+                        </form>
+                    </details>
+                    #elseif(row.status == "closed"):
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                            <button class="btn action-btn action-danger" type="submit"
+                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                        </form>
+                    </div>
+                    #elseif(row.status == "open"):
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                            <button class="btn action-btn action-danger" type="submit"
+                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                        </form>
+                    </div>
+                    #else:
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                            <button class="btn action-btn action-danger" type="submit"
+                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                        </form>
+                    </div>
+                    #endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+    <div style="margin-top:.5rem">
+        <a class="btn action-btn" href="/assignments/new?sectionID=#(section.sectionID)"
+           style="font-size:.8rem;padding:.25rem .6rem">+ Add item to #(section.name)</a>
+    </div>
+</div>
+#endfor
+</div><!-- #sections-container -->
+
+<!-- Ungrouped bucket -->
+#if(!ungroupedRows.isEmpty || !hasSections):
+<div style="margin-bottom:1.5rem">
+    #if(hasSections):
+    <h2 style="font-size:1rem;font-weight:600;color:var(--gray-600);margin-bottom:.4rem">Ungrouped</h2>
+    #endif
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Validation</th>
+                <th class="due-col">Due</th>
+                #if(hasSections):<th>Move</th>#endif
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="assignments-body">
+        #for(row in ungroupedRows):
+            <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif"
+                #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
+                <td>
+                    #if(row.assignmentID):
+                    <span class="reorder-controls">
+                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
+                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
+                    </span>
+                    <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+                    #endif
+                    #if(row.title):
+                    #if(row.assignmentID):
+                    <a href="/assignments/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                    #else:
+                    <strong>#(row.title)</strong>
+                    #endif
+                    #else:
+                    <span style="color:var(--gray-600)">Unpublished</span>
+                    #endif
+                </td>
+                <td>
+                    #if(row.assignmentID && row.validationStatus == "passed"):
+                    <form method="post" action="/assignments/#(row.assignmentID)/status">
+                        <select class="form-input" name="status" onchange="this.form.submit()"
+                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
+                            <option value="open" #if(row.status == "open"):selected#endif>open</option>
+                            <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
+                        </select>
                     </form>
-                </div>
-                #elseif(row.status == "open"):
-                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
-                    <form method="post" action="/assignments/#(row.assignmentID)/delete"
-                          onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
-                        <button class="btn action-btn action-danger" type="submit"
-                                aria-label="Delete assignment"
-                                title="Delete assignment">Delete
-                        </button>
-                    </form>
-                </div>
-                #else:
-                <!-- draft — not yet validated/opened -->
-                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
-                    <form method="post" action="/assignments/#(row.assignmentID)/delete"
-                          onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
-                        <button class="btn action-btn action-danger" type="submit"
-                                aria-label="Delete assignment"
-                                title="Delete assignment">Delete
-                        </button>
-                    </form>
-                </div>
+                    #elseif(row.assignmentID):
+                    <span class="tier tier-closed">closed</span>
+                    #else:
+                    <span class="tier
+                        #if(row.status == "open"):tier-open
+                        #elseif(row.status == "closed"):tier-closed
+                        #elseif(row.status == "unpublished"):tier-unpublished
+                    #endif">#(row.status)</span>
+                    #endif
+                </td>
+                <td>
+                    #if(row.validationStatus == "passed"):
+                    <span class="tier tier-open">passed</span>
+                    #elseif(row.validationStatus == "failed"):
+                    <span class="tier tier-closed">failed</span>
+                    #if(row.validationSubmissionID):
+                    <div style="margin-top:.25rem">
+                        <a href="/submissions/#(row.validationSubmissionID)">View results</a>
+                    </div>
+                    #endif
+                    #elseif(row.validationStatus == "pending"):
+                    <span class="tier">pending</span>
+                    #if(row.validationSubmissionID):
+                    <div style="margin-top:.25rem">
+                        <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
+                    </div>
+                    #endif
+                    #else:
+                    <span class="tier">—</span>
+                    #endif
+                </td>
+                <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                #if(hasSections):
+                <td>
+                    #if(row.assignmentID):
+                    <select class="form-input move-section-select" data-assignment-id="#(row.assignmentID)"
+                            style="font-size:.75rem;padding:.15rem .35rem;min-width:6rem"
+                            aria-label="Move to section">
+                        <option value="" selected>Ungrouped</option>
+                        #for(s in sections):
+                        <option value="#(s.sectionID)">#(s.name)</option>
+                        #endfor
+                    </select>
+                    #else:
+                    <span style="color:var(--gray-400)">—</span>
+                    #endif
+                </td>
                 #endif
-            </td>
-        </tr>
-    #endfor
-    </tbody>
-</table>
+                <td>
+                    #if(row.status == "unpublished"):
+                    <details class="publish-details">
+                        <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
+                        <form class="publish-form" method="post" action="/assignments">
+                            <input type="hidden" name="testSetupID" value="#(row.setupID)">
+                            <label class="form-label" style="font-size:.8rem">
+                                Title
+                                <input class="form-input" type="text" name="title"
+                                       placeholder="e.g. Lab 1 — Warmup" required
+                                       style="font-size:.85rem;padding:.3rem .5rem">
+                            </label>
+                            <label class="form-label" style="font-size:.8rem">
+                                Due date (optional)
+                                <input class="form-input publish-due-date" type="datetime-local" name="dueAt"
+                                       style="font-size:.85rem;padding:.3rem .5rem">
+                            </label>
+                            <div class="publish-uw-warning card-meta" style="display:none;color:#c05000;font-size:.8rem;margin-top:-.25rem;margin-bottom:.25rem"></div>
+                            <button class="btn btn-primary" type="submit"
+                                    style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
+                        </form>
+                    </details>
+                    #elseif(row.status == "closed"):
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                            <button class="btn action-btn action-danger" type="submit"
+                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                        </form>
+                    </div>
+                    #elseif(row.status == "open"):
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                            <button class="btn action-btn action-danger" type="submit"
+                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                        </form>
+                    </div>
+                    #else:
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                            <button class="btn action-btn action-danger" type="submit"
+                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                        </form>
+                    </div>
+                    #endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+</div>
+#endif
+
 #endif
 <style>
 .assignment-drag-handle {
@@ -166,111 +406,207 @@ tr.assignment-draggable.dragging {
 tr.assignment-draggable td {
     cursor: grab;
 }
+.section-block.section-dragging {
+    opacity: .55;
+}
+.rename-details[open] .rename-popup,
+.add-section-details[open] .add-section-popup {
+    display: block;
+}
 </style>
 <script>
 (function () {
-    var body = document.getElementById('assignments-body');
-    if (!body) return;
+    'use strict';
 
-    var draggableRows = Array.from(body.querySelectorAll('tr[data-assignment-id]'));
-    if (draggableRows.length < 2) return;
+    // ── Assignment drag-and-drop (within each tbody) ──────────────────────────
+    function initAssignmentDragDrop(body) {
+        var draggableRows = Array.from(body.querySelectorAll('tr[data-assignment-id]'));
+        if (draggableRows.length < 2) return;
 
-    var dragged = null;
-    var dragStartOrder = '';
+        var dragged = null;
+        var dragStartOrder = '';
 
-    function currentOrder() {
-        return Array.from(body.querySelectorAll('tr[data-assignment-id]'))
-            .map(function (row) { return row.getAttribute('data-assignment-id'); })
-            .filter(function (v) { return !!v; });
-    }
+        function currentOrder() {
+            return Array.from(body.querySelectorAll('tr[data-assignment-id]'))
+                .map(function (row) { return row.getAttribute('data-assignment-id'); })
+                .filter(function (v) { return !!v; });
+        }
 
-    async function persistOrderIfChanged() {
-        var order = currentOrder();
-        var joined = order.join(',');
-        if (joined === dragStartOrder) return;
-        try {
-            var res = await fetch('/assignments/reorder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ assignmentIDs: order })
-            });
-            if (!res.ok) {
-                window.location.reload();
+        async function persistOrderIfChanged() {
+            var order = currentOrder();
+            var joined = order.join(',');
+            if (joined === dragStartOrder) return;
+            try {
+                var res = await fetch('/assignments/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assignmentIDs: order })
+                });
+                if (!res.ok) { window.location.reload(); }
+            } catch (_) { window.location.reload(); }
+        }
+
+        draggableRows.forEach(function (row) {
+            row.classList.add('assignment-draggable');
+            row.setAttribute('draggable', 'true');
+        });
+
+        body.addEventListener('dragstart', function (event) {
+            var target = event.target;
+            if (!(target instanceof Element)) return;
+            if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
+            var row = target.closest('tr[data-assignment-id]');
+            if (!row) return;
+            dragged = row;
+            dragStartOrder = currentOrder().join(',');
+            row.classList.add('dragging');
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', row.getAttribute('data-assignment-id') || '');
             }
-        } catch (_) {
-            window.location.reload();
-        }
+        });
+        body.addEventListener('dragover', function (event) {
+            if (!dragged) return;
+            event.preventDefault();
+            var target = event.target;
+            if (!(target instanceof Element)) return;
+            var overRow = target.closest('tr[data-assignment-id]');
+            if (!overRow || overRow === dragged) return;
+            var rect = overRow.getBoundingClientRect();
+            var after = event.clientY > rect.top + rect.height / 2;
+            body.insertBefore(dragged, after ? overRow.nextSibling : overRow);
+        });
+        body.addEventListener('drop', function (event) {
+            if (!dragged) return;
+            event.preventDefault();
+        });
+        body.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!(target instanceof Element)) return;
+            if (!target.classList.contains('reorder-btn')) return;
+            event.preventDefault();
+            event.stopPropagation();
+            var row = target.closest('tr[data-assignment-id]');
+            if (!row) return;
+            var dir = target.getAttribute('data-reorder');
+            if (dir === 'up' && row.previousElementSibling) {
+                body.insertBefore(row, row.previousElementSibling);
+                persistOrderIfChanged();
+            } else if (dir === 'down' && row.nextElementSibling) {
+                body.insertBefore(row.nextElementSibling, row);
+                persistOrderIfChanged();
+            }
+        });
+        body.addEventListener('dragend', function () {
+            if (!dragged) return;
+            dragged.classList.remove('dragging');
+            dragged = null;
+            persistOrderIfChanged();
+        });
     }
 
-    draggableRows.forEach(function (row) {
-        row.classList.add('assignment-draggable');
-        row.setAttribute('draggable', 'true');
-    });
+    // Init drag-drop for all assignment tables on the page.
+    document.querySelectorAll('.assignments-body, #assignments-body').forEach(initAssignmentDragDrop);
 
-    body.addEventListener('dragstart', function (event) {
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        if (target.closest('.reorder-btn')) {
+    // ── Section drag-and-drop ─────────────────────────────────────────────────
+    var sectionsContainer = document.getElementById('sections-container');
+    if (sectionsContainer) {
+        var draggedSection = null;
+        var sectionDragStartOrder = '';
+
+        function currentSectionOrder() {
+            return Array.from(sectionsContainer.querySelectorAll('.section-block[data-section-id]'))
+                .map(function (el) { return el.getAttribute('data-section-id'); })
+                .filter(function (v) { return !!v; });
+        }
+
+        async function persistSectionOrderIfChanged() {
+            var order = currentSectionOrder();
+            var joined = order.join(',');
+            if (joined === sectionDragStartOrder) return;
+            try {
+                var res = await fetch('/assignments/sections/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sectionIDs: order })
+                });
+                if (!res.ok) { window.location.reload(); }
+            } catch (_) { window.location.reload(); }
+        }
+
+        sectionsContainer.querySelectorAll('.section-drag-handle').forEach(function (handle) {
+            var block = handle.closest('.section-block');
+            if (!block) return;
+            block.setAttribute('draggable', 'true');
+        });
+
+        sectionsContainer.addEventListener('dragstart', function (event) {
+            var target = event.target;
+            if (!(target instanceof Element)) return;
+            var block = target.closest('.section-block[data-section-id]');
+            if (!block) return;
+            // Only start section drag if the handle was clicked.
+            var handle = target.closest('.section-drag-handle');
+            if (!handle) { return; }
+            draggedSection = block;
+            sectionDragStartOrder = currentSectionOrder().join(',');
+            block.classList.add('section-dragging');
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', block.getAttribute('data-section-id') || '');
+            }
+        });
+
+        sectionsContainer.addEventListener('dragover', function (event) {
+            if (!draggedSection) return;
             event.preventDefault();
-            return;
-        }
-        var row = target.closest('tr[data-assignment-id]');
-        if (!row) return;
-        dragged = row;
-        dragStartOrder = currentOrder().join(',');
-        row.classList.add('dragging');
-        if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', row.getAttribute('data-assignment-id') || '');
-        }
+            var target = event.target;
+            if (!(target instanceof Element)) return;
+            var overBlock = target.closest('.section-block[data-section-id]');
+            if (!overBlock || overBlock === draggedSection) return;
+            var rect = overBlock.getBoundingClientRect();
+            var after = event.clientY > rect.top + rect.height / 2;
+            sectionsContainer.insertBefore(draggedSection, after ? overBlock.nextSibling : overBlock);
+        });
+
+        sectionsContainer.addEventListener('drop', function (event) {
+            if (!draggedSection) return;
+            event.preventDefault();
+        });
+
+        sectionsContainer.addEventListener('dragend', function () {
+            if (!draggedSection) return;
+            draggedSection.classList.remove('section-dragging');
+            draggedSection = null;
+            persistSectionOrderIfChanged();
+        });
+    }
+
+    // ── Move assignment between sections ─────────────────────────────────────
+    document.querySelectorAll('.move-section-select').forEach(function (select) {
+        var originalValue = select.value;
+        select.addEventListener('change', async function () {
+            var assignmentID = select.getAttribute('data-assignment-id');
+            var newSectionID = select.value;
+            if (!assignmentID) return;
+            try {
+                var res = await fetch('/assignments/' + assignmentID + '/section', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sectionID: newSectionID })
+                });
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    select.value = originalValue;
+                }
+            } catch (_) {
+                select.value = originalValue;
+            }
+        });
     });
 
-    body.addEventListener('dragover', function (event) {
-        if (!dragged) return;
-        event.preventDefault();
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        var overRow = target.closest('tr[data-assignment-id]');
-        if (!overRow || overRow === dragged) return;
-
-        var rect = overRow.getBoundingClientRect();
-        var after = event.clientY > rect.top + rect.height / 2;
-        body.insertBefore(dragged, after ? overRow.nextSibling : overRow);
-    });
-
-    body.addEventListener('drop', function (event) {
-        if (!dragged) return;
-        event.preventDefault();
-    });
-
-    body.addEventListener('click', function (event) {
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        if (!target.classList.contains('reorder-btn')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        var row = target.closest('tr[data-assignment-id]');
-        if (!row) return;
-        var dir = target.getAttribute('data-reorder');
-        if (dir === 'up' && row.previousElementSibling) {
-            body.insertBefore(row, row.previousElementSibling);
-            persistOrderIfChanged();
-        } else if (dir === 'down' && row.nextElementSibling) {
-            body.insertBefore(row.nextElementSibling, row);
-            persistOrderIfChanged();
-        }
-    });
-
-    body.addEventListener('dragend', function () {
-        if (!dragged) return;
-        dragged.classList.remove('dragging');
-        dragged = null;
-        persistOrderIfChanged();
-    });
-})();
-
-// UWaterloo important-date proximity warning for inline publish forms
-(function () {
+    // ── UWaterloo important-date proximity warning ────────────────────────────
     function checkUWDates(dateTimeValue, warningEl) {
         if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
         var selected = new Date(dateTimeValue);

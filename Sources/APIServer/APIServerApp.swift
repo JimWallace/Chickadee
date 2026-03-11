@@ -144,6 +144,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.migrations.add(CreateResults())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())
+    app.migrations.add(AddCourseSections())
 
     try app.autoMigrate().wait()
 
