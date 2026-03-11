@@ -44,18 +44,42 @@
      * @returns {{ outcomes: object[], response: object }}
      */
     async function runAndSubmit(notebookBytes, setupID) {
-        const py    = await loadPyodideOnce();
-        const JSZip = await loadJSZip();
+        let py, JSZip;
+        try {
+            setRunnerStatus('loading', 'Initializing Python runtime…');
+            py = await loadPyodideOnce();
+        } catch (e) {
+            throw new Error('Failed to initialize Python runtime: ' + toMessage(e));
+        }
+        try {
+            JSZip = await loadJSZip();
+        } catch (e) {
+            throw new Error('Failed to load ZIP library: ' + toMessage(e));
+        }
 
         // Unique work directory per run to avoid state leakage.
         const workDir = `/chickadee_work_${Date.now()}`;
-        py.FS.mkdir(workDir);
+        try {
+            py.FS.mkdir(workDir);
+        } catch (e) {
+            throw new Error('Failed to create work directory: ' + toMessage(e));
+        }
 
         try {
             // 1. Download and unpack the test setup zip.
             setRunnerStatus('loading', 'Fetching test setup…');
-            const setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
-            const zip      = await JSZip.loadAsync(setupZip);
+            let setupZip;
+            try {
+                setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
+            } catch (e) {
+                throw new Error('Failed to download test setup: ' + toMessage(e));
+            }
+            let zip;
+            try {
+                zip = await JSZip.loadAsync(setupZip);
+            } catch (e) {
+                throw new Error('Failed to unpack test setup zip: ' + toMessage(e));
+            }
             for (const [name, file] of Object.entries(zip.files)) {
                 if (file.dir) continue;
                 const data     = await file.async('uint8array');
@@ -83,16 +107,28 @@
             await extractNotebook(py, workDir, notebookFilename, notebookText);
 
             // Add working directory to Python's path so helpers are importable.
-            await py.runPythonAsync(`
+            try {
+                await py.runPythonAsync(`
 import sys
 if '${workDir}' not in sys.path:
     sys.path.insert(0, '${workDir}')
 import os
 os.chdir('${workDir}')
 `);
+            } catch (e) {
+                throw new Error('Failed to configure Python environment: ' + toMessage(e));
+            }
 
-            // 4. Read test.properties.json and run each test suite entry.
-            const manifest = JSON.parse(py.FS.readFile(`${workDir}/test.properties.json`, { encoding: 'utf8' }));
+            // 4. Fetch manifest from server (test.properties.json is not in the zip;
+            //    the server serves it directly from the database via the manifest endpoint).
+            setRunnerStatus('loading', 'Loading test configuration…');
+            let manifest;
+            try {
+                const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
+                manifest = JSON.parse(manifestText);
+            } catch (e) {
+                throw new Error('Failed to load test configuration: ' + toMessage(e));
+            }
             const outcomes = [];
 
             setRunnerStatus('loading', 'Running tests…');
@@ -411,6 +447,19 @@ sys.stderr = sys.__stderr__
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Fetch failed ${res.status}: ${url}`);
         return res.arrayBuffer();
+    }
+
+    async function fetchText(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Fetch failed ${res.status}: ${url}`);
+        return res.text();
+    }
+
+    /** Converts any thrown value to a human-readable string. */
+    function toMessage(e) {
+        if (e instanceof Error && e.message) return e.message;
+        const s = String(e);
+        return (s && s !== '[object Object]') ? s : 'unknown error';
     }
 
     function loadScript(src) {

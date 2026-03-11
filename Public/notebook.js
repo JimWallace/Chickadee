@@ -110,7 +110,11 @@
                 window.location.assign(`/submissions/${response.submissionID}`);
                 return;
             } catch (err) {
-                setStatus('error', `Error: ${err.message}`);
+                const msg = (err instanceof Error && err.message)
+                    ? err.message
+                    : String(err);
+                console.error('[notebook] Submit error:', err);
+                setStatus('error', `Error: ${msg}`);
             } finally {
                 submitBtn.disabled = false;
             }
@@ -448,7 +452,11 @@
                 window.location.assign(`/submissions/${response.submissionID}`);
                 return;
             } catch (err) {
-                setStatus('error', `Error: ${err.message}`);
+                const msg = (err instanceof Error && err.message)
+                    ? err.message
+                    : String(err);
+                console.error('[notebook] Upload error:', err);
+                setStatus('error', `Error: ${msg}`);
             } finally {
                 if (submitBtn) submitBtn.disabled = false;
                 // Reset so the same file can be re-selected.
