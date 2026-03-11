@@ -441,14 +441,18 @@ tr.assignment-draggable td {
     document.querySelectorAll('tr[data-assignment-id]').forEach(function (row) {
         row.classList.add('assignment-draggable');
         row.setAttribute('draggable', 'true');
+        // Prevent native link / image drag from taking priority over the row
+        // drag. Without this, clicking on the assignment-name <a> starts a
+        // browser link-drag instead of our custom row drag.
+        row.querySelectorAll('a, img').forEach(function (el) {
+            el.setAttribute('draggable', 'false');
+        });
     });
 
     document.addEventListener('dragstart', function (event) {
         var target = event.target;
         if (!(target instanceof Element)) return;
         if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
-        // Section header drags are handled by sectionsContainer's dragstart — skip.
-        if (target.closest('.section-header')) return;
         var row = target.closest('tr[data-assignment-id]');
         if (!row) return;
         assignDragged = row;
@@ -493,6 +497,17 @@ tr.assignment-draggable td {
         var dropTbody = target.closest('tbody[data-section-id]');
         if (dropTbody && assignDragged.parentElement !== dropTbody) {
             dropTbody.appendChild(assignDragged);
+            return;
+        }
+
+        // 4. Over a section block's header / gap area (outside the table body).
+        //    Find the block's tbody and move the row there.
+        var overBlock = target.closest('.section-block[data-section-id]');
+        if (overBlock) {
+            var blockTbody = overBlock.querySelector('tbody[data-section-id]');
+            if (blockTbody && assignDragged.parentElement !== blockTbody) {
+                blockTbody.appendChild(assignDragged);
+            }
         }
     });
 
@@ -583,14 +598,6 @@ tr.assignment-draggable td {
             } catch (_) { window.location.reload(); }
         }
 
-        // Make section HEADERS (not blocks) draggable. The header div is a sibling
-        // of the section's <table>, so it is never an ancestor of any <tr> row.
-        // Row dragstart events therefore never bubble through .section-header,
-        // eliminating the conflict that was causing row drags to be cancelled.
-        sectionsContainer.querySelectorAll('.section-header').forEach(function (header) {
-            header.setAttribute('draggable', 'true');
-        });
-
         // Track whether the most-recent mousedown was on a section drag handle,
         // so accidental drags on the pencil / buttons / name text don't reorder.
         var sectionDragHandleDown = false;
@@ -602,24 +609,24 @@ tr.assignment-draggable td {
             sectionDragHandleDown = false;
         });
 
-        sectionsContainer.addEventListener('dragstart', function (event) {
-            var target = event.target;
-            if (!(target instanceof Element)) return;
-            // Only handle drags that originate on a section header.
-            // Row drags also bubble through sectionsContainer — we must NOT call
-            // preventDefault on them here; let them continue to document.dragstart.
-            var header = target.closest('.section-header');
-            if (!header) return;
-            if (!sectionDragHandleDown) { event.preventDefault(); return; }
-            var block = header.closest('.section-block[data-section-id]');
-            if (!block) return;
-            draggedSection = block;
-            sectionDragStartOrder = currentSectionOrder().join(',');
-            block.classList.add('section-dragging');
-            if (event.dataTransfer) {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', block.getAttribute('data-section-id') || '');
-            }
+        // Attach dragstart directly to each section header with stopPropagation.
+        // This guarantees section-drag events NEVER reach the document-level
+        // row-drag handler, and row-drag events NEVER trigger section logic.
+        sectionsContainer.querySelectorAll('.section-header').forEach(function (header) {
+            header.setAttribute('draggable', 'true');
+            header.addEventListener('dragstart', function (event) {
+                if (!sectionDragHandleDown) { event.preventDefault(); return; }
+                event.stopPropagation(); // prevent reaching document.dragstart
+                var block = header.closest('.section-block[data-section-id]');
+                if (!block) return;
+                draggedSection = block;
+                sectionDragStartOrder = currentSectionOrder().join(',');
+                block.classList.add('section-dragging');
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', block.getAttribute('data-section-id') || '');
+                }
+            });
         });
 
         sectionsContainer.addEventListener('dragover', function (event) {
