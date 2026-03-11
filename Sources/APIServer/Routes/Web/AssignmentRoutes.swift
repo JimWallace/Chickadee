@@ -219,12 +219,41 @@ struct AssignmentRoutes: RouteCollection {
             )
         }
 
+        // Fetch students enrolled in the active course.
+        let enrolledStudents: [EnrolledStudentRow]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            let enrollments = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == activeCourseUUID)
+                .all()
+            let enrolledUserIDs = enrollments.map { $0.userID }
+            if enrolledUserIDs.isEmpty {
+                enrolledStudents = []
+            } else {
+                let users = try await APIUser.query(on: req.db)
+                    .filter(\.$id ~~ enrolledUserIDs)
+                    .filter(\.$role == "student")
+                    .sort(\.$username)
+                    .all()
+                enrolledStudents = users.compactMap { u in
+                    guard let id = u.id else { return nil }
+                    return EnrolledStudentRow(
+                        id: id.uuidString,
+                        username: u.username,
+                        displayName: u.displayName ?? u.username
+                    )
+                }
+            }
+        } else {
+            enrolledStudents = []
+        }
+
         let ctx = AssignmentsContext(
             currentUser: userContext,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,
-            hasUngrouped: !ungroupedRows.isEmpty
+            hasUngrouped: !ungroupedRows.isEmpty,
+            enrolledStudents: enrolledStudents
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
@@ -1507,6 +1536,13 @@ private struct AssignmentsContext: Encodable {
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
     let hasUngrouped: Bool
+    let enrolledStudents: [EnrolledStudentRow]
+}
+
+private struct EnrolledStudentRow: Encodable {
+    let id: String
+    let username: String
+    let displayName: String
 }
 
 private struct AssignmentSubmissionsContext: Encodable {

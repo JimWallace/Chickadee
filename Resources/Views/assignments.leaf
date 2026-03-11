@@ -3,35 +3,31 @@
 Assignments
 #endexport
 #export("content"):
-<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1.5rem">
-    <h1 style="margin:0">Instructor</h1>
-    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
-        <!-- Add Section inline form -->
-        <details class="add-section-details" id="add-section-details">
-            <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
-            <div class="add-section-popup card" style="position:absolute;z-index:100;right:0;margin-top:.5rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
-                <form method="post" action="/assignments/sections" class="form" style="margin:0;gap:.6rem">
-                    <label class="form-label" style="margin:0">
-                        Section name
-                        <input class="form-input" type="text" name="name" placeholder="e.g. Labs" required
-                               style="font-size:.85rem;padding:.3rem .5rem">
-                    </label>
-                    <label class="form-label" style="margin:0">
-                        Default grading mode
-                        <select class="form-input" name="defaultGradingMode"
-                                style="font-size:.85rem;padding:.3rem .5rem">
-                            <option value="worker">worker (server-side)</option>
-                            <option value="browser">browser (in-browser)</option>
-                        </select>
-                    </label>
-                    <button class="btn btn-primary" type="submit"
-                            style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
-                </form>
-            </div>
-        </details>
-        <a class="btn btn-primary" href="/assignments/new">Create New</a>
-    </div>
+<div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem;position:relative">
+    <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
+    <!-- Add Section inline form -->
+    <details class="add-section-details" id="add-section-details">
+        <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
+        <div class="add-section-popup card" style="position:absolute;z-index:100;right:0;margin-top:.5rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
+            <form method="post" action="/assignments/sections" class="form" style="margin:0;gap:.6rem">
+                <label class="form-label" style="margin:0">
+                    Section name
+                    <input class="form-input" type="text" name="name" placeholder="e.g. Labs" required
+                           style="font-size:.85rem;padding:.3rem .5rem">
+                </label>
+                <label class="form-label" style="margin:0">
+                    Default grading mode
+                    <select class="form-input" name="defaultGradingMode"
+                            style="font-size:.85rem;padding:.3rem .5rem">
+                        <option value="worker">server-side</option>
+                        <option value="browser">browser (in-browser)</option>
+                    </select>
+                </label>
+                <button class="btn btn-primary" type="submit"
+                        style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+            </form>
+        </div>
+    </details>
 </div>
 
 #if(!hasSections && !hasUngrouped):
@@ -49,11 +45,13 @@ Assignments
         <!-- View mode -->
         <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
             <strong>#(section.name)</strong>
-            <span style="font-size:.78rem;color:var(--gray-500)">graded in #(section.defaultGradingMode)</span>
+            <span style="font-size:.78rem;color:var(--gray-500)">#if(section.defaultGradingMode == "worker"):graded on server#else:graded in browser#endif</span>
             <button class="btn-link section-edit-toggle" type="button"
                     title="Edit section" aria-label="Edit section"
-                    style="font-size:.85rem;line-height:1;padding:.1rem .25rem;color:var(--gray-500)">✏️</button>
-            <a class="btn btn-primary" href="/assignments/new?sectionID=#(section.sectionID)"
+                    style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </button>
+            <a class="btn action-btn" href="/assignments/new?sectionID=#(section.sectionID)"
                style="font-size:.8rem;padding:.2rem .55rem;margin-left:auto">+ Create New</a>
         </div>
 
@@ -359,6 +357,32 @@ Assignments
 #endif
 
 #endif
+
+<!-- ── Enrolled students ──────────────────────────────────────────────── -->
+<div style="margin-top:2.5rem">
+    <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.6rem">Enrolled students</h2>
+    #if(enrolledStudents.isEmpty):
+    <p class="empty">No students enrolled yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Username</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(student in enrolledStudents):
+            <tr>
+                <td>#(student.displayName)</td>
+                <td><code>#(student.username)</code></td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</div>
+
 <style>
 .assignment-drag-handle {
     display: inline-block;
