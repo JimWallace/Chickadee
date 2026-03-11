@@ -760,9 +760,20 @@ struct AssignmentRoutes: RouteCollection {
             return req.redirect(to: "/assignments/new?\(q)")
         }
 
+        // Resolve the section up front so we can inherit its grading mode.
+        let resolvedSectionID: UUID? = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db)
+        let sectionGradingMode: String
+        if let sid = resolvedSectionID,
+           let sec = try await APICourseSection.find(sid, on: req.db) {
+            sectionGradingMode = sec.defaultGradingMode   // "browser" | "worker"
+        } else {
+            sectionGradingMode = "worker"
+        }
+
         let manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
-            includeMakefile: setupPackage.hasMakefile
+            includeMakefile: setupPackage.hasMakefile,
+            gradingMode: sectionGradingMode
         )
         let setup = APITestSetup(
             id: setupID,
@@ -772,9 +783,6 @@ struct AssignmentRoutes: RouteCollection {
             courseID: courseID
         )
         try await setup.save(on: req.db)
-
-        // Resolve the section ID from the form field, validating it belongs to the active course.
-        let resolvedSectionID: UUID? = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db)
 
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
@@ -1483,9 +1491,18 @@ struct AssignmentRoutes: RouteCollection {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
             return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
         }
+        // Preserve the grading mode already stored in the manifest — editing
+        // the suite files must not silently reset it back to "worker".
+        let existingGradingMode: String = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let mode = dict["gradingMode"] as? String else { return "worker" }
+            return mode
+        }()
         setup.manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
-            includeMakefile: setupPackage.hasMakefile
+            includeMakefile: setupPackage.hasMakefile,
+            gradingMode: existingGradingMode
         )
         setup.notebookPath = notebookPath
         try await setup.save(on: req.db)
@@ -2356,12 +2373,13 @@ private func normalizeTier(_ raw: String?) -> String {
 
 private func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
-    includeMakefile: Bool
+    includeMakefile: Bool,
+    gradingMode: String = "worker"
 ) throws -> String {
     let testSuiteJSON = testSuites.map { ["tier": $0.tier, "script": $0.script] }
     let manifest: [String: Any] = [
         "schemaVersion": 1,
-        "gradingMode": "worker",
+        "gradingMode": gradingMode,
         "requiredFiles": [],
         "testSuites": testSuiteJSON,
         "timeLimitSeconds": 10,
