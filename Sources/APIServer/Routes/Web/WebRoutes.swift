@@ -93,7 +93,7 @@ struct WebRoutes: RouteCollection {
             let publishedIDs = Set(openAssignments.map(\.testSetupID))
             guard !publishedIDs.isEmpty else {
                 return try await req.view.render("index",
-                    IndexContext(sections: [], ungroupedSetups: [], hasSections: false, currentUser: userContext)).encodeResponse(for: req)
+                    IndexContext(sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false, currentUser: userContext)).encodeResponse(for: req)
             }
             setups = try await APITestSetup.query(on: req.db)
                 .filter(\.$id ~~ publishedIDs)
@@ -261,6 +261,7 @@ struct WebRoutes: RouteCollection {
                 sections: sectionContexts,
                 ungroupedSetups: ungroupedSetups,
                 hasSections: !allSections.isEmpty,
+                hasUngrouped: !ungroupedSetups.isEmpty,
                 currentUser: userContext
             )).encodeResponse(for: req)
     }
@@ -705,6 +706,7 @@ private struct IndexContext: Encodable {
     let sections: [IndexSectionContext]     // named sections with their visible items
     let ungroupedSetups: [TestSetupRow]     // items not assigned to any section
     let hasSections: Bool                   // true if the course has any defined sections
+    let hasUngrouped: Bool                  // true if there are items not in any section
     let currentUser: CurrentUserContext?
 }
 

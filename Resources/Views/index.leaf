@@ -4,7 +4,7 @@ Assignments
 #endexport
 #export("content"):
 <h1>Assignments</h1>
-#if(!hasSections && ungroupedSetups.isEmpty):
+#if(!hasSections && !hasUngrouped):
 <p class="empty">No assignments available yet.</p>
 #else:
 
@@ -81,10 +81,9 @@ Assignments
 #endif
 #endfor
 
-<!-- Ungrouped items (shown under "Other" heading when sections exist) -->
-#if(!ungroupedSetups.isEmpty):
-<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">Other</h2>
-<table class="results-table" style="margin-bottom:.5rem">
+<!-- Ungrouped items (no heading — instructors should assign everything to a section) -->
+#if(hasUngrouped):
+<table class="results-table" style="margin-bottom:.5rem;margin-top:1rem">
     <thead>
         <tr>
             <th>Name</th>
