@@ -45,7 +45,7 @@ Assignments
         <!-- View mode -->
         <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
             <strong>#(section.name)</strong>
-            <span style="font-size:.78rem;color:var(--gray-500)">#if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
+            <span style="font-size:.78rem;color:var(--gray-500)">tested in #if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
             <button class="btn-link section-edit-toggle" type="button"
                     title="Edit section" aria-label="Edit section"
                     style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
