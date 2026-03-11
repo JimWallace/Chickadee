@@ -4,10 +4,17 @@ Assignments
 #endexport
 #export("content"):
 <h1>Assignments</h1>
-#if(setups.isEmpty):
+#if(!hasSections && ungroupedSetups.isEmpty):
 <p class="empty">No assignments available yet.</p>
 #else:
-<table class="results-table">
+
+#if(hasSections):
+
+<!-- Sections layout -->
+#for(section in sections):
+#if(!section.setups.isEmpty):
+<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">#(section.name)</h2>
+<table class="results-table" style="margin-bottom:.5rem">
     <thead>
         <tr>
             <th>Name</th>
@@ -19,7 +26,7 @@ Assignments
         </tr>
     </thead>
     <tbody>
-    #for(setup in setups):
+    #for(setup in section.setups):
         <tr>
             <td>
                 #if(setup.title):
@@ -71,6 +78,148 @@ Assignments
     #endfor
     </tbody>
 </table>
+#endif
+#endfor
+
+<!-- Ungrouped items (shown under "Other" heading when sections exist) -->
+#if(!ungroupedSetups.isEmpty):
+<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">Other</h2>
+<table class="results-table" style="margin-bottom:.5rem">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th class="due-col">Due</th>
+            <th>Grade</th>
+            <th>History</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(setup in ungroupedSetups):
+        <tr>
+            <td>
+                #if(setup.title):
+                    <strong>#(setup.title)</strong>
+                #else:
+                <span style="color:var(--gray-600)">Unpublished</span>
+                #endif
+            </td>
+            <td>
+                <span class="tier
+                    #if(setup.status == "open"):tier-open
+                    #elseif(setup.status == "closed"):tier-closed
+                    #elseif(setup.status == "unpublished"):tier-unpublished
+                    #endif">#(setup.status)</span>
+            </td>
+            <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
+            <td>
+                #if(setup.bestGradeText):
+                    <strong>#(setup.bestGradeText)</strong>
+                #else:
+                    <span class="empty">—</span>
+                #endif
+            </td>
+            <td>
+                #if(setup.submissionCount > 0):
+                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                        #if(setup.hasLatestSubmission):
+                            <a href="/submissions/#(setup.latestSubmissionID)" style="font-size:.82rem">#(setup.latestSubmittedAtText)</a>
+                        #endif
+                        #if(setup.additionalSubmissionCount > 0):
+                            <a href="/testsetups/#(setup.id)/history" style="font-size:.78rem;color:var(--gray-600)">+#(setup.additionalSubmissionCount) more</a>
+                        #endif
+                    </div>
+                #else:
+                    <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+            <td>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    #if(setup.isOpen):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
+                       style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
+                </div>
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+
+#else:
+
+<!-- Flat layout (no sections defined) -->
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th class="due-col">Due</th>
+            <th>Grade</th>
+            <th>History</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(setup in ungroupedSetups):
+        <tr>
+            <td>
+                #if(setup.title):
+                    <strong>#(setup.title)</strong>
+                #else:
+                <span style="color:var(--gray-600)">Unpublished</span>
+                #endif
+            </td>
+            <td>
+                <span class="tier
+                    #if(setup.status == "open"):tier-open
+                    #elseif(setup.status == "closed"):tier-closed
+                    #elseif(setup.status == "unpublished"):tier-unpublished
+                    #endif">#(setup.status)</span>
+            </td>
+            <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
+            <td>
+                #if(setup.bestGradeText):
+                    <strong>#(setup.bestGradeText)</strong>
+                #else:
+                    <span class="empty">—</span>
+                #endif
+            </td>
+            <td>
+                #if(setup.submissionCount > 0):
+                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                        #if(setup.hasLatestSubmission):
+                            <a href="/submissions/#(setup.latestSubmissionID)" style="font-size:.82rem">#(setup.latestSubmittedAtText)</a>
+                        #endif
+                        #if(setup.additionalSubmissionCount > 0):
+                            <a href="/testsetups/#(setup.id)/history" style="font-size:.78rem;color:var(--gray-600)">+#(setup.additionalSubmissionCount) more</a>
+                        #endif
+                    </div>
+                #else:
+                    <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+            <td>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    #if(setup.isOpen):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
+                       style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
+                </div>
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+
+#endif
+
 #endif
 #endexport
 #endextend

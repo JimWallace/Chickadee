@@ -3,17 +3,22 @@
 // Instructor-facing assignment management routes.
 // Requires instructor or admin role (enforced by routes.swift).
 //
-//   GET  /assignments                        → assignments.leaf (all setups + status)
-//   GET  /assignments/new                    → assignment-new.leaf
-//   POST /assignments/new/save               → save draft assignment, redirect to /assignments
-//   POST /assignments                        → create draft assignment → redirect to validate
-//   GET  /assignments/:assignmentID/validate → assignment-validate.leaf
-//   GET  /assignments/:assignmentID/edit     → assignment-edit.leaf
-//   POST /assignments/:assignmentID/edit/save → update assignment content + validate
-//   POST /assignments/:assignmentID/status   → set open/closed status → redirect to /assignments
-//   POST /assignments/:assignmentID/open     → set isOpen=true → redirect to /assignments
-//   POST /assignments/:assignmentID/close    → set isOpen=false → redirect to /assignments
-//   POST /assignments/:assignmentID/delete   → remove assignment record → redirect to /assignments
+//   GET  /assignments                               → assignments.leaf (all setups + status)
+//   GET  /assignments/new                           → assignment-new.leaf
+//   POST /assignments/new/save                      → save draft assignment, redirect to /assignments
+//   POST /assignments                               → create draft assignment → redirect to validate
+//   GET  /assignments/:assignmentID/validate        → assignment-validate.leaf
+//   GET  /assignments/:assignmentID/edit            → assignment-edit.leaf
+//   POST /assignments/:assignmentID/edit/save       → update assignment content + validate
+//   POST /assignments/:assignmentID/status          → set open/closed status → redirect to /assignments
+//   POST /assignments/:assignmentID/open            → set isOpen=true → redirect to /assignments
+//   POST /assignments/:assignmentID/close           → set isOpen=false → redirect to /assignments
+//   POST /assignments/:assignmentID/delete          → remove assignment record → redirect to /assignments
+//   POST /assignments/:assignmentID/section         → move assignment to a section (or ungrouped)
+//   POST /assignments/sections                      → create a new course section
+//   POST /assignments/sections/reorder              → reorder sections
+//   POST /assignments/sections/:sectionID/rename    → rename/reconfigure a section
+//   POST /assignments/sections/:sectionID/delete    → delete a section
 
 import Vapor
 import Fluent
@@ -32,6 +37,11 @@ struct AssignmentRoutes: RouteCollection {
         r.get("new", use: newAssignmentPage)
         r.post("new", "save", use: saveNewAssignment)
         r.post("reorder", use: reorderAssignments)
+        r.post("sections", use: createSection)
+        r.post("sections", "reorder", use: reorderSections)
+        r.post("sections", ":sectionID", "rename", use: renameSection)
+        r.post("sections", ":sectionID", "delete", use: deleteSection)
+        r.post(":assignmentID", "section", use: moveToSection)
         r.post(use: publish)
         r.get(":assignmentID", "validate", use: validatePage)
         r.get(":assignmentID", "edit",     use: editPage)
@@ -140,7 +150,7 @@ struct AssignmentRoutes: RouteCollection {
             )
         }
 
-        let rows = unsortedRows.sorted { lhs, rhs in
+        let sortedRows = unsortedRows.sorted { lhs, rhs in
             let lhsPublished = lhs.assignmentID != nil
             let rhsPublished = rhs.assignmentID != nil
             if lhsPublished != rhsPublished {
@@ -165,9 +175,55 @@ struct AssignmentRoutes: RouteCollection {
             return lhsIndex < rhsIndex
         }
 
+        // Fetch sections for the active course, sorted by sort_order.
+        let allSections: [APICourseSection]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            allSections = try await APICourseSection.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .sort(\.$sortOrder, .ascending)
+                .all()
+        } else {
+            allSections = try await APICourseSection.query(on: req.db)
+                .sort(\.$sortOrder, .ascending)
+                .all()
+        }
+
+        // Build a lookup: assignment publicID → section UUID
+        let sectionByPublicID: [String: UUID] = Dictionary(
+            allAssignments.compactMap { a -> (String, UUID)? in
+                guard let sid = a.sectionID else { return nil }
+                return (a.publicID, sid)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        // Group sorted rows by section; rows without a matching section → ungrouped.
+        var rowsBySectionID: [UUID: [AssignmentRow]] = [:]
+        var ungroupedRows: [AssignmentRow] = []
+        for row in sortedRows {
+            if let aID = row.assignmentID, let sID = sectionByPublicID[aID] {
+                rowsBySectionID[sID, default: []].append(row)
+            } else {
+                ungroupedRows.append(row)
+            }
+        }
+
+        let sectionContexts: [CourseSectionRow] = allSections.map { section in
+            let sID = section.id ?? UUID()
+            return CourseSectionRow(
+                sectionID: sID.uuidString,
+                name: section.name,
+                defaultGradingMode: section.defaultGradingMode,
+                sortOrder: section.sortOrder,
+                rows: rowsBySectionID[sID] ?? []
+            )
+        }
+
         let ctx = AssignmentsContext(
             currentUser: userContext,
-            rows: rows
+            sections: sectionContexts,
+            ungroupedRows: ungroupedRows,
+            hasSections: !allSections.isEmpty
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
@@ -535,12 +591,35 @@ struct AssignmentRoutes: RouteCollection {
             var dueAt: String?
             var error: String?
             var notice: String?
+            var sectionID: String?
         }
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
         let q = (try? req.query.decode(NewQuery.self))
+
+        let sections: [CourseSectionRow]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            sections = try await APICourseSection.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .sort(\.$sortOrder, .ascending)
+                .all()
+                .map { s in CourseSectionRow(
+                    sectionID: s.id?.uuidString ?? "",
+                    name: s.name,
+                    defaultGradingMode: s.defaultGradingMode,
+                    sortOrder: s.sortOrder,
+                    rows: []
+                )}
+        } else {
+            sections = []
+        }
+
         let ctx = NewAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentName: (q?.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
             dueAt: q?.dueAt ?? "",
+            sections: sections,
+            preselectedSectionID: q?.sectionID ?? "",
             notice: q?.notice,
             error: q?.error
         )
@@ -560,6 +639,7 @@ struct AssignmentRoutes: RouteCollection {
         struct SaveBodyMany: Content {
             var assignmentName: String?
             var dueAt: String?
+            var sectionID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: [File]?
@@ -568,6 +648,7 @@ struct AssignmentRoutes: RouteCollection {
         struct SaveBodySingle: Content {
             var assignmentName: String?
             var dueAt: String?
+            var sectionID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: File?
@@ -582,6 +663,7 @@ struct AssignmentRoutes: RouteCollection {
 
         let assignmentName = bodyMany?.assignmentName ?? bodySingle?.assignmentName
         let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
+        let sectionIDRaw = bodyMany?.sectionID ?? bodySingle?.sectionID
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
         let suiteFilesRaw = bodyMany?.suiteFiles ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
@@ -660,6 +742,9 @@ struct AssignmentRoutes: RouteCollection {
         )
         try await setup.save(on: req.db)
 
+        // Resolve the section ID from the form field, validating it belongs to the active course.
+        let resolvedSectionID: UUID? = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db)
+
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
             testSetupID: setupID,
@@ -669,6 +754,7 @@ struct AssignmentRoutes: RouteCollection {
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: "pending",
             validationSubmissionID: nil,
+            sectionID: resolvedSectionID,
             courseID: courseID
         )
 
@@ -841,6 +927,152 @@ struct AssignmentRoutes: RouteCollection {
             assignment.sortOrder = index + 1
             try await assignment.save(on: req.db)
         }
+        return .ok
+    }
+
+    // MARK: - POST /assignments/sections
+
+    @Sendable
+    func createSection(req: Request) async throws -> Response {
+        struct CreateSectionBody: Content {
+            var name: String
+            var defaultGradingMode: String
+        }
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+        let body = try req.content.decode(CreateSectionBody.self)
+        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            throw Abort(.badRequest, reason: "Section name must not be empty.")
+        }
+        let mode = body.defaultGradingMode
+        guard mode == "browser" || mode == "worker" else {
+            throw Abort(.badRequest, reason: "defaultGradingMode must be 'browser' or 'worker'.")
+        }
+        let maxOrder = try await APICourseSection.query(on: req.db)
+            .filter(\.$courseID == courseID)
+            .max(\.$sortOrder) ?? 0
+        let section = APICourseSection(name: name, defaultGradingMode: mode, sortOrder: maxOrder + 1, courseID: courseID)
+        try await section.save(on: req.db)
+        return req.redirect(to: "/assignments")
+    }
+
+    // MARK: - POST /assignments/sections/reorder
+
+    @Sendable
+    func reorderSections(req: Request) async throws -> HTTPStatus {
+        struct ReorderBody: Content {
+            var sectionIDs: [String]
+        }
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseID = courseState.activeCourseUUID else { return .ok }
+        let body = try req.content.decode(ReorderBody.self)
+        let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
+        guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {
+            throw Abort(.badRequest, reason: "Invalid section ID in reorder payload.")
+        }
+        let sections = try await APICourseSection.query(on: req.db)
+            .filter(\.$courseID == courseID)
+            .filter(\.$id ~~ uuids)
+            .all()
+        guard sections.count == uuids.count else {
+            throw Abort(.badRequest, reason: "Section set mismatch in reorder payload.")
+        }
+        let byID = Dictionary(uniqueKeysWithValues: sections.compactMap { s -> (UUID, APICourseSection)? in
+            guard let id = s.id else { return nil }
+            return (id, s)
+        })
+        for (index, uuid) in uuids.enumerated() {
+            guard let section = byID[uuid] else { continue }
+            section.sortOrder = index + 1
+            try await section.save(on: req.db)
+        }
+        return .ok
+    }
+
+    // MARK: - POST /assignments/sections/:sectionID/rename
+
+    @Sendable
+    func renameSection(req: Request) async throws -> Response {
+        struct RenameSectionBody: Content {
+            var name: String
+            var defaultGradingMode: String
+        }
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+        guard let sectionIDStr = req.parameters.get("sectionID"),
+              let sectionUUID = UUID(uuidString: sectionIDStr) else {
+            throw Abort(.notFound)
+        }
+        guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
+              section.courseID == courseID else {
+            throw Abort(.notFound)
+        }
+        let body = try req.content.decode(RenameSectionBody.self)
+        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            throw Abort(.badRequest, reason: "Section name must not be empty.")
+        }
+        let mode = body.defaultGradingMode
+        guard mode == "browser" || mode == "worker" else {
+            throw Abort(.badRequest, reason: "defaultGradingMode must be 'browser' or 'worker'.")
+        }
+        section.name = name
+        section.defaultGradingMode = mode
+        try await section.save(on: req.db)
+        return req.redirect(to: "/assignments")
+    }
+
+    // MARK: - POST /assignments/sections/:sectionID/delete
+
+    @Sendable
+    func deleteSection(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+        guard let sectionIDStr = req.parameters.get("sectionID"),
+              let sectionUUID = UUID(uuidString: sectionIDStr) else {
+            throw Abort(.notFound)
+        }
+        guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
+              section.courseID == courseID else {
+            throw Abort(.notFound)
+        }
+        // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
+        try await section.delete(on: req.db)
+        return req.redirect(to: "/assignments")
+    }
+
+    // MARK: - POST /assignments/:assignmentID/section
+
+    @Sendable
+    func moveToSection(req: Request) async throws -> HTTPStatus {
+        struct MoveBody: Content {
+            var sectionID: String?  // UUID string, or "" / absent = ungrouped
+        }
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+        let idStr = try assignmentPublicIDParameter(from: req)
+        guard let assignment = try await assignmentByPublicID(idStr, on: req.db),
+              assignment.courseID == courseID else {
+            throw Abort(.notFound)
+        }
+        let body = (try? req.content.decode(MoveBody.self))
+        let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
+        assignment.sectionID = newSectionID
+        try await assignment.save(on: req.db)
         return .ok
     }
 
@@ -1259,9 +1491,20 @@ struct AssignmentRow: Encodable {
     let createdAt:    String
 }
 
+/// A course section with its grouped assignment rows, used in instructor and student views.
+struct CourseSectionRow: Encodable {
+    let sectionID: String           // UUID as string
+    let name: String
+    let defaultGradingMode: String  // "browser" | "worker"
+    let sortOrder: Int
+    let rows: [AssignmentRow]       // assignments in this section, sorted
+}
+
 private struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
-    let rows: [AssignmentRow]
+    let sections: [CourseSectionRow]    // sections with their assignments
+    let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
+    let hasSections: Bool
 }
 
 private struct AssignmentSubmissionsContext: Encodable {
@@ -1297,6 +1540,8 @@ private struct NewAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentName: String
     let dueAt: String
+    let sections: [CourseSectionRow]    // available sections for the section picker
+    let preselectedSectionID: String    // from ?sectionID= query param
     let notice: String?
     let error: String?
 }
@@ -1345,6 +1590,21 @@ private struct SubmissionHistoryRow: Encodable {
     let gradeText: String
 }
 
+/// Validates a sectionID string (UUID) against the given course and returns the UUID if valid.
+/// Returns nil for absent, empty, or "none" values (meaning "ungrouped").
+private func resolveSectionID(_ raw: String?, courseID: UUID, db: Database) async throws -> UUID? {
+    guard let raw, !raw.isEmpty, raw.lowercased() != "none" else { return nil }
+    guard let uuid = UUID(uuidString: raw) else {
+        throw Abort(.badRequest, reason: "Invalid sectionID format.")
+    }
+    guard let section = try await APICourseSection.find(uuid, on: db),
+          section.courseID == courseID else {
+        // Section not found or belongs to a different course — silently ignore.
+        return nil
+    }
+    return uuid
+}
+
 private func parseDueDate(_ raw: String?) -> Date? {
     guard let raw, !raw.isEmpty else { return nil }
 
@@ -1384,6 +1644,7 @@ private func createAssignmentWithUniquePublicID(
     sortOrder: Int?,
     validationStatus: String? = nil,
     validationSubmissionID: String? = nil,
+    sectionID: UUID? = nil,
     courseID: UUID
 ) async throws -> APIAssignment {
     for _ in 0..<32 {
@@ -1402,6 +1663,7 @@ private func createAssignmentWithUniquePublicID(
             sortOrder: sortOrder,
             validationStatus: validationStatus,
             validationSubmissionID: validationSubmissionID,
+            sectionID: sectionID,
             courseID: courseID
         )
         do {

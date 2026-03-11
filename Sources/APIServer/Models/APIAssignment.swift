@@ -52,6 +52,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "validation_submission_id")
     var validationSubmissionID: String?
 
+    /// The section this assignment belongs to (nil = ungrouped).
+    @OptionalField(key: "section_id")
+    var sectionID: UUID?
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID
@@ -72,6 +76,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
          sortOrder: Int? = nil,
          validationStatus: String? = nil,
          validationSubmissionID: String? = nil,
+         sectionID: UUID? = nil,
          courseID: UUID) {
         self.id          = id
         self.publicID    = publicID
@@ -82,6 +87,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.sortOrder   = sortOrder
         self.validationStatus = validationStatus
         self.validationSubmissionID = validationSubmissionID
+        self.sectionID   = sectionID
         self.courseID    = courseID
     }
 }

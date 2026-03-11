@@ -32,6 +32,21 @@ Create Assignment
     </label>
     <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:-.5rem;margin-bottom:.5rem"></div>
 
+    #if(!sections.isEmpty):
+    <label class="form-label">
+        Section (optional)
+        <select class="form-input" name="sectionID" id="sectionID">
+            <option value="" #if(!preselectedSectionID):selected#endif>— Ungrouped —</option>
+            #for(section in sections):
+            <option value="#(section.sectionID)"
+                    data-grading-mode="#(section.defaultGradingMode)"
+                    #if(preselectedSectionID == section.sectionID):selected#endif>#(section.name)</option>
+            #endfor
+        </select>
+    </label>
+    <p id="grading-mode-hint" class="card-meta" style="margin-top:-.4rem;margin-bottom:.25rem;display:none"></p>
+    #endif
+
     <label class="form-label">
         <span style="white-space:nowrap">Assignment Notebook (<code>assignment.ipynb</code>)</span>
         <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb" required>
@@ -199,6 +214,28 @@ Create Assignment
         dueAtInput.addEventListener('change', function () {
             checkUWDates(dueAtInput.value, warning);
         });
+    })();
+
+    // Grading mode hint when a section is selected
+    (function () {
+        var sectionSelect = document.getElementById('sectionID');
+        var hint = document.getElementById('grading-mode-hint');
+        if (!sectionSelect || !hint) return;
+        function updateHint() {
+            var selected = sectionSelect.options[sectionSelect.selectedIndex];
+            var mode = selected ? selected.getAttribute('data-grading-mode') : null;
+            if (mode === 'browser') {
+                hint.textContent = '\u24d8 This section uses browser grading by default.';
+                hint.style.display = '';
+            } else if (mode === 'worker') {
+                hint.textContent = '\u24d8 This section uses server-side (worker) grading by default.';
+                hint.style.display = '';
+            } else {
+                hint.style.display = 'none';
+            }
+        }
+        sectionSelect.addEventListener('change', updateHint);
+        updateHint();
     })();
 })();
 </script>
