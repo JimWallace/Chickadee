@@ -34,7 +34,7 @@ Assignments
     </div>
 </div>
 
-#if(!hasSections && ungroupedRows.isEmpty):
+#if(!hasSections && !hasUngrouped):
 <p class="empty">No assignments yet. <a href="/assignments/new">Create one to get started.</a></p>
 #else:
 
@@ -236,8 +236,8 @@ Assignments
 #endfor
 </div><!-- #sections-container -->
 
-<!-- Ungrouped bucket -->
-#if(!ungroupedRows.isEmpty || !hasSections):
+<!-- Ungrouped bucket: shown when there are ungrouped items, or when no sections exist at all (flat-table mode) -->
+#if(hasUngrouped || !hasSections):
 <div style="margin-bottom:1.5rem">
     #if(hasSections):
     <h2 style="font-size:1rem;font-weight:600;color:var(--gray-600);margin-bottom:.4rem">Ungrouped</h2>
@@ -534,6 +534,19 @@ tr.assignment-draggable td {
             } catch (_) { window.location.reload(); }
         }
 
+        // Track whether the most-recent mousedown was on a section drag handle.
+        // dragstart fires with event.target = the draggable block (not the
+        // clicked child), so we can't use closest() inside dragstart to find
+        // the handle; a mousedown flag is the reliable alternative.
+        var sectionDragHandleDown = false;
+        sectionsContainer.addEventListener('mousedown', function (event) {
+            var t = event.target;
+            sectionDragHandleDown = !!(t instanceof Element && t.closest('.section-drag-handle'));
+        });
+        sectionsContainer.addEventListener('mouseup', function () {
+            sectionDragHandleDown = false;
+        });
+
         sectionsContainer.querySelectorAll('.section-drag-handle').forEach(function (handle) {
             var block = handle.closest('.section-block');
             if (!block) return;
@@ -541,13 +554,11 @@ tr.assignment-draggable td {
         });
 
         sectionsContainer.addEventListener('dragstart', function (event) {
+            if (!sectionDragHandleDown) { event.preventDefault(); return; }
             var target = event.target;
             if (!(target instanceof Element)) return;
             var block = target.closest('.section-block[data-section-id]');
             if (!block) return;
-            // Only start section drag if the handle was clicked.
-            var handle = target.closest('.section-drag-handle');
-            if (!handle) { return; }
             draggedSection = block;
             sectionDragStartOrder = currentSectionOrder().join(',');
             block.classList.add('section-dragging');

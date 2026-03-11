@@ -223,7 +223,8 @@ struct AssignmentRoutes: RouteCollection {
             currentUser: userContext,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
-            hasSections: !allSections.isEmpty
+            hasSections: !allSections.isEmpty,
+            hasUngrouped: !ungroupedRows.isEmpty
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
@@ -1505,6 +1506,7 @@ private struct AssignmentsContext: Encodable {
     let sections: [CourseSectionRow]    // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
+    let hasUngrouped: Bool
 }
 
 private struct AssignmentSubmissionsContext: Encodable {
