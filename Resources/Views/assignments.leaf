@@ -44,43 +44,43 @@ Assignments
 <div class="section-block" data-section-id="#(section.sectionID)" style="margin-bottom:1.5rem">
     <div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
         <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
-              style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem">⋮⋮</span>
-        <strong style="flex:1;min-width:0">#(section.name)</strong>
-        <span class="tier" style="font-size:.75rem">#(section.defaultGradingMode)</span>
-        <!-- Rename -->
-        <details class="rename-details">
-            <summary class="btn action-btn" style="list-style:none;cursor:pointer;font-size:.8rem;padding:.2rem .5rem">Rename…</summary>
-            <div class="rename-popup card" style="position:absolute;z-index:50;margin-top:.25rem;padding:.75rem;min-width:16rem;box-shadow:0 4px 12px rgba(0,0,0,.12)">
-                <form method="post" action="/assignments/sections/#(section.sectionID)/rename" class="form" style="margin:0;gap:.5rem">
-                    <label class="form-label" style="margin:0;font-size:.85rem">
-                        Name
-                        <input class="form-input" type="text" name="name" value="#(section.name)" required
-                               style="font-size:.85rem;padding:.25rem .45rem">
-                    </label>
-                    <label class="form-label" style="margin:0;font-size:.85rem">
-                        Default grading mode
-                        <select class="form-input" name="defaultGradingMode"
-                                style="font-size:.85rem;padding:.25rem .45rem">
-                            <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>worker (server-side)</option>
-                            <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>browser (in-browser)</option>
-                        </select>
-                    </label>
-                    <button class="btn btn-primary" type="submit"
-                            style="font-size:.8rem;padding:.25rem .5rem">Save</button>
-                </form>
-            </div>
-        </details>
-        <!-- Delete -->
-        <form method="post" action="/assignments/sections/#(section.sectionID)/delete"
-              onsubmit="return confirm('Delete section \u201c#(section.name)\u201d? Its assignments will become ungrouped.')">
-            <button class="btn action-btn action-danger" type="submit"
-                    style="font-size:.8rem;padding:.2rem .5rem">Delete</button>
-        </form>
+              style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
+
+        <!-- View mode -->
+        <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+            <strong>#(section.name)</strong>
+            <span style="font-size:.78rem;color:var(--gray-500)">graded in #(section.defaultGradingMode)</span>
+            <button class="btn-link section-edit-toggle" type="button"
+                    title="Edit section" aria-label="Edit section"
+                    style="font-size:.85rem;line-height:1;padding:.1rem .25rem;color:var(--gray-500)">✏️</button>
+            <a class="btn btn-primary" href="/assignments/new?sectionID=#(section.sectionID)"
+               style="font-size:.8rem;padding:.2rem .55rem;margin-left:auto">+ Create New</a>
+        </div>
+
+        <!-- Edit mode (hidden by default) -->
+        <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
+            <form class="section-rename-form" method="post" action="/assignments/sections/#(section.sectionID)/rename"
+                  style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+                <input class="form-input section-name-input" type="text" name="name" value="#(section.name)" required
+                       style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
+                <select class="form-input" name="defaultGradingMode"
+                        style="font-size:.85rem;padding:.25rem .45rem">
+                    <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>worker (server-side)</option>
+                    <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>browser (in-browser)</option>
+                </select>
+                <button class="btn btn-primary" type="submit"
+                        style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+            </form>
+            <button class="btn action-btn action-danger section-delete-btn" type="button"
+                    data-action="/assignments/sections/#(section.sectionID)/delete"
+                    data-name="#(section.name)"
+                    style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
+            <button class="btn-link section-edit-cancel" type="button"
+                    aria-label="Cancel" title="Cancel"
+                    style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+        </div>
     </div>
 
-    #if(section.rows.isEmpty):
-    <p class="empty" style="margin:.25rem 0 .5rem">No items in this section yet.</p>
-    #else:
     <table class="results-table">
         <thead>
             <tr>
@@ -88,11 +88,17 @@ Assignments
                 <th>Status</th>
                 <th>Validation</th>
                 <th class="due-col">Due</th>
-                <th>Move</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody class="assignments-body" data-section-id="#(section.sectionID)">
+        #if(section.rows.isEmpty):
+        <tr class="section-empty-row">
+            <td colspan="5" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
+                Drag items here or use <a href="/assignments/new?sectionID=#(section.sectionID)">+ Create New</a>
+            </td>
+        </tr>
+        #else:
         #for(row in section.rows):
             <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif"
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
@@ -102,7 +108,7 @@ Assignments
                         <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
                         <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
                     </span>
-                    <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+                    <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
@@ -155,23 +161,6 @@ Assignments
                     #endif
                 </td>
                 <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-                <td>
-                    #if(row.assignmentID):
-                    <select class="form-input move-section-select" data-assignment-id="#(row.assignmentID)"
-                            style="font-size:.75rem;padding:.15rem .35rem;min-width:6rem"
-                            aria-label="Move to section">
-                        <option value="#(section.sectionID)" selected>#(section.name)</option>
-                        #for(s in sections):
-                        #if(s.sectionID != section.sectionID):
-                        <option value="#(s.sectionID)">#(s.name)</option>
-                        #endif
-                        #endfor
-                        <option value="">Ungrouped</option>
-                    </select>
-                    #else:
-                    <span style="color:var(--gray-400)">—</span>
-                    #endif
-                </td>
                 <td>
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
@@ -225,13 +214,9 @@ Assignments
                 </td>
             </tr>
         #endfor
+        #endif
         </tbody>
     </table>
-    #endif
-    <div style="margin-top:.5rem">
-        <a class="btn action-btn" href="/assignments/new?sectionID=#(section.sectionID)"
-           style="font-size:.8rem;padding:.25rem .6rem">+ Add item to #(section.name)</a>
-    </div>
 </div>
 #endfor
 </div><!-- #sections-container -->
@@ -249,11 +234,10 @@ Assignments
                 <th>Status</th>
                 <th>Validation</th>
                 <th class="due-col">Due</th>
-                #if(hasSections):<th>Move</th>#endif
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody id="assignments-body">
+        <tbody id="assignments-body" data-section-id="">
         #for(row in ungroupedRows):
             <tr class="#if(row.status == "open"):status-pass#elseif(row.status == "closed"):status-fail#endif"
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
@@ -263,7 +247,7 @@ Assignments
                         <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
                         <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
                     </span>
-                    <span class="assignment-drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+                    <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
@@ -316,22 +300,6 @@ Assignments
                     #endif
                 </td>
                 <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-                #if(hasSections):
-                <td>
-                    #if(row.assignmentID):
-                    <select class="form-input move-section-select" data-assignment-id="#(row.assignmentID)"
-                            style="font-size:.75rem;padding:.15rem .35rem;min-width:6rem"
-                            aria-label="Move to section">
-                        <option value="" selected>Ungrouped</option>
-                        #for(s in sections):
-                        <option value="#(s.sectionID)">#(s.name)</option>
-                        #endfor
-                    </select>
-                    #else:
-                    <span style="color:var(--gray-400)">—</span>
-                    #endif
-                </td>
-                #endif
                 <td>
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
@@ -409,7 +377,9 @@ tr.assignment-draggable td {
 .section-block.section-dragging {
     opacity: .55;
 }
-.rename-details[open] .rename-popup,
+.section-empty-row td {
+    cursor: default !important;
+}
 .add-section-details[open] .add-section-popup {
     display: block;
 }
@@ -418,97 +388,150 @@ tr.assignment-draggable td {
 (function () {
     'use strict';
 
-    // ── Assignment drag-and-drop (within each tbody) ──────────────────────────
-    function initAssignmentDragDrop(body) {
-        var draggableRows = Array.from(body.querySelectorAll('tr[data-assignment-id]'));
-        if (draggableRows.length < 2) return;
+    // ── Assignment drag-and-drop (within and across sections) ─────────────────
+    //
+    // All assignment tbodies carry data-section-id (empty string = ungrouped).
+    // Dragging to a different tbody triggers a section-move API call + reload.
+    // Dragging within the same tbody triggers a reorder API call.
 
-        var dragged = null;
-        var dragStartOrder = '';
+    var assignDragged = null;
+    var assignStartTbody = null;
+    var assignStartOrder = '';
 
-        function currentOrder() {
-            return Array.from(body.querySelectorAll('tr[data-assignment-id]'))
-                .map(function (row) { return row.getAttribute('data-assignment-id'); })
-                .filter(function (v) { return !!v; });
-        }
-
-        async function persistOrderIfChanged() {
-            var order = currentOrder();
-            var joined = order.join(',');
-            if (joined === dragStartOrder) return;
-            try {
-                var res = await fetch('/assignments/reorder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ assignmentIDs: order })
-                });
-                if (!res.ok) { window.location.reload(); }
-            } catch (_) { window.location.reload(); }
-        }
-
-        draggableRows.forEach(function (row) {
-            row.classList.add('assignment-draggable');
-            row.setAttribute('draggable', 'true');
-        });
-
-        body.addEventListener('dragstart', function (event) {
-            var target = event.target;
-            if (!(target instanceof Element)) return;
-            if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
-            var row = target.closest('tr[data-assignment-id]');
-            if (!row) return;
-            dragged = row;
-            dragStartOrder = currentOrder().join(',');
-            row.classList.add('dragging');
-            if (event.dataTransfer) {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', row.getAttribute('data-assignment-id') || '');
-            }
-        });
-        body.addEventListener('dragover', function (event) {
-            if (!dragged) return;
-            event.preventDefault();
-            var target = event.target;
-            if (!(target instanceof Element)) return;
-            var overRow = target.closest('tr[data-assignment-id]');
-            if (!overRow || overRow === dragged) return;
-            var rect = overRow.getBoundingClientRect();
-            var after = event.clientY > rect.top + rect.height / 2;
-            body.insertBefore(dragged, after ? overRow.nextSibling : overRow);
-        });
-        body.addEventListener('drop', function (event) {
-            if (!dragged) return;
-            event.preventDefault();
-        });
-        body.addEventListener('click', function (event) {
-            var target = event.target;
-            if (!(target instanceof Element)) return;
-            if (!target.classList.contains('reorder-btn')) return;
-            event.preventDefault();
-            event.stopPropagation();
-            var row = target.closest('tr[data-assignment-id]');
-            if (!row) return;
-            var dir = target.getAttribute('data-reorder');
-            if (dir === 'up' && row.previousElementSibling) {
-                body.insertBefore(row, row.previousElementSibling);
-                persistOrderIfChanged();
-            } else if (dir === 'down' && row.nextElementSibling) {
-                body.insertBefore(row.nextElementSibling, row);
-                persistOrderIfChanged();
-            }
-        });
-        body.addEventListener('dragend', function () {
-            if (!dragged) return;
-            dragged.classList.remove('dragging');
-            dragged = null;
-            persistOrderIfChanged();
-        });
+    function currentOrder(tbody) {
+        return Array.from(tbody.querySelectorAll('tr[data-assignment-id]'))
+            .map(function (r) { return r.getAttribute('data-assignment-id'); })
+            .filter(Boolean);
     }
 
-    // Init drag-drop for all assignment tables on the page.
-    document.querySelectorAll('.assignments-body, #assignments-body').forEach(initAssignmentDragDrop);
+    async function persistReorder(tbody) {
+        var res = await fetch('/assignments/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assignmentIDs: currentOrder(tbody) })
+        });
+        if (!res.ok) window.location.reload();
+    }
 
-    // ── Section drag-and-drop ─────────────────────────────────────────────────
+    // Make all assignment rows draggable on page load.
+    document.querySelectorAll('tr[data-assignment-id]').forEach(function (row) {
+        row.classList.add('assignment-draggable');
+        row.setAttribute('draggable', 'true');
+    });
+
+    document.addEventListener('dragstart', function (event) {
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
+        // Section handle drags are handled separately — don't intercept them.
+        if (target.closest('.section-drag-handle')) return;
+        var row = target.closest('tr[data-assignment-id]');
+        if (!row) return;
+        assignDragged = row;
+        assignStartTbody = row.parentElement;
+        assignStartOrder = currentOrder(assignStartTbody).join(',');
+        row.classList.add('dragging');
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', row.getAttribute('data-assignment-id') || '');
+        }
+    });
+
+    document.addEventListener('dragover', function (event) {
+        if (!assignDragged) return;
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+
+        // 1. Over another assignment row — reorder (works within and across sections).
+        var overRow = target.closest('tr[data-assignment-id]');
+        if (overRow && overRow !== assignDragged) {
+            event.preventDefault();
+            var rect = overRow.getBoundingClientRect();
+            var after = event.clientY > rect.top + rect.height / 2;
+            overRow.parentElement.insertBefore(assignDragged, after ? overRow.nextSibling : overRow);
+            return;
+        }
+
+        // 2. Over an empty-section placeholder row — move into that section.
+        var emptyRow = target.closest('tr.section-empty-row');
+        if (emptyRow) {
+            event.preventDefault();
+            emptyRow.style.display = 'none';
+            emptyRow.parentElement.insertBefore(assignDragged, emptyRow);
+            return;
+        }
+
+        // 3. Over a tbody directly (edge of table, or tbody with no rows) — append.
+        var dropTbody = target.closest('tbody[data-section-id]');
+        if (dropTbody && assignDragged.parentElement !== dropTbody) {
+            event.preventDefault();
+            dropTbody.appendChild(assignDragged);
+        }
+    });
+
+    document.addEventListener('drop', function (event) {
+        if (!assignDragged) return;
+        event.preventDefault();
+    });
+
+    document.addEventListener('dragend', function () {
+        if (!assignDragged) return;
+        assignDragged.classList.remove('dragging');
+        var row = assignDragged;
+        var startTbody = assignStartTbody;
+        var startOrder = assignStartOrder;
+        assignDragged = null;
+        assignStartTbody = null;
+        assignStartOrder = '';
+
+        var currentTbody = row.parentElement;
+        if (!currentTbody) return;
+
+        if (currentTbody !== startTbody) {
+            // Cross-section move.
+            var newSectionID = currentTbody.getAttribute('data-section-id') || '';
+            var assignmentID = row.getAttribute('data-assignment-id');
+            fetch('/assignments/' + assignmentID + '/section', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sectionID: newSectionID })
+            }).then(function () {
+                window.location.reload();
+            }).catch(function () {
+                window.location.reload();
+            });
+        } else {
+            // Within-section reorder.
+            var newOrder = currentOrder(currentTbody).join(',');
+            if (newOrder !== startOrder) {
+                persistReorder(currentTbody).catch(function () { window.location.reload(); });
+            }
+        }
+    });
+
+    // ↑↓ button reorder (within the same section only).
+    document.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!(target instanceof Element)) return;
+        if (!target.classList.contains('reorder-btn')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var row = target.closest('tr[data-assignment-id]');
+        if (!row) return;
+        var body = row.parentElement;
+        var before = currentOrder(body).join(',');
+        var dir = target.getAttribute('data-reorder');
+        if (dir === 'up' && row.previousElementSibling && row.previousElementSibling.hasAttribute('data-assignment-id')) {
+            body.insertBefore(row, row.previousElementSibling);
+        } else if (dir === 'down' && row.nextElementSibling && row.nextElementSibling.hasAttribute('data-assignment-id')) {
+            body.insertBefore(row.nextElementSibling, row);
+        }
+        if (currentOrder(body).join(',') !== before) {
+            persistReorder(body).catch(function () { window.location.reload(); });
+        }
+    });
+
+    // ── Section drag-and-drop (reorder sections) ──────────────────────────────
     var sectionsContainer = document.getElementById('sections-container');
     if (sectionsContainer) {
         var draggedSection = null;
@@ -517,27 +540,26 @@ tr.assignment-draggable td {
         function currentSectionOrder() {
             return Array.from(sectionsContainer.querySelectorAll('.section-block[data-section-id]'))
                 .map(function (el) { return el.getAttribute('data-section-id'); })
-                .filter(function (v) { return !!v; });
+                .filter(Boolean);
         }
 
         async function persistSectionOrderIfChanged() {
             var order = currentSectionOrder();
-            var joined = order.join(',');
-            if (joined === sectionDragStartOrder) return;
+            if (order.join(',') === sectionDragStartOrder) return;
             try {
                 var res = await fetch('/assignments/sections/reorder', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ sectionIDs: order })
                 });
-                if (!res.ok) { window.location.reload(); }
+                if (!res.ok) window.location.reload();
             } catch (_) { window.location.reload(); }
         }
 
         // Track whether the most-recent mousedown was on a section drag handle.
-        // dragstart fires with event.target = the draggable block (not the
-        // clicked child), so we can't use closest() inside dragstart to find
-        // the handle; a mousedown flag is the reliable alternative.
+        // dragstart fires with event.target = the draggable block (not the clicked
+        // child), so closest() inside dragstart cannot find the handle. A mousedown
+        // flag is the reliable alternative.
         var sectionDragHandleDown = false;
         sectionsContainer.addEventListener('mousedown', function (event) {
             var t = event.target;
@@ -549,12 +571,12 @@ tr.assignment-draggable td {
 
         sectionsContainer.querySelectorAll('.section-drag-handle').forEach(function (handle) {
             var block = handle.closest('.section-block');
-            if (!block) return;
-            block.setAttribute('draggable', 'true');
+            if (block) block.setAttribute('draggable', 'true');
         });
 
         sectionsContainer.addEventListener('dragstart', function (event) {
-            if (!sectionDragHandleDown) { event.preventDefault(); return; }
+            // No preventDefault when not from handle — lets row drags pass through.
+            if (!sectionDragHandleDown) return;
             var target = event.target;
             if (!(target instanceof Element)) return;
             var block = target.closest('.section-block[data-section-id]');
@@ -593,27 +615,38 @@ tr.assignment-draggable td {
         });
     }
 
-    // ── Move assignment between sections ─────────────────────────────────────
-    document.querySelectorAll('.move-section-select').forEach(function (select) {
-        var originalValue = select.value;
-        select.addEventListener('change', async function () {
-            var assignmentID = select.getAttribute('data-assignment-id');
-            var newSectionID = select.value;
-            if (!assignmentID) return;
-            try {
-                var res = await fetch('/assignments/' + assignmentID + '/section', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sectionID: newSectionID })
-                });
-                if (res.ok) {
-                    window.location.reload();
-                } else {
-                    select.value = originalValue;
-                }
-            } catch (_) {
-                select.value = originalValue;
-            }
+    // ── Section edit mode ─────────────────────────────────────────────────────
+    document.querySelectorAll('.section-edit-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var header = btn.closest('.section-header');
+            if (!header) return;
+            header.querySelector('.section-view').style.display = 'none';
+            var editDiv = header.querySelector('.section-edit');
+            editDiv.style.display = 'flex';
+            var input = editDiv.querySelector('.section-name-input');
+            if (input) { input.focus(); input.select(); }
+        });
+    });
+
+    document.querySelectorAll('.section-edit-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var header = btn.closest('.section-header');
+            if (!header) return;
+            header.querySelector('.section-view').style.display = 'flex';
+            header.querySelector('.section-edit').style.display = 'none';
+        });
+    });
+
+    document.querySelectorAll('.section-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var name = btn.getAttribute('data-name');
+            var action = btn.getAttribute('data-action');
+            if (!confirm('Delete section \u201c' + name + '\u201d? Its assignments will become ungrouped.')) return;
+            var form = document.createElement('form');
+            form.method = 'post';
+            form.action = action;
+            document.body.appendChild(form);
+            form.submit();
         });
     });
 
