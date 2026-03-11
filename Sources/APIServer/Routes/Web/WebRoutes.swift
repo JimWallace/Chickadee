@@ -478,12 +478,23 @@ struct WebRoutes: RouteCollection {
         let workspaceID = "\(setupID)-\(userSlug)-student"
         let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
 
+        // Decode gradingMode from the manifest so the template can load
+        // browser-runner.js for browser-graded assignments.
+        let manifestGradingMode: String = {
+            let data = Data(setup.manifest.utf8)
+            guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+                return GradingMode.browser.rawValue
+            }
+            return manifest.gradingMode.rawValue
+        }()
+
         return try await req.view.render("notebook",
             NotebookContext(
                 testSetupID: setupID,
                 assignmentTitle: assignmentTitle,
                 notebookURL: "/testsetups/\(setupID)/notebook/source",
                 jupyterLiteEditorURL: editorURL,
+                gradingMode: manifestGradingMode,
                 currentUser: req.currentUserContext
             ))
     }
@@ -655,6 +666,7 @@ private struct NotebookContext: Encodable {
     let assignmentTitle: String
     let notebookURL: String
     let jupyterLiteEditorURL: String
+    let gradingMode: String          // "browser" | "worker"
     let currentUser: CurrentUserContext?
 }
 

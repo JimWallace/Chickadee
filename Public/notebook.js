@@ -3,13 +3,14 @@
 // Chickadee notebook submission page.
 //
 // Loads the assignment notebook, lets the student edit it in JupyterLite,
-// then on "Submit" sends the notebook directly to the server for runner-based
-// grading. No browser-side grading is performed here.
+// then on "Submit" either:
+//   - gradingMode="browser": runs tests locally via window.BrowserRunner
+//     (browser-runner.js) and displays results inline, or
+//   - gradingMode="worker": sends the notebook to the server and redirects
+//     to the submission detail page once the native runner completes.
 //
 // "Upload & submit": if a file picker is present, uploaded notebook files are
-// submitted directly to the runner as well (no browser-side grading).
-//
-// After submission, the page redirects to the canonical submission detail view.
+// submitted directly to the native runner (no browser-side grading).
 
 (function () {
     'use strict';
@@ -20,7 +21,8 @@
     const resultsEl  = document.getElementById('nb-results');
     const uploadFile = document.getElementById('nb-upload-file');
     const frameError = document.getElementById('nb-frame-error');
-    const setupID    = frame ? frame.dataset.setupId : null;
+    const setupID     = frame ? frame.dataset.setupId : null;
+    const gradingMode = frame ? frame.dataset.gradingMode : null;
 
     if (!frame || !setupID) return;
 
@@ -87,9 +89,23 @@
                 setStatus('loading', 'Capturing notebook…');
                 const notebook = await loadNotebookForSubmit();
 
+                if (gradingMode === 'browser' && window.BrowserRunner) {
+                    // Browser-graded lab: run tests locally in Pyodide then submit atomically.
+                    setStatus('loading', 'Running tests in your browser…');
+                    const notebookBytes = new Uint8Array(
+                        new TextEncoder().encode(JSON.stringify(notebook))
+                    );
+                    const { outcomes, response } =
+                        await window.BrowserRunner.runAndSubmit(notebookBytes, setupID);
+                    renderResults(outcomes, response);
+                    const passCount = outcomes.filter(o => o.status === 'pass').length;
+                    setStatus('ok', `${passCount} / ${outcomes.length} tests passed.`);
+                    return;
+                }
+
+                // Worker-graded assignment: enqueue for native runner.
                 setStatus('loading', 'Submitting…');
                 const response = await postRunnerSubmission(notebook, setupID);
-
                 setStatus('loading', 'Submission queued. Opening grade details…');
                 window.location.assign(`/submissions/${response.submissionID}`);
                 return;
@@ -740,11 +756,11 @@ else:
         }
         table.appendChild(tbody);
 
-        // "View official submission" link
+        // "View submission" link
         const link = document.createElement('a');
         link.className = 'nb-results-link';
-        link.href = `/submissions/${response.workerSubmissionID}`;
-        link.textContent = 'View official submission →';
+        link.href = `/submissions/${response.submissionID}`;
+        link.textContent = 'View submission →';
 
         resultsEl.innerHTML = '';
         resultsEl.appendChild(scoreEl);
