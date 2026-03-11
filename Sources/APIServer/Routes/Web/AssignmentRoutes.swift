@@ -1103,6 +1103,25 @@ struct AssignmentRoutes: RouteCollection {
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         assignment.sectionID = newSectionID
         try await assignment.save(on: req.db)
+
+        // When moving into a named section, sync the test setup's grading mode
+        // to match the section's defaultGradingMode.  Moving to "ungrouped"
+        // (nil section) leaves the grading mode unchanged.
+        if let sectionUUID = newSectionID,
+           let section     = try await APICourseSection.find(sectionUUID, on: req.db),
+           let setup        = try await APITestSetup.find(assignment.testSetupID, on: req.db) {
+            let mode = section.defaultGradingMode   // "browser" | "worker"
+            if var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any],
+               (dict["gradingMode"] as? String) != mode {
+                dict["gradingMode"] = mode
+                if let data = try? JSONSerialization.data(withJSONObject: dict),
+                   let json = String(data: data, encoding: .utf8) {
+                    setup.manifest = json
+                    try await setup.save(on: req.db)
+                }
+            }
+        }
+
         return .ok
     }
 
