@@ -23,6 +23,7 @@ Notebook
     class="jl-frame"
     title="Notebook editor"
     data-setup-id="#(testSetupID)"
+    data-grading-mode="#(gradingMode)"
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
     src="#(jupyterLiteEditorURL)"
@@ -33,6 +34,8 @@ Notebook
     The embedded editor did not load.
 </p>
 <div id="nb-results" class="nb-results" hidden></div>
+<div id="browser-runner-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script src="/notebook.js"></script>
+<script src="/browser-runner.js" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
 #endexport
 #endextend

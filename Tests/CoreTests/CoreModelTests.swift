@@ -44,12 +44,12 @@ final class CoreModelTests: XCTestCase {
 
     // MARK: - GradingMode
 
-    func testGradingModeDefaultsBrowserWhenAbsent() throws {
+    func testGradingModeDefaultsWorkerWhenAbsent() throws {
         let json = """
         { "schemaVersion": 1 }
         """.data(using: .utf8)!
         let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertEqual(manifest.gradingMode, .browser)
+        XCTAssertEqual(manifest.gradingMode, .worker)
     }
 
     func testGradingModeExplicitBrowser() throws {

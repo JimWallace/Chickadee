@@ -1,11 +1,8 @@
 // APIServer/Routes/BrowserResultRoutes.swift
 //
-// Phase 5: accepts grading results from the student's browser (Pyodide run)
-// and enqueues the notebook for an authoritative worker re-run.
-//
-// Phase 9: merges instructor's hidden test cells back into the student's
-// notebook before saving to disk, so the worker grades with the full
-// test suite (including secret/release cells stripped from the download).
+// Accepts grading results from the student's browser (Pyodide run).
+// The browser runner runs tests locally and submits the notebook + results
+// in one atomic call — no native worker re-run is queued.
 //
 //   POST /api/v1/submissions/browser-result
 //
@@ -71,8 +68,7 @@ struct BrowserResultRoutes: RouteCollection {
         let attemptNumber = priorCount + 1
 
         // Create a submission record in "browser-complete" status.
-        // A second "pending" submission is NOT created here — the same record
-        // transitions to "pending" so the existing worker pull loop picks it up.
+        // Browser results are authoritative — no native worker re-run is queued.
         let submission = APISubmission(
             id:            subID,
             testSetupID:   setup.id!,
@@ -98,28 +94,9 @@ struct BrowserResultRoutes: RouteCollection {
         )
         try await browserResult.save(on: req.db)
 
-        // Enqueue for the authoritative worker re-run by creating a second
-        // submission record pointing at the same notebook file.
-        let workerSubID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let workerSub = APISubmission(
-            id:            workerSubID,
-            testSetupID:   setup.id!,
-            zipPath:       nbPath,
-            attemptNumber: attemptNumber,
-            status:        "pending",
-            filename:      "\(subID).ipynb",
-            userID:        caller.id,
-            kind:          APISubmission.Kind.student
-        )
-        try await workerSub.save(on: req.db)
-        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+        req.logger.info("Browser result stored for \(subID)")
 
-        req.logger.info("Browser result stored for \(subID); worker job queued as \(workerSubID)")
-
-        return BrowserResultResponse(
-            submissionID:       subID,
-            workerSubmissionID: workerSubID
-        )
+        return BrowserResultResponse(submissionID: subID)
     }
 
     // MARK: - POST /api/v1/submissions/runner-submit
@@ -160,7 +137,16 @@ struct BrowserResultRoutes: RouteCollection {
             kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
-        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+
+        // For browser-mode test setups the client-side WASM runner picks up the job;
+        // waking the local native runner would waste resources and claim nothing
+        // (WorkerJobRoutes filters out browser-mode submissions).
+        let manifestData = Data(setup.manifest.utf8)
+        let isWorkerMode = (try? JSONDecoder().decode(TestProperties.self, from: manifestData))
+            .map { $0.gradingMode == .worker } ?? true
+        if isWorkerMode {
+            await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+        }
 
         return RunnerSubmissionResponse(submissionID: subID)
     }
@@ -184,10 +170,8 @@ struct RunnerSubmitBody: Content {
 }
 
 struct BrowserResultResponse: Content {
-    /// ID of the record holding the browser preview result.
+    /// ID of the submission record (status: browser-complete).
     let submissionID: String
-    /// ID of the pending worker job (for polling the official result).
-    let workerSubmissionID: String
 }
 
 struct RunnerSubmissionResponse: Content {

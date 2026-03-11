@@ -157,8 +157,8 @@ actor WorkerDaemon {
             try runMake(in: testSetupDir, target: makefile.target)
         }
 
-        // Run repository-managed notebook prep build step before tests.
-        try runRepositoryPrepMakefile(in: testSetupDir)
+        // Extract code cells from any .ipynb notebooks into .py / .R files.
+        try extractNotebooksToCode(in: testSetupDir)
 
         // Install shared Python test runtime helpers for every run.
         try writePythonRuntimeHelpers(in: testSetupDir)
@@ -329,29 +329,7 @@ actor WorkerDaemon {
         }
     }
 
-    private func runRepositoryPrepMakefile(in directory: URL) throws {
-        let repoRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        let sourceMakefile = repoRoot.appendingPathComponent("Tools/runner-support/Makefile")
-        guard FileManager.default.fileExists(atPath: sourceMakefile.path) else {
-            return
-        }
-
-        let localMakefile = directory.appendingPathComponent("ChickadeePrep.mk")
-        if FileManager.default.fileExists(atPath: localMakefile.path) {
-            try FileManager.default.removeItem(at: localMakefile)
-        }
-        try FileManager.default.copyItem(at: sourceMakefile, to: localMakefile)
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/make")
-        proc.arguments = ["-f", localMakefile.lastPathComponent]
-        proc.currentDirectoryURL = directory
-        try proc.run()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else {
-            throw WorkerDaemonError.prepMakeFailed
-        }
-    }
+    // extractNotebooksToCode is a module-level function (see below).
 
     private func reportProcessingFailure(job: Job, error: Error) async throws {
         let message = String(describing: error)
@@ -728,6 +706,67 @@ errored <- function(message = "error") {
 }
 """#
 
+// MARK: - Notebook extraction
+
+/// Extract code cells from all .ipynb notebooks in `directory` into .py or .R source files.
+///
+/// This replaces the former runner-support/Makefile prep step with a pure-Swift
+/// implementation. The .ipynb format is plain JSON — no `make`, Python, or external
+/// tools are required. Kernel language detection mirrors the logic in
+/// TestSetupRoutes.normalizeNotebookForJupyterLite() and browser-runner.js.
+///
+/// Module-level (not private) so WorkerTests can exercise it directly.
+func extractNotebooksToCode(in directory: URL) throws {
+    let items = (try? FileManager.default.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: nil
+    )) ?? []
+
+    for item in items where item.pathExtension.lowercased() == "ipynb" {
+        guard
+            let data     = try? Data(contentsOf: item),
+            let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let cells    = notebook["cells"] as? [[String: Any]]
+        else { continue }
+
+        // Detect kernel language: ir/r/webr → R, everything else → Python.
+        let language: String = {
+            if let meta = notebook["metadata"] as? [String: Any] {
+                if let ks = meta["kernelspec"] as? [String: Any],
+                   let name = (ks["name"] as? String)?.lowercased() {
+                    if name == "ir" || name == "r" || name == "webr" { return "r" }
+                }
+                if let li = meta["language_info"] as? [String: Any],
+                   (li["name"] as? String)?.lowercased() == "r" { return "r" }
+            }
+            return "python"
+        }()
+
+        let ext    = language == "r" ? "R" : "py"
+        let stem   = item.deletingPathExtension().lastPathComponent
+        let outURL = directory.appendingPathComponent("\(stem).\(ext)")
+
+        var output = "# Generated from \(item.lastPathComponent)\n\n"
+        for cell in cells {
+            guard cell["cell_type"] as? String == "code" else { continue }
+            let raw: String
+            if let arr = cell["source"] as? [String] {
+                raw = arr.joined()
+            } else if let str = cell["source"] as? String {
+                raw = str
+            } else { continue }
+
+            // Mirror Python's rstrip(): strip trailing whitespace/newlines.
+            var src = raw
+            while src.last?.isWhitespace == true { src.removeLast() }
+            guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            output += src + "\n\n"
+        }
+
+        try output.write(to: outURL, atomically: true, encoding: .utf8)
+    }
+}
+
 // MARK: - Helpers
 
 private extension TestStatus {
@@ -772,14 +811,12 @@ enum WorkerDaemonError: Error, LocalizedError {
     case downloadFailed(URL)
     case unzipFailed(URL)
     case makeFailed(String?)
-    case prepMakeFailed
 
     var errorDescription: String? {
         switch self {
         case .downloadFailed(let url):  return "Failed to download \(url)"
         case .unzipFailed(let url):     return "Failed to unzip \(url.lastPathComponent)"
         case .makeFailed(let target):   return "make \(target ?? "") failed"
-        case .prepMakeFailed:           return "Repository prep Makefile failed"
         }
     }
 }

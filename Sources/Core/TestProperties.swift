@@ -5,13 +5,13 @@
 
 /// Where and how a submission is graded.
 ///
-/// - `browser`: The student's browser runs the notebook via Pyodide and POSTs
-///   a preliminary `TestOutcomeCollection`. The server also enqueues the
-///   submission for a worker re-run that produces the official grade.
-/// - `worker`: The submission is queued for a worker immediately on upload
-///   (existing behaviour for shell-script test suites).
+/// - `worker`: The submission is queued for a native runner on the server
+///   (default — handles shell-script and Python test suites).
+/// - `browser`: The student's browser runs tests locally via Pyodide and
+///   POSTs the notebook + `TestOutcomeCollection` in one atomic call.
+///   No server-side runner is involved.
 ///
-/// Default when the field is absent from JSON: `.browser`.
+/// Default when the field is absent from JSON: `.worker`.
 public enum GradingMode: String, Codable, Sendable, Equatable {
     case browser
     case worker
@@ -41,7 +41,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion    = try c.decode(Int.self,                       forKey: .schemaVersion)
-        gradingMode      = try c.decodeIfPresent(GradingMode.self,      forKey: .gradingMode)      ?? .browser
+        gradingMode      = try c.decodeIfPresent(GradingMode.self,      forKey: .gradingMode)      ?? .worker
         requiredFiles    = try c.decodeIfPresent([String].self,         forKey: .requiredFiles)    ?? []
         testSuites       = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites)       ?? []
         timeLimitSeconds = try c.decodeIfPresent(Int.self,              forKey: .timeLimitSeconds) ?? 10

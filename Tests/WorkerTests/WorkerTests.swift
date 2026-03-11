@@ -286,4 +286,160 @@ final class WorkerTests: XCTestCase {
             "Backoff should never exceed max"
         )
     }
+
+    // MARK: - extractNotebooksToCode
+
+    @discardableResult
+    private func writeNotebook(_ json: String, name: String = "assignment.ipynb") throws -> URL {
+        let url = tmpDir.appendingPathComponent(name)
+        try json.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    func testExtractPythonNotebookProducesPyFile() throws {
+        let nb = """
+        {
+          "nbformat": 4,
+          "metadata": {"kernelspec": {"name": "python3"}},
+          "cells": [
+            {"cell_type": "code", "source": ["def add(a, b):\\n", "    return a + b"]},
+            {"cell_type": "markdown", "source": ["# ignored"]},
+            {"cell_type": "code", "source": ["result = add(1, 2)"]}
+          ]
+        }
+        """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        let pyURL = tmpDir.appendingPathComponent("assignment.py")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pyURL.path),
+                      "Should produce assignment.py from assignment.ipynb")
+
+        let content = try String(contentsOf: pyURL)
+        XCTAssertTrue(content.contains("def add(a, b):"),
+                      "Code cell content should be present")
+        XCTAssertTrue(content.contains("result = add(1, 2)"),
+                      "Second code cell should be present")
+        XCTAssertFalse(content.contains("# ignored"),
+                       "Markdown cells must not appear in output")
+    }
+
+    func testExtractRNotebookWithIRKernelProducesRFile() throws {
+        let nb = """
+        {
+          "nbformat": 4,
+          "metadata": {"kernelspec": {"name": "ir"}},
+          "cells": [
+            {"cell_type": "code", "source": ["x <- 42"]}
+          ]
+        }
+        """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
+                      "IR kernel should produce .R file")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path),
+                       "IR kernel must NOT produce .py file")
+
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.R"))
+        XCTAssertTrue(content.contains("x <- 42"))
+    }
+
+    func testExtractRNotebookWithWebRKernelProducesRFile() throws {
+        let nb = """
+        {
+          "nbformat": 4,
+          "metadata": {"kernelspec": {"name": "webr"}},
+          "cells": [{"cell_type": "code", "source": ["y <- 1"]}]
+        }
+        """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
+                      "WebR kernel should produce .R file")
+    }
+
+    func testExtractPythonNotebookDetectsViaLanguageInfo() throws {
+        // No kernelspec, but language_info says python → should produce .py
+        let nb = """
+        {
+          "nbformat": 4,
+          "metadata": {"language_info": {"name": "python"}},
+          "cells": [{"cell_type": "code", "source": ["pass"]}]
+        }
+        """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path))
+    }
+
+    func testExtractSkipsEmptyCodeCells() throws {
+        let nb = """
+        {
+          "nbformat": 4,
+          "metadata": {},
+          "cells": [
+            {"cell_type": "code", "source": [""]},
+            {"cell_type": "code", "source": ["   \\n  "]},
+            {"cell_type": "code", "source": ["x = 1"]}
+          ]
+        }
+        """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"))
+        // Only "x = 1" should be present; empty/whitespace cells are skipped.
+        XCTAssertTrue(content.contains("x = 1"))
+        // The file should not have multiple blank-line groups from empty cells.
+        let codeLines = content.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { $0.trimmingCharacters(in: .whitespaces) == "" }
+        // Allow at most a few blank lines (one between cells + header gap).
+        XCTAssertLessThan(codeLines.count, 5, "Excess blank lines from empty cells")
+    }
+
+    func testExtractIgnoresNonNotebookFiles() throws {
+        // Put a Python file and a non-notebook file in the dir; neither should be modified.
+        let pyURL = tmpDir.appendingPathComponent("helper.py")
+        try "original = True".write(to: pyURL, atomically: true, encoding: .utf8)
+        let txtURL = tmpDir.appendingPathComponent("readme.txt")
+        try "hello".write(to: txtURL, atomically: true, encoding: .utf8)
+
+        try extractNotebooksToCode(in: tmpDir)  // no .ipynb → nothing to do
+
+        let pyContent = try String(contentsOf: pyURL)
+        XCTAssertEqual(pyContent, "original = True", "Non-notebook files must be untouched")
+    }
+
+    func testExtractMultipleNotebooks() throws {
+        // Two notebooks in the same directory → two output files.
+        let nb = """
+        {"nbformat":4,"metadata":{},"cells":[{"cell_type":"code","source":["pass"]}]}
+        """
+        try writeNotebook(nb, name: "lab1.ipynb")
+        try writeNotebook(nb, name: "lab2.ipynb")
+        try extractNotebooksToCode(in: tmpDir)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("lab1.py").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("lab2.py").path))
+    }
+
+    func testExtractSourceAsStringNotArray() throws {
+        // The Jupyter spec allows source to be a plain string, not just array-of-strings.
+        let nb = """
+        {
+          "nbformat": 4,
+          "metadata": {},
+          "cells": [{"cell_type": "code", "source": "x = 99"}]
+        }
+        """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"))
+        XCTAssertTrue(content.contains("x = 99"), "String-form source must be extracted")
+    }
 }

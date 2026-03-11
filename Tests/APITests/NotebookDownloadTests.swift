@@ -332,6 +332,71 @@ final class NotebookDownloadTests: XCTestCase {
                       "student's solution cell must be present in saved notebook")
     }
 
+    // MARK: - POST /api/v1/submissions/browser-result — single submission, no worker re-queue
+
+    func testBrowserSubmitCreatesSingleBrowserCompleteSubmission() async throws {
+        let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
+        let cookie  = try await loginAsStudent()
+
+        let notebookData   = mixedNotebookJSON.data(using: .utf8)!
+        let collectionJSON = """
+        {"submissionID":"","testSetupID":"\(setupID)","attemptNumber":1,
+         "buildStatus":"passed","compilerOutput":null,"outcomes":[],
+         "totalTests":0,"passCount":0,"failCount":0,"errorCount":0,"timeoutCount":0,
+         "executionTimeMs":0,"runnerVersion":"browser-wasm-runner/1.0",
+         "timestamp":"2026-01-01T00:00:00Z"}
+        """
+
+        var savedSubID = ""
+
+        try await app.test(.POST, "/api/v1/submissions/browser-result",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                var body = ByteBufferAllocator().buffer(capacity: 1024)
+                let boundary = "Boundary9876"
+                req.headers.contentType = HTTPMediaType(type: "multipart", subType: "form-data",
+                                                         parameters: ["boundary": boundary])
+                func part(_ name: String, _ value: String) {
+                    body.writeString("--\(boundary)\r\n")
+                    body.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+                    body.writeString(value + "\r\n")
+                }
+                func filePart(_ name: String, _ filename: String, _ data: Data) {
+                    body.writeString("--\(boundary)\r\n")
+                    body.writeString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
+                    body.writeString("Content-Type: application/json\r\n\r\n")
+                    body.writeBytes(data)
+                    body.writeString("\r\n")
+                }
+                part("collection",  collectionJSON)
+                part("testSetupID", setupID)
+                filePart("notebook", "notebook.ipynb", notebookData)
+                body.writeString("--\(boundary)--\r\n")
+                req.body = .init(buffer: body)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .ok, "browser-result POST should succeed")
+                if let json = try? JSONSerialization.jsonObject(with: Data(res.body.readableBytesView))
+                                as? [String: String] {
+                    savedSubID = json["submissionID"] ?? ""
+                    // Verify no workerSubmissionID is returned — we no longer re-queue.
+                    XCTAssertNil(json["workerSubmissionID"],
+                                 "browser-result must not return a workerSubmissionID")
+                }
+            })
+
+        XCTAssertFalse(savedSubID.isEmpty)
+
+        // Exactly ONE submission must exist in the DB (browser-complete), no pending re-run.
+        let allSubs = try await APISubmission.query(on: app.db).all()
+        XCTAssertEqual(allSubs.count, 1, "Only one submission record should be created")
+        XCTAssertEqual(allSubs[0].status, "browser-complete",
+                       "The single submission should have status 'browser-complete'")
+        XCTAssertFalse(
+            allSubs.contains(where: { $0.status == "pending" }),
+            "No pending worker re-run submission should exist"
+        )
+    }
+
     // MARK: - POST /api/v1/submissions/file — merge hidden test cells
 
     func testFileUploadMergesTestCells() async throws {

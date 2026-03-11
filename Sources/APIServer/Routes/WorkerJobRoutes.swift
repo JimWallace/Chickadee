@@ -18,34 +18,61 @@ struct WorkerJobRoutes: RouteCollection {
         let body = try req.content.decode(WorkerRequestBody.self)
         await req.application.workerActivityStore.markActive(workerID: body.workerID)
 
-        let pendingStudent = try await APISubmission.query(on: req.db)
+        // Find the oldest pending student submission backed by a worker-mode test setup.
+        // Submissions for browser-mode test setups (gradingMode == .browser) are
+        // handled by the client-side WASM runner and must not be claimed here.
+        let studentCandidates = try await APISubmission.query(on: req.db)
             .filter(\.$status == "pending")
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .ascending)
-            .first()
+            .all()
 
+        var workerModeStudent: (submission: APISubmission, setup: APITestSetup, manifest: TestProperties)?
+        for candidate in studentCandidates {
+            guard let setup = try await APITestSetup.find(candidate.testSetupID, on: req.db) else { continue }
+            let data = Data(setup.manifest.utf8)
+            guard
+                let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
+                manifest.gradingMode == .worker
+            else { continue }
+            workerModeStudent = (candidate, setup, manifest)
+            break
+        }
+
+        // Validation submissions are always worker-mode (instructors validate via worker).
         let pendingValidation = try await APISubmission.query(on: req.db)
             .filter(\.$status == "pending")
             .filter(\.$kind == APISubmission.Kind.validation)
             .sort(\.$submittedAt, .ascending)
             .first()
 
-        guard let submission = pendingStudent ?? pendingValidation else {
+        // Prefer student submissions, fall back to validation.
+        let submission: APISubmission
+        let setup: APITestSetup
+        let manifest: TestProperties
+
+        if let wm = workerModeStudent {
+            submission = wm.submission
+            setup      = wm.setup
+            manifest   = wm.manifest
+        } else if let val = pendingValidation {
+            submission = val
+            guard let valSetup = try await APITestSetup.find(submission.testSetupID, on: req.db) else {
+                throw Abort(.internalServerError, reason: "TestSetup \(submission.testSetupID) not found")
+            }
+            let valManifestData = Data(valSetup.manifest.utf8)
+            let valManifest     = try JSONDecoder().decode(TestProperties.self, from: valManifestData)
+            setup    = valSetup
+            manifest = valManifest
+        } else {
             return Response(status: .noContent)
         }
 
+        // Atomically claim the submission for this worker.
         submission.status     = "assigned"
         submission.workerID   = body.workerID
         submission.assignedAt = Date()
         try await submission.save(on: req.db)
-
-        guard let setup = try await APITestSetup.find(submission.testSetupID, on: req.db) else {
-            throw Abort(.internalServerError, reason: "TestSetup \(submission.testSetupID) not found")
-        }
-
-        let manifestData = Data(setup.manifest.utf8)
-        let decoder      = JSONDecoder()
-        let manifest     = try decoder.decode(TestProperties.self, from: manifestData)
 
         let base = resolvedWorkerBaseURL(req: req)
 
