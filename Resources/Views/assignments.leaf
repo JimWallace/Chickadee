@@ -361,9 +361,7 @@ Assignments
 <!-- ── Enrolled students ──────────────────────────────────────────────── -->
 <div style="margin-top:2.5rem">
     <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.6rem">Enrolled students</h2>
-    #if(enrolledStudents.isEmpty):
-    <p class="empty">No students enrolled yet.</p>
-    #else:
+    #if(hasEnrolledStudents):
     <table class="results-table">
         <thead>
             <tr>
@@ -380,6 +378,8 @@ Assignments
         #endfor
         </tbody>
     </table>
+    #else:
+    <p class="empty">No students enrolled yet.</p>
     #endif
 </div>
 

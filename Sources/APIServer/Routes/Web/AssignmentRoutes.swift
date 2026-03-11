@@ -253,7 +253,8 @@ struct AssignmentRoutes: RouteCollection {
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,
             hasUngrouped: !ungroupedRows.isEmpty,
-            enrolledStudents: enrolledStudents
+            enrolledStudents: enrolledStudents,
+            hasEnrolledStudents: !enrolledStudents.isEmpty
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
@@ -1556,6 +1557,7 @@ private struct AssignmentsContext: Encodable {
     let hasSections: Bool
     let hasUngrouped: Bool
     let enrolledStudents: [EnrolledStudentRow]
+    let hasEnrolledStudents: Bool       // explicit flag — Leaf's array.isEmpty is unreliable
 }
 
 private struct EnrolledStudentRow: Encodable {
