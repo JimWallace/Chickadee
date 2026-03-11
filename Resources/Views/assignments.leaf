@@ -447,8 +447,8 @@ tr.assignment-draggable td {
         var target = event.target;
         if (!(target instanceof Element)) return;
         if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
-        // Section handle drags are handled separately — don't intercept them.
-        if (target.closest('.section-drag-handle')) return;
+        // Section header drags are handled by sectionsContainer's dragstart — skip.
+        if (target.closest('.section-header')) return;
         var row = target.closest('tr[data-assignment-id]');
         if (!row) return;
         assignDragged = row;
@@ -583,36 +583,35 @@ tr.assignment-draggable td {
             } catch (_) { window.location.reload(); }
         }
 
-        // Track whether the most-recent mousedown was on a section drag handle.
-        // dragstart fires with event.target = the draggable block (not the clicked
-        // child), so closest() inside dragstart cannot find the handle. A mousedown
-        // flag is the reliable alternative.
-        // Section blocks are only made draggable while the handle is held down.
-        // Keeping them permanently draggable causes the browser to sometimes pick
-        // the block (not the inner tr) as the drag source for row drags, which
-        // swallows the row dragstart before our document handler can claim it.
+        // Make section HEADERS (not blocks) draggable. The header div is a sibling
+        // of the section's <table>, so it is never an ancestor of any <tr> row.
+        // Row dragstart events therefore never bubble through .section-header,
+        // eliminating the conflict that was causing row drags to be cancelled.
+        sectionsContainer.querySelectorAll('.section-header').forEach(function (header) {
+            header.setAttribute('draggable', 'true');
+        });
+
+        // Track whether the most-recent mousedown was on a section drag handle,
+        // so accidental drags on the pencil / buttons / name text don't reorder.
         var sectionDragHandleDown = false;
         sectionsContainer.addEventListener('mousedown', function (event) {
             var t = event.target;
             sectionDragHandleDown = !!(t instanceof Element && t.closest('.section-drag-handle'));
-            if (sectionDragHandleDown) {
-                sectionsContainer.querySelectorAll('.section-block').forEach(function (b) {
-                    b.setAttribute('draggable', 'true');
-                });
-            }
         });
-        sectionsContainer.addEventListener('mouseup', function () {
+        document.addEventListener('mouseup', function () {
             sectionDragHandleDown = false;
-            sectionsContainer.querySelectorAll('.section-block').forEach(function (b) {
-                b.removeAttribute('draggable');
-            });
         });
 
         sectionsContainer.addEventListener('dragstart', function (event) {
-            if (!sectionDragHandleDown) { event.preventDefault(); return; }
             var target = event.target;
             if (!(target instanceof Element)) return;
-            var block = target.closest('.section-block[data-section-id]');
+            // Only handle drags that originate on a section header.
+            // Row drags also bubble through sectionsContainer — we must NOT call
+            // preventDefault on them here; let them continue to document.dragstart.
+            var header = target.closest('.section-header');
+            if (!header) return;
+            if (!sectionDragHandleDown) { event.preventDefault(); return; }
+            var block = header.closest('.section-block[data-section-id]');
             if (!block) return;
             draggedSection = block;
             sectionDragStartOrder = currentSectionOrder().join(',');
