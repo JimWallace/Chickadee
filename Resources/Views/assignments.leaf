@@ -372,7 +372,7 @@ Assignments
         <tbody>
         #for(student in enrolledStudents):
             <tr>
-                <td>#(student.displayName)</td>
+                <td>#(student.displayName) #if(student.role != "student"):<span class="tier">#(student.role)</span>#endif</td>
                 <td><code>#(student.username)</code></td>
             </tr>
         #endfor

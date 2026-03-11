@@ -231,7 +231,6 @@ struct AssignmentRoutes: RouteCollection {
             } else {
                 let users = try await APIUser.query(on: req.db)
                     .filter(\.$id ~~ enrolledUserIDs)
-                    .filter(\.$role == "student")
                     .sort(\.$username)
                     .all()
                 enrolledStudents = users.compactMap { u in
@@ -239,7 +238,8 @@ struct AssignmentRoutes: RouteCollection {
                     return EnrolledStudentRow(
                         id: id.uuidString,
                         username: u.username,
-                        displayName: u.displayName ?? u.username
+                        displayName: u.displayName ?? u.username,
+                        role: u.role
                     )
                 }
             }
@@ -1564,6 +1564,7 @@ private struct EnrolledStudentRow: Encodable {
     let id: String
     let username: String
     let displayName: String
+    let role: String        // "student" | "instructor" | "admin"
 }
 
 private struct AssignmentSubmissionsContext: Encodable {
