@@ -463,13 +463,18 @@ tr.assignment-draggable td {
 
     document.addEventListener('dragover', function (event) {
         if (!assignDragged) return;
+        // Call preventDefault unconditionally so the drop cursor stays valid
+        // regardless of which element is under the pointer. Without this, once
+        // the dragged row has already moved to the target tbody, subsequent
+        // dragover events over empty table space would find no matching branch
+        // and never call preventDefault, causing the browser to cancel the drop.
+        event.preventDefault();
         var target = event.target;
         if (!(target instanceof Element)) return;
 
-        // 1. Over another assignment row — reorder (works within and across sections).
+        // 1. Over another assignment row — insert before or after it.
         var overRow = target.closest('tr[data-assignment-id]');
         if (overRow && overRow !== assignDragged) {
-            event.preventDefault();
             var rect = overRow.getBoundingClientRect();
             var after = event.clientY > rect.top + rect.height / 2;
             overRow.parentElement.insertBefore(assignDragged, after ? overRow.nextSibling : overRow);
@@ -479,16 +484,14 @@ tr.assignment-draggable td {
         // 2. Over an empty-section placeholder row — move into that section.
         var emptyRow = target.closest('tr.section-empty-row');
         if (emptyRow) {
-            event.preventDefault();
             emptyRow.style.display = 'none';
             emptyRow.parentElement.insertBefore(assignDragged, emptyRow);
             return;
         }
 
-        // 3. Over a tbody directly (edge of table, or tbody with no rows) — append.
+        // 3. Over a tbody but not a specific row — append if from a different section.
         var dropTbody = target.closest('tbody[data-section-id]');
         if (dropTbody && assignDragged.parentElement !== dropTbody) {
-            event.preventDefault();
             dropTbody.appendChild(assignDragged);
         }
     });
@@ -584,23 +587,29 @@ tr.assignment-draggable td {
         // dragstart fires with event.target = the draggable block (not the clicked
         // child), so closest() inside dragstart cannot find the handle. A mousedown
         // flag is the reliable alternative.
+        // Section blocks are only made draggable while the handle is held down.
+        // Keeping them permanently draggable causes the browser to sometimes pick
+        // the block (not the inner tr) as the drag source for row drags, which
+        // swallows the row dragstart before our document handler can claim it.
         var sectionDragHandleDown = false;
         sectionsContainer.addEventListener('mousedown', function (event) {
             var t = event.target;
             sectionDragHandleDown = !!(t instanceof Element && t.closest('.section-drag-handle'));
+            if (sectionDragHandleDown) {
+                sectionsContainer.querySelectorAll('.section-block').forEach(function (b) {
+                    b.setAttribute('draggable', 'true');
+                });
+            }
         });
         sectionsContainer.addEventListener('mouseup', function () {
             sectionDragHandleDown = false;
-        });
-
-        sectionsContainer.querySelectorAll('.section-drag-handle').forEach(function (handle) {
-            var block = handle.closest('.section-block');
-            if (block) block.setAttribute('draggable', 'true');
+            sectionsContainer.querySelectorAll('.section-block').forEach(function (b) {
+                b.removeAttribute('draggable');
+            });
         });
 
         sectionsContainer.addEventListener('dragstart', function (event) {
-            // No preventDefault when not from handle — lets row drags pass through.
-            if (!sectionDragHandleDown) return;
+            if (!sectionDragHandleDown) { event.preventDefault(); return; }
             var target = event.target;
             if (!(target instanceof Element)) return;
             var block = target.closest('.section-block[data-section-id]');
