@@ -225,10 +225,10 @@ Create Assignment
             var selected = sectionSelect.options[sectionSelect.selectedIndex];
             var mode = selected ? selected.getAttribute('data-grading-mode') : null;
             if (mode === 'browser') {
-                hint.textContent = '\u24d8 This section uses browser grading by default.';
+                hint.textContent = '\u24d8 This section uses Student Browser grading by default.';
                 hint.style.display = '';
             } else if (mode === 'worker') {
-                hint.textContent = '\u24d8 This section uses server-side (worker) grading by default.';
+                hint.textContent = '\u24d8 This section uses Chickadee grading by default.';
                 hint.style.display = '';
             } else {
                 hint.style.display = 'none';

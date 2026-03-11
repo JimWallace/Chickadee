@@ -19,8 +19,8 @@ Assignments
                     Default grading mode
                     <select class="form-input" name="defaultGradingMode"
                             style="font-size:.85rem;padding:.3rem .5rem">
-                        <option value="worker">server-side</option>
-                        <option value="browser">browser (in-browser)</option>
+                        <option value="worker">Chickadee</option>
+                        <option value="browser">Student Browser</option>
                     </select>
                 </label>
                 <button class="btn btn-primary" type="submit"
@@ -45,7 +45,7 @@ Assignments
         <!-- View mode -->
         <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
             <strong>#(section.name)</strong>
-            <span style="font-size:.78rem;color:var(--gray-500)">#if(section.defaultGradingMode == "worker"):graded on server#else:graded in browser#endif</span>
+            <span style="font-size:.78rem;color:var(--gray-500)">#if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
             <button class="btn-link section-edit-toggle" type="button"
                     title="Edit section" aria-label="Edit section"
                     style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
@@ -63,8 +63,8 @@ Assignments
                        style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
                 <select class="form-input" name="defaultGradingMode"
                         style="font-size:.85rem;padding:.25rem .45rem">
-                    <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>worker (server-side)</option>
-                    <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>browser (in-browser)</option>
+                    <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>Chickadee</option>
+                    <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>Student Browser</option>
                 </select>
                 <button class="btn btn-primary" type="submit"
                         style="font-size:.8rem;padding:.25rem .5rem">Save</button>
