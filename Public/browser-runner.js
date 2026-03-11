@@ -91,8 +91,12 @@ import os
 os.chdir('${workDir}')
 `);
 
-            // 4. Read test.properties.json and run each test suite entry.
-            const manifest = JSON.parse(py.FS.readFile(`${workDir}/test.properties.json`, { encoding: 'utf8' }));
+            // 4. Fetch the manifest from the server (test.properties.json is not
+            //    stored inside the zip on disk — the native runner receives it via
+            //    the Job struct, but the browser runner needs it separately).
+            setRunnerStatus('loading', 'Loading test configuration…');
+            const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
+            const manifest = JSON.parse(manifestText);
             const outcomes = [];
 
             setRunnerStatus('loading', 'Running tests…');
@@ -411,6 +415,12 @@ sys.stderr = sys.__stderr__
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Fetch failed ${res.status}: ${url}`);
         return res.arrayBuffer();
+    }
+
+    async function fetchText(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Fetch failed ${res.status}: ${url}`);
+        return res.text();
     }
 
     function loadScript(src) {
