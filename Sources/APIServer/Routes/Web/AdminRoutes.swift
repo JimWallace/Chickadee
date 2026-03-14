@@ -243,8 +243,9 @@ struct AdminRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        let body = try req.content.decode(Body.self)
-        course.openEnrollment = (body.openEnrollment == "on")
+        // An unchecked checkbox sends no field at all (empty body); treat that as false.
+        let body = try? req.content.decode(Body.self)
+        course.openEnrollment = (body?.openEnrollment == "on")
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
     }
