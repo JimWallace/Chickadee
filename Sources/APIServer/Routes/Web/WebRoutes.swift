@@ -922,17 +922,6 @@ private func latestNotebookSubmissionData(
     return (try notebookData(for: fallbackSetup), fallbackFilename)
 }
 
-private func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
-    guard let data = collectionJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let passCount = root["passCount"] as? Int,
-          let totalTests = root["totalTests"] as? Int,
-          totalTests > 0 else {
-        return nil
-    }
-    return Int((Double(passCount) / Double(totalTests) * 100).rounded())
-}
-
 private func stderrScriptOutput(from raw: String?, status: TestStatus) -> String? {
     guard status != .pass else { return nil }
     guard let raw else { return nil }
