@@ -133,21 +133,26 @@ for _key in list(sys.modules.keys()):
     if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
         del sys.modules[_key]
 
-# Import test_runtime directly from the MEMFS workdir.
-import test_runtime as _tr  # noqa: E402
+# Import test_runtime — set functions in BOTH __main__ globals and builtins.
+# Pyodide may not resolve builtins the same way CPython does, so we need
+# them as __main__ globals too (runPythonAsync runs in __main__).
+from test_runtime import passed, failed, errored, require_function
+from test_runtime import load_student_modules, load_student_module
+from test_runtime import student_module_names_in_load_order
 
-# Register builtins so test scripts can call passed()/failed()/etc. directly.
-builtins.passed           = _tr.passed
-builtins.failed           = _tr.failed
-builtins.errored          = _tr.errored
-builtins.require_function = _tr.require_function
+builtins.passed           = passed
+builtins.failed           = failed
+builtins.errored          = errored
+builtins.require_function = require_function
 
-# Load student code and expose it as builtins (mirrors sitecustomize.py).
-_student_modules = _tr.load_student_modules()
+# Load student code and expose in both globals and builtins.
+_student_modules = load_student_modules()
+student_modules  = _student_modules
 builtins.student_modules = _student_modules
-_student_module  = _tr.load_student_module()
+_student_module  = load_student_module()
+student_module   = _student_module
 builtins.student_module  = _student_module
-for _module_name in _tr.student_module_names_in_load_order():
+for _module_name in student_module_names_in_load_order():
     _module = _student_modules.get(_module_name)
     if _module is None:
         continue
@@ -156,6 +161,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             continue
         if callable(_value) and not hasattr(builtins, _name):
             setattr(builtins, _name, _value)
+            globals()[_name] = _value
 `);
             } catch (e) {
                 throw new Error('Failed to configure Python environment: ' + toMessage(e));
@@ -274,6 +280,15 @@ for _module_name in _tr.student_module_names_in_load_order():
         const startMs = Date.now();
         let stdout    = '';
         let stderr    = '';
+
+        // Ensure test_runtime helpers are in scope for this execution context.
+        // In Pyodide, sitecustomize.py is not auto-imported and builtins may
+        // not resolve the same way as in CPython, so we inject explicit imports
+        // before every test script to guarantee passed/failed/errored/
+        // require_function are available as globals.
+        await py.runPythonAsync(`
+from test_runtime import passed, failed, errored, require_function
+`);
 
         // Redirect sys.stdout / sys.stderr to JS buffers.
         await py.runPythonAsync(`
