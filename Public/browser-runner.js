@@ -108,17 +108,20 @@
 
             // Add working directory to Python's path and set up builtins.
             //
-            // sitecustomize.py is NOT auto-imported in Pyodide — the interpreter
-            // is already running when we write the file to MEMFS, so CPython's
-            // "import sitecustomize at startup" never fires.  We must import it
-            // explicitly here.  We also flush stale copies of our helper modules
-            // (test_runtime, sitecustomize, and any student_* modules) so that
-            // repeated submissions within the same Pyodide session don't inherit
-            // the previous run's module state (especially test_runtime's
+            // We cannot rely on sitecustomize.py being auto-imported in Pyodide:
+            // the interpreter is already running when we write the file, and
+            // "sitecustomize" is a special name that Python's site machinery may
+            // have already tried and cached.  Instead we import test_runtime
+            // directly and wire up the builtins ourselves — identical to what
+            // sitecustomize.py does, but without the name-based special-casing.
+            //
+            // We also flush stale copies of our helper/student modules so that
+            // repeated submissions in the same Pyodide session don't inherit the
+            // previous run's module state (especially test_runtime's
             // _loaded_student_modules global).
             try {
                 await py.runPythonAsync(`
-import sys, os
+import sys, os, builtins
 
 # Replace any stale chickadee work-directory on the path.
 sys.path = [p for p in sys.path if not p.startswith('/chickadee_work_')]
@@ -130,10 +133,29 @@ for _key in list(sys.modules.keys()):
     if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
         del sys.modules[_key]
 
-# Importing sitecustomize runs its side-effects: registers passed/failed/
-# errored/require_function as builtins and loads student code into
-# builtins.student_module.
-import sitecustomize  # noqa: F401
+# Import test_runtime directly from the MEMFS workdir.
+import test_runtime as _tr  # noqa: E402
+
+# Register builtins so test scripts can call passed()/failed()/etc. directly.
+builtins.passed           = _tr.passed
+builtins.failed           = _tr.failed
+builtins.errored          = _tr.errored
+builtins.require_function = _tr.require_function
+
+# Load student code and expose it as builtins (mirrors sitecustomize.py).
+_student_modules = _tr.load_student_modules()
+builtins.student_modules = _student_modules
+_student_module  = _tr.load_student_module()
+builtins.student_module  = _student_module
+for _module_name in _tr.student_module_names_in_load_order():
+    _module = _student_modules.get(_module_name)
+    if _module is None:
+        continue
+    for _name, _value in vars(_module).items():
+        if _name.startswith('_'):
+            continue
+        if callable(_value) and not hasattr(builtins, _name):
+            setattr(builtins, _name, _value)
 `);
             } catch (e) {
                 throw new Error('Failed to configure Python environment: ' + toMessage(e));
