@@ -1,9 +1,13 @@
 #extend("base"):
 #export("title"):
-Assignments
+#if(currentUser.activeCourse):#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)#else:Assignments#endif
 #endexport
 #export("content"):
+#if(currentUser.activeCourse):
+<h1>#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+#else:
 <h1>Assignments</h1>
+#endif
 #if(!hasSections && !hasUngrouped):
 <p class="empty">No assignments available yet.</p>
 #else:

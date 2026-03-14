@@ -4,7 +4,7 @@ CSV Enrollment Result
 #endexport
 #export("content"):
 <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
-    <a href="/admin/courses/#(courseID)" class="btn">← #(courseCode)</a>
+    <a href="#(returnURL)" class="btn">← #(courseCode)</a>
     <h1 style="margin:0">CSV Enrollment — #(courseCode)</h1>
 </div>
 <p style="color:var(--gray-600);margin-top:-.75rem;margin-bottom:1.5rem">#(courseName)</p>

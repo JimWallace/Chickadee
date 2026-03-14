@@ -243,8 +243,9 @@ struct AdminRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        let body = try req.content.decode(Body.self)
-        course.openEnrollment = (body.openEnrollment == "on")
+        // An unchecked checkbox sends no field at all (empty body); treat that as false.
+        let body = try? req.content.decode(Body.self)
+        course.openEnrollment = (body?.openEnrollment == "on")
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
     }
@@ -626,14 +627,14 @@ struct AdminRoutes: RouteCollection {
             }
         }
 
-        return try await req.view.render("admin-enroll-csv-result", AdminEnrollCSVResultContext(
+        return try await req.view.render("admin-enroll-csv-result", EnrollCSVResultContext(
             currentUser:          req.currentUserContext,
-            courseID:             idString,
             courseCode:           course.code,
             courseName:           course.name,
             enrolledCount:        enrolledCount,
             alreadyEnrolledCount: alreadyEnrolledCount,
-            notFoundUsernames:    notFoundUsernames
+            notFoundUsernames:    notFoundUsernames,
+            returnURL:            "/admin/courses/\(idString)"
         ))
     }
 
@@ -744,47 +745,6 @@ private struct AdminContext: Encodable {
     let courses: [AdminCourseRow]
 }
 
-/// Parses a flat list of usernames from a CSV upload.
-/// - Takes the first column of every non-blank line.
-/// - Strips surrounding quotes and whitespace.
-/// - Auto-detects and skips a header row when the first column matches a known keyword.
-private func parseUsernamesFromCSV(_ data: Data) -> [String] {
-    guard let text = String(data: data, encoding: .utf8)
-                  ?? String(data: data, encoding: .isoLatin1) else {
-        return []
-    }
-
-    var lines = text.components(separatedBy: .newlines)
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-
-    // Skip an obvious header row.
-    if let firstLine = lines.first {
-        let firstCol = firstLine
-            .components(separatedBy: ",").first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-            .lowercased()
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: " ", with: "")
-            ?? ""
-        let headerKeywords = ["username", "user", "login", "id", "studentid", "userid", "loginid"]
-        if headerKeywords.contains(firstCol) {
-            lines.removeFirst()
-        }
-    }
-
-    // Extract first column, strip surrounding quotes/whitespace.
-    return lines.compactMap { line -> String? in
-        let col = line
-            .components(separatedBy: ",").first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-        guard let col, !col.isEmpty else { return nil }
-        return col
-    }
-}
-
 private struct AdminUserDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let targetUserID: String
@@ -799,19 +759,6 @@ private struct AdminUserCourseRow: Encodable {
     let id: String
     let code: String
     let name: String
-}
-
-private struct AdminEnrollCSVResultContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let courseID: String
-    let courseCode: String
-    let courseName: String
-    let enrolledCount: Int
-    let alreadyEnrolledCount: Int
-    let notFoundUsernames: [String]
-    // Precomputed for easy Leaf truthiness check.
-    var hasNotFound: Bool { !notFoundUsernames.isEmpty }
-    var notFoundCount: Int { notFoundUsernames.count }
 }
 
 private struct AdminCourseDetailContext: Encodable {
