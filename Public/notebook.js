@@ -110,8 +110,6 @@
                 window.location.assign(`/submissions/${response.submissionID}`);
                 return;
             } catch (err) {
-                // err.message may be undefined if something non-Error was thrown
-                // (e.g. an Emscripten ErrnoError or a plain string rejection).
                 const msg = (err instanceof Error && err.message)
                     ? err.message
                     : String(err);

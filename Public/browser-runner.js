@@ -44,18 +44,42 @@
      * @returns {{ outcomes: object[], response: object }}
      */
     async function runAndSubmit(notebookBytes, setupID) {
-        const py    = await loadPyodideOnce();
-        const JSZip = await loadJSZip();
+        let py, JSZip;
+        try {
+            setRunnerStatus('loading', 'Initializing Python runtime…');
+            py = await loadPyodideOnce();
+        } catch (e) {
+            throw new Error('Failed to initialize Python runtime: ' + toMessage(e));
+        }
+        try {
+            JSZip = await loadJSZip();
+        } catch (e) {
+            throw new Error('Failed to load ZIP library: ' + toMessage(e));
+        }
 
         // Unique work directory per run to avoid state leakage.
         const workDir = `/chickadee_work_${Date.now()}`;
-        py.FS.mkdir(workDir);
+        try {
+            py.FS.mkdir(workDir);
+        } catch (e) {
+            throw new Error('Failed to create work directory: ' + toMessage(e));
+        }
 
         try {
             // 1. Download and unpack the test setup zip.
             setRunnerStatus('loading', 'Fetching test setup…');
-            const setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
-            const zip      = await JSZip.loadAsync(setupZip);
+            let setupZip;
+            try {
+                setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
+            } catch (e) {
+                throw new Error('Failed to download test setup: ' + toMessage(e));
+            }
+            let zip;
+            try {
+                zip = await JSZip.loadAsync(setupZip);
+            } catch (e) {
+                throw new Error('Failed to unpack test setup zip: ' + toMessage(e));
+            }
             for (const [name, file] of Object.entries(zip.files)) {
                 if (file.dir) continue;
                 const data     = await file.async('uint8array');
@@ -82,21 +106,77 @@
             const notebookText = new TextDecoder().decode(notebookBytes);
             await extractNotebook(py, workDir, notebookFilename, notebookText);
 
-            // Add working directory to Python's path so helpers are importable.
-            await py.runPythonAsync(`
-import sys
-if '${workDir}' not in sys.path:
-    sys.path.insert(0, '${workDir}')
-import os
-os.chdir('${workDir}')
-`);
+            // Add working directory to Python's path and set up builtins.
+            //
+            // We cannot rely on sitecustomize.py being auto-imported in Pyodide:
+            // the interpreter is already running when we write the file, and
+            // "sitecustomize" is a special name that Python's site machinery may
+            // have already tried and cached.  Instead we import test_runtime
+            // directly and wire up the builtins ourselves — identical to what
+            // sitecustomize.py does, but without the name-based special-casing.
+            //
+            // We also flush stale copies of our helper/student modules so that
+            // repeated submissions in the same Pyodide session don't inherit the
+            // previous run's module state (especially test_runtime's
+            // _loaded_student_modules global).
+            try {
+                await py.runPythonAsync(`
+import sys, os, builtins
 
-            // 4. Fetch the manifest from the server (test.properties.json is not
-            //    stored inside the zip on disk — the native runner receives it via
-            //    the Job struct, but the browser runner needs it separately).
+# Replace any stale chickadee work-directory on the path.
+sys.path = [p for p in sys.path if not p.startswith('/chickadee_work_')]
+sys.path.insert(0, '${workDir}')
+os.chdir('${workDir}')
+
+# Flush stale helper + student modules so fresh files are picked up.
+for _key in list(sys.modules.keys()):
+    if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
+        del sys.modules[_key]
+
+# Import test_runtime — set functions in BOTH __main__ globals and builtins.
+# Pyodide may not resolve builtins the same way CPython does, so we need
+# them as __main__ globals too (runPythonAsync runs in __main__).
+from test_runtime import passed, failed, errored, require_function
+from test_runtime import load_student_modules, load_student_module
+from test_runtime import student_module_names_in_load_order
+
+builtins.passed           = passed
+builtins.failed           = failed
+builtins.errored          = errored
+builtins.require_function = require_function
+
+# Load student code and expose in both globals and builtins.
+_student_modules = load_student_modules()
+student_modules  = _student_modules
+builtins.student_modules = _student_modules
+_student_module  = load_student_module()
+student_module   = _student_module
+builtins.student_module  = _student_module
+for _module_name in student_module_names_in_load_order():
+    _module = _student_modules.get(_module_name)
+    if _module is None:
+        continue
+    for _name, _value in vars(_module).items():
+        if _name.startswith('_'):
+            continue
+        if callable(_value) and not hasattr(builtins, _name):
+            setattr(builtins, _name, _value)
+            globals()[_name] = _value
+`);
+            } catch (e) {
+                throw new Error('Failed to configure Python environment: ' + toMessage(e));
+            }
+
+            // 4. Fetch manifest from server (test.properties.json is not in the zip;
+            //    the server serves it directly from the database via the manifest endpoint).
             setRunnerStatus('loading', 'Loading test configuration…');
-            const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
-            const manifest = JSON.parse(manifestText);
+            let manifest;
+            try {
+                const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
+                manifest = JSON.parse(manifestText);
+            } catch (e) {
+                throw new Error('Failed to load test configuration: ' + toMessage(e));
+            }
             const outcomes = [];
 
             setRunnerStatus('loading', 'Running tests…');
@@ -201,6 +281,12 @@ os.chdir('${workDir}')
         let stdout    = '';
         let stderr    = '';
 
+        // Auto-load any Pyodide packages the script imports (numpy, pandas,
+        // scipy, etc.).  loadPackagesFromImports inspects import statements and
+        // fetches the matching WASM wheels from Pyodide's CDN package index.
+        // Unknown names (test_runtime, student modules) are silently skipped.
+        try { await py.loadPackagesFromImports(src); } catch (_) { /* non-fatal */ }
+
         // Redirect sys.stdout / sys.stderr to JS buffers.
         await py.runPythonAsync(`
 import sys, io
@@ -213,17 +299,44 @@ sys.stderr = _br_stderr
         let timedOut = false;
         let pyErr    = null;
 
-        const runPromise     = py.runPythonAsync(src).catch(err => { pyErr = err; });
+        // Run the test script via compile() + exec() from its MEMFS file:
+        //
+        // 1. compile(source, scriptName) gives inspect.stack() the real
+        //    filename so test_runtime._first_comment_label() reads the
+        //    correct test label (not "<exec>").
+        //
+        // 2. except SystemExit catches the exit that test_runtime's
+        //    passed()/failed()/errored() raise.  In the native runner
+        //    this terminates the subprocess cleanly; in Pyodide it would
+        //    become a PythonError with noisy tracebacks in stderr.
+        //
+        // 3. The imports + compile + exec all run in the SAME exec() call
+        //    so they share one locals dict (Pyodide may isolate locals
+        //    between separate runPythonAsync calls).
+        const runSrc = `
+from test_runtime import passed, failed, errored, require_function
+_br_exit_code = None
+try:
+    _br_code = compile(open('${scriptName}', encoding='utf-8').read(), '${scriptName}', 'exec')
+    exec(_br_code, globals())
+except SystemExit as _e:
+    _br_exit_code = _e.code
+`;
+        const runPromise     = py.runPythonAsync(runSrc).catch(err => { pyErr = err; });
         const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
 
         await Promise.race([runPromise, timeoutPromise]);
 
-        // Restore stdout/stderr and collect output.
+        // Restore stdout/stderr, collect output, and read exit code.
+        let brExitCode = null;
         try {
             const captured = await py.runPythonAsync(`
-(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()))
+(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
 `);
-            [stdout, stderr] = captured.toJs ? captured.toJs() : [String(captured), ''];
+            const result = captured.toJs ? captured.toJs() : [String(captured), '', null];
+            stdout = result[0] || '';
+            stderr = result[1] || '';
+            brExitCode = result[2];
             captured.destroy && captured.destroy();
         } catch (_) { /* fallback: no output */ }
 
@@ -250,10 +363,14 @@ sys.stderr = sys.__stderr__
         let shortResult = 'passed';
         let longResult  = null;
 
-        if (pyErr) {
+        // Determine status: prefer the Python-side exit code (caught SystemExit),
+        // fall back to JS-side pyErr if the wrapper itself threw.
+        if (brExitCode !== null && brExitCode !== undefined) {
+            const code = typeof brExitCode === 'number' ? brExitCode : parseInt(brExitCode) || 1;
+            status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
+        } else if (pyErr) {
             const msg = pyErr.message || String(pyErr);
             if (msg.includes('SystemExit')) {
-                // test_runtime.py called passed/failed/errored.
                 const exitMatch = msg.match(/SystemExit:\s*(-?\d+)/);
                 const code = exitMatch ? parseInt(exitMatch[1]) : 1;
                 status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
@@ -280,12 +397,15 @@ sys.stderr = sys.__stderr__
             const stderrTrim = (stderr || '').trim();
             if (stdoutTrim) parts.push(`stdout:\n${stdoutTrim}`);
             if (stderrTrim) parts.push(`stderr:\n${stderrTrim}`);
-            if (pyErr && !String(pyErr.message).includes('SystemExit')) {
+            if (pyErr && !String(pyErr.message || '').includes('SystemExit')) {
                 parts.push(`exception:\n${pyErr.message || pyErr}`);
             }
             if (parts.length) longResult = parts.join('\n\n');
         } else if ((stderr || '').trim()) {
-            longResult = (stderr || '').trim();
+            // For passing tests, only include stderr if it has real content
+            // (not just SystemExit tracebacks).
+            const cleanStderr = (stderr || '').trim();
+            if (cleanStderr && !cleanStderr.match(/^\s*$/)) longResult = cleanStderr;
         }
 
         return makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs);
@@ -421,6 +541,13 @@ sys.stderr = sys.__stderr__
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Fetch failed ${res.status}: ${url}`);
         return res.text();
+    }
+
+    /** Converts any thrown value to a human-readable string. */
+    function toMessage(e) {
+        if (e instanceof Error && e.message) return e.message;
+        const s = String(e);
+        return (s && s !== '[object Object]') ? s : 'unknown error';
     }
 
     function loadScript(src) {
