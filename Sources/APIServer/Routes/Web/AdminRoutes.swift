@@ -493,12 +493,14 @@ struct AdminRoutes: RouteCollection {
             .filter(\.$courseID == courseID)
             .sort(\.$dueAt)
             .all()
-        let iso = ISO8601DateFormatter()
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .short
         let assignments = assignmentModels.map { a in
             AdminCourseAssignmentRow(
                 id:     a.publicID,
                 title:  a.title,
-                dueAt:  a.dueAt.map { iso.string(from: $0) },
+                dueAt:  a.dueAt.map { df.string(from: $0) },
                 isOpen: a.isOpen
             )
         }

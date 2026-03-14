@@ -32,31 +32,19 @@
     </form>
 </section>
 #else:
-<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
-    <div style="display:flex;align-items:center;gap:.75rem">
-        <h1 style="margin:0">#(course.code) — #(course.name)</h1>
-        #if(course.isArchived):
-        <span class="tier tier-closed">archived</span>
-        #else:
-        <span class="tier tier-open">active</span>
-        #endif
-        #if(course.openEnrollment):
-        <span class="tier tier-open">open enrolment</span>
-        #else:
-        <span class="tier tier-closed">closed enrolment</span>
-        #endif
-    </div>
-    <div style="display:flex;gap:.5rem;align-items:center">
-        #if(!course.isArchived):
-        <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
-              enctype="multipart/form-data" style="margin:0">
-            <label class="btn btn-primary" style="cursor:pointer;margin:0">
-                Enrol from CSV
-                <input type="file" name="file" accept=".csv,.txt" required
-                       style="display:none" onchange="this.closest('form').submit()">
-            </label>
-        </form>
-        #endif
+<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem">
+    <h1 style="margin:0">#(course.code) — #(course.name)</h1>
+    #if(course.isArchived):
+    <span class="tier tier-closed">archived</span>
+    #else:
+    <span class="tier tier-open">active</span>
+    #endif
+    #if(course.openEnrollment):
+    <span class="tier tier-open">open enrolment</span>
+    #else:
+    <span class="tier tier-closed">closed enrolment</span>
+    #endif
+    <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
         <form method="post" action="/admin/courses/#(course.id)/archive" style="margin:0">
             #if(course.isArchived):
             <button class="btn action-danger" type="submit"
@@ -90,6 +78,46 @@
 </section>
 #endif
 
+<!-- ── Assignments ─────────────────────────────────────── -->
+<section class="admin-section">
+    <h2>Assignments (#(assignmentCount))</h2>
+    #if(assignments.isEmpty):
+    <p class="empty">No assignments for this course.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th class="due-col">Due</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(assignment in assignments):
+            <tr>
+                <td>#(assignment.title)</td>
+                <td class="due-col">
+                    #if(assignment.dueAt):#(assignment.dueAt)#else:—#endif
+                </td>
+                <td>
+                    #if(assignment.isOpen):
+                    <span class="tier tier-open">open</span>
+                    #else:
+                    <span class="tier tier-closed">closed</span>
+                    #endif
+                </td>
+                <td>
+                    <a href="/assignments/#(assignment.id)/submissions"
+                       class="btn action-btn">Submissions</a>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
 <!-- ── Enrolled students ───────────────────────────────── -->
 <section class="admin-section">
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -103,6 +131,16 @@
                 Open enrolment
             </label>
         </form>
+        #if(!course.isArchived):
+        <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
+              enctype="multipart/form-data" style="margin:0;margin-left:auto">
+            <label class="btn btn-primary" style="cursor:pointer;margin:0">
+                Enrol from CSV
+                <input type="file" name="file" accept=".csv,.txt" required
+                       style="display:none" onchange="this.closest('form').submit()">
+            </label>
+        </form>
+        #endif
         #endif
     </div>
     #if(enrolledUsers.isEmpty):
@@ -137,50 +175,6 @@
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Remove @#(user.username) from #(course.code)?')">Remove</button>
                     </form>
-                </td>
-            </tr>
-        #endfor
-        </tbody>
-    </table>
-    #endif
-</section>
-
-<!-- ── Assignments ─────────────────────────────────────── -->
-<section class="admin-section">
-    <h2>Assignments (#(assignmentCount))</h2>
-    #if(assignments.isEmpty):
-    <p class="empty">No assignments for this course.</p>
-    #else:
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th class="time">Due</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(assignment in assignments):
-            <tr>
-                <td>#(assignment.title)</td>
-                <td class="time">
-                    #if(assignment.dueAt):
-                        #(assignment.dueAt)
-                    #else:
-                        —
-                    #endif
-                </td>
-                <td>
-                    #if(assignment.isOpen):
-                    <span class="tier tier-open">open</span>
-                    #else:
-                    <span class="tier tier-closed">closed</span>
-                    #endif
-                </td>
-                <td>
-                    <a href="/assignments/#(assignment.id)/submissions"
-                       class="btn action-btn">Submissions</a>
                 </td>
             </tr>
         #endfor
