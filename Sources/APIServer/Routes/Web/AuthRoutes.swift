@@ -72,6 +72,9 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=invalid")
         }
 
+        user.lastLoginAt = Date()
+        try await user.save(on: req.db)
+
         req.auth.login(user)
         req.session.authenticate(user)
         return try await postLoginRedirect(for: user, req: req)
@@ -144,20 +147,27 @@ struct AuthRoutes: RouteCollection {
 
 // MARK: - Post-login redirect helper
 
-/// Redirects to /enroll when multiple courses exist and the user has no enrollments;
-/// otherwise redirects to /.
-private func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
+/// Called after any successful login (local or SSO).
+/// - If the user has no enrollments and exactly one active course exists, auto-enroll them silently.
+/// - If the user has no enrollments and multiple courses exist, redirect to /enroll.
+/// - Otherwise redirect to /.
+func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
     guard let userID = user.id else { return req.redirect(to: "/") }
 
-    let courseCount = try await APICourse.query(on: req.db)
-        .filter(\.$isArchived == false)
+    let enrollmentCount = try await APICourseEnrollment.query(on: req.db)
+        .filter(\.$userID == userID)
         .count()
 
-    if courseCount > 1 {
-        let enrollmentCount = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .count()
-        if enrollmentCount == 0 {
+    if enrollmentCount == 0 {
+        let courses = try await APICourse.query(on: req.db)
+            .filter(\.$isArchived == false)
+            .all()
+
+        if courses.count == 1, let course = courses.first, let courseID = course.id {
+            // Exactly one active course: silently auto-enroll the user.
+            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+            try? await enrollment.save(on: req.db)
+        } else if courses.count > 1 {
             return req.redirect(to: "/enroll")
         }
     }

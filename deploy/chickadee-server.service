@@ -1,0 +1,17 @@
+[Unit]
+Description=Chickadee Server
+After=network.target
+
+[Service]
+Type=simple
+User=chickadee
+WorkingDirectory=/opt/chickadee
+ExecStart=/opt/chickadee/.build/release/chickadee-server serve --hostname 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/opt/chickadee/.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

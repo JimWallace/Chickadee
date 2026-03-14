@@ -1,0 +1,20 @@
+[Unit]
+Description=Chickadee Runner
+After=network.target chickadee-server.service
+
+[Service]
+Type=simple
+User=chickadee
+WorkingDirectory=/opt/chickadee
+ExecStart=/opt/chickadee/.build/release/chickadee-runner \
+    --api-base-url http://127.0.0.1:8080 \
+    --worker-id runner-01 \
+    --max-jobs 2
+Restart=on-failure
+RestartSec=10
+EnvironmentFile=/opt/chickadee/.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
