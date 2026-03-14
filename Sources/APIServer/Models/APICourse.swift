@@ -24,9 +24,13 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @Field(key: "name")
     var name: String
 
-    /// Archived courses are hidden from the enrollment picker but their data is preserved.
+    /// Archived courses are hidden from all users and their data is preserved.
     @Field(key: "is_archived")
     var isArchived: Bool
+
+    /// When false, students cannot self-enroll. Admin-managed enrollment still works.
+    @Field(key: "open_enrollment")
+    var openEnrollment: Bool
 
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
@@ -36,10 +40,12 @@ final class APICourse: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: UUID? = nil, code: String, name: String, isArchived: Bool = false) {
-        self.id         = id
-        self.code       = code
-        self.name       = name
-        self.isArchived = isArchived
+    init(id: UUID? = nil, code: String, name: String,
+         isArchived: Bool = false, openEnrollment: Bool = true) {
+        self.id             = id
+        self.code           = code
+        self.name           = name
+        self.isArchived     = isArchived
+        self.openEnrollment = openEnrollment
     }
 }

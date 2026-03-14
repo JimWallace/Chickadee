@@ -153,9 +153,11 @@ extension Request {
         // Fetch current enrollments.
         var enrolledContexts = try await loadEnrolledCourseContexts(userID: userID)
 
-        // Auto-enroll when there is exactly one non-archived course.
+        // Auto-enroll when there is exactly one non-archived, open-enrollment course.
         if enrolledContexts.isEmpty, allCourses.count == 1,
-           let onlyCourse = allCourses.first, let courseID = onlyCourse.id {
+           let onlyCourse = allCourses.first,
+           onlyCourse.openEnrollment,
+           let courseID = onlyCourse.id {
             let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
             try? await enrollment.save(on: db)
             enrolledContexts = try await loadEnrolledCourseContexts(userID: userID)

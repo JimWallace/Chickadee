@@ -72,6 +72,7 @@ struct AdminRoutes: RouteCollection {
                 code: course.code,
                 name: course.name,
                 isArchived: course.isArchived,
+                openEnrollment: course.openEnrollment,
                 enrollmentCount: enrollmentCounts[id] ?? 0,
                 assignmentCount: assignmentCounts[id] ?? 0,
                 createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
@@ -178,6 +179,7 @@ struct AdminRoutes: RouteCollection {
             code:            "",
             name:            "",
             isArchived:      false,
+            openEnrollment:  true,
             enrollmentCount: 0,
             assignmentCount: 0,
             createdAt:       ""
@@ -318,7 +320,11 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func editCourse(req: Request) async throws -> Response {
-        struct EditCourseBody: Content { var code: String; var name: String }
+        struct EditCourseBody: Content {
+            var code: String
+            var name: String
+            var openEnrollment: String?   // checkbox: "on" when checked, absent when unchecked
+        }
 
         guard
             let idString = req.parameters.get("courseID"),
@@ -343,8 +349,9 @@ struct AdminRoutes: RouteCollection {
             return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
         }
 
-        course.code = code
-        course.name = name
+        course.code           = code
+        course.name           = name
+        course.openEnrollment = (body.openEnrollment == "on")
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
     }
@@ -436,6 +443,7 @@ struct AdminRoutes: RouteCollection {
             code:            course.code,
             name:            course.name,
             isArchived:      course.isArchived,
+            openEnrollment:  course.openEnrollment,
             enrollmentCount: enrollmentCounts[courseID] ?? 0,
             assignmentCount: assignmentCounts[courseID] ?? 0,
             createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
@@ -705,6 +713,7 @@ private struct AdminCourseRow: Encodable {
     let code: String
     let name: String
     let isArchived: Bool
+    let openEnrollment: Bool
     let enrollmentCount: Int
     let assignmentCount: Int
     let createdAt: String
