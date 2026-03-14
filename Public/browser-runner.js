@@ -281,15 +281,6 @@ for _module_name in student_module_names_in_load_order():
         let stdout    = '';
         let stderr    = '';
 
-        // Ensure test_runtime helpers are in scope for this execution context.
-        // In Pyodide, sitecustomize.py is not auto-imported and builtins may
-        // not resolve the same way as in CPython, so we inject explicit imports
-        // before every test script to guarantee passed/failed/errored/
-        // require_function are available as globals.
-        await py.runPythonAsync(`
-from test_runtime import passed, failed, errored, require_function
-`);
-
         // Redirect sys.stdout / sys.stderr to JS buffers.
         await py.runPythonAsync(`
 import sys, io
@@ -302,7 +293,12 @@ sys.stderr = _br_stderr
         let timedOut = false;
         let pyErr    = null;
 
-        const runPromise     = py.runPythonAsync(src).catch(err => { pyErr = err; });
+        // Prepend test_runtime imports directly into the script source so they
+        // execute in the SAME exec() call.  Pyodide isolates locals between
+        // separate runPythonAsync calls, so a prior "from test_runtime import …"
+        // in a separate call does NOT carry over.
+        const preamble = 'from test_runtime import passed, failed, errored, require_function\n';
+        const runPromise     = py.runPythonAsync(preamble + src).catch(err => { pyErr = err; });
         const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
 
         await Promise.race([runPromise, timeoutPromise]);
