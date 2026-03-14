@@ -191,6 +191,7 @@ extension Request {
         return enrollments
             .compactMap { e -> CourseContext? in
                 guard let id = e.course.id else { return nil }
+                guard !e.course.isArchived else { return nil }   // hide archived courses everywhere
                 return CourseContext(id: id.uuidString, code: e.course.code, name: e.course.name, isActive: false)
             }
             .sorted { $0.code < $1.code }
