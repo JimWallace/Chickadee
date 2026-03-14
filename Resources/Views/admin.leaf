@@ -3,8 +3,6 @@
 Admin
 #endexport
 #export("content"):
-<h1>Admin dashboard</h1>
-
 <section class="admin-section">
     <h2>Runners</h2>
     <form method="post" action="/admin/runner-secret" style="max-width:700px">
@@ -76,14 +74,14 @@ Admin
     #if(courses.isEmpty):
     <p class="empty">No courses yet.</p>
     #else:
-    <table class="results-table">
+    <table class="results-table" id="courses-table">
         <thead>
             <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Students</th>
-                <th>Assignments</th>
-                <th>Status</th>
+                <th data-sort-key="code" data-sort-type="text" tabindex="0" aria-sort="none">Code</th>
+                <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
+                <th data-sort-key="students" data-sort-type="text" tabindex="0" aria-sort="none">Students</th>
+                <th data-sort-key="assignments" data-sort-type="text" tabindex="0" aria-sort="none">Assignments</th>
+                <th data-sort-key="status" data-sort-type="text" tabindex="0" aria-sort="none">Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -183,20 +181,24 @@ Admin
     </table>
 </section>
 <style>
-#users-table th[data-sort-key] {
+#users-table th[data-sort-key],
+#courses-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
 }
-#users-table th[data-sort-key]::after {
+#users-table th[data-sort-key]::after,
+#courses-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
     font-size: .75rem;
 }
-#users-table th[data-sort-key].sort-asc::after {
+#users-table th[data-sort-key].sort-asc::after,
+#courses-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
 }
-#users-table th[data-sort-key].sort-desc::after {
+#users-table th[data-sort-key].sort-desc::after,
+#courses-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
 }
 </style>
@@ -388,6 +390,63 @@ Admin
                 row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
             });
         });
+    }
+
+    var coursesTable = document.getElementById('courses-table');
+    if (coursesTable) {
+        var coursesBody = coursesTable.querySelector('tbody');
+        var courseHeaders = Array.from(coursesTable.querySelectorAll('th[data-sort-key]'));
+        if (coursesBody && courseHeaders.length) {
+            var activeCourseHeader = null;
+            var activeCourseDirection = 'asc';
+
+            function clearCourseSortIndicators() {
+                courseHeaders.forEach(function (header) {
+                    header.classList.remove('sort-asc', 'sort-desc');
+                    header.setAttribute('aria-sort', 'none');
+                });
+            }
+
+            function sortCoursesByHeader(header, direction) {
+                var index = courseHeaders.indexOf(header);
+                if (index < 0) return;
+                var rows = Array.from(coursesBody.querySelectorAll('tr'));
+                rows.sort(function (lhs, rhs) {
+                    var lCell = lhs.children[index];
+                    var rCell = rhs.children[index];
+                    var lv = ((lCell && lCell.textContent) || '').trim();
+                    var rv = ((rCell && rCell.textContent) || '').trim();
+                    var result = collator.compare(lv, rv);
+                    if (result === 0) {
+                        var lCode = ((lhs.children[0] && lhs.children[0].textContent) || '').trim();
+                        var rCode = ((rhs.children[0] && rhs.children[0].textContent) || '').trim();
+                        result = collator.compare(lCode, rCode);
+                    }
+                    return direction === 'asc' ? result : -result;
+                });
+                rows.forEach(function (row) { coursesBody.appendChild(row); });
+                clearCourseSortIndicators();
+                header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+                header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+                activeCourseHeader = header;
+                activeCourseDirection = direction;
+            }
+
+            courseHeaders.forEach(function (header) {
+                header.addEventListener('click', function () {
+                    var next = (activeCourseHeader === header && activeCourseDirection === 'asc') ? 'desc' : 'asc';
+                    sortCoursesByHeader(header, next);
+                });
+                header.addEventListener('keydown', function (event) {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    var next = (activeCourseHeader === header && activeCourseDirection === 'asc') ? 'desc' : 'asc';
+                    sortCoursesByHeader(header, next);
+                });
+            });
+
+            sortCoursesByHeader(courseHeaders[0], 'asc');
+        }
     }
 
     setInterval(function () {
