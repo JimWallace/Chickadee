@@ -1,8 +1,13 @@
 #extend("base"):
 #export("title"):
-Assignments
+#if(currentUser.activeCourse):#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)#else:Assignments#endif
 #endexport
 #export("content"):
+#if(currentUser.activeCourse):
+<h1 style="margin-bottom:1.25rem">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+#else:
+<h1 style="margin-bottom:1.25rem">Assignments</h1>
+#endif
 <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
     <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
     <!-- Add Section inline form -->
@@ -360,20 +365,44 @@ Assignments
 
 <!-- ── Enrolled students ──────────────────────────────────────────────── -->
 <div style="margin-top:2.5rem">
-    <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.6rem">Enrolled students</h2>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+        <h2 style="font-size:1.05rem;font-weight:600;margin:0">Enrolled students (#(enrolledStudentCount))</h2>
+        #if(currentUser.activeCourse):
+        #if(!courseIsArchived):
+        <form method="post" action="/courses/#(currentUser.activeCourse.id)/open-enrollment" style="margin:0">
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
+                <input type="checkbox" name="openEnrollment" value="on"
+                       #if(courseOpenEnrollment):checked#endif
+                       onchange="this.form.submit()">
+                Open enrolment
+            </label>
+        </form>
+        <form method="post" action="/courses/#(currentUser.activeCourse.id)/enroll-csv"
+              enctype="multipart/form-data" style="margin:0;margin-left:auto">
+            <label class="btn btn-primary" style="cursor:pointer;margin:0">
+                Enrol from CSV
+                <input type="file" name="file" accept=".csv,.txt" required
+                       style="display:none" onchange="this.closest('form').submit()">
+            </label>
+        </form>
+        #endif
+        #endif
+    </div>
     #if(hasEnrolledStudents):
-    <table class="results-table">
+    <table class="results-table" id="enrolled-students-table">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Username</th>
+                <th class="sortable" data-col="0" style="cursor:pointer;user-select:none">Name <span class="sort-icon">⇕</span></th>
+                <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
+                <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
             </tr>
         </thead>
         <tbody>
         #for(student in enrolledStudents):
             <tr>
-                <td>#(student.displayName) #if(student.role != "student"):<span class="tier">#(student.role)</span>#endif</td>
+                <td>#(student.displayName)</td>
                 <td><code>#(student.username)</code></td>
+                <td>#(student.role)</td>
             </tr>
         #endfor
         </tbody>
@@ -733,6 +762,36 @@ tr.assignment-draggable td {
         if (!warning) return;
         input.addEventListener('change', function () { checkUWDates(input.value, warning); });
     });
+
+    // ── Enrolled students table sort ──────────────────────────────────────────
+    var enrolledTable = document.getElementById('enrolled-students-table');
+    if (enrolledTable) {
+        var sortCol = -1;
+        var sortAsc = true;
+        enrolledTable.querySelectorAll('th.sortable').forEach(function (th) {
+            th.addEventListener('click', function () {
+                var col = parseInt(th.getAttribute('data-col'), 10);
+                if (sortCol === col) {
+                    sortAsc = !sortAsc;
+                } else {
+                    sortCol = col;
+                    sortAsc = true;
+                }
+                enrolledTable.querySelectorAll('th.sortable .sort-icon').forEach(function (icon) {
+                    icon.textContent = '⇕';
+                });
+                th.querySelector('.sort-icon').textContent = sortAsc ? '↑' : '↓';
+                var tbody = enrolledTable.querySelector('tbody');
+                var rows = Array.from(tbody.querySelectorAll('tr'));
+                rows.sort(function (a, b) {
+                    var aText = (a.cells[col] ? a.cells[col].textContent : '').trim().toLowerCase();
+                    var bText = (b.cells[col] ? b.cells[col].textContent : '').trim().toLowerCase();
+                    return sortAsc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+                });
+                rows.forEach(function (row) { tbody.appendChild(row); });
+            });
+        });
+    }
 })();
 </script>
 #endexport
