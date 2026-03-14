@@ -47,10 +47,12 @@ struct WebRoutes: RouteCollection {
             enrolledCourses: courseState.all
         )
 
-        // If multiple courses exist but user has no enrollments → redirect to /enroll.
+        // If active (non-archived) courses exist but user has no active enrollment → redirect to /enroll.
         if courseState.active == nil {
-            let courseCount = try await APICourse.query(on: req.db).count()
-            if courseCount > 0 {
+            let activeCourseCount = try await APICourse.query(on: req.db)
+                .filter(\.$isArchived == false)
+                .count()
+            if activeCourseCount > 0 {
                 return req.redirect(to: "/enroll")
             }
         }
