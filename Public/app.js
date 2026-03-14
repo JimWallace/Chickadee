@@ -41,23 +41,19 @@ if (dropZone && fileInput) {
 // Results page: poll until the submission reaches its final state.
 //
 // Statuses that require polling:
-//   pending / assigned       — runner hasn't started yet
-//   browser-complete         — browser run done, waiting for official runner result
+//   pending / assigned  — runner hasn't started yet
 const root = document.getElementById('submission-root');
 if (root) {
-    const isPending         = root.dataset.pending === 'true';
-    const isBrowserComplete = root.dataset.browserComplete === 'true';
+    const isPending = root.dataset.pending === 'true';
 
-    if (isPending || isBrowserComplete) {
+    if (isPending) {
         const submissionID = root.dataset.submissionId;
         const poll = setInterval(async () => {
             try {
                 const res = await fetch(`/api/v1/submissions/${submissionID}`);
                 if (!res.ok) return;
                 const data = await res.json();
-                const done = data.status !== 'pending'
-                          && data.status !== 'assigned'
-                          && data.status !== 'browser-complete';
+                const done = data.status !== 'pending' && data.status !== 'assigned';
                 if (done) {
                     clearInterval(poll);
                     window.location.reload();

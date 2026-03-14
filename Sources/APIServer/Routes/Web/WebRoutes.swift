@@ -589,9 +589,8 @@ struct WebRoutes: RouteCollection {
             }
         }
 
-        // "browser-complete" means the browser run finished but worker hasn't yet.
         let isPending         = submission.status == "pending" || submission.status == "assigned"
-        let isBrowserComplete = submission.status == "browser-complete"
+        let isBrowserComplete = false   // browser submissions now go straight to "complete"
         let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
         let nameExt = (submission.filename ?? "").lowercased()
         let openInNotebookURL: String? = (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))

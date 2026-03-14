@@ -67,14 +67,14 @@ struct BrowserResultRoutes: RouteCollection {
             .count()
         let attemptNumber = priorCount + 1
 
-        // Create a submission record in "browser-complete" status.
-        // Browser results are authoritative — no native worker re-run is queued.
+        // Create the submission record as "complete" immediately — browser
+        // results are authoritative and no native worker re-run is queued.
         let submission = APISubmission(
             id:            subID,
             testSetupID:   setup.id!,
             zipPath:       nbPath,
             attemptNumber: attemptNumber,
-            status:        "browser-complete",
+            status:        "complete",
             filename:      "\(subID).ipynb",
             userID:        caller.id,
             kind:          APISubmission.Kind.student
@@ -170,7 +170,7 @@ struct RunnerSubmitBody: Content {
 }
 
 struct BrowserResultResponse: Content {
-    /// ID of the submission record (status: browser-complete).
+    /// ID of the submission record (status: complete).
     let submissionID: String
 }
 
