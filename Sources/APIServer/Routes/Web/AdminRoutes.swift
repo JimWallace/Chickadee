@@ -255,13 +255,11 @@ struct AdminRoutes: RouteCollection {
             .sort(\.$sortOrder)
             .all()
 
-        var newCourseID = UUID()
-
-        try await req.db.transaction { db in
+        let newCourseID = try await req.db.transaction { db -> UUID in
             // 1. Create the new course.
             let newCourse = APICourse(code: newCode, name: "\(source.name) (Copy)")
             try await newCourse.save(on: db)
-            newCourseID = try newCourse.requireID()
+            let newCourseID = try newCourse.requireID()
 
             // 2. Copy each test setup (zip + optional notebook) to a new ID.
             var setupIDMap: [String: String] = [:]
@@ -310,6 +308,8 @@ struct AdminRoutes: RouteCollection {
                 )
                 try await newAssignment.save(on: db)
             }
+
+            return newCourseID
         }
 
         req.logger.info("Admin copied course \(source.code) → \(newCode) (new ID: \(newCourseID))")
