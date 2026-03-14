@@ -29,6 +29,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
         admin.post("courses", ":courseID", "copy",    use: copyCourse)
+        admin.post("courses", ":courseID", "open-enrollment", use: toggleOpenEnrollment)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.get("users", ":userID", use: userDetail)
@@ -230,6 +231,24 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 
+    // MARK: - POST /admin/courses/:courseID/open-enrollment
+
+    @Sendable
+    func toggleOpenEnrollment(req: Request) async throws -> Response {
+        struct Body: Content { var openEnrollment: String? }
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course   = try await APICourse.find(courseID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+        let body = try req.content.decode(Body.self)
+        course.openEnrollment = (body.openEnrollment == "on")
+        try await course.save(on: req.db)
+        return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
     // MARK: - POST /admin/courses/:courseID/copy
 
     @Sendable
@@ -320,11 +339,7 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func editCourse(req: Request) async throws -> Response {
-        struct EditCourseBody: Content {
-            var code: String
-            var name: String
-            var openEnrollment: String?   // checkbox: "on" when checked, absent when unchecked
-        }
+        struct EditCourseBody: Content { var code: String; var name: String }
 
         guard
             let idString = req.parameters.get("courseID"),
@@ -349,9 +364,8 @@ struct AdminRoutes: RouteCollection {
             return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
         }
 
-        course.code           = code
-        course.name           = name
-        course.openEnrollment = (body.openEnrollment == "on")
+        course.code = code
+        course.name = name
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
     }

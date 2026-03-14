@@ -85,11 +85,6 @@
             <input class="form-input" type="text" name="name" value="#(course.name)"
                    required style="display:block;width:100%">
         </label>
-        <label class="form-label" style="display:inline-flex;flex-direction:row;align-items:center;gap:.5rem;white-space:nowrap;align-self:flex-end;padding-bottom:.35rem">
-            <input type="checkbox" name="openEnrollment" value="on"
-                   #if(course.openEnrollment):checked#endif>
-            Open enrolment
-        </label>
         <button class="btn btn-primary" type="submit" style="align-self:flex-end">Save</button>
     </form>
 </section>
@@ -97,7 +92,19 @@
 
 <!-- ── Enrolled students ───────────────────────────────── -->
 <section class="admin-section">
-    <h2>Enrolled students (#(course.enrollmentCount))</h2>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <h2 style="margin:0">Enrolled students (#(course.enrollmentCount))</h2>
+        #if(!isNew):
+        <form method="post" action="/admin/courses/#(course.id)/open-enrollment" style="margin:0">
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
+                <input type="checkbox" name="openEnrollment" value="on"
+                       #if(course.openEnrollment):checked#endif
+                       onchange="this.form.submit()">
+                Open enrolment
+            </label>
+        </form>
+        #endif
+    </div>
     #if(enrolledUsers.isEmpty):
     <p class="empty">No students enrolled yet.</p>
     #else:
