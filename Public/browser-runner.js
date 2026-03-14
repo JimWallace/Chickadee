@@ -217,6 +217,9 @@ for _module_name in student_module_names_in_load_order():
             const collection = buildCollection(setupID, outcomes);
             const response   = await postBrowserResult(notebookBytes, collection, setupID);
 
+            // Hide the loading-progress status bar — results are now in #nb-results.
+            if (statusEl) statusEl.hidden = true;
+
             return { outcomes, response };
 
         } finally {
