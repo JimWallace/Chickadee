@@ -281,6 +281,12 @@ for _module_name in student_module_names_in_load_order():
         let stdout    = '';
         let stderr    = '';
 
+        // Auto-load any Pyodide packages the script imports (numpy, pandas,
+        // scipy, etc.).  loadPackagesFromImports inspects import statements and
+        // fetches the matching WASM wheels from Pyodide's CDN package index.
+        // Unknown names (test_runtime, student modules) are silently skipped.
+        try { await py.loadPackagesFromImports(src); } catch (_) { /* non-fatal */ }
+
         // Redirect sys.stdout / sys.stderr to JS buffers.
         await py.runPythonAsync(`
 import sys, io
