@@ -7,6 +7,7 @@ func routes(_ app: Application) throws {
 
     // MARK: - Public routes (no auth required)
 
+    try app.register(collection: HealthRoutes())
     try app.register(collection: AuthRoutes())
     if app.authMode != .local {
         try app.register(collection: SSOAuthRoutes())

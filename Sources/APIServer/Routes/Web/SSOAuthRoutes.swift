@@ -151,7 +151,7 @@ struct SSOAuthRoutes: RouteCollection {
         // Establish session — identical to local login
         req.auth.login(user)
         req.session.authenticate(user)
-        return req.redirect(to: "/")
+        return try await postLoginRedirect(for: user, req: req)
     }
 
     // MARK: - User upsert
