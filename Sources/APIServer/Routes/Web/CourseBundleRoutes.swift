@@ -188,7 +188,8 @@ struct CourseBundleRoutes: RouteCollection {
             exportedAt:           Date(),
             exportedBy:           caller.username,
             chickadeeVersion:     ChickadeeVersion.current,
-            course:               BundledCourse(code: course.code, name: course.name),
+            course:               BundledCourse(code: course.code, name: course.name,
+                                               openEnrollment: course.openEnrollment),
             users:                bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
             assignments:          bundledAssignments,
@@ -374,7 +375,8 @@ struct CourseBundleRoutes: RouteCollection {
             )
 
             // 7a. Create course
-            let newCourse = APICourse(code: manifest.course.code, name: manifest.course.name)
+            let newCourse = APICourse(code: manifest.course.code, name: manifest.course.name,
+                                      openEnrollment: manifest.course.openEnrollment ?? true)
             try await newCourse.save(on: db)
             t.courseID   = newCourse.id!
             t.courseCode = newCourse.code

@@ -40,6 +40,11 @@
         #else:
         <span class="tier tier-open">active</span>
         #endif
+        #if(course.openEnrollment):
+        <span class="tier tier-open">open enrolment</span>
+        #else:
+        <span class="tier tier-closed">closed enrolment</span>
+        #endif
     </div>
     <div style="display:flex;gap:.5rem;align-items:center">
         #if(!course.isArchived):
@@ -79,6 +84,11 @@
             Name
             <input class="form-input" type="text" name="name" value="#(course.name)"
                    required style="display:block;width:100%">
+        </label>
+        <label class="form-label" style="display:inline-flex;flex-direction:row;align-items:center;gap:.5rem;white-space:nowrap;align-self:flex-end;padding-bottom:.35rem">
+            <input type="checkbox" name="openEnrollment" value="on"
+                   #if(course.openEnrollment):checked#endif>
+            Open enrolment
         </label>
         <button class="btn btn-primary" type="submit" style="align-self:flex-end">Save</button>
     </form>

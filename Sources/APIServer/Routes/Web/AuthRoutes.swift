@@ -163,11 +163,14 @@ func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response
             .filter(\.$isArchived == false)
             .all()
 
-        if courses.count == 1, let course = courses.first, let courseID = course.id {
-            // Exactly one active course: silently auto-enroll the user.
+        let openCourses = courses.filter { $0.openEnrollment }
+
+        if courses.count == 1, let course = courses.first,
+           course.openEnrollment, let courseID = course.id {
+            // Exactly one active course with open enrollment: silently auto-enroll.
             let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
             try? await enrollment.save(on: req.db)
-        } else if courses.count > 1 {
+        } else if openCourses.count > 1 {
             return req.redirect(to: "/enroll")
         }
     }

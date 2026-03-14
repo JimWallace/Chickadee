@@ -25,6 +25,7 @@ struct EnrollmentRoutes: RouteCollection {
 
         let allCourses = try await APICourse.query(on: req.db)
             .filter(\.$isArchived == false)
+            .filter(\.$openEnrollment == true)
             .sort(\.$code)
             .all()
 
@@ -70,6 +71,7 @@ struct EnrollmentRoutes: RouteCollection {
             : try await APICourse.query(on: req.db)
                 .filter(\.$id ~~ selectedIDs)
                 .filter(\.$isArchived == false)
+                .filter(\.$openEnrollment == true)
                 .all()
         let validIDs = Set(validCourses.compactMap(\.id))
 
