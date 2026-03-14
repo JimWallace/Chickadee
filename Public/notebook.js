@@ -91,7 +91,7 @@
 
                 if (gradingMode === 'browser' && window.BrowserRunner) {
                     // Browser-graded lab: run tests locally in Pyodide then submit atomically.
-                    setStatus('loading', 'Running tests in your browser…');
+                    setStatus('loading', 'Testing…');
                     const notebookBytes = new Uint8Array(
                         new TextEncoder().encode(JSON.stringify(notebook))
                     );
@@ -720,6 +720,21 @@ else:
     function renderResults(outcomes, response) {
         if (!resultsEl) return;
 
+        const pass    = outcomes.filter(o => o.status === 'pass').length;
+        const fail    = outcomes.filter(o => o.status === 'fail').length;
+        const error   = outcomes.filter(o => o.status === 'error').length;
+        const timeout = outcomes.filter(o => o.status === 'timeout').length;
+        const total   = outcomes.length;
+
+        // Summary line below the status bar
+        const summaryEl = document.createElement('p');
+        summaryEl.className = 'score';
+        const parts = [`${pass} / ${total} passed`];
+        if (fail)    parts.push(`${fail} failed`);
+        if (error)   parts.push(`${error} error${error > 1 ? 's' : ''}`);
+        if (timeout) parts.push(`${timeout} timed out`);
+        summaryEl.textContent = parts.join(' · ');
+
         // Results table — reuses the same CSS classes as submission.leaf
         const table = document.createElement('table');
         table.className = 'results-table';
@@ -750,6 +765,7 @@ else:
         table.appendChild(tbody);
 
         resultsEl.innerHTML = '';
+        resultsEl.appendChild(summaryEl);
         resultsEl.appendChild(table);
         resultsEl.hidden = false;
 

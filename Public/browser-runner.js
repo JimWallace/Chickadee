@@ -179,7 +179,6 @@ for _module_name in student_module_names_in_load_order():
             }
             const outcomes = [];
 
-            setRunnerStatus('loading', 'Running tests…');
             for (const entry of manifest.testSuites || []) {
                 const script     = entry.script || '';
                 const ext        = script.split('.').pop().toLowerCase();
