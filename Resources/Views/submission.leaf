@@ -5,8 +5,7 @@ Submission #(submissionID)
 #export("content"):
 <div id="submission-root"
      data-submission-id="#(submissionID)"
-     data-pending="#(isPending)"
-     data-browser-complete="#(isBrowserComplete)">
+     data-pending="#(isPending)">
 
 <div class="submission-header">
     <div class="submission-header-row">
@@ -31,14 +30,6 @@ Submission #(submissionID)
 </div>
 
 #else:
-
-#if(isBrowserComplete):
-<div class="info-box">
-    <strong>Preview result</strong> — your code ran in the browser.
-    The official grade is being computed by the server and will appear here automatically.
-    <div class="spinner spinner-inline"></div>
-</div>
-#endif
 
 #if(buildFailed):
 <div class="error-box">
