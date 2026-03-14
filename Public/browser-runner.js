@@ -293,22 +293,44 @@ sys.stderr = _br_stderr
         let timedOut = false;
         let pyErr    = null;
 
-        // Prepend test_runtime imports directly into the script source so they
-        // execute in the SAME exec() call.  Pyodide isolates locals between
-        // separate runPythonAsync calls, so a prior "from test_runtime import …"
-        // in a separate call does NOT carry over.
-        const preamble = 'from test_runtime import passed, failed, errored, require_function\n';
-        const runPromise     = py.runPythonAsync(preamble + src).catch(err => { pyErr = err; });
+        // Run the test script via compile() + exec() from its MEMFS file:
+        //
+        // 1. compile(source, scriptName) gives inspect.stack() the real
+        //    filename so test_runtime._first_comment_label() reads the
+        //    correct test label (not "<exec>").
+        //
+        // 2. except SystemExit catches the exit that test_runtime's
+        //    passed()/failed()/errored() raise.  In the native runner
+        //    this terminates the subprocess cleanly; in Pyodide it would
+        //    become a PythonError with noisy tracebacks in stderr.
+        //
+        // 3. The imports + compile + exec all run in the SAME exec() call
+        //    so they share one locals dict (Pyodide may isolate locals
+        //    between separate runPythonAsync calls).
+        const runSrc = `
+from test_runtime import passed, failed, errored, require_function
+_br_exit_code = None
+try:
+    _br_code = compile(open('${scriptName}', encoding='utf-8').read(), '${scriptName}', 'exec')
+    exec(_br_code, globals())
+except SystemExit as _e:
+    _br_exit_code = _e.code
+`;
+        const runPromise     = py.runPythonAsync(runSrc).catch(err => { pyErr = err; });
         const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
 
         await Promise.race([runPromise, timeoutPromise]);
 
-        // Restore stdout/stderr and collect output.
+        // Restore stdout/stderr, collect output, and read exit code.
+        let brExitCode = null;
         try {
             const captured = await py.runPythonAsync(`
-(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()))
+(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
 `);
-            [stdout, stderr] = captured.toJs ? captured.toJs() : [String(captured), ''];
+            const result = captured.toJs ? captured.toJs() : [String(captured), '', null];
+            stdout = result[0] || '';
+            stderr = result[1] || '';
+            brExitCode = result[2];
             captured.destroy && captured.destroy();
         } catch (_) { /* fallback: no output */ }
 
@@ -335,10 +357,14 @@ sys.stderr = sys.__stderr__
         let shortResult = 'passed';
         let longResult  = null;
 
-        if (pyErr) {
+        // Determine status: prefer the Python-side exit code (caught SystemExit),
+        // fall back to JS-side pyErr if the wrapper itself threw.
+        if (brExitCode !== null && brExitCode !== undefined) {
+            const code = typeof brExitCode === 'number' ? brExitCode : parseInt(brExitCode) || 1;
+            status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
+        } else if (pyErr) {
             const msg = pyErr.message || String(pyErr);
             if (msg.includes('SystemExit')) {
-                // test_runtime.py called passed/failed/errored.
                 const exitMatch = msg.match(/SystemExit:\s*(-?\d+)/);
                 const code = exitMatch ? parseInt(exitMatch[1]) : 1;
                 status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
@@ -365,12 +391,15 @@ sys.stderr = sys.__stderr__
             const stderrTrim = (stderr || '').trim();
             if (stdoutTrim) parts.push(`stdout:\n${stdoutTrim}`);
             if (stderrTrim) parts.push(`stderr:\n${stderrTrim}`);
-            if (pyErr && !String(pyErr.message).includes('SystemExit')) {
+            if (pyErr && !String(pyErr.message || '').includes('SystemExit')) {
                 parts.push(`exception:\n${pyErr.message || pyErr}`);
             }
             if (parts.length) longResult = parts.join('\n\n');
         } else if ((stderr || '').trim()) {
-            longResult = (stderr || '').trim();
+            // For passing tests, only include stderr if it has real content
+            // (not just SystemExit tracebacks).
+            const cleanStderr = (stderr || '').trim();
+            if (cleanStderr && !cleanStderr.match(/^\s*$/)) longResult = cleanStderr;
         }
 
         return makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs);
