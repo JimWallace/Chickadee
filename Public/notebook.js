@@ -99,7 +99,10 @@
                         await window.BrowserRunner.runAndSubmit(notebookBytes, setupID);
                     renderResults(outcomes, response);
                     const passCount = outcomes.filter(o => o.status === 'pass').length;
-                    setStatus('ok', `${passCount} / ${outcomes.length} tests passed.`);
+                    const allPassed = passCount === outcomes.length && outcomes.length > 0;
+                    const summary   = `${passCount} / ${outcomes.length} passed` +
+                                      (allPassed ? ' ✓ All tests passed!' : '');
+                    setStatus('ok', summary);
                     return;
                 }
 
@@ -717,22 +720,6 @@ else:
     function renderResults(outcomes, response) {
         if (!resultsEl) return;
 
-        const pass  = outcomes.filter(o => o.status === 'pass').length;
-        const total = outcomes.length;
-        const totalMs = outcomes.reduce((s, o) => s + o.executionTimeMs, 0);
-
-        const allPassed = pass === total && total > 0;
-
-        // Score line
-        const scoreEl = document.createElement('p');
-        scoreEl.className = 'score';
-        scoreEl.innerHTML =
-            `${pass} / ${total} passed ` +
-            `<span class="exec-time">(${totalMs} ms)</span>`;
-        if (allPassed) {
-            scoreEl.innerHTML += ' <span style="color:var(--green)">✓ All tests passed!</span>';
-        }
-
         // Results table — reuses the same CSS classes as submission.leaf
         const table = document.createElement('table');
         table.className = 'results-table';
@@ -742,7 +729,6 @@ else:
                     <th>Test</th>
                     <th>Tier</th>
                     <th>Result</th>
-                    <th>ms</th>
                 </tr>
             </thead>`;
 
@@ -758,22 +744,13 @@ else:
             tr.innerHTML = `
                 <td><code>${escHtml(o.testName)}</code></td>
                 <td><span class="tier">${escHtml(o.tier)}</span></td>
-                <td>${escHtml(o.shortResult)}${longCell}</td>
-                <td class="time">${o.executionTimeMs}</td>`;
+                <td>${escHtml(o.shortResult)}${longCell}</td>`;
             tbody.appendChild(tr);
         }
         table.appendChild(tbody);
 
-        // "View submission" link
-        const link = document.createElement('a');
-        link.className = 'nb-results-link';
-        link.href = `/submissions/${response.submissionID}`;
-        link.textContent = 'View submission →';
-
         resultsEl.innerHTML = '';
-        resultsEl.appendChild(scoreEl);
         resultsEl.appendChild(table);
-        resultsEl.appendChild(link);
         resultsEl.hidden = false;
 
         // Scroll results into view so student sees feedback immediately.

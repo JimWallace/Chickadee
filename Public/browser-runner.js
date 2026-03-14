@@ -218,7 +218,6 @@ for _module_name in student_module_names_in_load_order():
             const collection = buildCollection(setupID, outcomes);
             const response   = await postBrowserResult(notebookBytes, collection, setupID);
 
-            setRunnerStatus('ok', 'Done — results submitted.');
             return { outcomes, response };
 
         } finally {
