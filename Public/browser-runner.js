@@ -178,13 +178,26 @@ for _module_name in student_module_names_in_load_order():
                 throw new Error('Failed to load test configuration: ' + toMessage(e));
             }
             const outcomes = [];
+            // Track which scripts passed so dependent tests can be pre-checked.
+            const passedScripts = new Set();
 
             for (const entry of manifest.testSuites || []) {
                 const script     = entry.script || '';
                 const ext        = script.split('.').pop().toLowerCase();
                 const tier       = entry.tier || 'public';
                 const scriptPath = `${workDir}/${script}`;
+                const deps       = Array.isArray(entry.dependsOn) ? entry.dependsOn : [];
 
+                // Dependency pre-check: if any prerequisite did not pass, auto-fail
+                // without running the script (mirrors worker RunnerDaemon behaviour).
+                const blockedBy = deps.find(dep => !passedScripts.has(dep));
+                if (blockedBy !== undefined) {
+                    outcomes.push(makeOutcome(script, tier, 'fail',
+                        `Skipped: prerequisite '${blockedBy}' did not pass`, null, 0));
+                    continue;
+                }
+
+                let outcome;
                 if (ext === 'py') {
                     let src = '';
                     try { src = py.FS.readFile(scriptPath, { encoding: 'utf8' }); }
@@ -193,24 +206,27 @@ for _module_name in student_module_names_in_load_order():
                             `Script not found: ${script}`, null, 0));
                         continue;
                     }
-                    outcomes.push(await runPyScript(py, src, script, tier,
-                        manifest.timeLimitSeconds || 10));
+                    outcome = await runPyScript(py, src, script, tier,
+                        manifest.timeLimitSeconds || 10);
 
                 } else if (ext === 'r') {
-                    outcomes.push(makeOutcome(script, tier, 'error',
+                    outcome = makeOutcome(script, tier, 'error',
                         'R test scripts require WebR — not yet supported in browser runner',
-                        null, 0));
+                        null, 0);
 
                 } else if (ext === 'sh' || ext === 'bash') {
-                    outcomes.push(makeOutcome(script, tier, 'error',
+                    outcome = makeOutcome(script, tier, 'error',
                         'Shell scripts cannot run in the browser runner',
-                        null, 0));
+                        null, 0);
 
                 } else {
-                    outcomes.push(makeOutcome(script, tier, 'error',
+                    outcome = makeOutcome(script, tier, 'error',
                         `Unsupported test script type: .${ext}`,
-                        null, 0));
+                        null, 0);
                 }
+
+                outcomes.push(outcome);
+                if (outcome.status === 'pass') passedScripts.add(script);
             }
 
             // 5. Build collection and POST notebook + results atomically.
