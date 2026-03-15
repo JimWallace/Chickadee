@@ -336,10 +336,21 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     // --- Drag & Drop ---
 
+    // Track whether mousedown occurred on a drag handle (same pattern as assignments.leaf).
+    // dragstart's e.target is always the draggable <tr>, not the mousedown target,
+    // so closest('.suite-drag-handle') from e.target searches upward and never finds it.
+    var suiteDragHandleDown = false;
+    body.addEventListener('mousedown', function (event) {
+        var t = event.target;
+        suiteDragHandleDown = !!(t instanceof Element && t.closest('.suite-drag-handle'));
+    });
+    document.addEventListener('mouseup', function () {
+        suiteDragHandleDown = false;
+    });
+
     body.addEventListener('dragstart', function (e) {
-        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
-        var row = handle.closest('tr[data-name]');
+        if (!suiteDragHandleDown) { e.preventDefault(); return; }
+        var row = e.target.closest ? e.target.closest('tr[data-name]') : null;
         if (!row) { e.preventDefault(); return; }
         dragName = row.getAttribute('data-name');
         e.dataTransfer.effectAllowed = 'move';

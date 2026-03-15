@@ -641,15 +641,23 @@ func createRunnerSetupZip(
         throw Abort(.badRequest, reason: "Select at least one test file in the suite file list")
     }
 
+    // Build the zip to a fresh temp file then atomically move it into place.
+    // /usr/bin/zip -r appends to existing archives, so writing directly to
+    // zipPath would preserve entries for files that were deleted.
+    let tempZipPath = tempDir.appendingPathComponent("output.zip").path
     let zip = Process()
     zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     zip.currentDirectoryURL = tempDir
-    zip.arguments = ["-q", "-r", zipPath, "."]
+    zip.arguments = ["-q", "-r", tempZipPath, ".", "-x", "output.zip"]
     try zip.run()
     zip.waitUntilExit()
     guard zip.terminationStatus == 0 else {
         throw Abort(.internalServerError, reason: "Failed to package setup zip")
     }
+    // Replace the old zip (if any) with the freshly built one.
+    let destURL = URL(fileURLWithPath: zipPath)
+    try? fm.removeItem(at: destURL)
+    try fm.moveItem(at: URL(fileURLWithPath: tempZipPath), to: destURL)
     let hasMakefile = storedNameByIndex.values.contains {
         let n = $0.lowercased()
         return n == "makefile" || n == "gnumakefile"
