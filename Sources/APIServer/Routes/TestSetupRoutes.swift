@@ -215,6 +215,9 @@ struct TestSetupRoutes: RouteCollection {
             throw Abort(.unprocessableEntity, reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1")
         }
 
+        // Validate the dependency graph (reference integrity + cycle detection).
+        try validateManifestDependencies(manifest)
+
         // Mode-specific validation.
         switch manifest.gradingMode {
         case .browser:

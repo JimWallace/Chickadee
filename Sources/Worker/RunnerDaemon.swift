@@ -168,8 +168,33 @@ actor WorkerDaemon {
         try writeRRuntimeHelper(in: testSetupDir)
 
         // Run each test script and collect outcomes.
+        // `passedScripts` tracks which scripts produced a .pass outcome so that
+        // dependent tests can check their prerequisites before running.
         var outcomes: [TestOutcome] = []
+        var passedScripts: Set<String> = []
+
         for entry in manifest.testSuites {
+            // Dependency pre-check: if any prerequisite did not pass, auto-fail
+            // without running the script.
+            if let blockedBy = entry.dependsOn.first(where: { !passedScripts.contains($0) }),
+               !entry.dependsOn.isEmpty {
+                let baseName = (entry.script as NSString).deletingPathExtension
+                let skipped = TestOutcome(
+                    testName:           baseName.isEmpty ? entry.script : baseName,
+                    testClass:          nil,
+                    tier:               entry.tier,
+                    status:             .fail,
+                    shortResult:        "Skipped: prerequisite '\(blockedBy)' did not pass",
+                    longResult:         nil,
+                    executionTimeMs:    0,
+                    memoryUsageBytes:   nil,
+                    attemptNumber:      job.attemptNumber,
+                    isFirstPassSuccess: false
+                )
+                outcomes.append(skipped)
+                continue
+            }
+
             let scriptURL = testSetupDir.appendingPathComponent(entry.script)
             guard FileManager.default.fileExists(atPath: scriptURL.path) else {
                 fputs("[\(workerID)] Warning: script not found: \(entry.script)\n", stderr)
@@ -185,6 +210,9 @@ actor WorkerDaemon {
             let isFirstAttempt = job.attemptNumber == 1
             let outcome = interpretOutput(output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
             outcomes.append(outcome)
+            if outcome.status == .pass {
+                passedScripts.insert(entry.script)
+            }
         }
 
         let collection = makeCollection(outcomes: outcomes, job: job)

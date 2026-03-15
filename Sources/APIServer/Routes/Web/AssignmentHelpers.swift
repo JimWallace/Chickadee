@@ -18,6 +18,7 @@ struct EditSuiteConfigRow: Decodable {
     let isTest: Bool?
     let tier: String?
     let order: Int?
+    let dependsOn: [String]?   // script names of prerequisites
 }
 
 struct ReindexedSuiteConfigRow: Encodable {
@@ -25,6 +26,7 @@ struct ReindexedSuiteConfigRow: Encodable {
     let isTest: Bool
     let tier: String
     let order: Int?
+    let dependsOn: [String]?   // script names of prerequisites
 }
 
 struct ResolvedEditSuiteFiles {
@@ -37,12 +39,14 @@ struct SuiteConfigRow: Decodable {
     let isTest: Bool
     let tier: String?
     let order: Int?
+    let dependsOn: [String]?   // script names of prerequisites
 }
 
 struct ConfiguredSuiteEntry {
     let script: String
     let tier: String
     let order: Int
+    let dependsOn: [String]    // script names of prerequisites; empty == none
 }
 
 struct RunnerSetupPackage {
@@ -210,13 +214,13 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
         )
     }()
 
-    let manifestSuites: [(script: String, tier: String, order: Int)] = {
+    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String])] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return []
         }
         return props.testSuites.enumerated().map { (idx, item) in
-            (script: item.script, tier: item.tier.rawValue, order: idx + 1)
+            (script: item.script, tier: item.tier.rawValue, order: idx + 1, dependsOn: item.dependsOn)
         }
     }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
@@ -251,7 +255,8 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
             url: "/assignments/\(assignmentID)/files/item?name=\(urlEncode(name))",
             isTest: entry != nil,
             tier: entry?.tier ?? "support",
-            order: entry?.order ?? (idx + 1)
+            order: entry?.order ?? (idx + 1),
+            dependsOn: entry?.dependsOn ?? []
         )
     }
 
@@ -346,14 +351,14 @@ func resolveEditSuiteFiles(
         var configRows: [ReindexedSuiteConfigRow] = []
         var nextOrder = 1
 
-        let manifestTests: [String: (tier: String, order: Int)] = {
+        let manifestTests: [String: (tier: String, order: Int, dependsOn: [String])] = {
             guard let data = setupManifestJSON.data(using: .utf8),
                   let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
                 return [:]
             }
-            var map: [String: (tier: String, order: Int)] = [:]
+            var map: [String: (tier: String, order: Int, dependsOn: [String])] = [:]
             for (idx, entry) in props.testSuites.enumerated() {
-                map[entry.script] = (entry.tier.rawValue, idx + 1)
+                map[entry.script] = (entry.tier.rawValue, idx + 1, entry.dependsOn)
             }
             return map
         }()
@@ -370,7 +375,8 @@ func resolveEditSuiteFiles(
                 index: resolvedFiles.count - 1,
                 isTest: testInfo != nil && tier != "support",
                 tier: tier,
-                order: testInfo?.order ?? nextOrder
+                order: testInfo?.order ?? nextOrder,
+                dependsOn: testInfo?.dependsOn
             ))
             nextOrder += 1
         }
@@ -391,7 +397,8 @@ func resolveEditSuiteFiles(
                 index: resolvedFiles.count - 1,
                 isTest: likelyTest,
                 tier: likelyTest ? "public" : "support",
-                order: nextOrder
+                order: nextOrder,
+                dependsOn: nil
             ))
             nextOrder += 1
         }
@@ -445,7 +452,8 @@ func resolveEditSuiteFiles(
             index: resolvedFiles.count - 1,
             isTest: isTest,
             tier: tier,
-            order: row.order ?? nextOrder
+            order: row.order ?? nextOrder,
+            dependsOn: row.dependsOn
         ))
         nextOrder += 1
     }
@@ -670,7 +678,8 @@ func buildSuiteEntries(
             selected.append(ConfiguredSuiteEntry(
                 script: script,
                 tier: tier,
-                order: row.order ?? (index + 1)
+                order: row.order ?? (index + 1),
+                dependsOn: row.dependsOn ?? []
             ))
         }
         return selected
@@ -690,7 +699,8 @@ func buildSuiteEntries(
         defaults.append(ConfiguredSuiteEntry(
             script: script,
             tier: "public",
-            order: inferredOrder(from: script) ?? (index + 1)
+            order: inferredOrder(from: script) ?? (index + 1),
+            dependsOn: []
         ))
     }
     return defaults
@@ -727,7 +737,17 @@ func makeWorkerManifestJSON(
     includeMakefile: Bool,
     gradingMode: String = "worker"
 ) throws -> String {
-    let testSuiteJSON = testSuites.map { ["tier": $0.tier, "script": $0.script] }
+    // Topologically sort so the runner can process dependencies with a single
+    // linear pass (parents always appear before children in the array).
+    let sorted = topologicallySorted(testSuites)
+
+    let testSuiteJSON: [[String: Any]] = sorted.map { entry in
+        var dict: [String: Any] = ["tier": entry.tier, "script": entry.script]
+        if !entry.dependsOn.isEmpty {
+            dict["dependsOn"] = entry.dependsOn
+        }
+        return dict
+    }
     let manifest: [String: Any] = [
         "schemaVersion": 1,
         "gradingMode": gradingMode,
@@ -738,6 +758,49 @@ func makeWorkerManifestJSON(
     ]
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+/// Returns `entries` in topological order (prerequisites before dependents).
+/// Entries with no dependencies are emitted first in their original relative order.
+/// If the graph has no cycles (guaranteed by upload-time validation), this
+/// always produces a valid ordering.
+private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [ConfiguredSuiteEntry] {
+    var inDegree: [String: Int] = [:]
+    var dependents: [String: [String]] = [:]
+    var byScript: [String: ConfiguredSuiteEntry] = [:]
+
+    for entry in entries {
+        byScript[entry.script] = entry
+        inDegree[entry.script, default: 0] += 0
+        for dep in entry.dependsOn {
+            dependents[dep, default: []].append(entry.script)
+            inDegree[entry.script, default: 0] += 1
+        }
+    }
+
+    // Maintain original relative order among entries with equal in-degree.
+    var queue = entries.filter { inDegree[$0.script, default: 0] == 0 }
+    var result: [ConfiguredSuiteEntry] = []
+    while !queue.isEmpty {
+        let node = queue.removeFirst()
+        result.append(node)
+        let children = (dependents[node.script] ?? [])
+            .compactMap { byScript[$0] }
+            .sorted { lhs, rhs in
+                // Preserve original order among siblings.
+                let li = entries.firstIndex(where: { $0.script == lhs.script }) ?? 0
+                let ri = entries.firstIndex(where: { $0.script == rhs.script }) ?? 0
+                return li < ri
+            }
+        for child in children {
+            inDegree[child.script, default: 1] -= 1
+            if inDegree[child.script, default: 0] == 0 {
+                queue.append(child)
+            }
+        }
+    }
+    // Fall back to original order if cycle somehow slipped through.
+    return result.isEmpty ? entries : result
 }
 
 func enqueueRunnerValidationSubmission(

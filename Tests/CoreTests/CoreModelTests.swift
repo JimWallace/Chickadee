@@ -151,6 +151,54 @@ final class CoreModelTests: XCTestCase {
         XCTAssertNil(manifest.makefile?.target)  // bare `make`, no target
     }
 
+    // MARK: - TestSuiteEntry dependsOn
+
+    func testTestSuiteEntryDefaultsEmptyDependsOn() throws {
+        let json = """
+        { "tier": "public", "script": "test_foo.sh" }
+        """.data(using: .utf8)!
+        let entry = try decoder.decode(TestSuiteEntry.self, from: json)
+        XCTAssertEqual(entry.dependsOn, [])
+    }
+
+    func testTestSuiteEntryWithDependsOnRoundTrip() throws {
+        let json = """
+        { "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }
+        """.data(using: .utf8)!
+        let entry = try decoder.decode(TestSuiteEntry.self, from: json)
+        XCTAssertEqual(entry.script, "test_bar.sh")
+        XCTAssertEqual(entry.dependsOn, ["test_foo.sh"])
+
+        let reencoded = try encoder.encode(entry)
+        let redecoded = try decoder.decode(TestSuiteEntry.self, from: reencoded)
+        XCTAssertEqual(entry, redecoded)
+    }
+
+    func testTestPropertiesWithDependencyChainRoundTrip() throws {
+        let json = """
+        {
+          "schemaVersion": 1,
+          "gradingMode": "worker",
+          "testSuites": [
+            { "tier": "public",  "script": "test_build.sh" },
+            { "tier": "public",  "script": "test_unit_a.sh",  "dependsOn": ["test_build.sh"] },
+            { "tier": "release", "script": "test_unit_b.sh",  "dependsOn": ["test_build.sh"] }
+          ],
+          "timeLimitSeconds": 10
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try decoder.decode(TestProperties.self, from: json)
+        XCTAssertEqual(manifest.testSuites.count, 3)
+        XCTAssertEqual(manifest.testSuites[0].dependsOn, [])
+        XCTAssertEqual(manifest.testSuites[1].dependsOn, ["test_build.sh"])
+        XCTAssertEqual(manifest.testSuites[2].dependsOn, ["test_build.sh"])
+
+        let reencoded = try encoder.encode(manifest)
+        let redecoded = try decoder.decode(TestProperties.self, from: reencoded)
+        XCTAssertEqual(manifest, redecoded)
+    }
+
     // MARK: - TestOutcomeCollection
 
     func testTestOutcomeCollectionRoundTrip() throws {

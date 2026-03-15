@@ -52,20 +52,23 @@ Edit Assignment
     </label>
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 
-    <table class="results-table">
+    <p class="card-meta" style="margin-bottom:.4rem">
+        Drag &#10783; to reorder. Drag a file onto another to make it a dependent (child) test.
+        Drag to the strip at the bottom to remove a dependency.
+    </p>
+    <table class="results-table" id="suite-config-table">
         <thead>
             <tr>
                 <th>File</th>
                 <th>Test?</th>
                 <th>Tier</th>
-                <th class="time">Order</th>
                 <th class="time">Delete</th>
             </tr>
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)">
-                <td><a href="#(row.url)"><code>#(row.name)</code></a></td>
+            <tr data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)">
+                <td><span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
@@ -75,7 +78,6 @@ Edit Assignment
                         <option value="release" #if(row.tier == "release"):selected#endif>release</option>
                     </select>
                 </td>
-                <td class="time"><input class="form-input suite-order" type="number" min="1" step="1" value="#(row.order)" style="width:6rem;padding:.25rem .5rem;font-size:.8rem"></td>
                 <td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>
             </tr>
             #endfor
@@ -91,137 +93,272 @@ Edit Assignment
         <a class="btn" href="/assignments">Cancel</a>
     </div>
 </form>
+<style>
+.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
+.suite-drag-handle:active { cursor: grabbing; }
+.suite-row-dragging { opacity: .35; }
+tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
+tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
+tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
+.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
+.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
+.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
+.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
+</style>
 <script>
 (function () {
     'use strict';
 
-    var filesInput = document.getElementById('suite-files-input');
+    var filesInput  = document.getElementById('suite-files-input');
     var configField = document.getElementById('suite-config-field');
-    var body = document.getElementById('suite-config-body');
+    var body        = document.getElementById('suite-config-body');
     if (!filesInput || !configField || !body) return;
 
+    // items: { name, source, index?, isTest, tier, dependsOn[], url? }
+    var items = [];
+    var dragName = null;
+    var uploadCount = 0;  // running count of uploaded files added
+
     function isLikelyScript(name) {
-        var lower = (name || '').toLowerCase();
-        return lower.endsWith('.sh')
-            || lower.endsWith('.bash')
-            || lower.endsWith('.zsh')
-            || lower.endsWith('.py')
-            || lower.endsWith('.r')
-            || lower.endsWith('.rb')
-            || lower.endsWith('.pl')
-            || lower.endsWith('.js')
-            || lower.endsWith('.php');
+        var ext = (name || '').toLowerCase().split('.').pop();
+        return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
     }
 
-    function inferredOrder(name, fallback) {
-        var match = (name || '').match(/^([0-9]+)[_-]/);
-        if (!match) return fallback;
-        var n = Number(match[1]);
-        return Number.isFinite(n) && n > 0 ? n : fallback;
+    function hasChildren(name) {
+        return items.some(function (it) { return it.dependsOn.indexOf(name) >= 0; });
     }
 
-    function removeUploadedRows() {
-        body.querySelectorAll('tr[data-source="upload"]').forEach(function (row) { row.remove(); });
+    function isChild(name) {
+        var it = items.find(function (i) { return i.name === name; });
+        return it ? it.dependsOn.length > 0 : false;
     }
 
-    function renderRows() {
-        var files = Array.from(filesInput.files || []);
-        removeUploadedRows();
-        files.forEach(function (file, index) {
-            var likelyScript = isLikelyScript(file.name);
-            var checked = likelyScript;
-            var supportSelected = likelyScript ? '' : 'selected';
-            var publicSelected = likelyScript ? 'selected' : '';
-            var order = inferredOrder(file.name, index + 1);
-            var tr = document.createElement('tr');
-            tr.setAttribute('data-source', 'upload');
-            tr.setAttribute('data-index', String(index));
-            tr.innerHTML = '<td><code>' + escapeHtml(file.name) + '</code> <span class="card-meta">(new)</span></td>'
-                + '<td><input type="checkbox" class="suite-test-toggle" ' + (checked ? 'checked' : '') + '></td>'
-                + '<td>'
-                + '  <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
-                + '    <option value="support" ' + supportSelected + '>support</option>'
-                + '    <option value="public" ' + publicSelected + '>public</option>'
-                + '    <option value="secret">secret</option>'
-                + '    <option value="release">release</option>'
-                + '  </select>'
-                + '</td>'
-                + '<td class="time"><input class="form-input suite-order" type="number" min="1" step="1" value="' + order + '" style="width:6rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-                + '<td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>';
-            body.appendChild(tr);
+    function visualOrder() {
+        var result = [];
+        var childMap = {};
+        items.forEach(function (it) {
+            if (it.dependsOn.length > 0) {
+                var p = it.dependsOn[0];
+                childMap[p] = childMap[p] || [];
+                childMap[p].push(it);
+            }
         });
-        syncConfig();
+        items.filter(function (it) { return it.dependsOn.length === 0; }).forEach(function (root) {
+            result.push({ item: root, depth: 0 });
+            (childMap[root.name] || []).forEach(function (child) {
+                result.push({ item: child, depth: 1 });
+            });
+        });
+        return result;
+    }
+
+    function tierOptions(selected) {
+        return ['support','public','secret','release'].map(function (t) {
+            return '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>';
+        }).join('');
+    }
+
+    function rowHTML(item, depth) {
+        var isNew     = item.source === 'upload';
+        var label     = isNew ? '<code>' + escHtml(item.name) + '</code> <span class="card-meta">(new)</span>'
+                               : '<a href="' + escAttr(item.url || '#') + '"><code>' + escHtml(item.name) + '</code></a>';
+        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
+        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
+        var checked   = item.isTest ? ' checked' : '';
+        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
+            + '<td' + indent + '>'
+            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span>'
+            +   connector + label
+            + '</td>'
+            + '<td><input type="checkbox" class="suite-test-toggle"' + checked + '></td>'
+            + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+            +   tierOptions(item.tier)
+            + '</select></td>'
+            + '<td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>'
+            + '</tr>';
+    }
+
+    function renderTree() {
+        var visual = visualOrder();
+        body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
+            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
-        var rows = Array.from(body.querySelectorAll('tr[data-source]'));
-        var config = rows.map(function (row) {
-            var source = row.getAttribute('data-source') || 'existing';
-            var tier = row.querySelector('.suite-tier')?.value || 'public';
-            var toggleEl = row.querySelector('.suite-test-toggle');
-            var toggleChecked = !!toggleEl?.checked;
-            var isTest = toggleChecked && tier !== 'support';
-            var orderRaw = row.querySelector('.suite-order')?.value || '';
-            var order = Number(orderRaw);
-
-            var tierEl = row.querySelector('.suite-tier');
-            var orderEl = row.querySelector('.suite-order');
-            if (toggleEl) toggleEl.checked = isTest;
-            if (tierEl) tierEl.disabled = false;
-            if (orderEl) orderEl.disabled = !isTest;
-
-            var base = {
-                source: source,
-                isIncluded: true,
-                isTest: isTest,
-                tier: tier,
-                order: Number.isFinite(order) && order > 0 ? Math.floor(order) : null
-            };
-            if (source === 'upload') {
-                base.index = Number(row.getAttribute('data-index'));
-            } else {
-                base.name = row.getAttribute('data-name') || '';
+        var visual = visualOrder();
+        var config = visual.map(function (v, i) {
+            var item = v.item;
+            var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
+            if (row) {
+                var tierEl   = row.querySelector('.suite-tier');
+                var toggleEl = row.querySelector('.suite-test-toggle');
+                if (tierEl)   item.tier   = tierEl.value;
+                if (toggleEl) item.isTest = toggleEl.checked && item.tier !== 'support';
             }
+            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn };
+            if (item.source === 'upload') { base.index = item.index; }
+            else                          { base.name  = item.name;  }
             return base;
         });
         configField.value = JSON.stringify(config);
     }
 
-    function escapeHtml(value) {
-        return String(value)
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#39;');
+    // Initialize items from server-rendered existing rows
+    function initFromDOM() {
+        items = [];
+        body.querySelectorAll('tr[data-source="existing"]').forEach(function (row) {
+            var name      = row.getAttribute('data-name') || '';
+            var isTest    = row.getAttribute('data-is-test') === 'true';
+            var tier      = row.getAttribute('data-tier') || 'public';
+            var url       = row.querySelector('a') ? row.querySelector('a').getAttribute('href') : '#';
+            var depsRaw   = row.getAttribute('data-depends-on') || '[]';
+            var dependsOn = [];
+            try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
+            items.push({ name: name, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, url: url });
+        });
+        renderTree();
+        syncConfig();
     }
 
-    filesInput.addEventListener('change', renderRows);
-    body.addEventListener('change', syncConfig);
-    body.addEventListener('input', syncConfig);
-    body.addEventListener('click', function (event) {
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        if (!target.classList.contains('suite-delete-btn')) return;
-        var row = target.closest('tr[data-source]');
-        if (!row) return;
-        row.remove();
+    // Add newly uploaded files to the items list (appended as root items)
+    function addUploadedFiles() {
+        var files = Array.from(filesInput.files || []);
+        // Remove previously added upload items (re-add fresh)
+        items = items.filter(function (it) { return it.source !== 'upload'; });
+        var existingNames = new Set(items.map(function (it) { return it.name; }));
+        files.forEach(function (file, idx) {
+            var name = file.name;
+            // Avoid name collision with existing files
+            var finalName = existingNames.has(name) ? name : name;
+            items.push({
+                name:      finalName,
+                source:    'upload',
+                index:     idx,
+                isTest:    isLikelyScript(name),
+                tier:      isLikelyScript(name) ? 'public' : 'support',
+                dependsOn: []
+            });
+        });
+        renderTree();
         syncConfig();
-    });
-    syncConfig();
+    }
 
-    // Native form submission is intentionally left unmodified.
-    // Hidden suiteConfig is kept in sync by change/input listeners above.
+    // --- Drag & Drop ---
+
+    body.addEventListener('dragstart', function (e) {
+        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        var row = handle.closest('tr[data-name]');
+        if (!row) { e.preventDefault(); return; }
+        dragName = row.getAttribute('data-name');
+        e.dataTransfer.effectAllowed = 'move';
+        row.classList.add('suite-row-dragging');
+    });
+
+    body.addEventListener('dragend', function () {
+        dragName = null;
+        body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
+        clearDropIndicators();
+    });
+
+    function clearDropIndicators() {
+        body.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover').forEach(function (r) {
+            r.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
+        });
+    }
+
+    body.addEventListener('dragover', function (e) {
+        if (!dragName) return;
+        e.preventDefault();
+        clearDropIndicators();
+        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
+        if (rootZone) { rootZone.classList.add('drop-hover'); return; }
+        var target = e.target.closest && e.target.closest('tr[data-name]');
+        if (!target) return;
+        var rect  = target.getBoundingClientRect();
+        var relY  = (e.clientY - rect.top) / rect.height;
+        var tName = target.getAttribute('data-name');
+        if (tName === dragName) return;
+        if (relY < 0.3) {
+            target.classList.add('drop-before');
+        } else if (relY > 0.7) {
+            target.classList.add('drop-after');
+        } else if (!isChild(tName) && !hasChildren(dragName)) {
+            target.classList.add('drop-adopt');
+        } else {
+            target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
+        }
+    });
+
+    body.addEventListener('dragleave', function (e) {
+        var row = e.target.closest && e.target.closest('tr');
+        if (row) row.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
+    });
+
+    body.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (!dragName) return;
+        var dragItem = items.find(function (it) { return it.name === dragName; });
+        if (!dragItem) return;
+
+        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
+        if (rootZone) {
+            dragItem.dependsOn = [];
+            renderTree(); syncConfig(); return;
+        }
+
+        var target = e.target.closest && e.target.closest('tr[data-name]');
+        if (!target) return;
+        var tName = target.getAttribute('data-name');
+        if (!tName || tName === dragName) return;
+
+        var rect = target.getBoundingClientRect();
+        var relY = (e.clientY - rect.top) / rect.height;
+
+        if (relY >= 0.3 && relY <= 0.7 && !isChild(tName) && !hasChildren(dragName)) {
+            dragItem.dependsOn = [tName];
+        } else {
+            dragItem.dependsOn = [];
+            items = items.filter(function (it) { return it.name !== dragName; });
+            var tIdx = items.findIndex(function (it) { return it.name === tName; });
+            items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
+        }
+        renderTree(); syncConfig();
+    });
+
+    // Delete button
+    body.addEventListener('click', function (event) {
+        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
+        if (!btn) return;
+        var row = btn.closest('tr[data-name]');
+        if (!row) return;
+        var name = row.getAttribute('data-name');
+        items = items.filter(function (it) { return it.name !== name; });
+        // Clear any dependsOn references to the deleted item
+        items.forEach(function (it) {
+            it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; });
+        });
+        renderTree(); syncConfig();
+    });
+
+    body.addEventListener('change', function () { syncConfig(); });
+    body.addEventListener('input',  function () { syncConfig(); });
+
+    filesInput.addEventListener('change', addUploadedFiles);
+
+    function escHtml(v) {
+        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    }
+    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
+
+    initFromDOM();
 
     // UWaterloo important-date proximity warning
     (function () {
         var dueAtInput = document.getElementById('dueAt');
-        var warning = document.getElementById('uw-date-warning');
+        var warning    = document.getElementById('uw-date-warning');
         if (!dueAtInput || !warning) return;
-        dueAtInput.addEventListener('change', function () {
-            checkUWDates(dueAtInput.value, warning);
-        });
-        // Check the pre-filled value on page load
+        dueAtInput.addEventListener('change', function () { checkUWDates(dueAtInput.value, warning); });
         if (dueAtInput.value) { checkUWDates(dueAtInput.value, warning); }
     })();
 })();
