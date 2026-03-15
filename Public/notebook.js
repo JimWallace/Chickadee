@@ -717,6 +717,9 @@ else:
         }
     }
 
+    // Pattern that identifies a dependency-skip shortResult.
+    const SKIP_RE = /^Skipped: prerequisite '(.+)' did not pass$/;
+
     function renderResults(outcomes, response) {
         if (!resultsEl) return;
 
@@ -735,7 +738,7 @@ else:
         if (timeout) parts.push(`${timeout} timed out`);
         summaryEl.textContent = parts.join(' · ');
 
-        // Results table — reuses the same CSS classes as submission.leaf
+        // Results table — 4-column structure matching submission.leaf
         const table = document.createElement('table');
         table.className = 'results-table';
         table.innerHTML = `
@@ -743,23 +746,59 @@ else:
                 <tr>
                     <th>Test</th>
                     <th>Tier</th>
-                    <th>Result</th>
+                    <th>Output</th>
+                    <th>Mark</th>
                 </tr>
             </thead>`;
 
         const tbody = document.createElement('tbody');
         for (const o of outcomes) {
-            const tr = document.createElement('tr');
-            tr.className = `status-${o.status}`;
+            const skipMatch  = SKIP_RE.exec(o.shortResult || '');
+            const isSkipped  = !!skipMatch;
+            const blockerRaw = isSkipped ? skipMatch[1] : null;
+            // Strip file extension: "test_build.py" → "test_build"
+            const blockerName = blockerRaw
+                ? (blockerRaw.includes('.') ? blockerRaw.replace(/\.[^.]+$/, '') : blockerRaw)
+                : null;
 
-            const longCell = o.longResult
-                ? `<details><summary>details</summary><pre>${escHtml(o.longResult)}</pre></details>`
+            const tr = document.createElement('tr');
+            tr.className = isSkipped ? 'status-skipped' : `status-${o.status}`;
+
+            // Mark label and CSS class
+            let markLabel, markClass;
+            if (isSkipped) {
+                markLabel = '—';       markClass = 'skipped';
+            } else {
+                switch (o.status) {
+                    case 'pass':    markLabel = 'Pass';    markClass = 'pass';    break;
+                    case 'fail':    markLabel = 'Fail';    markClass = 'fail';    break;
+                    case 'error':   markLabel = 'Error';   markClass = 'error';   break;
+                    case 'timeout': markLabel = 'Timeout'; markClass = 'timeout'; break;
+                    default:        markLabel = 'Fail';    markClass = 'fail';
+                }
+            }
+
+            // Test name cell — with optional "↳ blocked by" annotation for skips
+            const blockerHtml = blockerName
+                ? `<div class="skip-blocker">↳ blocked by <code>${escHtml(blockerName)}</code></div>`
                 : '';
 
+            // Output cell
+            let outputHtml;
+            if (isSkipped) {
+                outputHtml = `<span class="skip-reason">${escHtml(o.shortResult)}</span>`;
+            } else {
+                const longHtml = o.longResult
+                    ? `<details><summary>Show output ▸</summary><pre>${escHtml(o.longResult)}</pre></details>`
+                    : '';
+                outputHtml = escHtml(o.shortResult) + longHtml;
+            }
+
             tr.innerHTML = `
-                <td><code>${escHtml(o.testName)}</code></td>
+                <td><code>${escHtml(o.testName)}</code>${blockerHtml}</td>
                 <td><span class="tier">${escHtml(o.tier)}</span></td>
-                <td>${escHtml(o.shortResult)}${longCell}</td>`;
+                <td>${outputHtml}</td>
+                <td><span class="result-mark result-mark-${markClass}">${escHtml(markLabel)}</span></td>`;
             tbody.appendChild(tr);
         }
         table.appendChild(tbody);

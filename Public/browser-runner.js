@@ -402,7 +402,7 @@ sys.stderr = sys.__stderr__
                 const parsed = JSON.parse(lastLine);
                 shortResult = parsed.shortResult || (status === 'pass' ? 'passed' : status);
             } catch (_) {
-                shortResult = lastLine.substring(0, 200);
+                shortResult = lastLine;
             }
         } else {
             shortResult = status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : 'error';

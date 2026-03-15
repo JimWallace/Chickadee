@@ -388,6 +388,7 @@ textarea.form-input {
 .status-fail    td:first-child { border-left: 3px solid var(--red); }
 .status-error   td:first-child { border-left: 3px solid var(--purple); }
 .status-timeout td:first-child { border-left: 3px solid var(--amber); }
+.status-skipped td:first-child { border-left: 3px solid var(--gray-400); }
 
 /* Tier badge */
 .tier {
@@ -456,6 +457,57 @@ details pre {
     color: var(--closed-fg);
     background: var(--danger-bg);
     border-color: var(--closed-fg);
+}
+
+.result-mark-error {
+    color: var(--purple);
+    background: var(--gray-100);
+    border-color: var(--purple);
+}
+
+.result-mark-timeout {
+    color: var(--amber);
+    background: var(--gray-100);
+    border-color: var(--amber);
+}
+
+.result-mark-skipped {
+    color: var(--gray-500);
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+}
+
+/* Dependency-skip row annotations */
+.skip-blocker {
+    font-size: .75rem;
+    color: var(--gray-500);
+    margin-top: .2rem;
+}
+
+.skip-reason {
+    color: var(--gray-500);
+    font-style: italic;
+}
+
+/* Per-attempt delta column */
+.delta-col {
+    width: 2rem;
+    text-align: center;
+    color: var(--gray-500);
+}
+
+.delta-cell {
+    text-align: center;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.delta-improved  { color: var(--green); }
+.delta-regressed { color: var(--red); }
+
+.delta-summary {
+    color: var(--gray-600);
+    font-size: .9em;
 }
 
 /* ── Misc ────────────────────────────────────────────── */

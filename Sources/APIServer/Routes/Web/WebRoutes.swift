@@ -627,6 +627,33 @@ struct WebRoutes: RouteCollection {
         let browserResult = allResults.first { $0.source == "browser" }
         let displayResult = workerResult ?? browserResult
 
+        // Fetch the immediately-prior attempt for per-test delta display.
+        let currentAttempt = submission.attemptNumber ?? 1
+        var priorOutcomeMap: [String: TestStatus] = [:]
+        if currentAttempt > 1, let userID = submission.userID {
+            if let priorSub = try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID == submission.testSetupID)
+                .filter(\.$userID == userID)
+                .filter(\.$attemptNumber == currentAttempt - 1)
+                .first(),
+               let priorSubID = priorSub.id
+            {
+                let priorResults = try await APIResult.query(on: req.db)
+                    .filter(\.$submissionID == priorSubID)
+                    .sort(\.$receivedAt, .descending)
+                    .all()
+                let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
+                if let priorResult,
+                   let data = priorResult.collectionJSON.data(using: .utf8),
+                   let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+                {
+                    for o in priorCollection.outcomes {
+                        priorOutcomeMap[o.testName] = o.status
+                    }
+                }
+            }
+        }
+
         if let result = displayResult {
             resultSource = result.source ?? "worker"
             if let data       = result.collectionJSON.data(using: .utf8),
@@ -642,18 +669,55 @@ struct WebRoutes: RouteCollection {
                     ? Int((Double(visible.passCount) / Double(visible.totalTests) * 100).rounded())
                     : 0
                 outcomes = visible.outcomes.map { o in
-                    OutcomeRow(
-                        testName:        o.testName,
-                        tier:            o.tier.rawValue,
-                        status:          o.status.rawValue,
-                        shortResult:     o.shortResult,
-                        stderrOutput:    stderrScriptOutput(from: o.longResult, status: o.status),
-                        markLabel:       (o.status == .pass) ? "Pass" : "Fail",
-                        markClass:       (o.status == .pass) ? "pass" : "fail"
+                    let skip = parseSkip(shortResult: o.shortResult)
+                    let longOutput: String? = {
+                        guard o.status != .pass else { return nil }
+                        let s = (o.longResult ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        return s.isEmpty ? nil : s
+                    }()
+                    let (markLabel, markClass): (String, String) = {
+                        if skip.isSkipped { return ("—", "skipped") }
+                        switch o.status {
+                        case .pass:    return ("Pass",    "pass")
+                        case .fail:    return ("Fail",    "fail")
+                        case .error:   return ("Error",   "error")
+                        case .timeout: return ("Timeout", "timeout")
+                        }
+                    }()
+                    let (deltaImproved, deltaRegressed): (Bool, Bool) = {
+                        guard let prior = priorOutcomeMap[o.testName] else { return (false, false) }
+                        let wasPass = (prior == .pass)
+                        let isPass  = (o.status == .pass)
+                        return (!wasPass && isPass, wasPass && !isPass)
+                    }()
+                    return OutcomeRow(
+                        testName:       o.testName,
+                        tier:           o.tier.rawValue,
+                        status:         o.status.rawValue,
+                        shortResult:    o.shortResult,
+                        longResult:     longOutput,
+                        markLabel:      markLabel,
+                        markClass:      markClass,
+                        isSkipped:      skip.isSkipped,
+                        blockerName:    skip.blockerName,
+                        deltaImproved:  deltaImproved,
+                        deltaRegressed: deltaRegressed
                     )
                 }
             }
         }
+
+        let hasDelta = !priorOutcomeMap.isEmpty
+        let deltaHeaderText: String? = {
+            guard hasDelta else { return nil }
+            let improved  = outcomes.filter { $0.deltaImproved  }.count
+            let regressed = outcomes.filter { $0.deltaRegressed }.count
+            var parts: [String] = []
+            if improved  > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
+            if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }
+            if parts.isEmpty { return "No change since attempt \(currentAttempt - 1)" }
+            return parts.joined(separator: " · ") + " since attempt \(currentAttempt - 1)"
+        }()
 
         let ctx = SubmissionContext(
             submissionID:      subID,
@@ -671,6 +735,8 @@ struct WebRoutes: RouteCollection {
             totalTests:        totalTests,
             gradePercent:      gradePercent,
             executionTimeMs:   executionTimeMs,
+            hasDelta:          hasDelta,
+            deltaHeaderText:   deltaHeaderText,
             currentUser:       req.currentUserContext
         )
         return try await req.view.render("submission", ctx)
@@ -752,11 +818,15 @@ private struct SubmissionHistoryRow: Encodable {
 private struct OutcomeRow: Encodable {
     let testName: String
     let tier: String
-    let status: String
+    let status: String           // pass | fail | error | timeout
     let shortResult: String
-    let stderrOutput: String?
-    let markLabel: String
-    let markClass: String
+    let longResult: String?      // full output shown in <details>; nil for passing tests
+    let markLabel: String        // Pass | Fail | Error | Timeout | —
+    let markClass: String        // pass | fail | error | timeout | skipped
+    let isSkipped: Bool          // shortResult matches the dependency-skip pattern
+    let blockerName: String?     // extracted prerequisite name ("test_build"), no extension
+    let deltaImproved: Bool      // was non-pass last attempt, is pass now
+    let deltaRegressed: Bool     // was pass last attempt, is non-pass now
 }
 
 private struct SubmissionContext: Encodable {
@@ -777,6 +847,10 @@ private struct SubmissionContext: Encodable {
     let totalTests: Int
     let gradePercent: Int
     let executionTimeMs: Int
+    /// True when a prior attempt exists and delta data is populated.
+    let hasDelta: Bool
+    /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.
+    let deltaHeaderText: String?
     let currentUser: CurrentUserContext?
 }
 
@@ -927,6 +1001,26 @@ private func latestNotebookSubmissionData(
         return name.isEmpty ? nil : name
     }()
     return (try notebookData(for: fallbackSetup), fallbackFilename)
+}
+
+/// Detects the dependency-skip message format and extracts the blocking test name.
+/// Matches: `Skipped: prerequisite 'test_build.py' did not pass`
+private func parseSkip(shortResult: String) -> (isSkipped: Bool, blockerName: String?) {
+    let prefix = "Skipped: prerequisite '"
+    let suffix = "' did not pass"
+    guard shortResult.hasPrefix(prefix), shortResult.hasSuffix(suffix) else { return (false, nil) }
+    let start = shortResult.index(shortResult.startIndex, offsetBy: prefix.count)
+    let end   = shortResult.index(shortResult.endIndex,   offsetBy: -suffix.count)
+    guard start <= end else { return (false, nil) }
+    let raw = String(shortResult[start..<end])
+    // Strip file extension so "test_build.py" becomes "test_build"
+    let name: String
+    if let dot = raw.lastIndex(of: ".") {
+        name = String(raw[..<dot])
+    } else {
+        name = raw
+    }
+    return (true, name.isEmpty ? nil : name)
 }
 
 private func stderrScriptOutput(from raw: String?, status: TestStatus) -> String? {

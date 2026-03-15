@@ -18,7 +18,7 @@ Submission #(submissionID)
     #else:
     #if(buildFailed):
     #else:
-    <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #(passCount) / #(totalTests) tests passed</p>
+    <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #(passCount) / #(totalTests) tests passed#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
     #endif
     #endif
 </div>
@@ -46,20 +46,36 @@ Submission #(submissionID)
             <th>Script</th>
             <th>Tier</th>
             <th>Output</th>
+            #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">Δ</th>#endif
             <th>Mark</th>
         </tr>
     </thead>
     <tbody>
     #for(outcome in outcomes):
-        <tr class="status-#(outcome.status)">
-            <td><code>#(outcome.testName)</code></td>
-            <td><span class="tier">#(outcome.tier)</span></td>
+        <tr class="#if(outcome.isSkipped):status-skipped#else:status-#(outcome.status)#endif">
             <td>
-                #(outcome.shortResult)
-                #if(outcome.stderrOutput):
-                <pre class="script-output-inline script-output-error">#(outcome.stderrOutput)</pre>
+                <code>#(outcome.testName)</code>
+                #if(outcome.blockerName):
+                <div class="skip-blocker">↳ blocked by <code>#(outcome.blockerName)</code></div>
                 #endif
             </td>
+            <td><span class="tier">#(outcome.tier)</span></td>
+            <td>
+                #if(outcome.isSkipped):
+                <span class="skip-reason">#(outcome.shortResult)</span>
+                #else:
+                #(outcome.shortResult)
+                #if(outcome.longResult):
+                <details><summary>Show output ▸</summary><pre>#(outcome.longResult)</pre></details>
+                #endif
+                #endif
+            </td>
+            #if(hasDelta):
+            <td class="delta-cell">
+                #if(outcome.deltaImproved):<span class="delta-improved" title="Was failing, now passing">↑</span>#endif
+                #if(outcome.deltaRegressed):<span class="delta-regressed" title="Was passing, now failing">↓</span>#endif
+            </td>
+            #endif
             <td>
                 <span class="result-mark result-mark-#(outcome.markClass)">#(outcome.markLabel)</span>
             </td>
