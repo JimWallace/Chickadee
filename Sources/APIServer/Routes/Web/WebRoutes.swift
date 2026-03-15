@@ -591,6 +591,12 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // Fetch the assignment for deadline-based tier visibility.
+        let submissionAssignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == submission.testSetupID)
+            .first()
+        let allowedTiers = visibleTiers(for: user, assignment: submissionAssignment)
+
         let isPending         = submission.status == "pending" || submission.status == "assigned"
         let isBrowserComplete = false   // browser submissions now go straight to "complete"
         let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
@@ -626,15 +632,16 @@ struct WebRoutes: RouteCollection {
             if let data       = result.collectionJSON.data(using: .utf8),
                let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
             {
+                let visible     = collection.filtering(tiers: allowedTiers)
                 buildFailed     = collection.buildStatus == .failed
                 compilerOutput  = collection.compilerOutput
-                passCount       = collection.passCount
-                totalTests      = collection.totalTests
+                passCount       = visible.passCount
+                totalTests      = visible.totalTests
                 executionTimeMs = collection.executionTimeMs
-                gradePercent    = collection.totalTests > 0
-                    ? Int((Double(collection.passCount) / Double(collection.totalTests) * 100).rounded())
+                gradePercent    = visible.totalTests > 0
+                    ? Int((Double(visible.passCount) / Double(visible.totalTests) * 100).rounded())
                     : 0
-                outcomes = collection.outcomes.map { o in
+                outcomes = visible.outcomes.map { o in
                     OutcomeRow(
                         testName:        o.testName,
                         tier:            o.tier.rawValue,

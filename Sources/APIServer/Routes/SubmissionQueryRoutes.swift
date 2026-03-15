@@ -90,7 +90,13 @@ struct SubmissionQueryRoutes: RouteCollection {
             throw Abort(.internalServerError, reason: "Stored result is corrupt")
         }
 
-        // Optional tier filter: ?tiers=public,student
+        // Enforce deadline-based tier visibility first, then honour any ?tiers= filter.
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == submission.testSetupID)
+            .first()
+        collection = collection.filtering(tiers: visibleTiers(for: caller, assignment: assignment))
+
+        // Optional additional tier filter: ?tiers=public,release
         if let tiersParam = req.query[String.self, at: "tiers"] {
             let requested = Set(tiersParam.split(separator: ",").map(String.init))
             collection = collection.filtering(tiers: requested)
@@ -112,35 +118,6 @@ struct SubmissionQueryRoutes: RouteCollection {
 private func canViewSubmission(caller: APIUser, submission: APISubmission) -> Bool {
     if caller.isInstructor { return true }
     return submission.userID == caller.id
-}
-
-// MARK: - Tier filtering
-
-private extension TestOutcomeCollection {
-    /// Returns a copy with outcomes filtered to the given tier raw values,
-    /// with all aggregate counts recomputed.
-    func filtering(tiers: Set<String>) -> TestOutcomeCollection {
-        // Map raw string to TestTier and filter.
-        let filtered = outcomes.filter { outcome in
-            tiers.contains(outcome.tier.rawValue)
-        }
-        return TestOutcomeCollection(
-            submissionID:    submissionID,
-            testSetupID:     testSetupID,
-            attemptNumber:   attemptNumber,
-            buildStatus:     buildStatus,
-            compilerOutput:  compilerOutput,
-            outcomes:        filtered,
-            totalTests:      filtered.count,
-            passCount:       filtered.filter { $0.status == .pass    }.count,
-            failCount:       filtered.filter { $0.status == .fail    }.count,
-            errorCount:      filtered.filter { $0.status == .error   }.count,
-            timeoutCount:    filtered.filter { $0.status == .timeout }.count,
-            executionTimeMs: executionTimeMs,
-            runnerVersion:   runnerVersion,
-            timestamp:       timestamp
-        )
-    }
 }
 
 // MARK: - Response types

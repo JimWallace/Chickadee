@@ -8,5 +8,4 @@ public enum TestTier: String, Codable, Sendable {
     case pub     = "public"   // results shown to student immediately
     case release = "release"  // run on demand, hidden until deadline
     case secret  = "secret"   // never shown to student
-    case student = "student"  // student-written tests, run for their benefit
 }

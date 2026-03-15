@@ -108,7 +108,8 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         id: String,
         testSetupID: String = "setup_001",
         status: String = "pending",
-        attemptNumber: Int = 1
+        attemptNumber: Int = 1,
+        userID: UUID? = nil
     ) async throws -> APISubmission {
         _ = try await ensureSetup(id: testSetupID)
 
@@ -117,7 +118,8 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             testSetupID: testSetupID,
             zipPath: tmpDir + "submissions/\(id).zip",
             attemptNumber: attemptNumber,
-            status: status
+            status: status,
+            userID: userID
         )
         try await sub.save(on: app.db)
         return sub
@@ -384,7 +386,6 @@ final class SubmissionQueryRoutesTests: XCTestCase {
                 makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
                 makeOutcome(name: "test_release", tier: .release, status: .fail),
                 makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
-                makeOutcome(name: "test_student", tier: .student, status: .error),
             ]
         )
         try await insertResult(submissionID: "sub_tier1", collection: collection)
@@ -410,13 +411,13 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             submissionID: "sub_tier2",
             outcomes: [
                 makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
-                makeOutcome(name: "test_student", tier: .student, status: .fail),
+                makeOutcome(name: "test_release", tier: .release, status: .fail),
                 makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_tier2", collection: collection)
 
-        try app.test(.GET, "/api/v1/submissions/sub_tier2/results?tiers=public,student", beforeRequest: { req in
+        try app.test(.GET, "/api/v1/submissions/sub_tier2/results?tiers=public,release", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -450,5 +451,183 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             XCTAssertEqual(body.outcomes.count, 3)
             XCTAssertEqual(body.totalTests, 3)
         })
+    }
+
+    // MARK: - Deadline-based tier visibility
+
+    /// Creates (or reuses) a test setup AND an assignment with the given dueAt for it.
+    @discardableResult
+    private func ensureAssignment(
+        setupID: String,
+        dueAt: Date?
+    ) async throws -> APIAssignment {
+        _ = try await ensureSetup(id: setupID)
+        if let existing = try await APIAssignment.query(on: app.db)
+            .filter(\.$testSetupID == setupID).first() {
+            return existing
+        }
+        let courseID = try await makeTestCourseID()
+        let assignment = APIAssignment(
+            testSetupID: setupID,
+            title: "Test Assignment",
+            dueAt: dueAt,
+            courseID: courseID
+        )
+        try await assignment.save(on: app.db)
+        return assignment
+    }
+
+    private func loginAsStudent(username: String = "student_tier") async throws -> String {
+        // Create only once per test (setUp re-creates the DB each time).
+        let hash = try Bcrypt.hash("pass")
+        let user = APIUser(username: username, passwordHash: hash, role: "student")
+        try await user.save(on: app.db)
+        var cookie = ""
+        try await app.test(.POST, "/login", beforeRequest: { req in
+            try req.content.encode(["username": username, "password": "pass"],
+                                   as: .urlEncodedForm)
+        }, afterResponse: { res in
+            cookie = res.headers.first(name: .setCookie) ?? ""
+        })
+        return cookie
+    }
+
+    private func loginAsInstructor(username: String = "instructor_tier") async throws -> String {
+        let hash = try Bcrypt.hash("pass")
+        let user = APIUser(username: username, passwordHash: hash, role: "instructor")
+        try await user.save(on: app.db)
+        var cookie = ""
+        try await app.test(.POST, "/login", beforeRequest: { req in
+            try req.content.encode(["username": username, "password": "pass"],
+                                   as: .urlEncodedForm)
+        }, afterResponse: { res in
+            cookie = res.headers.first(name: .setCookie) ?? ""
+        })
+        return cookie
+    }
+
+    /// Student cannot see `release` or `secret` outcomes before the deadline.
+    func testGetResultsHidesReleaseAndSecretBeforeDeadline() async throws {
+        let setupID  = "setup_deadline_before"
+        let username = "student_db1"
+        let cookie   = try await loginAsStudent(username: username)
+        let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+        let student  = try XCTUnwrap(studentOpt)
+        try await ensureAssignment(setupID: setupID,
+                                   dueAt: Date().addingTimeInterval(3600))  // 1 hr from now
+        try await insertSubmission(id: "sub_db1", testSetupID: setupID,
+                                   userID: student.id)
+        let collection = makeCollection(
+            submissionID: "sub_db1",
+            outcomes: [
+                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_release", tier: .release, status: .fail),
+                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+            ]
+        )
+        try await insertResult(submissionID: "sub_db1", collection: collection)
+
+        try await app.test(.GET, "/api/v1/submissions/sub_db1/results",
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.outcomes.count, 1,
+                    "before deadline, student should see only public outcomes")
+                XCTAssertEqual(body.outcomes[0].testName, "test_pub")
+                XCTAssertFalse(body.outcomes.contains { $0.tier == .release })
+                XCTAssertFalse(body.outcomes.contains { $0.tier == .secret })
+            })
+    }
+
+    /// Student can see `release` outcomes after the deadline has passed,
+    /// but `secret` outcomes remain hidden.
+    func testGetResultsShowsReleaseAfterDeadline() async throws {
+        let setupID  = "setup_deadline_after"
+        let username = "student_da1"
+        let cookie   = try await loginAsStudent(username: username)
+        let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+        let student  = try XCTUnwrap(studentOpt)
+        try await ensureAssignment(setupID: setupID,
+                                   dueAt: Date().addingTimeInterval(-3600))  // 1 hr ago
+        try await insertSubmission(id: "sub_da1", testSetupID: setupID,
+                                   userID: student.id)
+        let collection = makeCollection(
+            submissionID: "sub_da1",
+            outcomes: [
+                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_release", tier: .release, status: .fail),
+                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+            ]
+        )
+        try await insertResult(submissionID: "sub_da1", collection: collection)
+
+        try await app.test(.GET, "/api/v1/submissions/sub_da1/results",
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.outcomes.count, 2,
+                    "after deadline, student should see public + release but not secret")
+                XCTAssertTrue(body.outcomes.contains { $0.tier == .pub })
+                XCTAssertTrue(body.outcomes.contains { $0.tier == .release })
+                XCTAssertFalse(body.outcomes.contains { $0.tier == .secret })
+            })
+    }
+
+    /// `secret` outcomes are never visible to students, even after the deadline.
+    func testGetResultsAlwaysHidesSecretFromStudent() async throws {
+        let setupID  = "setup_secret_hide"
+        let username = "student_sh1"
+        let cookie   = try await loginAsStudent(username: username)
+        let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+        let student  = try XCTUnwrap(studentOpt)
+        try await ensureAssignment(setupID: setupID,
+                                   dueAt: Date().addingTimeInterval(-7200))  // well past
+        try await insertSubmission(id: "sub_sh1", testSetupID: setupID,
+                                   userID: student.id)
+        let collection = makeCollection(
+            submissionID: "sub_sh1",
+            outcomes: [
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+            ]
+        )
+        try await insertResult(submissionID: "sub_sh1", collection: collection)
+
+        try await app.test(.GET, "/api/v1/submissions/sub_sh1/results",
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertTrue(body.outcomes.isEmpty,
+                    "secret outcomes must never be visible to students")
+            })
+    }
+
+    /// Instructors always see all tiers regardless of deadline.
+    func testGetResultsInstructorSeesAllTiersRegardlessOfDeadline() async throws {
+        let setupID = "setup_instr_all"
+        let cookie  = try await loginAsInstructor()
+        try await ensureAssignment(setupID: setupID,
+                                   dueAt: Date().addingTimeInterval(3600))  // future deadline
+        try await insertSubmission(id: "sub_ia1", testSetupID: setupID)
+        let collection = makeCollection(
+            submissionID: "sub_ia1",
+            outcomes: [
+                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_release", tier: .release, status: .fail),
+                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+            ]
+        )
+        try await insertResult(submissionID: "sub_ia1", collection: collection)
+
+        try await app.test(.GET, "/api/v1/submissions/sub_ia1/results",
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.outcomes.count, 3,
+                    "instructors must see all tiers regardless of deadline")
+            })
     }
 }

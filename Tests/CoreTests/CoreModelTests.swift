@@ -28,7 +28,7 @@ final class CoreModelTests: XCTestCase {
     // MARK: - TestTier
 
     func testTestTierRoundTrip() throws {
-        for tier in [TestTier.pub, .release, .secret, .student] {
+        for tier in [TestTier.pub, .release, .secret] {
             let data = try encoder.encode(tier)
             let decoded = try decoder.decode(TestTier.self, from: data)
             XCTAssertEqual(tier, decoded)
@@ -39,7 +39,6 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(TestTier.pub.rawValue, "public")
         XCTAssertEqual(TestTier.release.rawValue, "release")
         XCTAssertEqual(TestTier.secret.rawValue, "secret")
-        XCTAssertEqual(TestTier.student.rawValue, "student")
     }
 
     // MARK: - GradingMode

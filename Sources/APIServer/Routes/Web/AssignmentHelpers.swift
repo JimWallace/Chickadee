@@ -727,7 +727,6 @@ func normalizeTier(_ raw: String?) -> String {
     switch (raw ?? "public").lowercased() {
     case "secret": return "secret"
     case "release": return "release"
-    case "student": return "student"
     default: return "public"
     }
 }
