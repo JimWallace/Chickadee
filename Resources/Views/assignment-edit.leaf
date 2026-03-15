@@ -85,7 +85,7 @@
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
+            <tr draggable="true" data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
                 <td><span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
@@ -253,7 +253,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
         var checked   = item.isTest ? ' checked' : '';
         var pts       = item.points || 1;
-        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
+        return '<tr draggable="true" data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
             + '<td' + indent + '>'
             +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector + label
@@ -443,6 +443,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
 
     initFromDOM();
+
+    // Reload when restored from bfcache (browser back/forward) so the page
+    // always reflects the server's current state rather than a cached snapshot.
+    window.addEventListener('pageshow', function (e) {
+        if (e.persisted) window.location.reload();
+    });
 
 })();
 </script>
