@@ -641,6 +641,10 @@ func createRunnerSetupZip(
         throw Abort(.badRequest, reason: "Select at least one test file in the suite file list")
     }
 
+    // Remove old zip first — /usr/bin/zip -r appends to existing archives,
+    // so deleted files would persist if we don't start fresh.
+    try? fm.removeItem(atPath: zipPath)
+
     let zip = Process()
     zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
     zip.currentDirectoryURL = tempDir
