@@ -18,7 +18,7 @@ Submission #(submissionID)
     #else:
     #if(buildFailed):
     #else:
-    <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #(passCount) / #(totalTests) tests passed#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+    <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
     #endif
     #endif
 </div>
@@ -78,6 +78,7 @@ Submission #(submissionID)
             #endif
             <td>
                 <span class="result-mark result-mark-#(outcome.markClass)">#(outcome.markLabel)</span>
+                #if(outcome.pointsLabel):<span class="points-label">#(outcome.pointsLabel)</span>#endif
             </td>
         </tr>
     #endfor

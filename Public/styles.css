@@ -477,6 +477,13 @@ details pre {
     border-color: var(--gray-400);
 }
 
+.points-label {
+    font-size: .7rem;
+    color: var(--gray-500);
+    margin-left: .3rem;
+    white-space: nowrap;
+}
+
 /* Dependency-skip row annotations */
 .skip-blocker {
     font-size: .75rem;

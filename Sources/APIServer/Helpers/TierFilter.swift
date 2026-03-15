@@ -31,6 +31,8 @@ extension TestOutcomeCollection {
             errorCount:      filtered.filter { $0.status == .error   }.count,
             timeoutCount:    filtered.filter { $0.status == .timeout }.count,
             executionTimeMs: executionTimeMs,
+            totalPoints:     filtered.reduce(0) { $0 + $1.points },
+            earnedPoints:    filtered.filter { $0.status == .pass }.reduce(0) { $0 + $1.points },
             runnerVersion:   runnerVersion,
             timestamp:       timestamp
         )

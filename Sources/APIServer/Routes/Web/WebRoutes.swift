@@ -610,6 +610,8 @@ struct WebRoutes: RouteCollection {
         var outcomes:       [OutcomeRow] = []
         var passCount       = 0
         var totalTests      = 0
+        var totalPoints     = 0
+        var earnedPoints    = 0
         var executionTimeMs = 0
         var gradePercent    = 0
         var resultSource    = ""   // "browser" | "worker" | ""
@@ -665,9 +667,12 @@ struct WebRoutes: RouteCollection {
                 passCount       = visible.passCount
                 totalTests      = visible.totalTests
                 executionTimeMs = collection.executionTimeMs
-                gradePercent    = visible.totalTests > 0
-                    ? Int((Double(visible.passCount) / Double(visible.totalTests) * 100).rounded())
+                totalPoints  = visible.totalPoints
+                earnedPoints = visible.earnedPoints
+                gradePercent = totalPoints > 0
+                    ? Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
                     : 0
+                let weighted = totalPoints != visible.totalTests
                 outcomes = visible.outcomes.map { o in
                     let skip = parseSkip(shortResult: o.shortResult)
                     let longOutput: String? = {
@@ -690,6 +695,7 @@ struct WebRoutes: RouteCollection {
                         let isPass  = (o.status == .pass)
                         return (!wasPass && isPass, wasPass && !isPass)
                     }()
+                    let pointsLabel: String? = weighted && o.points > 1 ? "\(o.points) pts" : nil
                     return OutcomeRow(
                         testName:       o.testName,
                         tier:           o.tier.rawValue,
@@ -701,7 +707,8 @@ struct WebRoutes: RouteCollection {
                         isSkipped:      skip.isSkipped,
                         blockerName:    skip.blockerName,
                         deltaImproved:  deltaImproved,
-                        deltaRegressed: deltaRegressed
+                        deltaRegressed: deltaRegressed,
+                        pointsLabel:    pointsLabel
                     )
                 }
             }
@@ -735,6 +742,9 @@ struct WebRoutes: RouteCollection {
             totalTests:        totalTests,
             gradePercent:      gradePercent,
             executionTimeMs:   executionTimeMs,
+            isWeighted:        totalPoints != totalTests,
+            totalPoints:       totalPoints,
+            earnedPoints:      earnedPoints,
             hasDelta:          hasDelta,
             deltaHeaderText:   deltaHeaderText,
             currentUser:       req.currentUserContext
@@ -827,6 +837,7 @@ private struct OutcomeRow: Encodable {
     let blockerName: String?     // extracted prerequisite name ("test_build"), no extension
     let deltaImproved: Bool      // was non-pass last attempt, is pass now
     let deltaRegressed: Bool     // was pass last attempt, is non-pass now
+    let pointsLabel: String?     // e.g. "2 pts" when assignment is weighted; nil otherwise
 }
 
 private struct SubmissionContext: Encodable {
@@ -847,6 +858,12 @@ private struct SubmissionContext: Encodable {
     let totalTests: Int
     let gradePercent: Int
     let executionTimeMs: Int
+    /// True when any test has points > 1 (i.e. grade uses weighted points).
+    let isWeighted: Bool
+    /// Sum of points for all visible outcomes; equals totalTests when unweighted.
+    let totalPoints: Int
+    /// Sum of points for passing outcomes; equals passCount when unweighted.
+    let earnedPoints: Int
     /// True when a prior attempt exists and delta data is populated.
     let hasDelta: Bool
     /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.

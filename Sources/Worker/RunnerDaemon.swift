@@ -282,6 +282,7 @@ actor WorkerDaemon {
             status:             status,
             shortResult:        shortResult,
             longResult:         longResult,
+            points:             entry.points,
             executionTimeMs:    output.executionTimeMs,
             memoryUsageBytes:   nil,
             attemptNumber:      attemptNumber,
@@ -297,6 +298,8 @@ actor WorkerDaemon {
         let errorCount   = outcomes.filter { $0.status == .error   }.count
         let timeoutCount = outcomes.filter { $0.status == .timeout }.count
         let totalMs      = outcomes.reduce(0) { $0 + $1.executionTimeMs }
+        let totalPoints  = outcomes.reduce(0) { $0 + $1.points }
+        let earnedPoints = outcomes.filter { $0.status == .pass }.reduce(0) { $0 + $1.points }
 
         let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
 
@@ -313,6 +316,8 @@ actor WorkerDaemon {
             errorCount:      errorCount,
             timeoutCount:    timeoutCount,
             executionTimeMs: totalMs,
+            totalPoints:     totalPoints,
+            earnedPoints:    earnedPoints,
             runnerVersion:   "shell-runner/1.0",
             timestamp:       Date()
         )

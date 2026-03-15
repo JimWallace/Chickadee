@@ -21,15 +21,18 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// `script` is the filename/path of a runnable test script in the test setup zip.
 /// `dependsOn` is an optional list of other `script` names that must pass before
 /// this test is executed. If any dependency did not pass, this test is auto-failed.
+/// `points` is the integer weight used for grade calculation (default 1).
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
-    public let script: String      // e.g. "01_public.py"
-    public let dependsOn: [String] // script names of prerequisites; empty == no deps
+    public let script: String       // e.g. "01_public.py"
+    public let dependsOn: [String]  // script names of prerequisites; empty == no deps
+    public let points: Int          // grade weight; 1 = default (unweighted)
 
-    public init(tier: TestTier, script: String, dependsOn: [String] = []) {
+    public init(tier: TestTier, script: String, dependsOn: [String] = [], points: Int = 1) {
         self.tier      = tier
         self.script    = script
         self.dependsOn = dependsOn
+        self.points    = points
     }
 
     public init(from decoder: Decoder) throws {
@@ -37,6 +40,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         tier      = try c.decode(TestTier.self,    forKey: .tier)
         script    = try c.decode(String.self,      forKey: .script)
         dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+        points    = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
     }
 }
 

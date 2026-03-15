@@ -503,12 +503,19 @@ func nextAssignmentSortOrder(req: Request) async throws -> Int {
 
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
     guard let data = collectionJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let passCount = root["passCount"] as? Int,
-          let totalTests = root["totalTests"] as? Int,
-          totalTests > 0 else {
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil
     }
+    // Prefer weighted points when present (non-nil and non-zero totalPoints).
+    if let earnedPoints = root["earnedPoints"] as? Int,
+       let totalPoints  = root["totalPoints"]  as? Int,
+       totalPoints > 0 {
+        return Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
+    }
+    // Fall back to unweighted count for old results.
+    guard let passCount  = root["passCount"]  as? Int,
+          let totalTests = root["totalTests"] as? Int,
+          totalTests > 0 else { return nil }
     return Int((Double(passCount) / Double(totalTests) * 100).rounded())
 }
 
