@@ -25,7 +25,7 @@ Chickadee accepts student code submissions, runs instructor-defined test suites,
 - **Four test tiers.** `public` results are shown immediately; `release` results are hidden until the assignment deadline; `secret` results are never shown; `student` results come from student-written tests.
 - **In-browser notebook grading.** A full JupyterLite instance is embedded for both student submission and instructor assignment creation — no separate tooling required.
 - **Sandboxed execution.** The runner supports OS-level sandboxing (`sandbox-exec` on macOS, `unshare` namespaces on Linux) to isolate untrusted code.
-- **Pluggable auth.** Local username/password for development and self-hosting; OIDC/SSO (Duo, Okta, Entra, etc.) for institutional deployments. Controlled by the `AUTH_MODE` environment variable.
+- **Local and SSO auth.** Local username/password for development and self-hosting; full OIDC/SSO (Authorization Code + PKCE) for institutional deployments (Duo, Okta, Entra, etc.). Dual mode runs both simultaneously. Controlled by the `AUTH_MODE` environment variable; roles are auto-assigned from `SSO_ADMIN_USERS` / `SSO_INSTRUCTOR_USERS` allowlists on every login.
 - **HMAC-signed runner protocol.** All runner↔server requests are signed with a shared secret. The server auto-generates a diceware passphrase if none is provided.
 
 ---

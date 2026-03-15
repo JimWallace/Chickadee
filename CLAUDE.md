@@ -4,8 +4,8 @@
 
 A clean-break rewrite of Marmoset, a student code submission and autograding
 system originally built in Java at the University of Maryland. The rewrite is
-in Swift using Vapor, targeting both macOS and Linux (containerized deployment
-later). No interoperability with the original Java system is required.
+in Swift using Vapor, targeting both macOS and Linux. No interoperability with
+the original Java system is required.
 
 The original Java codebase is available for reference in `/reference/` if
 needed, but the architecture has been redesigned from scratch.
@@ -69,9 +69,15 @@ Python interpreter, or any language runtime. Everything goes through
 `APIUser` and enforced via `RoleMiddleware`. Admin implies instructor.
 
 **Auth is pluggable.** `AUTH_MODE` env var selects `.local` (username/password),
-`.sso` (future OIDC/OAuth), or `.dual` (both). `APIUser` carries
-`authProvider` + `externalSubject` for SSO identity. Currently only `.local`
-is implemented; the model is forward-compatible.
+`.sso` (OIDC/OAuth), or `.dual` (both active simultaneously). `APIUser` carries
+`authProvider` + `externalSubject` for SSO identity. Both `.local` and `.sso`
+are fully implemented. The OIDC flow uses Authorization Code + PKCE; the
+discovery document and JWKS are fetched at startup from `OIDC_AUTH_SERVER`.
+Role assignment uses `SSO_ADMIN_USERS` / `SSO_INSTRUCTOR_USERS` env vars
+(comma-separated identity allowlists checked against JWT claims on every login).
+The current implementation is tested against UWaterloo DUO; claim names
+(`winaccountname`, `user_id`) are in `OIDCIDTokenClaims.swift` and can be
+adjusted for other providers.
 
 **HTTPS enforcement is optional and proxy-aware.** `AppSecurityConfiguration`
 reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
@@ -280,7 +286,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.3.0**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.0**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -324,9 +330,15 @@ Post-8 work also complete:
 - v0.3.0 admin course management UI (course detail, bulk CSV enroll, unenroll, archive)
 - v0.3.0 course bundle export/import (`.chickadee` zip)
 - v0.3.0 admin courses section rework (create/edit page consolidation)
+- SSO/OIDC implementation (Authorization Code + PKCE, dual mode, role assignment via
+  allowlists, tested against UWaterloo DUO)
+- v0.4.0 test dependency trees (`dependsOn` in manifest, tree UI, runner pre-check)
+- v0.4.0 Docker Compose deployment (`Dockerfile`, `docker-compose.yml`, entrypoint,
+  nginx config, updated `deploy/README.md`)
 
-**Next work:** SSO implementation (OIDC/OAuth provider integration), gamification
-(attempt tracking, leaderboards), containerized deployment.
+**Next work:** Gamification (attempt tracking, leaderboards), multi-provider SSO
+(generalize `OIDCIDTokenClaims` claim names beyond UWaterloo DUO), refresh token
+handling / IdP token revocation on logout.
 
 ---
 
