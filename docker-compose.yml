@@ -1,0 +1,117 @@
+# Chickadee — Docker Compose
+#
+# Quick start (local / dev):
+#   cp .env.example .env
+#   # Edit .env: set RUNNER_SHARED_SECRET and any other vars you need
+#   docker compose up -d
+#   open http://localhost:8080
+#
+# Production (with nginx + HTTPS):
+#   - Set PUBLIC_BASE_URL, ENFORCE_HTTPS, SESSION_COOKIE_SECURE in .env
+#   - Uncomment the nginx service below and remove the "8080:8080" port mapping
+#   - Follow the Let's Encrypt instructions in deploy/README.md
+#
+# Scaling the runner:
+#   docker compose up -d --scale runner=3
+
+services:
+
+  # ----------------------------------------------------------------
+  # Server — Vapor API + Leaf web UI
+  # ----------------------------------------------------------------
+  server:
+    build: .
+    image: chickadee:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # remove this if using the nginx service below
+    volumes:
+      - chickadee-data:/data
+    environment:
+      # Auth mode: "local" uses username/password (good for dev and self-hosted).
+      # Switch to "sso" or "dual" and fill in OIDC_* vars for SSO.
+      AUTH_MODE:                    ${AUTH_MODE:-local}
+      ENABLE_NON_SSO_AUTH_MODES:    ${ENABLE_NON_SSO_AUTH_MODES:-true}
+
+      # Required: shared secret between server and runner.
+      # Generate one with: openssl rand -base64 32
+      RUNNER_SHARED_SECRET:         ${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET must be set in .env}
+
+      # Public URL — set to your domain in production (e.g. https://chickadee.example.com)
+      PUBLIC_BASE_URL:              ${PUBLIC_BASE_URL:-}
+      ENFORCE_HTTPS:                ${ENFORCE_HTTPS:-false}
+      SESSION_COOKIE_SECURE:        ${SESSION_COOKIE_SECURE:-false}
+
+      # OIDC / SSO — only needed when AUTH_MODE=sso or dual
+      OIDC_AUTH_SERVER:             ${OIDC_AUTH_SERVER:-}
+      OIDC_CLIENT_ID:               ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET:           ${OIDC_CLIENT_SECRET:-}
+      OIDC_CALLBACK:                ${OIDC_CALLBACK:-}
+      SSO_ADMIN_USERS:              ${SSO_ADMIN_USERS:-}
+      SSO_INSTRUCTOR_USERS:         ${SSO_INSTRUCTOR_USERS:-}
+
+      LOG_LEVEL:                    ${LOG_LEVEL:-info}
+    networks:
+      - chickadee
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ----------------------------------------------------------------
+  # Runner — polls the server for pending jobs and runs test scripts
+  # ----------------------------------------------------------------
+  runner:
+    image: chickadee:latest
+    entrypoint: ["/app/chickadee-runner"]
+    command:
+      - --api-base-url
+      - http://server:8080
+      - --worker-id
+      - runner-01
+      - --max-jobs
+      - "4"
+      # Note: --sandbox is intentionally omitted here.
+      # Docker already provides container-level process isolation.
+      # To enable OS-level sandboxing (Linux unshare namespaces),
+      # add "--sandbox" here and "cap_add: [SYS_ADMIN]" to this service.
+    environment:
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET must be set in .env}
+    networks:
+      - chickadee
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # nginx — reverse proxy with JupyterLite headers
+  #
+  # Uncomment to use nginx instead of exposing :8080 directly.
+  # Also remove the "8080:8080" port mapping from the server service.
+  # ----------------------------------------------------------------
+  # nginx:
+  #   image: nginx:alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./deploy/nginx-docker.conf:/etc/nginx/conf.d/chickadee.conf:ro
+  #     - certbot-certs:/etc/letsencrypt:ro
+  #     - certbot-www:/var/www/certbot:ro
+  #   depends_on:
+  #     - server
+  #   networks:
+  #     - chickadee
+
+volumes:
+  chickadee-data:   # SQLite database, submissions, test setups, results
+  certbot-certs:    # TLS certificates (populated by certbot — see deploy/README.md)
+  certbot-www:      # ACME HTTP-01 challenge webroot
+
+networks:
+  chickadee:
+    driver: bridge

@@ -1,4 +1,128 @@
-# Chickadee — VM Deployment Guide
+# Chickadee — Deployment Guide
+
+Two deployment paths are documented here:
+
+- **[Docker Compose](#docker-compose-deployment)** — recommended for most deployments; no Swift toolchain on the host required.
+- **[VM / systemd](#vm--systemd-deployment)** — native binaries with systemd and nginx; useful when Docker is not available.
+
+---
+
+## Docker Compose Deployment
+
+### Prerequisites
+
+- Docker Engine 24+ and Docker Compose v2 (`docker compose version`)
+- A domain name (for HTTPS / production)
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/JimWallace/Chickadee.git
+cd Chickadee
+cp .env.example .env
+```
+
+Edit `.env`:
+
+| Variable | What to set |
+|---|---|
+| `RUNNER_SHARED_SECRET` | A strong random secret: `openssl rand -base64 32` |
+| `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
+| `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
+
+### 2. Build and start
+
+```bash
+docker compose up -d --build
+```
+
+The first build compiles both Swift binaries inside the container — this takes
+5–15 minutes depending on your machine. Subsequent builds without source changes
+use the cached layers and are nearly instant.
+
+Check status:
+
+```bash
+docker compose ps
+docker compose logs -f server
+```
+
+### 3. Verify
+
+```bash
+curl http://localhost:8080/health
+# → {"status":"ok","version":"0.3.0","db":"ok","runner":{"recentActivity":false}}
+```
+
+Navigate to `http://localhost:8080` and log in to create your first admin account.
+
+### 4. Add HTTPS with Let's Encrypt (production)
+
+```bash
+# Install certbot on the host
+sudo apt install certbot
+
+# Stop nginx momentarily and issue the certificate
+docker compose stop nginx
+sudo certbot certonly --standalone -d chickadee.example.com
+docker compose start nginx
+```
+
+Then in `deploy/nginx-docker.conf`:
+1. Uncomment the HTTPS server block and replace the domain name.
+2. Add `return 301 https://$host$request_uri;` to the HTTP server block.
+
+In `docker-compose.yml`:
+- Uncomment the `nginx` service.
+- Remove the `"8080:8080"` port mapping from the `server` service.
+
+In `.env`:
+```
+PUBLIC_BASE_URL=https://chickadee.example.com
+ENFORCE_HTTPS=true
+SESSION_COOKIE_SECURE=true
+```
+
+Reload:
+```bash
+docker compose up -d
+```
+
+### 5. Updating
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+The entrypoint script automatically syncs fresh templates and JupyterLite assets
+from the new image into the data volume on each restart.
+
+### Scaling the runner
+
+```bash
+docker compose up -d --scale runner=4
+```
+
+Each runner instance gets a unique worker ID derived from its container ID.
+
+### Data persistence
+
+All persistent data lives in the `chickadee-data` named volume:
+- `chickadee.sqlite` — the database
+- `submissions/`, `testsetups/`, `results/` — uploaded files
+
+```bash
+# Back up the data volume
+docker run --rm \
+  -v chickadee_chickadee-data:/data \
+  -v $(pwd):/backup \
+  ubuntu tar czf /backup/chickadee-backup-$(date +%Y%m%d).tar.gz -C /data .
+```
+
+---
+
+## VM / systemd Deployment
 
 This guide covers a standard Linux VM deployment: native Swift binaries, systemd
 service management, and nginx as the reverse proxy.

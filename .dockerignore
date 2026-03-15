@@ -1,0 +1,41 @@
+# Swift build output — large and not needed in the build context
+.build/
+.swiftpm/
+
+# Git history — not needed, keeps context lean
+.git/
+.gitignore
+.github/
+
+# Claude workspace
+.claude/
+
+# Local dev / runtime data — never goes into the image
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.worker-secret
+.local-runner-autostart
+results/
+submissions/
+testsetups/
+
+# JupyterLite build toolchain — built output is in Public/ (already checked in)
+node_modules/
+Tools/
+
+# Tests — not compiled in the production Dockerfile
+Tests/
+
+# Documentation and deploy configs — not needed inside the image
+*.md
+CHANGELOG
+VERSION
+LICENSE
+deploy/*.service
+deploy/*.md
+scripts/
+
+# macOS noise
+.DS_Store
