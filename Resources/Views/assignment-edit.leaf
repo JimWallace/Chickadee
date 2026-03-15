@@ -62,12 +62,13 @@ Edit Assignment
                 <th>File</th>
                 <th>Test?</th>
                 <th>Tier</th>
+                <th title="Grade point weight for this test (default 1)">Pts</th>
                 <th class="time">Delete</th>
             </tr>
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)">
+            <tr data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
                 <td><span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
@@ -78,6 +79,7 @@ Edit Assignment
                         <option value="release" #if(row.tier == "release"):selected#endif>release</option>
                     </select>
                 </td>
+                <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
                 <td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>
             </tr>
             #endfor
@@ -114,7 +116,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     var body        = document.getElementById('suite-config-body');
     if (!filesInput || !configField || !body) return;
 
-    // items: { name, source, index?, isTest, tier, dependsOn[], url? }
+    // items: { name, source, index?, isTest, tier, dependsOn[], points, url? }
     var items = [];
     var dragName = null;
     var uploadCount = 0;  // running count of uploaded files added
@@ -165,6 +167,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
         var checked   = item.isTest ? ' checked' : '';
+        var pts       = item.points || 1;
         return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
             + '<td' + indent + '>'
             +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span>'
@@ -174,6 +177,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
             + '</select></td>'
+            + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>'
             + '</tr>';
     }
@@ -181,7 +185,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     function renderTree() {
         var visual = visualOrder();
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="5">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
@@ -192,10 +196,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             if (row) {
                 var tierEl   = row.querySelector('.suite-tier');
                 var toggleEl = row.querySelector('.suite-test-toggle');
+                var ptsEl    = row.querySelector('.suite-points');
                 if (tierEl)   item.tier   = tierEl.value;
                 if (toggleEl) item.isTest = toggleEl.checked && item.tier !== 'support';
+                if (ptsEl)    item.points = Math.max(1, parseInt(ptsEl.value) || 1);
             }
-            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn };
+            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1 };
             if (item.source === 'upload') { base.index = item.index; }
             else                          { base.name  = item.name;  }
             return base;
@@ -214,7 +220,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var depsRaw   = row.getAttribute('data-depends-on') || '[]';
             var dependsOn = [];
             try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
-            items.push({ name: name, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, url: url });
+            var points = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
+            items.push({ name: name, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, points: points, url: url });
         });
         renderTree();
         syncConfig();
@@ -236,7 +243,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                 index:     idx,
                 isTest:    isLikelyScript(name),
                 tier:      isLikelyScript(name) ? 'public' : 'support',
-                dependsOn: []
+                dependsOn: [],
+                points:    1
             });
         });
         renderTree();

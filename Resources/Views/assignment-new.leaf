@@ -74,6 +74,7 @@ Create Assignment
                     <th>File</th>
                     <th>Test?</th>
                     <th>Tier</th>
+                    <th title="Grade point weight for this test (default 1)">Pts</th>
                 </tr>
             </thead>
             <tbody id="suite-config-body"></tbody>
@@ -112,7 +113,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     var body        = document.getElementById('suite-config-body');
     if (!filesInput || !configField || !panel || !body) return;
 
-    // items: [{ name, index, isTest, tier, dependsOn: [] }]
+    // items: [{ name, index, isTest, tier, dependsOn: [], points: 1 }]
     // Ordered by desired root-level sequence; children group under their parent visually.
     var items = [];
     var dragName = null;
@@ -161,6 +162,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var indentStyle = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector   = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
         var checked     = item.isTest ? ' checked' : '';
+        var pts         = item.points || 1;
         return '<tr data-name="' + escAttr(item.name) + '">'
             + '<td' + indentStyle + '>'
             +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span>'
@@ -171,6 +173,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
             + '</select></td>'
+            + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '</tr>';
     }
 
@@ -184,7 +187,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         }
         panel.style.display = '';
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="3">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
@@ -195,10 +198,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             if (row) {
                 var tierEl   = row.querySelector('.suite-tier');
                 var toggleEl = row.querySelector('.suite-test-toggle');
+                var ptsEl    = row.querySelector('.suite-points');
                 if (tierEl)   item.tier   = tierEl.value;
                 if (toggleEl) item.isTest = toggleEl.checked && item.tier !== 'support';
+                if (ptsEl)    item.points = Math.max(1, parseInt(ptsEl.value) || 1);
             }
-            return { index: item.index, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn };
+            return { index: item.index, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1 };
         });
         configField.value = JSON.stringify(config);
     }
@@ -213,9 +218,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             return {
                 name:      file.name,
                 index:     idx,
-                isTest:    old ? old.isTest : isLikelyScript(file.name),
-                tier:      old ? old.tier   : (isLikelyScript(file.name) ? 'public' : 'support'),
-                dependsOn: old ? old.dependsOn.filter(function (d) { return newNames.has(d); }) : []
+                isTest:    old ? old.isTest  : isLikelyScript(file.name),
+                tier:      old ? old.tier    : (isLikelyScript(file.name) ? 'public' : 'support'),
+                dependsOn: old ? old.dependsOn.filter(function (d) { return newNames.has(d); }) : [],
+                points:    old ? old.points  : 1
             };
         });
         renderRows();
