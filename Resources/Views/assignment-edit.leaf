@@ -73,7 +73,7 @@
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 
     <p class="card-meta" style="margin-bottom:.4rem">
-        Drag &#10783; to reorder. Drag a file onto another to make it a dependent (child) test.
+        Drag ⋮⋮ to reorder. Drag a file onto another to make it a dependent (child) test.
         Drag to the strip at the bottom to remove a dependency.
     </p>
     <table class="results-table" id="suite-config-table">
@@ -89,7 +89,7 @@
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
             <tr data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td><span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
+                <td><span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
@@ -273,7 +273,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var pts       = item.points || 1;
         return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
             + '<td' + indent + '>'
-            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span>'
+            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector + label
             + '</td>'
             + '<td><input type="checkbox" class="suite-test-toggle"' + checked + '></td>'

@@ -165,7 +165,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var pts         = item.points || 1;
         return '<tr data-name="' + escAttr(item.name) + '">'
             + '<td' + indentStyle + '>'
-            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">&#10783;</span>'
+            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
             +   '<code>' + escHtml(item.name) + '</code>'
             + '</td>'
