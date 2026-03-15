@@ -3,7 +3,7 @@
 Create Assignment
 #endexport
 #export("content"):
-<h1>Create new Assignment</h1>
+<h1>Create Assignment</h1>
 
 #if(error):
 <div class="error-box" style="margin-bottom:1rem">
@@ -18,19 +18,21 @@ Create Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/assignments/new/save" enctype="multipart/form-data">
-    <label class="form-label">
-        Assignment Name
-        <input class="form-input" type="text" name="assignmentName" required
-               value="#(assignmentName)"
-               placeholder="e.g. Lab 2 - Linked Lists">
-    </label>
-
-    <label class="form-label">
-        Due Date (optional)
-        <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
-    </label>
-    <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:-.5rem;margin-bottom:.5rem"></div>
+<form class="form" method="post" action="/assignments/new/save" enctype="multipart/form-data" novalidate>
+    <div style="margin-bottom:1.25rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
+        <strong style="font-size:.875rem;display:block;margin-bottom:.6rem">Name &amp; Due Date</strong>
+        <label class="form-label" style="margin-bottom:.5rem">
+            Assignment Name
+            <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
+                   value="#(assignmentName)"
+                   placeholder="e.g. Lab 2 - Linked Lists">
+        </label>
+        <label class="form-label" style="margin:0">
+            Due Date (optional)
+            <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
+        </label>
+        <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+    </div>
 
     #if(!sections.isEmpty):
     <label class="form-label">
