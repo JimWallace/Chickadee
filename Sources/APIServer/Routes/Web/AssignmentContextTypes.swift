@@ -115,6 +115,7 @@ struct EditableSuiteRow: Encodable {
     let tier: String
     let order: Int
     let dependsOn: [String]    // script names of prerequisites; empty == none
+    let points: Int            // grade weight; 1 = default (unweighted)
 
     /// JSON-encoded `dependsOn` array for use as an HTML data attribute in Leaf templates.
     var dependsOnJSON: String {
