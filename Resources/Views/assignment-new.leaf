@@ -58,14 +58,14 @@ Create Assignment
     </label>
 
     <label class="form-label">
-        <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>)</span>
+        <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.py</code> or <code>.r</code>)</span>
         <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple required>
     </label>
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 
     <div id="suite-config-panel" style="display:none">
         <p class="card-meta" style="margin-bottom:.4rem">
-            Drag ⣿ to reorder. Drag a file onto another to make it a dependent (child) test.
+            Drag ⋮⋮ to reorder. Drag a file onto another to make it a dependent (child) test.
             Drag to the strip at the bottom to remove a dependency.
         </p>
         <table class="results-table" id="suite-config-table">
@@ -75,6 +75,7 @@ Create Assignment
                     <th>Test?</th>
                     <th>Tier</th>
                     <th title="Grade point weight for this test (default 1)">Pts</th>
+                    <th class="time">Delete</th>
                 </tr>
             </thead>
             <tbody id="suite-config-body"></tbody>
@@ -102,6 +103,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
 .suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
+.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
 </style>
 <script>
 (function () {
@@ -121,6 +123,19 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     function isLikelyScript(name) {
         var ext = (name || '').toLowerCase().split('.').pop();
         return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
+    }
+
+    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
+                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
+                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
+
+    function fileErrors(file) {
+        var errs = [];
+        var ext = (file.name || '').toLowerCase().split('.').pop();
+        if (BINARY_EXTS.indexOf(ext) >= 0) errs.push('Binary file — unlikely to work as a test script');
+        if (!file.name.includes('.'))       errs.push('No file extension');
+        if (file.size === 0)                errs.push('Empty file');
+        return errs;
     }
 
     function hasChildren(name) {
@@ -159,21 +174,26 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     }
 
     function rowHTML(item, depth) {
-        var indentStyle = depth > 0 ? ' class="suite-child-indent"' : '';
-        var connector   = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var checked     = item.isTest ? ' checked' : '';
-        var pts         = item.points || 1;
-        return '<tr data-name="' + escAttr(item.name) + '">'
-            + '<td' + indentStyle + '>'
+        var errs      = (item.errors && item.errors.length > 0) ? item.errors : [];
+        var errBadge  = errs.length > 0
+            ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
+            : '';
+        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
+        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
+        var checked   = item.isTest ? ' checked' : '';
+        var pts       = item.points || 1;
+        return '<tr draggable="true" data-name="' + escAttr(item.name) + '" data-source="upload">'
+            + '<td' + indent + '>'
             +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
-            +   '<code>' + escHtml(item.name) + '</code>'
+            +   '<code>' + escHtml(item.name) + '</code> <span class="card-meta">(new)</span>' + errBadge
             + '</td>'
             + '<td><input type="checkbox" class="suite-test-toggle"' + checked + '></td>'
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
             + '</select></td>'
             + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
+            + '<td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>'
             + '</tr>';
     }
 
@@ -187,7 +207,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         }
         panel.style.display = '';
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="5">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
@@ -217,11 +237,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var old = oldMap[file.name];
             return {
                 name:      file.name,
+                source:    'upload',
                 index:     idx,
                 isTest:    old ? old.isTest  : isLikelyScript(file.name),
                 tier:      old ? old.tier    : (isLikelyScript(file.name) ? 'public' : 'support'),
                 dependsOn: old ? old.dependsOn.filter(function (d) { return newNames.has(d); }) : [],
-                points:    old ? old.points  : 1
+                points:    old ? old.points  : 1,
+                errors:    fileErrors(file)
             };
         });
         renderRows();
@@ -230,10 +252,21 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     // --- Drag & Drop ---
 
+    // Track whether mousedown occurred on a drag handle (same pattern as assignments.leaf).
+    // dragstart's e.target is always the draggable <tr>, not the mousedown target,
+    // so closest('.suite-drag-handle') from e.target searches upward and never finds it.
+    var suiteDragHandleDown = false;
+    body.addEventListener('mousedown', function (event) {
+        var t = event.target;
+        suiteDragHandleDown = !!(t instanceof Element && t.closest('.suite-drag-handle'));
+    });
+    document.addEventListener('mouseup', function () {
+        suiteDragHandleDown = false;
+    });
+
     body.addEventListener('dragstart', function (e) {
-        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
-        var row = handle.closest('tr[data-name]');
+        if (!suiteDragHandleDown) { e.preventDefault(); return; }
+        var row = e.target.closest ? e.target.closest('tr[data-name]') : null;
         if (!row) { e.preventDefault(); return; }
         dragName = row.getAttribute('data-name');
         e.dataTransfer.effectAllowed = 'move';
@@ -312,6 +345,20 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var tIdx = items.findIndex(function (it) { return it.name === tName; });
             items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
         }
+        renderRows(); syncConfig();
+    });
+
+    // Delete button
+    body.addEventListener('click', function (event) {
+        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
+        if (!btn) return;
+        var row = btn.closest('tr[data-name]');
+        if (!row) return;
+        var name = row.getAttribute('data-name');
+        items = items.filter(function (it) { return it.name !== name; });
+        items.forEach(function (it) {
+            it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; });
+        });
         renderRows(); syncConfig();
     });
 
