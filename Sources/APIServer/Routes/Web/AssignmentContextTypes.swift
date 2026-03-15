@@ -114,6 +114,13 @@ struct EditableSuiteRow: Encodable {
     let isTest: Bool
     let tier: String
     let order: Int
+    let dependsOn: [String]    // script names of prerequisites; empty == none
+
+    /// JSON-encoded `dependsOn` array for use as an HTML data attribute in Leaf templates.
+    var dependsOnJSON: String {
+        let data = (try? JSONEncoder().encode(dependsOn)) ?? Data("[]".utf8)
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
 }
 
 struct AssignmentStudentHistoryContext: Encodable {

@@ -19,9 +19,25 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 
 /// Entry for a single test in the manifest.
 /// `script` is the filename/path of a runnable test script in the test setup zip.
+/// `dependsOn` is an optional list of other `script` names that must pass before
+/// this test is executed. If any dependency did not pass, this test is auto-failed.
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
     public let script: String      // e.g. "01_public.py"
+    public let dependsOn: [String] // script names of prerequisites; empty == no deps
+
+    public init(tier: TestTier, script: String, dependsOn: [String] = []) {
+        self.tier      = tier
+        self.script    = script
+        self.dependsOn = dependsOn
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c     = try decoder.container(keyedBy: CodingKeys.self)
+        tier      = try c.decode(TestTier.self,    forKey: .tier)
+        script    = try c.decode(String.self,      forKey: .script)
+        dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+    }
 }
 
 /// Optional Makefile step to run before tests.
