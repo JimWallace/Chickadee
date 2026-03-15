@@ -44,6 +44,8 @@ final class TestSetupEditTests: XCTestCase {
         app.migrations.add(CreateResults())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
+        app.migrations.add(AddCourseSections())
+        app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
         try routes(app)

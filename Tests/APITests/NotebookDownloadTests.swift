@@ -55,6 +55,8 @@ final class NotebookDownloadTests: XCTestCase {
         app.migrations.add(CreateResults())
         app.migrations.add(CreateAssignments())
         app.migrations.add(CreatePerformanceIndexes())
+        app.migrations.add(AddCourseSections())
+        app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
         try routes(app)
@@ -386,11 +388,11 @@ final class NotebookDownloadTests: XCTestCase {
 
         XCTAssertFalse(savedSubID.isEmpty)
 
-        // Exactly ONE submission must exist in the DB (browser-complete), no pending re-run.
+        // Exactly ONE submission must exist in the DB (complete), no pending re-run.
         let allSubs = try await APISubmission.query(on: app.db).all()
         XCTAssertEqual(allSubs.count, 1, "Only one submission record should be created")
-        XCTAssertEqual(allSubs[0].status, "browser-complete",
-                       "The single submission should have status 'browser-complete'")
+        XCTAssertEqual(allSubs[0].status, "complete",
+                       "The single submission should have status 'complete'")
         XCTAssertFalse(
             allSubs.contains(where: { $0.status == "pending" }),
             "No pending worker re-run submission should exist"
