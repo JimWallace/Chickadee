@@ -2,50 +2,106 @@
 
 # Chickadee
 
-A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student code submission and autograding system. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
+A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student code submission and autograding system originally built at the University of Maryland. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
 
+---
 
 ## What it does
 
-Chickadee accepts student code submissions, runs instructor-defined test suites, and returns structured JSON results. Test suites are plain shell scripts — no language-specific code paths exist in Swift. Adding support for a new language or framework means writing a new shell script; no Swift changes are required.
+Chickadee accepts student code submissions, runs instructor-defined test suites, and returns structured results. Test suites are plain shell scripts — no language-specific code paths exist in Swift. Adding support for a new language means writing a new shell script; no Swift changes required.
 
-## Major improvements over Marmoset
+**Students** submit code or notebooks through a web UI, see graded results immediately, and track their submission history per assignment.
 
-- **Improved UI.** Chickadee ships with a modern web UI for students and instructors, including dashboards, submission history, assignment management, and readable per-test results.
-- **More efficient networking path.** Runner communication is a focused JSON API with lightweight polling and artifact transfer, keeping the server/runner protocol simple and operationally efficient.
-- **Notebook workflow in-site.** Instructors and students can work with notebooks directly in Chickadee via embedded JupyterLite flows, instead of relying on separate external tooling.
-- **Runner safety by design.** Runners support sandboxed execution with resource constraints, helping isolate untrusted code and bound runtime usage.
+**Instructors** create assignments, upload test-setup zips, manage courses and enrollment, and view per-student results and grade exports.
 
+**Admins** manage courses, users, runner configuration, and can trigger retests.
+
+---
+
+## Key features
+
+- **Shell-script test suites.** Any language, any framework — the runner executes `.sh` files and maps the exit code to `pass / fail / error / timeout`. Helper libraries are bundled in the test-setup zip by the instructor.
+- **Test dependency trees.** Tests can declare prerequisites (`dependsOn`). If a prerequisite doesn't pass, dependent tests are automatically skipped rather than run against broken code.
+- **Four test tiers.** `public` results are shown immediately; `release` results are hidden until the assignment deadline; `secret` results are never shown; `student` results come from student-written tests.
+- **In-browser notebook grading.** A full JupyterLite instance is embedded for both student submission and instructor assignment creation — no separate tooling required.
+- **Sandboxed execution.** The runner supports OS-level sandboxing (`sandbox-exec` on macOS, `unshare` namespaces on Linux) to isolate untrusted code.
+- **Pluggable auth.** Local username/password for development and self-hosting; OIDC/SSO (Duo, Okta, Entra, etc.) for institutional deployments. Controlled by the `AUTH_MODE` environment variable.
+- **HMAC-signed runner protocol.** All runner↔server requests are signed with a shared secret. The server auto-generates a diceware passphrase if none is provided.
+
+---
 
 ## Architecture
 
 Three Swift targets share a clean dependency boundary:
 
 ```
-┌─────────────────────────────────────────┐
-│             chickadee-server            │
-│  REST API (Vapor) + Leaf web UI         │
-└──────────────────┬──────────────────────┘
-                   │  SQLite (Fluent)
-┌──────────────────▼──────────────────────┐
-│             chickadee-runner            │
-│  Polls for jobs → ScriptRunner          │
-│  Reports TestOutcomeCollection to API   │
-└──────────────────┬──────────────────────┘
-                   │  subprocess (sandboxed)
+┌───────────────────────────────────────────┐
+│             chickadee-server              │
+│   REST API (Vapor) + Leaf web UI          │
+│   Auth, assignment management,            │
+│   submission intake, result storage,      │
+│   JupyterLite notebook workflow           │
+└──────────────────┬────────────────────────┘
+                   │  HTTP (HMAC-signed)
+┌──────────────────▼────────────────────────┐
+│             chickadee-runner              │
+│   Polls for jobs → downloads artifacts    │
+│   → ScriptRunner → TestOutcomeCollection  │
+└──────────────────┬────────────────────────┘
+                   │  subprocess (optionally sandboxed)
         ┌──────────┴──────────┐
         ▼                     ▼
   test_public.sh        test_release.sh
   (instructor-written shell scripts)
 ```
 
-**Core** — shared models with no Vapor dependency. Both targets depend on this.
+**Core** — shared models (`TestOutcome`, `TestProperties`, etc.) with no Vapor dependency. Both targets depend on this.
 
-**Shell scripts, not language runners.** Each test suite is a `.sh` file at the root of the instructor's test-setup zip. The runner executes them maps the exit code to a result. Any helper library (Python, Java, etc.) is bundled inside the zip by the instructor.
+The server and runner can run on the same host or on separate machines. Multiple runner instances can poll the same server concurrently.
 
 ---
 
-## Building
+## Deployment
+
+### Docker (recommended)
+
+No Swift toolchain required on the host. The multi-stage `Dockerfile` compiles both binaries inside a build container and produces a minimal Ubuntu runtime image (~150 MB).
+
+```bash
+git clone https://github.com/JimWallace/Chickadee.git
+cd Chickadee
+
+cp .env.example .env
+# Edit .env: set RUNNER_SHARED_SECRET (required) and any other vars
+
+docker compose up -d --build
+```
+
+The first build compiles Swift — expect 5–15 minutes. Subsequent builds with no source changes use the cached layers and are nearly instant.
+
+```bash
+# Verify
+curl http://localhost:8080/health
+
+# View logs
+docker compose logs -f server
+
+# Scale to more runner workers
+docker compose up -d --scale runner=4
+
+# Update after a git pull
+docker compose up -d --build
+```
+
+For HTTPS, nginx, and production configuration see **[deploy/README.md](deploy/README.md)**.
+
+### VM / systemd
+
+Install Swift via [`swiftly`](https://swift.org/install/linux), build release binaries, and manage them as systemd services with nginx as a reverse proxy. See **[deploy/README.md](deploy/README.md)** for step-by-step instructions, service files, and certbot setup.
+
+---
+
+## Local development
 
 Requires Swift 6 ([swift.org](https://swift.org/download)) and Xcode 16+ on macOS.
 
@@ -54,71 +110,88 @@ swift build
 swift test
 ```
 
-Run the API server:
+Run the server:
 
 ```bash
-swift run chickadee-server serve --port 8080 --worker-secret your-secret
+# AUTH_MODE defaults to SSO; override for local dev:
+AUTH_MODE=local ENABLE_NON_SSO_AUTH_MODES=true \
+  swift run chickadee-server serve --port 8080 --worker-secret dev-secret
 ```
 
-Run the runner, pointing it at a running API server:
+Run the runner against the local server:
 
 ```bash
-export RUNNER_SHARED_SECRET=your-secret
-swift run chickadee-runner \
-  --api-base-url http://localhost:8080 \
-  --worker-id    worker-1 \
-  --max-jobs     4
-
-# With sandboxing enabled (recommended for production):
-swift run chickadee-runner \
-  --api-base-url http://localhost:8080 \
-  --worker-id    worker-1 \
-  --sandbox
+RUNNER_SHARED_SECRET=dev-secret \
+  swift run chickadee-runner \
+    --api-base-url http://localhost:8080 \
+    --worker-id    local-runner \
+    --max-jobs     2
 ```
 
-`swift run` is a development convenience that builds and runs in one step. For production, build a release binary once and invoke it directly — no Swift toolchain is needed at runtime:
+The admin dashboard also supports a **local runner autostart** toggle that spawns a runner subprocess automatically — useful for development without a second terminal.
 
-```bash
-swift build -c release
-.build/release/chickadee-server serve --port 8080 --worker-secret your-secret
-RUNNER_SHARED_SECRET=your-secret .build/release/chickadee-runner --api-base-url http://api:8080 --worker-id runner-1 --sandbox
+---
+
+## Test script contract
+
+Each test suite is a shell script in the instructor's test-setup zip.
+
+| Exit code | Result |
+|-----------|--------|
+| `0` | `pass` |
+| `1` | `fail` |
+| `2` | `error` |
+| killed after timeout | `timeout` |
+
+**stdout:** The last non-empty line is parsed as JSON for optional `score` and `shortResult` fields. If it isn't valid JSON, it's used as plain-text `shortResult`.
+
+**stderr:** Captured verbatim as `longResult`.
+
+### Test dependency trees
+
+Tests can declare prerequisites in `test.properties.json`:
+
+```json
+{
+  "testSuites": [
+    { "tier": "public",  "script": "test_build.sh" },
+    { "tier": "public",  "script": "test_unit.sh",       "dependsOn": ["test_build.sh"] },
+    { "tier": "release", "script": "test_integration.sh", "dependsOn": ["test_build.sh"] }
+  ]
+}
 ```
 
-## Versioning
+If `test_build.sh` doesn't pass, `test_unit.sh` and `test_integration.sh` are automatically recorded as `fail` with `shortResult: "Skipped: prerequisite 'test_build.sh' did not pass"` — no wasted execution time on a broken build.
 
-Chickadee follows Semantic Versioning in the `0.y.z` phase:
+---
 
-- `0.y.0`: feature or behavior milestones.
-- `0.y.z`: backward-compatible bug fixes.
-- Breaking changes may still occur between `0.x` releases, but are documented in `CHANGELOG.md`.
+## JupyterLite
 
-Current project version: see [`VERSION`](VERSION).
-
-Release checklist:
-
-```bash
-# 1) Update VERSION, CHANGELOG.md, and any version references.
-# 2) Run tests.
-scripts/check-version.sh
-swift test
-
-# 3) Create an annotated release tag.
-git tag -a vX.Y.Z -m "Chickadee vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-## JupyterLite rebuilds
-
-`Public/jupyterlite` is generated output. The source-of-truth config and version pins live in:
-
-- `Tools/jupyterlite/jupyter-lite.json`
-- `Tools/jupyterlite/requirements.txt`
-
-Rebuild commands:
+`Public/jupyterlite/` is generated output and is checked in. Source-of-truth config lives in `Tools/jupyterlite/`. Rebuild only when updating kernel versions or config:
 
 ```bash
 scripts/setup-jupyterlite.sh
 scripts/build-jupyterlite.sh
 ```
 
-The build script keeps runtime notebook storage directories (`Public/jupyterlite/files`, `Public/jupyterlite/lab/files`, `Public/jupyterlite/notebooks/files`) while refreshing generated assets.
+---
+
+## Versioning
+
+Chickadee follows Semantic Versioning in the `0.y.z` phase. Current version: see [`VERSION`](VERSION).
+
+- `0.y.0` — feature milestones
+- `0.y.z` — backward-compatible fixes
+- Breaking changes are documented in [`CHANGELOG.md`](CHANGELOG.md)
+
+Release checklist:
+
+```bash
+# 1) Update VERSION and CHANGELOG.md
+scripts/check-version.sh
+swift test
+
+# 2) Tag
+git tag -a vX.Y.Z -m "Chickadee vX.Y.Z"
+git push origin vX.Y.Z
+```
