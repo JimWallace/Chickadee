@@ -1,10 +1,8 @@
 #extend("base"):
 #export("title"):
-Edit Assignment
+#(assignmentName)
 #endexport
 #export("content"):
-<h1>Edit Assignment</h1>
-
 #if(error):
 <div class="error-box" style="margin-bottom:1rem">
     <h2>Could not update assignment</h2>
@@ -18,19 +16,38 @@ Edit Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/assignments/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
-    <label class="form-label">
-        Assignment Name
-        <input class="form-input" type="text" name="assignmentName" required
-               value="#(assignmentName)"
-               placeholder="e.g. Lab 2 - Linked Lists">
-    </label>
+<!-- View mode header (outside form) -->
+<div id="assign-header-view" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <h1 style="margin:0">#(assignmentName)</h1>
+    <span class="card-meta" id="assign-due-display" style="font-size:.9rem"></span>
+    <button class="btn-link" id="assign-edit-toggle" type="button"
+            title="Edit name and due date" aria-label="Edit assignment name and due date"
+            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+    </button>
+</div>
 
-    <label class="form-label">
-        Due Date (optional)
-        <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
-    </label>
-    <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:-.5rem;margin-bottom:.5rem"></div>
+<form class="form" method="post" action="/assignments/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
+    <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
+    <div id="assign-header-edit" style="display:none;margin-bottom:1.25rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
+        <div style="display:flex;align-items:center;margin-bottom:.6rem">
+            <strong style="font-size:.875rem">Name &amp; Due Date</strong>
+            <button class="btn-link" id="assign-edit-cancel" type="button"
+                    aria-label="Cancel" title="Cancel"
+                    style="margin-left:auto;font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+        </div>
+        <label class="form-label" style="margin-bottom:.5rem">
+            Assignment Name
+            <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
+                   value="#(assignmentName)"
+                   placeholder="e.g. Lab 2 - Linked Lists">
+        </label>
+        <label class="form-label" style="margin:0">
+            Due Date (optional)
+            <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
+        </label>
+        <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+    </div>
 
     <div class="form-label">
         <span style="white-space:nowrap">Assignment Notebook (<a href="#(currentAssignmentURL)"><code>#(currentAssignmentFile)</code></a>)</span>
@@ -47,9 +64,12 @@ Edit Assignment
     </div>
 
     <label class="form-label">
-        <span style="white-space:nowrap">Add Test Suite Files (scripts/support files like <code>.sh</code> or <code>.py</code>)</span>
+        <span style="white-space:nowrap">Add Test Suite Files (scripts/support files like <code>.py</code> or <code>.r</code>)</span>
         <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple>
     </label>
+    <div id="upload-errors" style="display:none;margin-top:-.4rem;margin-bottom:.5rem;padding:.5rem .75rem;border-radius:.4rem;border:1px solid var(--red,#c0392b);background:var(--error-bg,#fff5f5)">
+        <ul id="upload-errors-list" style="margin:0;padding-left:1.2rem;font-size:.85rem;color:var(--red,#c0392b)"></ul>
+    </div>
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 
     <p class="card-meta" style="margin-bottom:.4rem">
@@ -111,6 +131,59 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 (function () {
     'use strict';
 
+    // ── Header view/edit toggle ────────────────────────────────────────────────
+    var headerView   = document.getElementById('assign-header-view');
+    var headerEdit   = document.getElementById('assign-header-edit');
+    var toggleBtn    = document.getElementById('assign-edit-toggle');
+    var cancelBtn    = document.getElementById('assign-edit-cancel');
+    var nameInput    = document.getElementById('assignmentNameInput');
+    var dueInput     = document.getElementById('dueAt');
+    var dueDisplay   = document.getElementById('assign-due-display');
+
+    function formatDueDate(val) {
+        if (!val) return 'No deadline';
+        // datetime-local format: "2024-03-15T09:00"
+        var d = new Date(val);
+        if (isNaN(d.getTime())) return val.replace('T', '\u2002');
+        return 'Due\u00a0' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+            + '\u00a0at\u00a0' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    }
+
+    function refreshDueDisplay() {
+        if (dueDisplay) dueDisplay.textContent = dueInput ? formatDueDate(dueInput.value) : '';
+    }
+
+    if (toggleBtn && headerView && headerEdit) {
+        toggleBtn.addEventListener('click', function () {
+            headerView.style.display = 'none';
+            headerEdit.style.display = '';
+            if (nameInput) { nameInput.focus(); nameInput.select(); }
+        });
+    }
+
+    if (cancelBtn && headerView && headerEdit) {
+        cancelBtn.addEventListener('click', function () {
+            headerEdit.style.display = 'none';
+            headerView.style.display = '';
+            refreshDueDisplay();
+        });
+    }
+
+    if (dueInput) {
+        dueInput.addEventListener('change', function () {
+            refreshDueDisplay();
+            checkUWDates(dueInput.value, document.getElementById('uw-date-warning'));
+        });
+    }
+
+    // Initialise the due-date display on load
+    refreshDueDisplay();
+    if (dueInput && dueInput.value) {
+        checkUWDates(dueInput.value, document.getElementById('uw-date-warning'));
+    }
+
+    // ── Suite file management ─────────────────────────────────────────────────
+
     var filesInput  = document.getElementById('suite-files-input');
     var configField = document.getElementById('suite-config-field');
     var body        = document.getElementById('suite-config-body');
@@ -124,6 +197,36 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     function isLikelyScript(name) {
         var ext = (name || '').toLowerCase().split('.').pop();
         return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
+    }
+
+    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
+                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
+                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
+
+    function validateUploads(files, existingNames) {
+        var errors = [];
+        files.forEach(function (file) {
+            var ext = (file.name || '').toLowerCase().split('.').pop();
+            if (BINARY_EXTS.indexOf(ext) >= 0) {
+                errors.push('\u201c' + escHtml(file.name) + '\u201d looks like a binary file and is unlikely to work as a test script.');
+            }
+            if (!file.name.includes('.')) {
+                errors.push('\u201c' + escHtml(file.name) + '\u201d has no file extension.');
+            }
+            if (file.size === 0) {
+                errors.push('\u201c' + escHtml(file.name) + '\u201d is empty.');
+            }
+        });
+        var errDiv  = document.getElementById('upload-errors');
+        var errList = document.getElementById('upload-errors-list');
+        if (!errDiv || !errList) return;
+        if (errors.length > 0) {
+            errList.innerHTML = errors.map(function (e) { return '<li>' + e + '</li>'; }).join('');
+            errDiv.style.display = '';
+        } else {
+            errDiv.style.display = 'none';
+            errList.innerHTML = '';
+        }
     }
 
     function hasChildren(name) {
@@ -230,6 +333,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     // Add newly uploaded files to the items list (appended as root items)
     function addUploadedFiles() {
         var files = Array.from(filesInput.files || []);
+        validateUploads(files, new Set(items.filter(function (it) { return it.source !== 'upload'; }).map(function (it) { return it.name; })));
         // Remove previously added upload items (re-add fresh)
         items = items.filter(function (it) { return it.source !== 'upload'; });
         var existingNames = new Set(items.map(function (it) { return it.name; }));
@@ -361,26 +465,18 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     initFromDOM();
 
-    // UWaterloo important-date proximity warning
-    (function () {
-        var dueAtInput = document.getElementById('dueAt');
-        var warning    = document.getElementById('uw-date-warning');
-        if (!dueAtInput || !warning) return;
-        dueAtInput.addEventListener('change', function () { checkUWDates(dueAtInput.value, warning); });
-        if (dueAtInput.value) { checkUWDates(dueAtInput.value, warning); }
-    })();
 })();
 </script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
-    if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
+    if (!dateTimeValue) { if (warningEl) warningEl.style.display = 'none'; return; }
     var selected = new Date(dateTimeValue);
-    if (isNaN(selected.getTime())) { warningEl.style.display = 'none'; return; }
+    if (isNaN(selected.getTime())) { if (warningEl) warningEl.style.display = 'none'; return; }
     fetch('/api/v1/uw-dates').then(function (resp) {
         if (!resp.ok) return;
         return resp.json();
     }).then(function (dates) {
-        if (!dates) return;
+        if (!dates || !warningEl) return;
         var threeDays = 3 * 86400000;
         var near = dates.filter(function (d) {
             var start = new Date(d.startDate);
