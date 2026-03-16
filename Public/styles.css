@@ -381,6 +381,7 @@ textarea.form-input {
 .results-table .due-col {
     text-align: left;
     white-space: nowrap;
+    width: 11rem;
 }
 
 /* Status colour strips */
