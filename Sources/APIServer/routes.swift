@@ -37,6 +37,7 @@ func routes(_ app: Application) throws {
 
     let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor))
     try instructor.register(collection: AssignmentRoutes())
+    try instructor.register(collection: MarmosetImportRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())
     try instructor.register(collection: UWDatesRoute())
@@ -46,5 +47,4 @@ func routes(_ app: Application) throws {
     let admin = app.grouped(sessionAuth, RoleMiddleware(required: .admin))
     try admin.register(collection: AdminRoutes())
     try admin.register(collection: CourseBundleRoutes())
-    try admin.register(collection: MarmosetImportRoutes())
 }

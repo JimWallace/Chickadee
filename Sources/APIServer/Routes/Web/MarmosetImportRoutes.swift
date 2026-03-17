@@ -1,11 +1,14 @@
 // APIServer/Routes/Web/MarmosetImportRoutes.swift
 //
-// Marmoset export import routes (admin only).
+// Marmoset export import routes (instructor+).
 //
-//   GET  /admin/courses/:courseID/import-marmoset              — upload form
-//   POST /admin/courses/:courseID/import-marmoset              — process import
-//   GET  /admin/courses/:courseID/import-marmoset/canonical/:setupID
-//                                                               — download stored canonical zip
+//   GET  /assignments/import-marmoset              — upload form
+//   POST /assignments/import-marmoset              — process import
+//   GET  /assignments/import-marmoset/canonical/:setupID
+//                                                   — download stored canonical zip
+//
+// Both form routes accept an optional ?sectionID= / sectionID body field to
+// place the imported assignment(s) into an existing section.
 //
 // Import rules:
 //   - One assignment is created per project found in the export.
@@ -23,58 +26,62 @@ import Foundation
 
 struct MarmosetImportRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        let r = routes.grouped("admin", "courses", ":courseID", "import-marmoset")
+        let r = routes.grouped("assignments", "import-marmoset")
         r.get(use: importForm)
         r.post(use: processImport)
         r.get("canonical", ":setupID", use: downloadCanonical)
     }
 
-    // MARK: - GET /admin/courses/:courseID/import-marmoset
+    // MARK: - GET /assignments/import-marmoset
 
     @Sendable
     func importForm(req: Request) async throws -> View {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isAdmin else { throw Abort(.forbidden) }
+        guard caller.isInstructor else { throw Abort(.forbidden) }
 
-        guard let courseIDStr = req.parameters.get("courseID"),
-              let courseUUID  = UUID(uuidString: courseIDStr),
-              let course      = try await APICourse.find(courseUUID, on: req.db)
-        else { throw Abort(.notFound, reason: "Course not found") }
+        let courseState = try await req.resolveActiveCourse(for: caller)
+        guard let course = courseState.active else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+
+        let sectionIDRaw = req.query[String.self, at: "sectionID"]
 
         struct ImportFormContext: Encodable {
             let currentUser: CurrentUserContext?
-            let courseID: String
             let courseCode: String
             let courseName: String
+            let sectionID: String?
             let error: String?
         }
 
-        let errorMsg = req.query[String.self, at: "error"]
         return try await req.view.render("marmoset-import", ImportFormContext(
             currentUser: req.currentUserContext,
-            courseID:    courseIDStr,
             courseCode:  course.code,
             courseName:  course.name,
-            error:       errorMsg
+            sectionID:   sectionIDRaw,
+            error:       req.query[String.self, at: "error"]
         ))
     }
 
-    // MARK: - POST /admin/courses/:courseID/import-marmoset
+    // MARK: - POST /assignments/import-marmoset
 
     @Sendable
     func processImport(req: Request) async throws -> View {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isAdmin else { throw Abort(.forbidden) }
+        guard caller.isInstructor else { throw Abort(.forbidden) }
 
-        guard let courseIDStr = req.parameters.get("courseID"),
-              let courseUUID  = UUID(uuidString: courseIDStr),
-              let course      = try await APICourse.find(courseUUID, on: req.db)
-        else { throw Abort(.notFound, reason: "Course not found") }
+        let courseState = try await req.resolveActiveCourse(for: caller)
+        guard let course = courseState.active,
+              let courseUUID = courseState.activeCourseUUID
+        else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
 
-        // ── 1. Receive uploaded zip ────────────────────────────────────
+        // ── 1. Receive uploaded zip + optional sectionID ───────────────
 
         struct MarmosetUpload: Content {
             let file: File
+            let sectionID: String?
         }
         let upload = try req.content.decode(MarmosetUpload.self)
         var buffer = upload.file.data
@@ -83,6 +90,9 @@ struct MarmosetImportRoutes: RouteCollection {
         else {
             throw Abort(.badRequest, reason: "Empty file uploaded")
         }
+
+        let resolvedSectionID: UUID? = try await resolveSectionID(
+            upload.sectionID, courseID: courseUUID, db: req.db)
 
         // ── 2. Save to temp file and extract ──────────────────────────
 
@@ -133,14 +143,10 @@ struct MarmosetImportRoutes: RouteCollection {
             try await extractZipArchive(zipPath: innerZipPath, into: stagingDir)
 
             // Remove Marmoset-specific files that have no place in Chickadee.
-            let filesToRemove = ["test.properties"]
-            for name in filesToRemove {
-                let path = stagingDir.appendingPathComponent(name)
-                try? FileManager.default.removeItem(at: path)
-            }
-            // Remove __MACOSX resource fork directory if present.
-            let macosx = stagingDir.appendingPathComponent("__MACOSX")
-            try? FileManager.default.removeItem(at: macosx)
+            try? FileManager.default.removeItem(
+                at: stagingDir.appendingPathComponent("test.properties"))
+            try? FileManager.default.removeItem(
+                at: stagingDir.appendingPathComponent("__MACOSX"))
 
             let setupZipPath = setupsDir + "\(setupID).zip"
             try await createZipArchive(sourceDir: stagingDir, outputPath: setupZipPath)
@@ -213,7 +219,7 @@ struct MarmosetImportRoutes: RouteCollection {
                 sortOrder: try await nextAssignmentSortOrder(req: req),
                 validationStatus: nil,
                 validationSubmissionID: nil,
-                sectionID: nil,
+                sectionID: resolvedSectionID,
                 courseID: courseUUID
             )
 
@@ -233,7 +239,6 @@ struct MarmosetImportRoutes: RouteCollection {
 
         struct ResultContext: Encodable {
             let currentUser: CurrentUserContext?
-            let courseID: String
             let courseCode: String
             let courseName: String
             let assignments: [ImportedAssignment]
@@ -241,31 +246,24 @@ struct MarmosetImportRoutes: RouteCollection {
 
         return try await req.view.render("marmoset-import-result", ResultContext(
             currentUser:  req.currentUserContext,
-            courseID:     courseIDStr,
             courseCode:   course.code,
             courseName:   course.name,
             assignments:  imported
         ))
     }
 
-    // MARK: - GET /admin/courses/:courseID/import-marmoset/canonical/:setupID
+    // MARK: - GET /assignments/import-marmoset/canonical/:setupID
 
     @Sendable
     func downloadCanonical(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isAdmin else { throw Abort(.forbidden) }
-
-        guard let courseIDStr = req.parameters.get("courseID"),
-              let courseUUID  = UUID(uuidString: courseIDStr)
-        else { throw Abort(.badRequest) }
+        guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("setupID"),
               setupID.hasPrefix("setup_")
         else { throw Abort(.badRequest) }
 
-        // Verify the test setup belongs to this course.
-        guard let setup = try await APITestSetup.find(setupID, on: req.db),
-              setup.courseID == courseUUID
+        guard try await APITestSetup.find(setupID, on: req.db) != nil
         else { throw Abort(.notFound) }
 
         let canonicalPath = req.application.testSetupsDirectory + "\(setupID)-canonical.zip"

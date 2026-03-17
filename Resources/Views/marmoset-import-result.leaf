@@ -1,6 +1,6 @@
 #extend("base"):
 #export("title"):
-Marmoset import result — #(courseCode) — Admin
+Marmoset import result — #(courseCode)
 #endexport
 #export("content"):
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap">
@@ -42,7 +42,7 @@ Marmoset import result — #(courseCode) — Admin
                     <a href="/assignments/#(a.publicID)/validate" class="btn action-btn btn-primary">Validate</a>
                     <a href="/assignments/#(a.publicID)/edit" class="btn action-btn">Edit</a>
                     #if(a.hasCanonical):
-                    <a href="/admin/courses/#(courseID)/import-marmoset/canonical/#(a.setupID)"
+                    <a href="/assignments/import-marmoset/canonical/#(a.setupID)"
                        class="btn action-btn">Download canonical</a>
                     #endif
                 </td>
@@ -54,8 +54,7 @@ Marmoset import result — #(courseCode) — Admin
 
     <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap">
         <a href="/assignments" class="btn btn-primary">Assignments</a>
-        <a href="/admin/courses/#(courseID)" class="btn">Course detail</a>
-        <a href="/admin/courses/#(courseID)/import-marmoset" class="btn">Import another</a>
+        <a href="/assignments/import-marmoset" class="btn">Import another</a>
     </div>
 </section>
 

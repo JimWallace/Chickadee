@@ -58,6 +58,8 @@
             </button>
             <a class="btn action-btn" href="/assignments/new?sectionID=#(section.sectionID)"
                style="font-size:.8rem;padding:.2rem .55rem;margin-left:auto">+ Create New</a>
+            <a class="btn action-btn" href="/assignments/import-marmoset?sectionID=#(section.sectionID)"
+               style="font-size:.8rem;padding:.2rem .55rem">Import from Marmoset</a>
         </div>
 
         <!-- Edit mode (hidden by default) -->
