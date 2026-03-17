@@ -54,6 +54,7 @@
                     onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">Archive</button>
             #endif
         </form>
+        <a href="/admin/courses/#(course.id)/import-marmoset" class="btn">Import from Marmoset</a>
         <a href="/admin/courses/#(course.id)/export" class="btn">Export bundle</a>
     </div>
 </div>

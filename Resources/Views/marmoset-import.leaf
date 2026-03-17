@@ -1,0 +1,73 @@
+#extend("base"):
+#export("title"):
+Import from Marmoset — #(courseCode) — Admin
+#endexport
+#export("content"):
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap">
+    <h1 style="margin:0">Import from Marmoset</h1>
+    <span style="color:var(--text-secondary)">#(courseCode) — #(courseName)</span>
+</div>
+
+#if(error):
+<div class="form-error" style="margin-bottom:1rem">#(error)</div>
+#endif
+
+<section class="admin-section">
+    <h2>Upload Marmoset export</h2>
+    <p style="margin-bottom:1rem;color:var(--text-secondary);font-size:.9rem">
+        Upload a Marmoset course export zip (e.g. <code>COURSE-export.zip</code>).
+        One assignment will be created for each project found in the archive.
+        Assignments will be closed and require validation before opening.
+    </p>
+    <form method="post"
+          action="/admin/courses/#(courseID)/import-marmoset"
+          enctype="multipart/form-data"
+          style="display:flex;flex-direction:column;gap:1rem;max-width:480px">
+        <label class="form-label">
+            Marmoset export zip
+            <input class="form-input" type="file" name="file" accept=".zip" required
+                   style="display:block;margin-top:.25rem">
+        </label>
+        <div style="display:flex;gap:.75rem">
+            <button class="btn btn-primary" type="submit">Import</button>
+            <a href="/admin/courses/#(courseID)" class="btn">Cancel</a>
+        </div>
+    </form>
+</section>
+
+<section class="admin-section" style="margin-top:1.5rem">
+    <h2>What gets imported</h2>
+    <table class="results-table" style="max-width:640px">
+        <thead>
+            <tr>
+                <th>Marmoset file</th>
+                <th>Chickadee action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>&lt;n&gt;-test-setup.zip</code></td>
+                <td>Creates a test setup. <code>test.properties</code> is converted to a Chickadee manifest; all other files are kept.</td>
+            </tr>
+            <tr>
+                <td><code>&lt;n&gt;-canonical.zip</code></td>
+                <td>Stored for download. Use it on the validate page to run the test suite against the reference solution.</td>
+            </tr>
+            <tr>
+                <td><code>&lt;n&gt;-project-starter-files.zip</code></td>
+                <td>If a <code>.ipynb</code> is found, it becomes the JupyterLite notebook for the assignment.</td>
+            </tr>
+            <tr>
+                <td><code>&lt;n&gt;.project.out</code></td>
+                <td>Assignment title is extracted if possible; otherwise defaults to "Imported Assignment N".</td>
+            </tr>
+        </tbody>
+    </table>
+    <p style="margin-top:.75rem;color:var(--text-secondary);font-size:.85rem">
+        After import, edit each assignment to set <strong>requiredFiles</strong>
+        (the file students must submit) and then run validation before opening.
+    </p>
+</section>
+
+#endexport
+#endextend
