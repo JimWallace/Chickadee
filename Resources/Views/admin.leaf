@@ -4,33 +4,32 @@ Admin
 #endexport
 #export("content"):
 <section class="admin-section">
-    <h2>Runners</h2>
-    <form method="post" action="/admin/runner-secret" style="max-width:700px">
-        <label class="form-label">
-            Runner shared secret
-            <div style="display:flex;gap:.5rem;align-items:center">
-                <input class="form-input"
-                       type="text"
-                       name="secret"
-                       value="#(workerSecret)"
-                       autocomplete="off"
-                       style="flex:1">
-                <button class="btn" type="submit">Save</button>
-            </div>
-        </label>
-    </form>
-    <form method="post" action="/admin/runner-autostart" style="margin-top:.75rem;max-width:700px">
-        <label class="form-label" style="display:inline-flex;flex-direction:row;align-items:center;gap:.5rem;white-space:nowrap">
-            <input type="checkbox"
-                   name="localRunnerAutoStart"
-                   onchange="this.form.submit()"
-                   #if(localRunnerAutoStartEnabled):checked#endif>
-            <span>Auto-start one local runner when none are connected</span>
-        </label>
-    </form>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:.75rem">
+            <h2 style="margin:0">Runners</h2>
+            <form method="post" action="/admin/runner-autostart">
+                <label style="display:inline-flex;align-items:center;gap:.4rem;white-space:nowrap;font-size:.875rem;cursor:pointer">
+                    <input type="checkbox"
+                           name="localRunnerAutoStart"
+                           onchange="this.form.submit()"
+                           #if(localRunnerAutoStartEnabled):checked#endif>
+                    Auto-start local
+                </label>
+            </form>
+        </div>
+        <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
+            <input class="form-input"
+                   type="text"
+                   name="secret"
+                   value="#(workerSecret)"
+                   autocomplete="off"
+                   placeholder="Worker shared secret"
+                   style="width:16rem">
+            <button class="btn" type="submit">Save secret</button>
+        </form>
+    </div>
 
-    <div style="margin-top:1rem">
-        <table id="workers-table" class="results-table">
+    <table id="workers-table" class="results-table">
             <thead>
                 <tr>
                     <th>Runner</th>
@@ -52,7 +51,6 @@ Admin
             #endfor
             </tbody>
         </table>
-    </div>
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
