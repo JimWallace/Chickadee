@@ -656,6 +656,21 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // Build a stem→displayName map from the current manifest so the page
+        // shows friendly names for both new submissions (where the runner already
+        // embedded the name) and old ones (where testName is still the filename stem).
+        var displayNameMap: [String: String] = [:]
+        if let setup = try? await APITestSetup.find(submission.testSetupID, on: req.db),
+           let manifestData = setup.manifest.data(using: .utf8),
+           let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData) {
+            for entry in props.testSuites {
+                guard let displayName = entry.name,
+                      !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                let stem = (entry.script as NSString).deletingPathExtension
+                displayNameMap[stem.isEmpty ? entry.script : stem] = displayName
+            }
+        }
+
         if let result = displayResult {
             resultSource = result.source ?? "worker"
             if let data       = result.collectionJSON.data(using: .utf8),
@@ -697,7 +712,7 @@ struct WebRoutes: RouteCollection {
                     }()
                     let pointsLabel: String? = weighted && o.points > 1 ? "\(o.points) pts" : nil
                     return OutcomeRow(
-                        testName:       o.testName,
+                        testName:       displayNameMap[o.testName] ?? o.testName,
                         tier:           o.tier.rawValue,
                         status:         o.status.rawValue,
                         shortResult:    o.shortResult,
