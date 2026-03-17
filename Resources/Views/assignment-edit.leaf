@@ -76,8 +76,7 @@
     <table class="results-table" id="suite-config-table">
         <thead>
             <tr>
-                <th>File</th>
-                <th title="Optional display name shown to students instead of the filename">Name</th>
+                <th title="Student-facing name (edit to override the filename)">Name</th>
                 <th>Test?</th>
                 <th>Tier</th>
                 <th title="Grade point weight for this test (default 1)">Pts</th>
@@ -87,8 +86,11 @@
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
             <tr draggable="true" data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td><span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
-                <td><input type="text" class="form-input suite-display-name" placeholder="e.g. Bit Count" value="#(row.displayNameOrEmpty)" style="width:10rem;padding:.25rem .5rem;font-size:.8rem"></td>
+                <td>
+                    <span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>
+                    <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
+                    <div class="suite-file-hint"><a href="#(row.url)"><code>#(row.name)</code></a></div>
+                </td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
@@ -126,6 +128,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
 .suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
 .suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
+.suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
+.suite-file-hint a { color: inherit; }
 </style>
 <script>
 (function () {
@@ -243,25 +247,34 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         }).join('');
     }
 
+    function stemOf(filename) {
+        var dot = filename.lastIndexOf('.');
+        return dot > 0 ? filename.slice(0, dot) : filename;
+    }
+
     function rowHTML(item, depth) {
-        var isNew     = item.source === 'upload';
-        var errs      = (item.errors && item.errors.length > 0) ? item.errors : [];
-        var errBadge  = errs.length > 0
+        var isNew    = item.source === 'upload';
+        var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
+        var errBadge = errs.length > 0
             ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
             : '';
-        var label     = isNew ? '<code>' + escHtml(item.name) + '</code> <span class="card-meta">(new)</span>' + errBadge
-                               : '<a href="' + escAttr(item.url || '#') + '"><code>' + escHtml(item.name) + '</code></a>';
+        // File link shown below the name input as a hint
+        var fileHint = isNew
+            ? '<div class="suite-file-hint"><code>' + escHtml(item.name) + '</code> <span class="card-meta">(new)</span>' + errBadge + '</div>'
+            : '<div class="suite-file-hint"><a href="' + escAttr(item.url || '#') + '"><code>' + escHtml(item.name) + '</code></a></div>';
         var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var checked     = item.isTest ? ' checked' : '';
-        var pts         = item.points || 1;
-        var displayName = escAttr(item.displayName || '');
+        var checked   = item.isTest ? ' checked' : '';
+        var pts       = item.points || 1;
+        // Default input value to display name if set, otherwise the filename stem
+        var nameVal   = escAttr(item.displayName || stemOf(item.name));
         return '<tr draggable="true" data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
             + '<td' + indent + '>'
             +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
-            +   connector + label
+            +   connector
+            +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
+            +   fileHint
             + '</td>'
-            + '<td><input type="text" class="form-input suite-display-name" placeholder="e.g. Bit Count" value="' + displayName + '" style="width:10rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td><input type="checkbox" class="suite-test-toggle"' + checked + '></td>'
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
@@ -274,7 +287,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     function renderTree() {
         var visual = visualOrder();
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="6">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="5">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
@@ -290,7 +303,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                 if (tierEl)        item.tier        = tierEl.value;
                 if (toggleEl)      item.isTest      = toggleEl.checked && item.tier !== 'support';
                 if (ptsEl)         item.points      = Math.max(1, parseInt(ptsEl.value) || 1);
-                if (displayNameEl) item.displayName = displayNameEl.value.trim();
+                if (displayNameEl) {
+                    var val = displayNameEl.value.trim();
+                    // Null out when the instructor left the default (equals the filename stem)
+                    item.displayName = (val && val !== stemOf(item.name)) ? val : null;
+                }
             }
             var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
             if (item.source === 'upload') { base.index = item.index; }
