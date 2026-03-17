@@ -3,9 +3,14 @@
 #(assignmentTitle) — Submissions
 #endexport
 #export("content"):
-<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
     <h1 style="margin:0">#(assignmentTitle)</h1>
-    <a class="btn action-btn" href="/assignments">Back to Instructor</a>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <input id="submissions-filter" class="form-input" type="search"
+               placeholder="Filter by name or ID…"
+               style="width:220px" aria-label="Filter students">
+        <a class="btn action-btn" href="/assignments">Back to Instructor</a>
+    </div>
 </div>
 
 #if(rows.isEmpty):
@@ -153,6 +158,18 @@
     });
 
     sortByHeader(headers[0], 'asc');
+
+    var filter = document.getElementById('submissions-filter');
+    if (filter && tbody) {
+        filter.addEventListener('input', function () {
+            var query = filter.value.trim().toLowerCase();
+            Array.from(tbody.querySelectorAll('tr')).forEach(function (row) {
+                if (!query) { row.hidden = false; return; }
+                var text = (row.textContent || '').toLowerCase();
+                row.hidden = !text.includes(query);
+            });
+        });
+    }
 })();
 </script>
 #endexport

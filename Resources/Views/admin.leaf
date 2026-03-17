@@ -122,11 +122,11 @@ Admin
 
 <!-- ── Users ──────────────────────────────────────────── -->
 <section class="admin-section">
-    <h2>Users</h2>
-    <div style="margin-bottom:.75rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">Users</h2>
         <input id="users-filter" class="form-input" type="search"
                placeholder="Filter by name, username or role…"
-               style="max-width:340px" aria-label="Filter users">
+               style="width:280px" aria-label="Filter users">
     </div>
     <table class="results-table" id="users-table">
         <thead>
