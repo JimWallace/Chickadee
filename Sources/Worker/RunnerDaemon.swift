@@ -179,8 +179,9 @@ actor WorkerDaemon {
             if let blockedBy = entry.dependsOn.first(where: { !passedScripts.contains($0) }),
                !entry.dependsOn.isEmpty {
                 let baseName = (entry.script as NSString).deletingPathExtension
+                let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
                 let skipped = TestOutcome(
-                    testName:           baseName.isEmpty ? entry.script : baseName,
+                    testName:           displayName ?? (baseName.isEmpty ? entry.script : baseName),
                     testClass:          nil,
                     tier:               entry.tier,
                     status:             .fail,
@@ -274,9 +275,10 @@ actor WorkerDaemon {
             return sections.joined(separator: "\n\n")
         }()
         let baseName = (entry.script as NSString).deletingPathExtension
+        let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
 
         return TestOutcome(
-            testName:           baseName.isEmpty ? entry.script : baseName,
+            testName:           displayName ?? (baseName.isEmpty ? entry.script : baseName),
             testClass:          nil,
             tier:               entry.tier,
             status:             status,

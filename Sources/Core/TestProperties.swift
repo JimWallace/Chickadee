@@ -19,18 +19,23 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 
 /// Entry for a single test in the manifest.
 /// `script` is the filename/path of a runnable test script in the test setup zip.
+/// `name` is an optional human-readable display name shown to students. When absent,
+/// the display name falls back to the script filename without its extension.
 /// `dependsOn` is an optional list of other `script` names that must pass before
 /// this test is executed. If any dependency did not pass, this test is auto-failed.
 /// `points` is the integer weight used for grade calculation (default 1).
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
     public let script: String       // e.g. "01_public.py"
+    public let name: String?        // optional display name shown to students
     public let dependsOn: [String]  // script names of prerequisites; empty == no deps
     public let points: Int          // grade weight; 1 = default (unweighted)
 
-    public init(tier: TestTier, script: String, dependsOn: [String] = [], points: Int = 1) {
+    public init(tier: TestTier, script: String, name: String? = nil,
+                dependsOn: [String] = [], points: Int = 1) {
         self.tier      = tier
         self.script    = script
+        self.name      = name
         self.dependsOn = dependsOn
         self.points    = points
     }
@@ -39,6 +44,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         let c     = try decoder.container(keyedBy: CodingKeys.self)
         tier      = try c.decode(TestTier.self,    forKey: .tier)
         script    = try c.decode(String.self,      forKey: .script)
+        name      = try c.decodeIfPresent(String.self,   forKey: .name)
         dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
         points    = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
     }

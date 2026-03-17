@@ -43,7 +43,7 @@ Submission #(submissionID)
 <table class="results-table">
     <thead>
         <tr>
-            <th>Script</th>
+            <th>Test</th>
             <th>Tier</th>
             <th>Output</th>
             #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">Δ</th>#endif
