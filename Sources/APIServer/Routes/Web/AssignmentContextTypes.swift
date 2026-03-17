@@ -118,6 +118,9 @@ struct EditableSuiteRow: Encodable {
     let points: Int            // grade weight; 1 = default (unweighted)
     let displayName: String?   // optional human-readable name shown to students
 
+    /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
+    var displayNameOrEmpty: String { displayName ?? "" }
+
     /// JSON-encoded `dependsOn` array for use as an HTML data attribute in Leaf templates.
     var dependsOnJSON: String {
         let data = (try? JSONEncoder().encode(dependsOn)) ?? Data("[]".utf8)
