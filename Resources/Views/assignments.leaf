@@ -387,6 +387,9 @@
         </form>
         #endif
         #endif
+        <input id="enrolled-filter" class="form-input" type="search"
+               placeholder="Filter by name or username…"
+               style="width:220px;margin-left:auto" aria-label="Filter enrolled students">
     </div>
     #if(hasEnrolledStudents):
     <table class="results-table" id="enrolled-students-table">
@@ -791,6 +794,18 @@ tr.assignment-draggable td {
                 rows.forEach(function (row) { tbody.appendChild(row); });
             });
         });
+
+        var enrolledFilter = document.getElementById('enrolled-filter');
+        if (enrolledFilter) {
+            var enrolledTbody = enrolledTable.querySelector('tbody');
+            enrolledFilter.addEventListener('input', function () {
+                var query = enrolledFilter.value.trim().toLowerCase();
+                Array.from(enrolledTbody.querySelectorAll('tr')).forEach(function (row) {
+                    if (!query) { row.hidden = false; return; }
+                    row.hidden = !(row.textContent || '').toLowerCase().includes(query);
+                });
+            });
+        }
     }
 })();
 </script>
