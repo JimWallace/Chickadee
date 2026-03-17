@@ -86,9 +86,9 @@
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr draggable="true" data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayName ?? "")" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
+            <tr draggable="true" data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
                 <td><span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
-                <td><input type="text" class="form-input suite-display-name" placeholder="e.g. Bit Count" value="#(row.displayName ?? "")" style="width:10rem;padding:.25rem .5rem;font-size:.8rem"></td>
+                <td><input type="text" class="form-input suite-display-name" placeholder="e.g. Bit Count" value="#(row.displayNameOrEmpty)" style="width:10rem;padding:.25rem .5rem;font-size:.8rem"></td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
