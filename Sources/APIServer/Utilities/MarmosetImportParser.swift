@@ -113,7 +113,7 @@ func parseJavaProperties(_ data: Data) -> [String: String] {
                     String(data: data, encoding: .isoLatin1) else { return [:] }
 
     var result: [String: String] = [:]
-    var lines = raw.components(separatedBy: .newlines)
+    let lines = raw.components(separatedBy: .newlines)
     var i = 0
 
     while i < lines.count {
