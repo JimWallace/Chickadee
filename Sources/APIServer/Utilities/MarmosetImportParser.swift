@@ -31,9 +31,25 @@ struct MarmosetProject: Sendable {
 /// one `MarmosetProject` per project number found.
 ///
 /// `extractedDir` is the directory produced by extracting the outer export zip.
-func parseMarmosetExport(from extractedDir: URL) throws -> [MarmosetProject] {
+/// Returns the resolved directory (unwrapping a single top-level subdirectory if present)
+/// and the parsed projects. The caller should use the returned URL when building paths
+/// into the archive (e.g. to locate inner zips).
+func parseMarmosetExport(from extractedDir: URL) throws -> (projectsDir: URL, projects: [MarmosetProject]) {
     let fm = FileManager.default
-    let entries = try fm.contentsOfDirectory(atPath: extractedDir.path)
+    var entries = try fm.contentsOfDirectory(atPath: extractedDir.path)
+
+    // If the zip extracted into a single subdirectory (common when the archive
+    // was created with a top-level folder), descend into it automatically.
+    let realEntries = entries.filter { $0 != "__MACOSX" && !$0.hasPrefix(".") }
+    var searchDir = extractedDir
+    if realEntries.count == 1 {
+        let candidate = extractedDir.appendingPathComponent(realEntries[0])
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: candidate.path, isDirectory: &isDir), isDir.boolValue {
+            searchDir = candidate
+            entries = (try? fm.contentsOfDirectory(atPath: candidate.path)) ?? []
+        }
+    }
 
     // Find project numbers by looking for "<n>-test-setup.zip".
     let projectNumbers: [Int] = entries.compactMap { name -> Int? in
@@ -42,9 +58,10 @@ func parseMarmosetExport(from extractedDir: URL) throws -> [MarmosetProject] {
         return Int(prefix)
     }.sorted()
 
-    return try projectNumbers.map { n in
-        try parseProject(number: n, in: extractedDir, entries: entries)
+    let projects = try projectNumbers.map { n in
+        try parseProject(number: n, in: searchDir, entries: entries)
     }
+    return (projectsDir: searchDir, projects: projects)
 }
 
 // MARK: - Per-project parsing
@@ -52,7 +69,8 @@ func parseMarmosetExport(from extractedDir: URL) throws -> [MarmosetProject] {
 private func parseProject(number n: Int, in dir: URL, entries: [String]) throws -> MarmosetProject {
     let fm = FileManager.default
     let testSetupZip = dir.appendingPathComponent("\(n)-test-setup.zip").path
-    let projectOutPath = dir.appendingPathComponent("\(n).project.out").path
+    // Marmoset names this file "<n>-project.out" (dash), not "<n>.project.out".
+    let projectOutPath = dir.appendingPathComponent("\(n)-project.out").path
 
     // ── 1. List inner zip contents ─────────────────────────────────────
 
@@ -240,7 +258,7 @@ func convertToChickadeeManifest(project: MarmosetProject) throws -> String {
         "requiredFiles": [],
         "testSuites":    suites,
         "timeLimitSeconds": 10,
-        "makefile": project.hasMakefile ? ["target": NSNull()] : NSNull()
+        "makefile": NSNull()  // Marmoset Makefiles are stripped; runner handles .ipynb→.py natively
     ]
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
@@ -283,4 +301,19 @@ func firstNotebookInZip(zipPath: String) throws -> String? {
 /// The filename is the last path component match (for nested paths).
 func extractNotebookFromZip(zipPath: String, filename: String) throws -> Data? {
     return try extractFileFromZip(zipPath: zipPath, filename: filename)
+}
+
+/// Extracts the first non-hidden file from a canonical zip.
+/// Returns the file data, its extension, and original filename, or `nil` if none found.
+func extractSolutionFromCanonicalZip(zipPath: String) throws -> (data: Data, ext: String, originalFilename: String)? {
+    let entries = try listZipContents(zipPath: zipPath)
+    guard let entry = entries.first(where: { e in
+        let name = (e as NSString).lastPathComponent
+        return !name.hasPrefix(".") && !name.isEmpty
+    }) else { return nil }
+    let filename = (entry as NSString).lastPathComponent
+    let ext = (filename as NSString).pathExtension.lowercased()
+    guard let data = try extractFileFromZip(zipPath: zipPath, filename: filename),
+          !data.isEmpty else { return nil }
+    return (data: data, ext: ext, originalFilename: filename)
 }

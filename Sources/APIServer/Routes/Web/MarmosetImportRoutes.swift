@@ -29,7 +29,6 @@ struct MarmosetImportRoutes: RouteCollection {
         let r = routes.grouped("assignments", "import-marmoset")
         r.get(use: importForm)
         r.post(use: processImport)
-        r.get("canonical", ":setupID", use: downloadCanonical)
     }
 
     // MARK: - GET /assignments/import-marmoset
@@ -66,12 +65,12 @@ struct MarmosetImportRoutes: RouteCollection {
     // MARK: - POST /assignments/import-marmoset
 
     @Sendable
-    func processImport(req: Request) async throws -> View {
+    func processImport(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         guard caller.isInstructor else { throw Abort(.forbidden) }
 
         let courseState = try await req.resolveActiveCourse(for: caller)
-        guard let course = courseState.active,
+        guard courseState.active != nil,
               let courseUUID = courseState.activeCourseUUID
         else {
             throw Abort(.badRequest, reason: "No active course selected.")
@@ -111,9 +110,10 @@ struct MarmosetImportRoutes: RouteCollection {
 
         // ── 3. Parse projects ──────────────────────────────────────────
 
+        let projectsDir: URL
         let projects: [MarmosetProject]
         do {
-            projects = try parseMarmosetExport(from: extractDir)
+            (projectsDir, projects) = try parseMarmosetExport(from: extractDir)
         } catch {
             throw Abort(.badRequest, reason: "Failed to parse Marmoset export: \(error)")
         }
@@ -124,8 +124,6 @@ struct MarmosetImportRoutes: RouteCollection {
 
         // ── 4. Import each project ─────────────────────────────────────
 
-        var imported: [ImportedAssignment] = []
-
         for project in projects {
             let n = project.number
             let setupsDir = req.application.testSetupsDirectory
@@ -133,7 +131,7 @@ struct MarmosetImportRoutes: RouteCollection {
 
             // ── 4a. Build the Chickadee test setup zip ─────────────────
 
-            let innerZipPath = extractDir.appendingPathComponent("\(n)-test-setup.zip").path
+            let innerZipPath = projectsDir.appendingPathComponent("\(n)-test-setup.zip").path
             guard FileManager.default.fileExists(atPath: innerZipPath) else { continue }
 
             let stagingDir = FileManager.default.temporaryDirectory
@@ -143,15 +141,52 @@ struct MarmosetImportRoutes: RouteCollection {
             try await extractZipArchive(zipPath: innerZipPath, into: stagingDir)
 
             // Remove Marmoset-specific files that have no place in Chickadee.
-            try? FileManager.default.removeItem(
-                at: stagingDir.appendingPathComponent("test.properties"))
-            try? FileManager.default.removeItem(
-                at: stagingDir.appendingPathComponent("__MACOSX"))
+            // The Makefile (jupyter nbconvert) is redundant — the runner's
+            // extractNotebooksToCode() handles .ipynb → .py/.R natively.
+            for name in ["test.properties", "Makefile", "__MACOSX"] {
+                try? FileManager.default.removeItem(
+                    at: stagingDir.appendingPathComponent(name))
+            }
+
+            // ── 4b. Inject solution.ipynb from canonical zip (if any) ──
+
+            var canonicalSolution: (data: Data, originalFilename: String)? = nil
+            let canonicalSrcPath = projectsDir.appendingPathComponent("\(n)-canonical.zip").path
+            if FileManager.default.fileExists(atPath: canonicalSrcPath),
+               let solution = try? extractSolutionFromCanonicalZip(zipPath: canonicalSrcPath) {
+                let solutionExt = solution.ext.isEmpty ? "py" : solution.ext
+                let solutionFilename = "solution.\(solutionExt)"
+                try solution.data.write(to: stagingDir.appendingPathComponent(solutionFilename))
+                canonicalSolution = (data: solution.data, originalFilename: solution.originalFilename)
+            }
+            let hasCanonical = canonicalSolution != nil
+
+            // ── 4c. Inject assignment.ipynb from starter files (if any) ─
+
+            var notebookPath: String? = nil
+            let starterZipPath = projectsDir.appendingPathComponent("\(n)-project-starter-files.zip").path
+            if FileManager.default.fileExists(atPath: starterZipPath),
+               let starterFilename = try? firstNotebookInZip(zipPath: starterZipPath),
+               let starterData = try? extractNotebookFromZip(zipPath: starterZipPath,
+                                                             filename: starterFilename) {
+                let normalized = normalizeNotebookForJupyterLite(starterData)
+                // Into the zip as assignment.ipynb (canonical name Chickadee uses).
+                try normalized.write(to: stagingDir.appendingPathComponent("assignment.ipynb"))
+                // Also persist to the notebooks/ directory so the JupyterLite route can serve it.
+                let notebookDir = setupsDir + "notebooks/\(setupID)/"
+                try FileManager.default.createDirectory(atPath: notebookDir,
+                                                        withIntermediateDirectories: true)
+                let nbPath = notebookDir + "assignment.ipynb"
+                try normalized.write(to: URL(fileURLWithPath: nbPath))
+                notebookPath = nbPath
+            }
+
+            // ── 4d. Create the Chickadee test setup zip ────────────────
 
             let setupZipPath = setupsDir + "\(setupID).zip"
             try await createZipArchive(sourceDir: stagingDir, outputPath: setupZipPath)
 
-            // ── 4b. Build the manifest ─────────────────────────────────
+            // ── 4e. Build the manifest ─────────────────────────────────
 
             let manifestJSON: String
             do {
@@ -167,36 +202,7 @@ struct MarmosetImportRoutes: RouteCollection {
                 continue
             }
 
-            // ── 4c. Store the canonical zip ────────────────────────────
-
-            var hasCanonical = false
-            let canonicalSrcPath = extractDir.appendingPathComponent("\(n)-canonical.zip").path
-            if FileManager.default.fileExists(atPath: canonicalSrcPath) {
-                let canonicalDstPath = setupsDir + "\(setupID)-canonical.zip"
-                try? FileManager.default.copyItem(
-                    atPath: canonicalSrcPath,
-                    toPath: canonicalDstPath
-                )
-                hasCanonical = FileManager.default.fileExists(atPath: canonicalDstPath)
-            }
-
-            // ── 4d. Extract starter notebook (if any) ─────────────────
-
-            var notebookPath: String? = nil
-            let starterZipPath = extractDir.appendingPathComponent("\(n)-project-starter-files.zip").path
-            if FileManager.default.fileExists(atPath: starterZipPath),
-               let notebookFilename = try? firstNotebookInZip(zipPath: starterZipPath),
-               let notebookData = try? extractNotebookFromZip(zipPath: starterZipPath, filename: notebookFilename) {
-                let normalized = normalizeNotebookForJupyterLite(notebookData)
-                let notebookDir = setupsDir + "notebooks/\(setupID)/"
-                try FileManager.default.createDirectory(atPath: notebookDir,
-                                                        withIntermediateDirectories: true)
-                let nbPath = notebookDir + notebookFilename
-                try normalized.write(to: URL(fileURLWithPath: nbPath))
-                notebookPath = nbPath
-            }
-
-            // ── 4e. Save test setup to DB ──────────────────────────────
+            // ── 4f. Save test setup to DB ──────────────────────────────
 
             let setup = APITestSetup(
                 id: setupID,
@@ -207,7 +213,7 @@ struct MarmosetImportRoutes: RouteCollection {
             )
             try await setup.save(on: req.db)
 
-            // ── 4f. Create the assignment ──────────────────────────────
+            // ── 4g. Create assignment and enqueue validation ───────────
 
             let title = project.suggestedTitle ?? "Imported Assignment \(n)"
             let assignment = try await createAssignmentWithUniquePublicID(
@@ -217,76 +223,26 @@ struct MarmosetImportRoutes: RouteCollection {
                 dueAt: nil,
                 isOpen: false,
                 sortOrder: try await nextAssignmentSortOrder(req: req),
-                validationStatus: nil,
+                validationStatus: hasCanonical ? "pending" : nil,
                 validationSubmissionID: nil,
                 sectionID: resolvedSectionID,
                 courseID: courseUUID
             )
 
-            imported.append(ImportedAssignment(
-                title:        title,
-                publicID:     assignment.publicID,
-                setupID:      setupID,
-                suiteCount:   totalSuites,
-                hasCanonical: hasCanonical,
-                hasNotebook:  notebookPath != nil
-            ))
+            if let canonical = canonicalSolution {
+                let validationSubID = try await enqueueRunnerValidationSubmission(
+                    req: req, setupID: setupID, solutionNotebookData: canonical.data,
+                    filename: canonical.originalFilename)
+                assignment.validationSubmissionID = validationSubID
+                try await assignment.save(on: req.db)
+            }
 
             req.logger.info("Marmoset import: created assignment '\(title)' (setup \(setupID)) for course \(courseUUID)")
         }
 
-        // ── 5. Render result page ──────────────────────────────────────
+        // ── 5. Kick the runner and redirect ───────────────────────────
 
-        struct ResultContext: Encodable {
-            let currentUser: CurrentUserContext?
-            let courseCode: String
-            let courseName: String
-            let assignments: [ImportedAssignment]
-        }
-
-        return try await req.view.render("marmoset-import-result", ResultContext(
-            currentUser:  req.currentUserContext,
-            courseCode:   course.code,
-            courseName:   course.name,
-            assignments:  imported
-        ))
+        await ensureValidationRunnerAvailability(req: req)
+        return req.redirect(to: "/assignments")
     }
-
-    // MARK: - GET /assignments/import-marmoset/canonical/:setupID
-
-    @Sendable
-    func downloadCanonical(req: Request) async throws -> Response {
-        let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
-
-        guard let setupID = req.parameters.get("setupID"),
-              setupID.hasPrefix("setup_")
-        else { throw Abort(.badRequest) }
-
-        guard try await APITestSetup.find(setupID, on: req.db) != nil
-        else { throw Abort(.notFound) }
-
-        let canonicalPath = req.application.testSetupsDirectory + "\(setupID)-canonical.zip"
-        guard FileManager.default.fileExists(atPath: canonicalPath),
-              let zipData = try? Data(contentsOf: URL(fileURLWithPath: canonicalPath))
-        else { throw Abort(.notFound, reason: "Canonical zip not found") }
-
-        var headers = HTTPHeaders()
-        headers.add(name: .contentType, value: "application/zip")
-        headers.add(name: .contentDisposition,
-                    value: "attachment; filename=\"\(setupID)-canonical.zip\"")
-        headers.add(name: .contentLength, value: "\(zipData.count)")
-        return Response(status: .ok, headers: headers, body: .init(data: zipData))
-    }
-}
-
-// MARK: - Supporting types
-
-struct ImportedAssignment: Encodable, Sendable {
-    let title: String
-    let publicID: String
-    let setupID: String
-    let suiteCount: Int
-    let hasCanonical: Bool
-    let hasNotebook: Bool
 }

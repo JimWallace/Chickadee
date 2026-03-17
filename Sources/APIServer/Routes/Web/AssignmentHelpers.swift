@@ -236,10 +236,10 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
 
     let archiveFiles = listZipEntries(zipPath: setup.zipPath)
     let solutionFile: CurrentFileLink? = {
-        if archiveFiles.contains("solution.ipynb") {
+        if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }) {
             return CurrentFileLink(
-                name: "solution.ipynb",
-                url: "/assignments/\(assignmentID)/files/item?name=solution.ipynb"
+                name: solutionEntry,
+                url: "/assignments/\(assignmentID)/files/item?name=\(urlEncode(solutionEntry))"
             )
         }
         if hasValidationSolution {
@@ -249,7 +249,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
     }()
 
     let nonNotebookFiles = archiveFiles
-        .filter { $0 != "assignment.ipynb" && $0 != "solution.ipynb" }
+        .filter { $0 != "assignment.ipynb" && !$0.hasPrefix("solution.") }
         .sorted { lhs, rhs in
             let l = testMap[lhs]?.order ?? Int.max
             let r = testMap[rhs]?.order ?? Int.max
@@ -296,6 +296,7 @@ func listZipEntries(zipPath: String) -> [String] {
         .split(separator: "\n")
         .map(String.init)
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .map { $0.hasPrefix("./") ? String($0.dropFirst(2)) : $0 }
         .filter { !$0.isEmpty && !$0.hasSuffix("/") }
 }
 
@@ -839,11 +840,13 @@ private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [Configur
 func enqueueRunnerValidationSubmission(
     req: Request,
     setupID: String,
-    solutionNotebookData: Data
+    solutionNotebookData: Data,
+    filename: String = "solution.ipynb"
 ) async throws -> String {
     let submissionsDir = req.application.submissionsDirectory
     let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-    let filePath = submissionsDir + "\(subID).ipynb"
+    let ext = (filename as NSString).pathExtension
+    let filePath = submissionsDir + "\(subID).\(ext)"
     try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
 
     let priorCount = try await APISubmission.query(on: req.db)
@@ -857,7 +860,7 @@ func enqueueRunnerValidationSubmission(
         testSetupID:   setupID,
         zipPath:       filePath,
         attemptNumber: priorCount + 1,
-        filename:      "solution.ipynb",
+        filename:      filename,
         userID:        user.id,
         kind:          APISubmission.Kind.validation
     )

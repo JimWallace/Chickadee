@@ -46,6 +46,24 @@ struct ResultRoutes: RouteCollection {
         if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {
             submission.status = "complete"
             try await submission.save(on: req.db)
+
+            // If this is a validation submission, update the assignment's validationStatus
+            // so the instructor sees pass/fail without needing to poll.
+            if submission.kind == APISubmission.Kind.validation {
+                let passed = collection.buildStatus == .passed
+                    && collection.failCount == 0
+                    && collection.errorCount == 0
+                    && collection.timeoutCount == 0
+                let status = passed ? "passed" : "failed"
+
+                if let assignment = try await APIAssignment.query(on: req.db)
+                    .filter(\.$validationSubmissionID == submission.id!)
+                    .first() {
+                    assignment.validationStatus = status
+                    try await assignment.save(on: req.db)
+                    req.logger.info("Validation \(status) for assignment '\(assignment.title)' (submission \(submission.id!))")
+                }
+            }
         }
 
         return ReportResponse(received: true)
