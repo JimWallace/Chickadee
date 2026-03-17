@@ -121,6 +121,14 @@ struct EditableSuiteRow: Encodable {
     /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
     var displayNameOrEmpty: String { displayName ?? "" }
 
+    /// Display name if set, otherwise the filename stem (extension stripped).
+    /// Used as the default value of the name input in the assignment editor.
+    var displayNameOrStem: String {
+        if let n = displayName, !n.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return n }
+        let stem = (name as NSString).deletingPathExtension
+        return stem.isEmpty ? name : stem
+    }
+
     /// JSON-encoded `dependsOn` array for use as an HTML data attribute in Leaf templates.
     var dependsOnJSON: String {
         let data = (try? JSONEncoder().encode(dependsOn)) ?? Data("[]".utf8)
