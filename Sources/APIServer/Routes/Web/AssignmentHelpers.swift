@@ -13,6 +13,7 @@ import Foundation
 struct EditSuiteConfigRow: Decodable {
     let source: String?
     let name: String?
+    let displayName: String?   // optional human-readable name shown to students
     let index: Int?
     let isIncluded: Bool?
     let isTest: Bool?
@@ -29,6 +30,7 @@ struct ReindexedSuiteConfigRow: Encodable {
     let order: Int?
     let dependsOn: [String]?   // script names of prerequisites
     let points: Int            // grade weight; 1 = default (unweighted)
+    let displayName: String?   // optional human-readable name shown to students
 }
 
 struct ResolvedEditSuiteFiles {
@@ -43,6 +45,7 @@ struct SuiteConfigRow: Decodable {
     let order: Int?
     let dependsOn: [String]?   // script names of prerequisites
     let points: Int?           // grade weight; nil decoded as 1
+    let displayName: String?   // optional human-readable name shown to students
 }
 
 struct ConfiguredSuiteEntry {
@@ -51,6 +54,7 @@ struct ConfiguredSuiteEntry {
     let order: Int
     let dependsOn: [String]    // script names of prerequisites; empty == none
     let points: Int            // grade weight; 1 = default (unweighted)
+    let displayName: String?   // optional human-readable name shown to students
 }
 
 struct RunnerSetupPackage {
@@ -218,13 +222,14 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
         )
     }()
 
-    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int)] = {
+    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return []
         }
         return props.testSuites.enumerated().map { (idx, item) in
-            (script: item.script, tier: item.tier.rawValue, order: idx + 1, dependsOn: item.dependsOn, points: item.points)
+            (script: item.script, tier: item.tier.rawValue, order: idx + 1,
+             dependsOn: item.dependsOn, points: item.points, name: item.name)
         }
     }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
@@ -261,7 +266,8 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
             tier: entry?.tier ?? "support",
             order: entry?.order ?? (idx + 1),
             dependsOn: entry?.dependsOn ?? [],
-            points: entry?.points ?? 1
+            points: entry?.points ?? 1,
+            displayName: entry?.name
         )
     }
 
@@ -356,14 +362,14 @@ func resolveEditSuiteFiles(
         var configRows: [ReindexedSuiteConfigRow] = []
         var nextOrder = 1
 
-        let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int)] = {
+        let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
             guard let data = setupManifestJSON.data(using: .utf8),
                   let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
                 return [:]
             }
-            var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int)] = [:]
+            var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = [:]
             for (idx, entry) in props.testSuites.enumerated() {
-                map[entry.script] = (entry.tier.rawValue, idx + 1, entry.dependsOn, entry.points)
+                map[entry.script] = (entry.tier.rawValue, idx + 1, entry.dependsOn, entry.points, entry.name)
             }
             return map
         }()
@@ -382,7 +388,8 @@ func resolveEditSuiteFiles(
                 tier: tier,
                 order: testInfo?.order ?? nextOrder,
                 dependsOn: testInfo?.dependsOn,
-                points: testInfo?.points ?? 1
+                points: testInfo?.points ?? 1,
+                displayName: testInfo?.name
             ))
             nextOrder += 1
         }
@@ -405,7 +412,8 @@ func resolveEditSuiteFiles(
                 tier: likelyTest ? "public" : "support",
                 order: nextOrder,
                 dependsOn: nil,
-                points: 1
+                points: 1,
+                displayName: nil
             ))
             nextOrder += 1
         }
@@ -461,7 +469,8 @@ func resolveEditSuiteFiles(
             tier: tier,
             order: row.order ?? nextOrder,
             dependsOn: row.dependsOn,
-            points: row.points ?? 1
+            points: row.points ?? 1,
+            displayName: row.displayName
         ))
         nextOrder += 1
     }
@@ -695,7 +704,8 @@ func buildSuiteEntries(
                 tier: tier,
                 order: row.order ?? (index + 1),
                 dependsOn: row.dependsOn ?? [],
-                points: row.points ?? 1
+                points: row.points ?? 1,
+                displayName: row.displayName
             ))
         }
         return selected
@@ -717,7 +727,8 @@ func buildSuiteEntries(
             tier: "public",
             order: inferredOrder(from: script) ?? (index + 1),
             dependsOn: [],
-            points: 1
+            points: 1,
+            displayName: nil
         ))
     }
     return defaults
@@ -759,6 +770,9 @@ func makeWorkerManifestJSON(
 
     let testSuiteJSON: [[String: Any]] = sorted.map { entry in
         var dict: [String: Any] = ["tier": entry.tier, "script": entry.script]
+        if let n = entry.displayName, !n.isEmpty {
+            dict["name"] = n
+        }
         if !entry.dependsOn.isEmpty {
             dict["dependsOn"] = entry.dependsOn
         }

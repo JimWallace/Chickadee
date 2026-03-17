@@ -77,6 +77,7 @@
         <thead>
             <tr>
                 <th>File</th>
+                <th title="Optional display name shown to students instead of the filename">Name</th>
                 <th>Test?</th>
                 <th>Tier</th>
                 <th title="Grade point weight for this test (default 1)">Pts</th>
@@ -85,8 +86,9 @@
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr draggable="true" data-source="existing" data-name="#(row.name)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
+            <tr draggable="true" data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayName ?? "")" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
                 <td><span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span><a href="#(row.url)"><code>#(row.name)</code></a></td>
+                <td><input type="text" class="form-input suite-display-name" placeholder="e.g. Bit Count" value="#(row.displayName ?? "")" style="width:10rem;padding:.25rem .5rem;font-size:.8rem"></td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
@@ -251,13 +253,15 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                                : '<a href="' + escAttr(item.url || '#') + '"><code>' + escHtml(item.name) + '</code></a>';
         var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var checked   = item.isTest ? ' checked' : '';
-        var pts       = item.points || 1;
+        var checked     = item.isTest ? ' checked' : '';
+        var pts         = item.points || 1;
+        var displayName = escAttr(item.displayName || '');
         return '<tr draggable="true" data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
             + '<td' + indent + '>'
             +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector + label
             + '</td>'
+            + '<td><input type="text" class="form-input suite-display-name" placeholder="e.g. Bit Count" value="' + displayName + '" style="width:10rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td><input type="checkbox" class="suite-test-toggle"' + checked + '></td>'
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
@@ -270,7 +274,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     function renderTree() {
         var visual = visualOrder();
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="5">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="6">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
@@ -279,14 +283,16 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var item = v.item;
             var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
             if (row) {
-                var tierEl   = row.querySelector('.suite-tier');
-                var toggleEl = row.querySelector('.suite-test-toggle');
-                var ptsEl    = row.querySelector('.suite-points');
-                if (tierEl)   item.tier   = tierEl.value;
-                if (toggleEl) item.isTest = toggleEl.checked && item.tier !== 'support';
-                if (ptsEl)    item.points = Math.max(1, parseInt(ptsEl.value) || 1);
+                var tierEl        = row.querySelector('.suite-tier');
+                var toggleEl      = row.querySelector('.suite-test-toggle');
+                var ptsEl         = row.querySelector('.suite-points');
+                var displayNameEl = row.querySelector('.suite-display-name');
+                if (tierEl)        item.tier        = tierEl.value;
+                if (toggleEl)      item.isTest      = toggleEl.checked && item.tier !== 'support';
+                if (ptsEl)         item.points      = Math.max(1, parseInt(ptsEl.value) || 1);
+                if (displayNameEl) item.displayName = displayNameEl.value.trim();
             }
-            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1 };
+            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
             if (item.source === 'upload') { base.index = item.index; }
             else                          { base.name  = item.name;  }
             return base;
@@ -305,8 +311,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var depsRaw   = row.getAttribute('data-depends-on') || '[]';
             var dependsOn = [];
             try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
-            var points = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
-            items.push({ name: name, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, points: points, url: url });
+            var points      = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
+            var displayName = row.getAttribute('data-display-name') || '';
+            items.push({ name: name, displayName: displayName, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, points: points, url: url });
         });
         renderTree();
         syncConfig();
@@ -320,14 +327,15 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         files.forEach(function (file, idx) {
             var name = file.name;
             items.push({
-                name:      name,
-                source:    'upload',
-                index:     idx,
-                isTest:    isLikelyScript(name),
-                tier:      isLikelyScript(name) ? 'public' : 'support',
-                dependsOn: [],
-                points:    1,
-                errors:    fileErrors(file)
+                name:        name,
+                displayName: '',
+                source:      'upload',
+                index:       idx,
+                isTest:      isLikelyScript(name),
+                tier:        isLikelyScript(name) ? 'public' : 'support',
+                dependsOn:   [],
+                points:      1,
+                errors:      fileErrors(file)
             });
         });
         renderTree();
