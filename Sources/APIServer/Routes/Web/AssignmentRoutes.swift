@@ -926,22 +926,31 @@ struct AssignmentRoutes: RouteCollection {
             return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
         }
 
+        // Resolve solution data + filename. Prefer newly uploaded file, then zip entry, then prior submission.
+        var solutionFilename = "solution.ipynb"
         let solutionNotebookRaw: Data = {
             if let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 {
+                solutionFilename = solutionNotebookFile.filename.isEmpty ? "solution.ipynb" : solutionNotebookFile.filename
                 return Data(solutionNotebookFile.data.readableBytesView)
             }
-            return extractZipEntry(zipPath: setup.zipPath, entryName: "solution.ipynb") ?? Data()
+            let archiveFiles = listZipEntries(zipPath: setup.zipPath)
+            if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }),
+               let data = extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry) {
+                solutionFilename = solutionEntry
+                return data
+            }
+            return Data()
         }()
         var resolvedSolutionNotebookRaw = solutionNotebookRaw
         if resolvedSolutionNotebookRaw.isEmpty,
            let existingSolution = try await loadExistingSolutionNotebook(req: req, assignment: assignment) {
             resolvedSolutionNotebookRaw = existingSolution
         }
-        guard !resolvedSolutionNotebookRaw.isEmpty,
-              (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil else {
+        guard !resolvedSolutionNotebookRaw.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
             return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
         }
+        let solutionIsNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
 
         let resolvedSuite: ResolvedEditSuiteFiles
         do {
@@ -1009,10 +1018,14 @@ struct AssignmentRoutes: RouteCollection {
         assignment.isOpen = false
         assignment.validationStatus = "pending"
 
+        let solutionDataToSubmit = solutionIsNotebook
+            ? normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw)
+            : resolvedSolutionNotebookRaw
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
             req: req,
             setupID: setup.id!,
-            solutionNotebookData: normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw)
+            solutionNotebookData: solutionDataToSubmit,
+            filename: solutionFilename
         )
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)

@@ -85,9 +85,9 @@
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr draggable="true" data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
+            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
                 <td>
-                    <span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>
+                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
                     <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
                     <div class="suite-file-hint"><a href="#(row.url)"><code>#(row.name)</code></a></div>
                 </td>
@@ -268,9 +268,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var pts       = item.points || 1;
         // Default input value to display name if set, otherwise the filename stem
         var nameVal   = escAttr(item.displayName || stemOf(item.name));
-        return '<tr draggable="true" data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
+        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
             + '<td' + indent + '>'
-            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
+            +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
             +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
             +   fileHint
@@ -368,6 +368,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         if (!row) { e.preventDefault(); return; }
         dragName = row.getAttribute('data-name');
         e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragName);  // required by Safari
         row.classList.add('suite-row-dragging');
     });
 
