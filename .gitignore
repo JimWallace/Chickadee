@@ -16,6 +16,7 @@ Tools/jupyterlite/.jupyterlite.doit.db
 .worker-secret
 .env
 chickadee*.sqlite
+chickadee*.sqlite3
 chickadee*.sqlite-wal
 chickadee*.sqlite-shm
 chickadee*.db
