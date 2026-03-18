@@ -1,9 +1,15 @@
 :root {
     color-scheme: light;
-    --blue:    #115E6B;   /* AHS teal — interactive elements */
-    --gold:    #EAAB00;   /* UW gold — brand, primary actions */
-    --gold-hover: #C8960A;
-    --teal-hover: #009CAB;
+    /* AHS Health palette — sourced from ahs.uwaterloo.ca/hlth230/style.css */
+    --health-teal-dark:  #005963;
+    --health-teal:       #0098A5;
+    --health-teal-light: #97DFEF;
+    --uw-gold:           #FFCC33;
+
+    --blue:    var(--health-teal-dark);  /* primary interactive — links, focus, spinner */
+    --gold:    var(--uw-gold);
+    --gold-hover: #E6B800;
+    --teal-hover: var(--health-teal);
     --green:   #16A34A;
     --red:     #DC2626;
     --purple:  #9333EA;
@@ -20,23 +26,23 @@
     --surface-muted: #F8FAFC;
     --danger-bg: #FEF2F2;
     --danger-border: #FECACA;
-    --accent-bg: #FEF3CC;   /* gold tint — badges, pills */
+    --accent-bg: #FEF9DB;   /* gold tint — grade pills / score badges */
     --accent-fg: #7A5000;   /* dark gold — readable on gold tint */
-    --hover-bg: #FEF7DC;    /* gold tint — hover backgrounds */
-    --open-bg: #DCFCE7;
-    --closed-bg: #FEE2E2;
-    --open-fg: #166534;
-    --closed-fg: #991B1B;
+    --hover-bg: #E0F7FA;    /* teal-light tint — drag-over, hover fills */
+    --open-bg:  #DCF3F6;    /* teal tint — active/open state */
+    --open-fg:  #005963;    /* health-teal-dark */
+    --closed-bg: #F3F4F6;   /* neutral gray — inactive/closed state */
+    --closed-fg: #4B5563;
     --border: var(--gray-200);
-    --success-bg: #F0FDF4;
+    --success-bg: #E0F7FA;  /* teal-light tint — success state */
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
         color-scheme: dark;
-        --blue: #00B8C8;        /* bright teal — readable on dark backgrounds */
-        --gold: #EAAB00;
-        --gold-hover: #C8960A;
+        --blue: #00C4D3;         /* bright teal — readable on dark backgrounds */
+        --gold: #FFCC33;
+        --gold-hover: #E6B800;
         --teal-hover: #00D4E8;
         --green: #4ADE80;
         --red: #F87171;
@@ -56,12 +62,12 @@
         --danger-border: #7F1D1D;
         --accent-bg: #3D2800;   /* dark gold tint */
         --accent-fg: #FED34C;   /* soft gold — readable on dark gold tint */
-        --hover-bg: #3D2800;
-        --open-bg: #052E1A;
-        --closed-bg: #3B1217;
-        --open-fg: #86EFAC;
-        --closed-fg: #FCA5A5;
-        --success-bg: #052e16;
+        --hover-bg: #072D35;    /* dark teal tint */
+        --open-bg:  #072D35;    /* dark teal — active/open state */
+        --open-fg:  #67E8F9;    /* bright cyan-teal — readable on dark teal */
+        --closed-bg: #1F2937;   /* dark gray — inactive/closed */
+        --closed-fg: #9CA3AF;
+        --success-bg: #072D35;
         /* --border inherits dark-mode --gray-200 automatically */
     }
 }
@@ -125,7 +131,7 @@ a { color: var(--blue); }
     font-weight: 700;
     font-size: 1.05rem;
     text-decoration: none;
-    color: #EAAB00;
+    color: #0098A5;  /* health-teal — readable on black (6.4:1), matches AHS palette */
 }
 
 .nav-brand-logo {
@@ -144,6 +150,18 @@ a { color: var(--blue); }
 .nav-link:hover {
     color: #EAAB00;
 }
+
+/* ── AHS colour bar ──────────────────────────────────── */
+
+.colour-bar {
+    height: 5px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.colour-bar div:nth-child(1) { background: #97DFEF; }  /* health-teal-light */
+.colour-bar div:nth-child(2) { background: #0098A5; }  /* health-teal */
+.colour-bar div:nth-child(3) { background: #005963; }  /* health-teal-dark */
 
 /* ── Main container ──────────────────────────────────── */
 
@@ -177,14 +195,14 @@ h2 { font-size: 1rem;   margin-bottom: .4rem; }
 }
 
 .btn-primary {
-    background: #EAAB00;
-    border-color: #EAAB00;
-    color: #000000;
+    background: #005963;  /* health-teal-dark */
+    border-color: #005963;
+    color: white;
 }
 
 .btn-primary:hover {
-    background: #C8960A;
-    border-color: #C8960A;
+    background: #003D47;
+    border-color: #003D47;
 }
 
 .btn + .btn { margin-left: .5rem; }
@@ -660,8 +678,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 }
 
 .course-tab-active {
-    color: var(--blue);          /* teal */
-    border-bottom-color: #EAAB00; /* gold underline */
+    color: var(--blue);         /* health-teal-dark */
+    border-bottom-color: var(--gold); /* UW gold underline */
     font-weight: 600;
 }
 
