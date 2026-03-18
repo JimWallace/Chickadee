@@ -25,9 +25,6 @@ testsetups/
 node_modules/
 Tools/
 
-# Tests — not compiled in the production Dockerfile
-Tests/
-
 # Documentation and deploy configs — not needed inside the image
 *.md
 CHANGELOG

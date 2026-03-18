@@ -13,10 +13,11 @@ WORKDIR /build
 COPY Package.swift Package.resolved ./
 RUN swift package resolve --skip-update
 
-# Copy sources and build both release binaries.
-# --static-swift-stdlib embeds the Swift stdlib so the runtime image
-# doesn't need Swift's shared libraries.
+# Copy sources and tests.  Tests/ is never compiled in this step (we build
+# specific products only), but SPM validates all target paths in Package.swift
+# even for targets it isn't building — so the directories must exist.
 COPY Sources ./Sources
+COPY Tests   ./Tests
 RUN swift build -c release \
     --static-swift-stdlib \
     --product chickadee-server \
