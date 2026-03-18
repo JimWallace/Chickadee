@@ -14,6 +14,19 @@ Two deployment paths are documented here:
 - Docker Engine 24+ and Docker Compose v2 (`docker compose version`)
 - A domain name (for HTTPS / production)
 
+> **Language runtimes:** The Docker image includes Python 3 (with numpy, pandas,
+> scipy, matplotlib) and R base out of the box. If your test scripts require
+> additional packages, create a `Dockerfile.local` that extends the image:
+> ```dockerfile
+> FROM chickadee:latest
+> USER root
+> RUN pip3 install --no-cache-dir mypackage
+> RUN Rscript -e "install.packages('tidyverse', repos='https://cloud.r-project.org')"
+> USER chickadee
+> ```
+> Then set `build: { context: ., dockerfile: Dockerfile.local }` on both the
+> `server` and `runner` services in `docker-compose.yml`.
+
 ### 1. Clone and configure
 
 ```bash
@@ -135,6 +148,7 @@ service management, and nginx as the reverse proxy.
 - Swift 6.0+ installed ([swift.org/download](https://swift.org/download/))
 - nginx installed (`apt install nginx`)
 - Your OIDC credentials from your identity provider (e.g. Duo, Okta, Entra)
+- Python 3 and R for the runner (`apt install python3 python3-pip python3-numpy python3-pandas python3-scipy python3-matplotlib r-base`). Install additional packages as needed for your courses.
 
 ---
 

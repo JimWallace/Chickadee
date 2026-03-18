@@ -30,7 +30,19 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install C runtime dependencies only (Swift stdlib is statically linked).
+# System dependencies:
+#   - C runtime libs (Swift stdlib is statically linked)
+#   - Python 3 + common scientific packages (for Python test scripts / submissions)
+#   - R base (for R test scripts / submissions)
+#
+# If your courses need additional Python packages, extend this image:
+#   FROM chickadee:latest
+#   USER root
+#   RUN pip3 install --no-cache-dir <your-packages>
+#   USER chickadee
+#
+# For additional R packages:
+#   RUN Rscript -e "install.packages(c('tidyverse', ...), repos='https://cloud.r-project.org')"
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -38,6 +50,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         libssl3 \
         libcurl4 \
+        python3 \
+        python3-pip \
+        python3-numpy \
+        python3-pandas \
+        python3-scipy \
+        python3-matplotlib \
+        r-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user for the application processes.
