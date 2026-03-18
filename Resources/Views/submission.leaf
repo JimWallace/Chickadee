@@ -84,6 +84,27 @@ Submission #(submissionID)
     #endfor
     </tbody>
 </table>
+
+#if(releaseSummary || secretSummary):
+<div class="hidden-tiers-summary">
+    <h3 class="hidden-tiers-heading">Additional Tests</h3>
+    #if(releaseSummary):
+    <div class="tier-summary-row tier-summary-release">
+        <span class="tier tier-release-badge">release</span>
+        <span class="tier-summary-counts">#(releaseSummary.passCount) passed, #(releaseSummary.failCount) failed#if(releaseSummary.errorCount): , #(releaseSummary.errorCount) error(s)#endif</span>
+        <span class="tier-summary-note">— details available after the deadline</span>
+    </div>
+    #endif
+    #if(secretSummary):
+    <div class="tier-summary-row tier-summary-secret">
+        <span class="tier tier-secret-badge">secret</span>
+        <span class="tier-summary-counts">#(secretSummary.total) test#if(secretSummary.total != 1):s#endif</span>
+        <span class="tier-summary-note">— results not shown</span>
+    </div>
+    #endif
+</div>
+#endif
+
 #endif
 
 #endif
