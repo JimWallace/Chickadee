@@ -1,0 +1,52 @@
+#extend("base"):
+#export("title"):
+#(title)
+#endexport
+#export("content"):
+<div class="error-page">
+    <img class="error-bird" src="/images/chickadee-icon-alt.png" alt="">
+    <div class="error-code">#(status)</div>
+    <h1 class="error-title">#(title)</h1>
+    #if(isNotFound):
+    <p class="error-message">This page doesn't exist, or you don't have permission to view it.</p>
+    #else:
+    <p class="error-message">#(message)</p>
+    #endif
+    <a href="/" class="btn">Go home</a>
+</div>
+<style>
+.error-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 5rem 1.5rem;
+    gap: 1rem;
+}
+.error-bird {
+    width: 5.5rem;
+    height: 5.5rem;
+    border-radius: 50%;
+    opacity: .8;
+    margin-bottom: .25rem;
+}
+.error-code {
+    font-size: 5rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--gray-300);
+    letter-spacing: -.05em;
+}
+.error-title {
+    margin: 0;
+    font-size: 1.4rem;
+}
+.error-message {
+    color: var(--gray-600);
+    max-width: 28rem;
+    margin: 0;
+}
+</style>
+#endexport
+#endextend

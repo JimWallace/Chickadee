@@ -309,12 +309,6 @@ textarea.form-input {
     flex-wrap: wrap;
 }
 
-.submission-meta {
-    font-size: .875rem;
-    color: var(--gray-600);
-    margin-top: .3rem;
-}
-
 .score {
     font-size: 1.2rem;
     font-weight: 600;
@@ -460,23 +454,6 @@ details pre {
     border-radius: .25rem;
     border: 1px solid var(--gray-200);
     overflow-x: auto;
-}
-
-.script-output-inline {
-    margin-top: .45rem;
-    margin-bottom: 0;
-    font-size: .78rem;
-    line-height: 1.35;
-    white-space: pre-wrap;
-    background: var(--surface-muted);
-    padding: .55rem .7rem;
-    border-radius: .25rem;
-    border: 1px solid var(--gray-200);
-}
-
-.script-output-error {
-    background: var(--danger-bg);
-    border-color: var(--danger-border);
 }
 
 .result-mark {

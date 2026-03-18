@@ -106,6 +106,9 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
         )
     }
     app.sessions.configuration = sessionConfig
+    // Error page middleware must be outermost so it catches errors from all
+    // subsequent middleware and route handlers.
+    app.middleware.use(LeafErrorMiddleware())
     if securityConfiguration.enforceHTTPS {
         app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
     }
