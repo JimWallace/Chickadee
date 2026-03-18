@@ -671,11 +671,28 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // Summaries for hidden tiers (students only; instructors see everything directly).
+        var releaseSummary: TierSummary? = nil
+        var secretSummary:  TierSummary? = nil
+
         if let result = displayResult {
             resultSource = result.source ?? "worker"
             if let data       = result.collectionJSON.data(using: .utf8),
                let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
             {
+                // Compute per-tier summaries from the full (unfiltered) collection.
+                if !user.isInstructor {
+                    let releaseOutcomes = collection.outcomes.filter { $0.tier == .release }
+                    let secretOutcomes  = collection.outcomes.filter { $0.tier == .secret }
+                    let releaseVisible  = allowedTiers.contains("release")
+                    if !releaseVisible, !releaseOutcomes.isEmpty {
+                        releaseSummary = TierSummary(outcomes: releaseOutcomes, isRelease: true)
+                    }
+                    if !secretOutcomes.isEmpty {
+                        secretSummary = TierSummary(outcomes: secretOutcomes, isRelease: false)
+                    }
+                }
+
                 let visible     = collection.filtering(tiers: allowedTiers)
                 buildFailed     = collection.buildStatus == .failed
                 compilerOutput  = collection.compilerOutput
@@ -762,6 +779,8 @@ struct WebRoutes: RouteCollection {
             earnedPoints:      earnedPoints,
             hasDelta:          hasDelta,
             deltaHeaderText:   deltaHeaderText,
+            releaseSummary:    releaseSummary,
+            secretSummary:     secretSummary,
             currentUser:       req.currentUserContext
         )
         return try await req.view.render("submission", ctx)
@@ -855,6 +874,27 @@ private struct OutcomeRow: Encodable {
     let pointsLabel: String?     // e.g. "2 pts" when assignment is weighted; nil otherwise
 }
 
+/// Aggregate summary for a hidden test tier (release before deadline, or secret).
+/// No individual test names or output are included — only counts.
+private struct TierSummary: Encodable {
+    let total: Int
+    let passCount: Int
+    let failCount: Int
+    let errorCount: Int
+    let timeoutCount: Int
+    /// true = release tier hidden until deadline; false = secret (never shown)
+    let isRelease: Bool
+
+    init(outcomes: [TestOutcome], isRelease: Bool) {
+        total        = outcomes.count
+        passCount    = outcomes.filter { $0.status == .pass }.count
+        failCount    = outcomes.filter { $0.status == .fail }.count
+        errorCount   = outcomes.filter { $0.status == .error }.count
+        timeoutCount = outcomes.filter { $0.status == .timeout }.count
+        self.isRelease = isRelease
+    }
+}
+
 private struct SubmissionContext: Encodable {
     let submissionID: String
     let testSetupID: String
@@ -883,6 +923,10 @@ private struct SubmissionContext: Encodable {
     let hasDelta: Bool
     /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.
     let deltaHeaderText: String?
+    /// Non-nil for students when release tests exist but are not yet visible (before deadline).
+    let releaseSummary: TierSummary?
+    /// Non-nil for students when secret tests exist (always hidden).
+    let secretSummary: TierSummary?
     let currentUser: CurrentUserContext?
 }
 

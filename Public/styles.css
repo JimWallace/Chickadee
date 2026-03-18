@@ -402,6 +402,47 @@ textarea.form-input {
     font-weight: 500;
 }
 
+/* Hidden-tier summary (release before deadline, secret always) */
+.hidden-tiers-summary {
+    margin-top: 1.25rem;
+    border: 1px solid var(--gray-100);
+    border-radius: .5rem;
+    padding: .75rem 1rem;
+    background: var(--gray-100);
+}
+
+.hidden-tiers-heading {
+    font-size: .8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--gray-600);
+    margin: 0 0 .5rem;
+}
+
+.tier-summary-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    border-left: 3px solid var(--gray-400);
+    padding: .35rem 0 .35rem .6rem;
+    margin-bottom: .3rem;
+    font-size: .9rem;
+}
+
+.tier-summary-row:last-child { margin-bottom: 0; }
+
+.tier-summary-release { border-left-color: var(--amber); }
+.tier-summary-secret  { border-left-color: var(--purple); }
+
+.tier-summary-counts { font-weight: 500; }
+
+.tier-summary-note {
+    color: var(--gray-600);
+    font-style: italic;
+    font-size: .85rem;
+}
+
 /* Long result expand */
 details > summary {
     cursor: pointer;
