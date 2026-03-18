@@ -41,6 +41,7 @@
         <a class="nav-link" href="/login">Log in</a>
     #endif
 </nav>
+<div class="colour-bar" aria-hidden="true"><div></div><div></div><div></div></div>
 #if(currentUser && currentUser.showCourseTabs):
 <nav class="course-tabs" aria-label="Courses">
     #for(course in currentUser.enrolledCourses):
