@@ -9,12 +9,12 @@
 <h1 style="margin-bottom:1.25rem">Assignments</h1>
 #endif
 <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
-    <a class="btn action-btn" href="/assignments/grades.csv">Export Grades CSV</a>
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
     <!-- Add Section inline form -->
     <details class="add-section-details" id="add-section-details" style="position:relative">
         <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
         <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
-            <form method="post" action="/assignments/sections" class="form" style="margin:0;gap:.6rem">
+            <form method="post" action="/instructor/sections" class="form" style="margin:0;gap:.6rem">
                 <label class="form-label" style="margin:0">
                     Section name
                     <input class="form-input" type="text" name="name" placeholder="e.g. Labs" required
@@ -36,7 +36,7 @@
 </div>
 
 #if(!hasSections && !hasUngrouped):
-<p class="empty">No assignments yet. <a href="/assignments/new">Create one to get started.</a></p>
+<p class="empty">No assignments yet. <a href="/instructor/new">Create one to get started.</a></p>
 #else:
 
 <!-- Sections -->
@@ -56,15 +56,15 @@
                     style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
             </button>
-            <a class="btn action-btn" href="/assignments/new?sectionID=#(section.sectionID)"
+            <a class="btn action-btn" href="/instructor/new?sectionID=#(section.sectionID)"
                style="font-size:.8rem;padding:.2rem .55rem;margin-left:auto">+ Create New</a>
-            <a class="btn action-btn" href="/assignments/import-marmoset?sectionID=#(section.sectionID)"
+            <a class="btn action-btn" href="/instructor/import-marmoset?sectionID=#(section.sectionID)"
                style="font-size:.8rem;padding:.2rem .55rem">Import from Marmoset</a>
         </div>
 
         <!-- Edit mode (hidden by default) -->
         <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
-            <form class="section-rename-form" method="post" action="/assignments/sections/#(section.sectionID)/rename"
+            <form class="section-rename-form" method="post" action="/instructor/sections/#(section.sectionID)/rename"
                   style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
                 <input class="form-input section-name-input" type="text" name="name" value="#(section.name)" required
                        style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
@@ -77,7 +77,7 @@
                         style="font-size:.8rem;padding:.25rem .5rem">Save</button>
             </form>
             <button class="btn action-btn action-danger section-delete-btn" type="button"
-                    data-action="/assignments/sections/#(section.sectionID)/delete"
+                    data-action="/instructor/sections/#(section.sectionID)/delete"
                     data-name="#(section.name)"
                     style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
             <button class="btn-link section-edit-cancel" type="button"
@@ -100,7 +100,7 @@
         #if(section.rows.isEmpty):
         <tr class="section-empty-row">
             <td colspan="5" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
-                Drag items here or use <a href="/assignments/new?sectionID=#(section.sectionID)">+ Create New</a>
+                Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
             </td>
         </tr>
         #else:
@@ -117,7 +117,7 @@
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
-                    <a href="/assignments/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                    <a href="/instructor/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
                     #else:
                     <strong>#(row.title)</strong>
                     #endif
@@ -127,7 +127,7 @@
                 </td>
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/assignments/#(row.assignmentID)/status">
+                    <form method="post" action="/instructor/#(row.assignmentID)/status">
                         <select class="form-input" name="status" onchange="this.form.submit()"
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
@@ -170,7 +170,7 @@
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
                         <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
-                        <form class="publish-form" method="post" action="/assignments">
+                        <form class="publish-form" method="post" action="/instructor">
                             <input type="hidden" name="testSetupID" value="#(row.setupID)">
                             <label class="form-label" style="font-size:.8rem">
                                 Title
@@ -190,8 +190,8 @@
                     </details>
                     #elseif(row.status == "closed"):
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
-                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -199,8 +199,8 @@
                     </div>
                     #elseif(row.status == "open"):
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
-                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -208,8 +208,8 @@
                     </div>
                     #else:
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
-                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                        <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -256,7 +256,7 @@
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
-                    <a href="/assignments/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                    <a href="/instructor/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
                     #else:
                     <strong>#(row.title)</strong>
                     #endif
@@ -266,7 +266,7 @@
                 </td>
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/assignments/#(row.assignmentID)/status">
+                    <form method="post" action="/instructor/#(row.assignmentID)/status">
                         <select class="form-input" name="status" onchange="this.form.submit()"
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
@@ -309,7 +309,7 @@
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
                         <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
-                        <form class="publish-form" method="post" action="/assignments">
+                        <form class="publish-form" method="post" action="/instructor">
                             <input type="hidden" name="testSetupID" value="#(row.setupID)">
                             <label class="form-label" style="font-size:.8rem">
                                 Title
@@ -329,8 +329,8 @@
                     </details>
                     #elseif(row.status == "closed"):
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
-                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -338,8 +338,8 @@
                     </div>
                     #elseif(row.status == "open"):
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/assignments/#(row.assignmentID)/edit">Edit</a>
-                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -347,8 +347,8 @@
                     </div>
                     #else:
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn btn-primary" href="/assignments/#(row.assignmentID)/validate">Validate &amp; open →</a>
-                        <form method="post" action="/assignments/#(row.assignmentID)/delete"
+                        <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -476,7 +476,7 @@ tr.assignment-draggable td {
     }
 
     async function persistReorder(tbody) {
-        var res = await fetch('/assignments/reorder', {
+        var res = await fetch('/instructor/reorder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ assignmentIDs: currentOrder(tbody) })
@@ -580,7 +580,7 @@ tr.assignment-draggable td {
             // Cross-section move.
             var newSectionID = currentTbody.getAttribute('data-section-id') || '';
             var assignmentID = row.getAttribute('data-assignment-id');
-            fetch('/assignments/' + assignmentID + '/section', {
+            fetch('/instructor/' + assignmentID + '/section', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sectionID: newSectionID })
@@ -636,7 +636,7 @@ tr.assignment-draggable td {
             var order = currentSectionOrder();
             if (order.join(',') === sectionDragStartOrder) return;
             try {
-                var res = await fetch('/assignments/sections/reorder', {
+                var res = await fetch('/instructor/sections/reorder', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ sectionIDs: order })

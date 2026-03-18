@@ -2,9 +2,9 @@
 //
 // Marmoset export import routes (instructor+).
 //
-//   GET  /assignments/import-marmoset              — upload form
-//   POST /assignments/import-marmoset              — process import
-//   GET  /assignments/import-marmoset/canonical/:setupID
+//   GET  /instructor/import-marmoset              — upload form
+//   POST /instructor/import-marmoset              — process import
+//   GET  /instructor/import-marmoset/canonical/:setupID
 //                                                   — download stored canonical zip
 //
 // Both form routes accept an optional ?sectionID= / sectionID body field to
@@ -31,7 +31,7 @@ struct MarmosetImportRoutes: RouteCollection {
         r.post(use: processImport)
     }
 
-    // MARK: - GET /assignments/import-marmoset
+    // MARK: - GET /instructor/import-marmoset
 
     @Sendable
     func importForm(req: Request) async throws -> View {
@@ -62,7 +62,7 @@ struct MarmosetImportRoutes: RouteCollection {
         ))
     }
 
-    // MARK: - POST /assignments/import-marmoset
+    // MARK: - POST /instructor/import-marmoset
 
     @Sendable
     func processImport(req: Request) async throws -> Response {
@@ -246,6 +246,6 @@ struct MarmosetImportRoutes: RouteCollection {
         // ── 5. Kick the runner and redirect ───────────────────────────
 
         await ensureValidationRunnerAvailability(req: req)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 }

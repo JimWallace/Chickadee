@@ -32,10 +32,10 @@ Validate — #(title)
 <div id="go-live-panel" hidden style="margin-top:1.5rem;padding:1rem;background:#F0FDF4;border:1px solid var(--green);border-radius:6px">
     <p style="margin:0 0 .75rem;color:var(--green);font-weight:600">✓ All tests passed — ready to go live!</p>
     <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
-        <form method="post" action="/assignments/#(assignmentID)/open">
+        <form method="post" action="/instructor/#(assignmentID)/open">
             <button class="btn btn-primary" type="submit">Go live</button>
         </form>
-        <a class="btn" href="/assignments">Not yet — back to assignments</a>
+        <a class="btn" href="/instructor">Not yet — back to assignments</a>
     </div>
 </div>
 

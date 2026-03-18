@@ -86,7 +86,8 @@ struct AdminRoutes: RouteCollection {
             workers:     workerRows,
             workerSecret: effectiveSecret,
             localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
-            courses: courseRows
+            courses: courseRows,
+            version: ChickadeeVersion.current
         )
         return try await req.view.render("admin", ctx)
     }
@@ -740,6 +741,7 @@ private struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let users: [AdminUserRow]
     let workers: [AdminWorkerRow]
+    let version: String
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
@@ -779,7 +781,7 @@ private struct AdminCourseEnrolledUserRow: Encodable {
 }
 
 private struct AdminCourseAssignmentRow: Encodable {
-    let id: String      // publicID — used in /assignments/:id/... URLs
+    let id: String      // publicID — used in /instructor/:id/... URLs
     let title: String
     let dueAt: String?
     let isOpen: Bool

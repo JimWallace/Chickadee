@@ -208,7 +208,7 @@ final class AuthRoutesTests: XCTestCase {
             sessionCookie = res.headers.first(name: .setCookie) ?? ""
         })
 
-        try await app.test(.GET, "/assignments", beforeRequest: { req in
+        try await app.test(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)

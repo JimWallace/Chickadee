@@ -27,7 +27,7 @@
     </button>
 </div>
 
-<form class="form" method="post" action="/assignments/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
+<form class="form" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
     <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
     <div id="assign-header-edit" style="display:none;margin-bottom:1.25rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
         <div style="display:flex;align-items:center;margin-bottom:.6rem">
@@ -113,7 +113,7 @@
 
     <div style="display:flex;gap:.6rem;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save</button>
-        <a class="btn" href="/assignments">Cancel</a>
+        <a class="btn" href="/instructor">Cancel</a>
     </div>
 </form>
 <style>

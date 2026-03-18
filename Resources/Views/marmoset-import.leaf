@@ -20,7 +20,7 @@ Import from Marmoset — #(courseCode)
         Assignments will be closed and require validation before opening.
     </p>
     <form method="post"
-          action="/assignments/import-marmoset"
+          action="/instructor/import-marmoset"
           enctype="multipart/form-data"
           style="display:flex;flex-direction:column;gap:1rem;max-width:480px">
         #if(sectionID):
@@ -33,7 +33,7 @@ Import from Marmoset — #(courseCode)
         </label>
         <div style="display:flex;gap:.75rem">
             <button class="btn btn-primary" type="submit">Import</button>
-            <a href="/assignments" class="btn">Cancel</a>
+            <a href="/instructor" class="btn">Cancel</a>
         </div>
     </form>
 </section>

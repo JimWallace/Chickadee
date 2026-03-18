@@ -4,7 +4,7 @@
 //
 //   PUT  /api/v1/testsetups/:id/assignment  — save edited notebook
 //   GET  /api/v1/testsetups/:id/assignment  — serves flat file when present
-//   GET  /assignments/:id/edit              — instructor-only editor page
+//   GET  /instructor/:id/edit              — instructor-only editor page
 
 import XCTest
 import XCTVapor
@@ -357,7 +357,7 @@ final class TestSetupEditTests: XCTestCase {
         )
     }
 
-    // MARK: - GET /assignments/:id/edit
+    // MARK: - GET /instructor/:id/edit
 
     func testEditPageRequiresInstructor() async throws {
         let cookie = try await loginAsStudent()
@@ -365,7 +365,7 @@ final class TestSetupEditTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_ep1", title: "Lab")
         let id = a.publicID
 
-        try await app.test(.GET, "/assignments/\(id)/edit",
+        try await app.test(.GET, "/instructor/\(id)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -378,7 +378,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let fakeID = "zzzzzz"
 
-        try await app.test(.GET, "/assignments/\(fakeID)/edit",
+        try await app.test(.GET, "/instructor/\(fakeID)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -393,7 +393,7 @@ final class TestSetupEditTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_ep2", title: "My Lab")
         let id = a.publicID
 
-        try await app.test(.GET, "/assignments/\(id)/edit",
+        try await app.test(.GET, "/instructor/\(id)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in

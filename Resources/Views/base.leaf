@@ -20,7 +20,7 @@
 
     #if(currentUser):
         #if(currentUser.isInstructor):
-            <a class="nav-link" href="/assignments">Instructor</a>
+            <a class="nav-link" href="/instructor">Instructor</a>
         #endif
         #if(currentUser.isAdmin):
             <a class="nav-link" href="/admin">Admin</a>

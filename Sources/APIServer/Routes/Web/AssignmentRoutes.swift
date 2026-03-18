@@ -3,22 +3,22 @@
 // Instructor-facing assignment management routes.
 // Requires instructor or admin role (enforced by routes.swift).
 //
-//   GET  /assignments                               → assignments.leaf (all setups + status)
-//   GET  /assignments/new                           → assignment-new.leaf
-//   POST /assignments/new/save                      → save draft assignment, redirect to /assignments
-//   POST /assignments                               → create draft assignment → redirect to validate
-//   GET  /assignments/:assignmentID/validate        → assignment-validate.leaf
-//   GET  /assignments/:assignmentID/edit            → assignment-edit.leaf
-//   POST /assignments/:assignmentID/edit/save       → update assignment content + validate
-//   POST /assignments/:assignmentID/status          → set open/closed status → redirect to /assignments
-//   POST /assignments/:assignmentID/open            → set isOpen=true → redirect to /assignments
-//   POST /assignments/:assignmentID/close           → set isOpen=false → redirect to /assignments
-//   POST /assignments/:assignmentID/delete          → remove assignment record → redirect to /assignments
-//   POST /assignments/:assignmentID/section         → move assignment to a section (or ungrouped)
-//   POST /assignments/sections                      → create a new course section
-//   POST /assignments/sections/reorder              → reorder sections
-//   POST /assignments/sections/:sectionID/rename    → rename/reconfigure a section
-//   POST /assignments/sections/:sectionID/delete    → delete a section
+//   GET  /instructor                               → assignments.leaf (all setups + status)
+//   GET  /instructor/new                           → assignment-new.leaf
+//   POST /instructor/new/save                      → save draft assignment, redirect to /instructor
+//   POST /instructor                               → create draft assignment → redirect to validate
+//   GET  /instructor/:assignmentID/validate        → assignment-validate.leaf
+//   GET  /instructor/:assignmentID/edit            → assignment-edit.leaf
+//   POST /instructor/:assignmentID/edit/save       → update assignment content + validate
+//   POST /instructor/:assignmentID/status          → set open/closed status → redirect to /instructor
+//   POST /instructor/:assignmentID/open            → set isOpen=true → redirect to /instructor
+//   POST /instructor/:assignmentID/close           → set isOpen=false → redirect to /instructor
+//   POST /instructor/:assignmentID/delete          → remove assignment record → redirect to /instructor
+//   POST /instructor/:assignmentID/section         → move assignment to a section (or ungrouped)
+//   POST /instructor/sections                      → create a new course section
+//   POST /instructor/sections/reorder              → reorder sections
+//   POST /instructor/sections/:sectionID/rename    → rename/reconfigure a section
+//   POST /instructor/sections/:sectionID/delete    → delete a section
 
 import Vapor
 import Fluent
@@ -28,11 +28,11 @@ import Crypto
 
 struct AssignmentRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        // Course-scoped instructor actions (not under the /assignments prefix).
+        // Course-scoped instructor actions (not under the /instructor prefix).
         routes.post("courses", ":courseID", "open-enrollment", use: toggleCourseOpenEnrollment)
         routes.post("courses", ":courseID", "enroll-csv",      use: instructorBulkEnrollCSV)
 
-        let r = routes.grouped("assignments")
+        let r = routes.grouped("instructor")
         r.get(use: list)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
@@ -59,7 +59,7 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "delete",  use: deleteAssignment)
     }
 
-    // MARK: - GET /assignments
+    // MARK: - GET /instructor
 
     @Sendable
     func list(req: Request) async throws -> Response {
@@ -275,7 +275,7 @@ struct AssignmentRoutes: RouteCollection {
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
 
-    // MARK: - GET /assignments/new
+    // MARK: - GET /instructor/new
 
     @Sendable
     func newAssignmentPage(req: Request) async throws -> View {
@@ -319,7 +319,7 @@ struct AssignmentRoutes: RouteCollection {
         return try await req.view.render("assignment-new", ctx)
     }
 
-    // MARK: - POST /assignments/new/save
+    // MARK: - POST /instructor/new/save
 
     @Sendable
     func saveNewAssignment(req: Request) async throws -> Response {
@@ -367,34 +367,34 @@ struct AssignmentRoutes: RouteCollection {
 
         guard !title.isEmpty else {
             let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
 
         guard let assignmentNotebookFile,
               assignmentNotebookFile.data.readableBytes > 0 else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
         guard let solutionNotebookFile,
               solutionNotebookFile.data.readableBytes > 0 else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
         let suiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
         guard !suiteFiles.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=At%20least%20one%20test%20suite%20file%20is%20required"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
 
         let assignmentNotebookRaw = Data(assignmentNotebookFile.data.readableBytesView)
         let solutionNotebookRaw = Data(solutionNotebookFile.data.readableBytesView)
         guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
         guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
 
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
@@ -419,7 +419,7 @@ struct AssignmentRoutes: RouteCollection {
         )
         guard !setupPackage.testSuites.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
-            return req.redirect(to: "/assignments/new?\(q)")
+            return req.redirect(to: "/instructor/new?\(q)")
         }
 
         // Resolve the section up front so we can inherit its grading mode.
@@ -474,7 +474,7 @@ struct AssignmentRoutes: RouteCollection {
             assignment.validationStatus = "passed"
             try await assignment.save(on: req.db)
             req.logger.info("Assignment validation passed for setup \(setupID): \(summary)")
-            return req.redirect(to: "/assignments")
+            return req.redirect(to: "/instructor")
         case .failed(let summary):
             assignment.validationStatus = "failed"
             try await assignment.save(on: req.db)
@@ -483,11 +483,11 @@ struct AssignmentRoutes: RouteCollection {
         case .timedOut:
             assignment.validationStatus = "pending"
             try await assignment.save(on: req.db)
-            return req.redirect(to: "/assignments")
+            return req.redirect(to: "/instructor")
         }
     }
 
-    // MARK: - POST /assignments
+    // MARK: - POST /instructor
     // Creates a draft (isOpen: false) assignment and redirects to the validate page.
 
     @Sendable
@@ -512,7 +512,7 @@ struct AssignmentRoutes: RouteCollection {
             .count()
         if existing > 0 {
             // Already published — redirect back.
-            return req.redirect(to: "/assignments")
+            return req.redirect(to: "/instructor")
         }
 
         let due: Date?
@@ -545,10 +545,10 @@ struct AssignmentRoutes: RouteCollection {
             sortOrder: try await nextAssignmentSortOrder(req: req),
             courseID: courseID
         )
-        return req.redirect(to: "/assignments/\(assignment.publicID)/validate")
+        return req.redirect(to: "/instructor/\(assignment.publicID)/validate")
     }
 
-    // MARK: - GET /assignments/:assignmentID/validate
+    // MARK: - GET /instructor/:assignmentID/validate
 
     @Sendable
     func validatePage(req: Request) async throws -> View {
@@ -583,7 +583,7 @@ struct AssignmentRoutes: RouteCollection {
         return try await req.view.render("assignment-validate", ctx)
     }
 
-    // MARK: - POST /assignments/:assignmentID/open
+    // MARK: - POST /instructor/:assignmentID/open
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
@@ -598,10 +598,10 @@ struct AssignmentRoutes: RouteCollection {
         }
         assignment.isOpen = true
         try await assignment.save(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - POST /assignments/reorder
+    // MARK: - POST /instructor/reorder
 
     @Sendable
     func reorderAssignments(req: Request) async throws -> HTTPStatus {
@@ -631,7 +631,7 @@ struct AssignmentRoutes: RouteCollection {
         return .ok
     }
 
-    // MARK: - POST /assignments/:assignmentID/status
+    // MARK: - POST /instructor/:assignmentID/status
 
     @Sendable
     func updateStatus(req: Request) async throws -> Response {
@@ -659,10 +659,10 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Unsupported status '\(body.status)'")
         }
         try await assignment.save(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - POST /assignments/:assignmentID/close
+    // MARK: - POST /instructor/:assignmentID/close
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
@@ -674,10 +674,10 @@ struct AssignmentRoutes: RouteCollection {
         }
         assignment.isOpen = false
         try await assignment.save(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - POST /assignments/:assignmentID/delete
+    // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
@@ -714,10 +714,10 @@ struct AssignmentRoutes: RouteCollection {
         }
 
         try await assignment.delete(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - GET /assignments/:assignmentID/edit
+    // MARK: - GET /instructor/:assignmentID/edit
 
     @Sendable
     func editPage(req: Request) async throws -> View {
@@ -764,7 +764,7 @@ struct AssignmentRoutes: RouteCollection {
         return try await req.view.render("assignment-edit", ctx)
     }
 
-    // MARK: - GET /assignments/:assignmentID/files/notebook
+    // MARK: - GET /instructor/:assignmentID/files/notebook
 
     @Sendable
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
@@ -788,7 +788,7 @@ struct AssignmentRoutes: RouteCollection {
         return buildFileResponse(data: data, filename: downloadName)
     }
 
-    // MARK: - GET /assignments/:assignmentID/files/item?name=<filename>
+    // MARK: - GET /instructor/:assignmentID/files/item?name=<filename>
 
     @Sendable
     func downloadCurrentSetupItem(req: Request) async throws -> Response {
@@ -818,7 +818,7 @@ struct AssignmentRoutes: RouteCollection {
         return buildFileResponse(data: data, filename: fileName)
     }
 
-    // MARK: - GET /assignments/:assignmentID/files/solution
+    // MARK: - GET /instructor/:assignmentID/files/solution
 
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
@@ -858,7 +858,7 @@ struct AssignmentRoutes: RouteCollection {
         throw Abort(.notFound, reason: "No solution notebook is available for this assignment yet")
     }
 
-    // MARK: - POST /assignments/:assignmentID/edit/save
+    // MARK: - POST /instructor/:assignmentID/edit/save
 
     @Sendable
     func saveEditedAssignment(req: Request) async throws -> Response {
@@ -908,7 +908,7 @@ struct AssignmentRoutes: RouteCollection {
 
         guard !title.isEmpty else {
             let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
         let uploadedSuiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
@@ -923,7 +923,7 @@ struct AssignmentRoutes: RouteCollection {
         guard !assignmentNotebookRaw.isEmpty,
               (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
         // Resolve solution data + filename. Prefer newly uploaded file, then zip entry, then prior submission.
@@ -948,7 +948,7 @@ struct AssignmentRoutes: RouteCollection {
         }
         guard !resolvedSolutionNotebookRaw.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
         let solutionIsNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
 
@@ -962,11 +962,11 @@ struct AssignmentRoutes: RouteCollection {
             )
         } catch {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=\(urlEncode(error.localizedDescription))"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
         guard !resolvedSuite.files.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20or%20keep%20at%20least%20one%20test%20suite%20or%20support%20file"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
@@ -995,7 +995,7 @@ struct AssignmentRoutes: RouteCollection {
         )
         guard !setupPackage.testSuites.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
         // Preserve the grading mode already stored in the manifest — editing
         // the suite files must not silently reset it back to "worker".
@@ -1037,7 +1037,7 @@ struct AssignmentRoutes: RouteCollection {
             assignment.validationStatus = "passed"
             try await assignment.save(on: req.db)
             req.logger.info("Assignment updated and validated for setup \(setup.id ?? ""): \(summary)")
-            return req.redirect(to: "/assignments")
+            return req.redirect(to: "/instructor")
         case .failed(let summary):
             assignment.validationStatus = "failed"
             try await assignment.save(on: req.db)
@@ -1047,7 +1047,7 @@ struct AssignmentRoutes: RouteCollection {
             assignment.validationStatus = "pending"
             try await assignment.save(on: req.db)
             let q = "notice=\(urlEncode("Assignment updated and validation started. It is still pending; refresh shortly."))"
-            return req.redirect(to: "/assignments/\(idStr)/edit?\(q)")
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
     }
 }

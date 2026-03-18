@@ -20,8 +20,8 @@ services:
   # Server — Vapor API + Leaf web UI
   # ----------------------------------------------------------------
   server:
-    build: .
-    image: chickadee:latest
+    build: .                              # used by `docker compose up --build` (local dev)
+    image: ghcr.io/jimwallace/chickadee:latest  # pulled by `docker compose pull` (production)
     restart: unless-stopped
     ports:
       - "8080:8080"   # remove this if using the nginx service below
@@ -64,7 +64,7 @@ services:
   # Runner — polls the server for pending jobs and runs test scripts
   # ----------------------------------------------------------------
   runner:
-    image: chickadee:latest
+    image: ghcr.io/jimwallace/chickadee:latest
     entrypoint: ["/app/chickadee-runner"]
     command:
       - --api-base-url

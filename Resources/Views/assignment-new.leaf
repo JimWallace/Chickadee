@@ -18,7 +18,7 @@ Create Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/assignments/new/save" enctype="multipart/form-data">
+<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data">
     <label class="form-label">
         Assignment Name
         <input class="form-input" type="text" name="assignmentName" required
@@ -88,7 +88,7 @@ Create Assignment
 
     <div style="display:flex;gap:.6rem;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Create &amp; Validate</button>
-        <a class="btn" href="/assignments">Cancel</a>
+        <a class="btn" href="/instructor">Cancel</a>
     </div>
 </form>
 <style>

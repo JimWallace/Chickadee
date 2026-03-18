@@ -9,7 +9,7 @@
         <input id="submissions-filter" class="form-input" type="search"
                placeholder="Filter by name or ID…"
                style="width:220px" aria-label="Filter students">
-        <a class="btn action-btn" href="/assignments">Back to Instructor</a>
+        <a class="btn action-btn" href="/instructor">Back to Instructor</a>
     </div>
 </div>
 
@@ -50,8 +50,8 @@
             </td>
             <td>
                 #if(row.hasLatestSubmission):
-                    <form method="post" action="/assignments/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
-                        <input type="hidden" name="returnTo" value="/assignments/#(assignmentID)/submissions">
+                    <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
+                        <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                         <button class="btn action-btn" type="submit">Re-test</button>
                     </form>
                 #else:

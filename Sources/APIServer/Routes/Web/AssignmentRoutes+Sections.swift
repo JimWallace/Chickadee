@@ -8,7 +8,7 @@ import Fluent
 
 extension AssignmentRoutes {
 
-    // MARK: - POST /assignments/sections
+    // MARK: - POST /instructor/sections
 
     @Sendable
     func createSection(req: Request) async throws -> Response {
@@ -35,10 +35,10 @@ extension AssignmentRoutes {
             .max(\.$sortOrder) ?? 0
         let section = APICourseSection(name: name, defaultGradingMode: mode, sortOrder: maxOrder + 1, courseID: courseID)
         try await section.save(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - POST /assignments/sections/reorder
+    // MARK: - POST /instructor/sections/reorder
 
     @Sendable
     func reorderSections(req: Request) async throws -> HTTPStatus {
@@ -72,7 +72,7 @@ extension AssignmentRoutes {
         return .ok
     }
 
-    // MARK: - POST /assignments/sections/:sectionID/rename
+    // MARK: - POST /instructor/sections/:sectionID/rename
 
     @Sendable
     func renameSection(req: Request) async throws -> Response {
@@ -105,10 +105,10 @@ extension AssignmentRoutes {
         section.name = name
         section.defaultGradingMode = mode
         try await section.save(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - POST /assignments/sections/:sectionID/delete
+    // MARK: - POST /instructor/sections/:sectionID/delete
 
     @Sendable
     func deleteSection(req: Request) async throws -> Response {
@@ -127,10 +127,10 @@ extension AssignmentRoutes {
         }
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
         try await section.delete(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
-    // MARK: - POST /assignments/:assignmentID/section
+    // MARK: - POST /instructor/:assignmentID/section
 
     @Sendable
     func moveToSection(req: Request) async throws -> HTTPStatus {
