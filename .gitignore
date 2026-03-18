@@ -15,10 +15,14 @@ Tools/jupyterlite/.jupyterlite.doit.db
 .local-runner-autostart
 .worker-secret
 .env
-chickadee.sqlite
-chickadee.sqlite-wal
-chickadee.sqlite-shm
+chickadee*.sqlite
+chickadee*.sqlite-wal
+chickadee*.sqlite-shm
+chickadee*.db
 chickadee.backup_*.sqlite
+
+# Local reference / import files
+Marmoset/
 
 # Runtime-generated app data
 results/
