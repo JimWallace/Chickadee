@@ -2,12 +2,12 @@
 //
 // Integration tests for Phase 7 instructor assignment management routes.
 //
-//   GET  /assignments
-//   POST /assignments                       (publish → draft)
-//   GET  /assignments/:id/validate
-//   POST /assignments/:id/open
-//   POST /assignments/:id/close
-//   POST /assignments/:id/delete
+//   GET  /instructor
+//   POST /instructor                       (publish → draft)
+//   GET  /instructor/:id/validate
+//   POST /instructor/:id/open
+//   POST /instructor/:id/close
+//   POST /instructor/:id/delete
 
 import XCTest
 import XCTVapor
@@ -129,11 +129,11 @@ final class AssignmentRoutesTests: XCTestCase {
         return student
     }
 
-    // MARK: - GET /assignments
+    // MARK: - GET /instructor
 
     func testStudentCannotAccessAssignments() async throws {
         let cookie = try await loginAsStudent()
-        try await app.test(.GET, "/assignments", beforeRequest: { req in
+        try await app.test(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -142,7 +142,7 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testInstructorCanAccessAssignments() async throws {
         let cookie = try await loginAsInstructor()
-        try await app.test(.GET, "/assignments", beforeRequest: { req in
+        try await app.test(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             // 500 expected because Leaf is not configured in tests — but middleware passed (not 401/403).
@@ -151,24 +151,24 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
-    // MARK: - POST /assignments (publish → creates draft)
+    // MARK: - POST /instructor (publish → creates draft)
 
     func testPublishCreatesDraftAssignment() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_pub1")
 
-        try await app.test(.POST, "/assignments", beforeRequest: { req in
+        try await app.test(.POST, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(
                 ["testSetupID": "setup_pub1", "title": "Lab 1"],
                 as: .urlEncodedForm
             )
         }, afterResponse: { res in
-            // Redirects to /assignments/:id/validate
+            // Redirects to /instructor/:id/validate
             XCTAssertEqual(res.status, .seeOther)
             let location = res.headers.first(name: .location) ?? ""
-            XCTAssertTrue(location.contains("/assignments/") && location.contains("/validate"),
-                          "Expected redirect to /assignments/:id/validate, got \(location)")
+            XCTAssertTrue(location.contains("/instructor/") && location.contains("/validate"),
+                          "Expected redirect to /instructor/:id/validate, got \(location)")
         })
 
         // Assignment should be in DB as draft (isOpen: false)
@@ -183,7 +183,7 @@ final class AssignmentRoutesTests: XCTestCase {
     func testPublishUnknownSetupReturnsBadRequest() async throws {
         let cookie = try await loginAsInstructor()
 
-        try await app.test(.POST, "/assignments", beforeRequest: { req in
+        try await app.test(.POST, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(
                 ["testSetupID": "does_not_exist", "title": "Oops"],
@@ -199,16 +199,16 @@ final class AssignmentRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_dup")
         try await insertAssignment(testSetupID: "setup_dup", title: "Already Published", isOpen: false)
 
-        try await app.test(.POST, "/assignments", beforeRequest: { req in
+        try await app.test(.POST, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(
                 ["testSetupID": "setup_dup", "title": "Duplicate"],
                 as: .urlEncodedForm
             )
         }, afterResponse: { res in
-            // Should redirect to /assignments without creating a second record
+            // Should redirect to /instructor without creating a second record
             XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/assignments")
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
         })
 
         let count = try await APIAssignment.query(on: app.db)
@@ -217,7 +217,7 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
-    // MARK: - POST /assignments/:id/open
+    // MARK: - POST /instructor/:id/open
 
     func testOpenAssignmentSetsIsOpenTrue() async throws {
         let cookie = try await loginAsInstructor()
@@ -225,18 +225,18 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_open", title: "Draft", isOpen: false)
         let id = a.publicID
 
-        try await app.test(.POST, "/assignments/\(id)/open", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(id)/open", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/assignments")
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
         })
 
         let updated = try await APIAssignment.find(a.id, on: app.db)
         XCTAssertEqual(updated?.isOpen, true)
     }
 
-    // MARK: - POST /assignments/:id/close
+    // MARK: - POST /instructor/:id/close
 
     func testCloseAssignmentSetsIsOpenFalse() async throws {
         let cookie = try await loginAsInstructor()
@@ -244,7 +244,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_close", title: "Open", isOpen: true)
         let id = a.publicID
 
-        try await app.test(.POST, "/assignments/\(id)/close", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(id)/close", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
@@ -254,7 +254,7 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertEqual(updated?.isOpen, false)
     }
 
-    // MARK: - POST /assignments/:id/delete
+    // MARK: - POST /instructor/:id/delete
 
     func testDeleteAssignmentRemovesRecord() async throws {
         let cookie = try await loginAsInstructor()
@@ -262,7 +262,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_del", title: "To Remove", isOpen: false)
         let id = a.publicID
 
-        try await app.test(.POST, "/assignments/\(id)/delete", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(id)/delete", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
@@ -276,27 +276,27 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let fakeID = "zzzzzz"
 
-        try await app.test(.POST, "/assignments/\(fakeID)/delete", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(fakeID)/delete", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
         })
     }
 
-    // MARK: - POST /assignments/:id/open — nonexistent
+    // MARK: - POST /instructor/:id/open — nonexistent
 
     func testOpenNonexistentAssignmentReturnsNotFound() async throws {
         let cookie = try await loginAsInstructor()
         let fakeID = "zzzzzz"
 
-        try await app.test(.POST, "/assignments/\(fakeID)/open", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(fakeID)/open", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
         })
     }
 
-    // MARK: - POST /assignments/:assignmentID/submissions/:submissionID/retest
+    // MARK: - POST /instructor/:assignmentID/submissions/:submissionID/retest
 
     func testRetestSubmissionRequeuesCompletedSubmission() async throws {
         let cookie = try await loginAsInstructor()
@@ -317,15 +317,15 @@ final class AssignmentRoutesTests: XCTestCase {
         submission.assignedAt = Date()
         try await submission.save(on: app.db)
 
-        try await app.test(.POST, "/assignments/\(assignmentID)/submissions/sub_retest_1/retest", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_1/retest", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(
-                ["returnTo": "/assignments/\(assignmentID)/submissions"],
+                ["returnTo": "/instructor/\(assignmentID)/submissions"],
                 as: .urlEncodedForm
             )
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/assignments/\(assignmentID)/submissions")
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor/\(assignmentID)/submissions")
         })
 
         let updated = try await APISubmission.find("sub_retest_1", on: app.db)
@@ -352,7 +352,7 @@ final class AssignmentRoutesTests: XCTestCase {
         )
         try await submission.save(on: app.db)
 
-        try await app.test(.POST, "/assignments/\(assignmentID)/submissions/sub_retest_mismatch/retest", beforeRequest: { req in
+        try await app.test(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_mismatch/retest", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)

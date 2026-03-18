@@ -24,7 +24,7 @@ extension AssignmentRoutes {
         let body = try? req.content.decode(Body.self)
         course.openEnrollment = (body?.openEnrollment == "on")
         try await course.save(on: req.db)
-        return req.redirect(to: "/assignments")
+        return req.redirect(to: "/instructor")
     }
 
     // MARK: - POST /courses/:courseID/enroll-csv
@@ -83,7 +83,7 @@ extension AssignmentRoutes {
             enrolledCount:        enrolledCount,
             alreadyEnrolledCount: alreadyEnrolledCount,
             notFoundUsernames:    notFoundUsernames,
-            returnURL:            "/assignments"
+            returnURL:            "/instructor"
         ))
     }
 }

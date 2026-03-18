@@ -5,7 +5,7 @@
 #export("content"):
 <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
     <h1 style="margin:0">#(assignmentTitle)</h1>
-    <a class="btn action-btn" href="/assignments/#(assignmentID)/submissions">Back to Assignment Summary</a>
+    <a class="btn action-btn" href="/instructor/#(assignmentID)/submissions">Back to Assignment Summary</a>
 </div>
 <p style="margin-top:0;color:var(--gray-700)">Student ID: <strong>#(studentID)</strong></p>
 
@@ -32,7 +32,7 @@
             <td><strong>#(row.gradeText)</strong></td>
             <td><a href="/submissions/#(row.submissionID)">Open</a></td>
             <td>
-                <form method="post" action="/assignments/#(assignmentID)/submissions/#(row.submissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
+                <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.submissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
                     <input type="hidden" name="returnTo" value="#(historyPath)">
                     <button class="btn action-btn" type="submit">Re-test</button>
                 </form>

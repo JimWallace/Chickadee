@@ -9,7 +9,7 @@ import Foundation
 
 extension AssignmentRoutes {
 
-    // MARK: - GET /assignments/grades.csv
+    // MARK: - GET /instructor/grades.csv
 
     @Sendable
     func exportGradesCSV(req: Request) async throws -> Response {
@@ -144,7 +144,7 @@ extension AssignmentRoutes {
         return response
     }
 
-    // MARK: - GET /assignments/:assignmentID/submissions
+    // MARK: - GET /instructor/:assignmentID/submissions
 
     @Sendable
     func assignmentSubmissionsPage(req: Request) async throws -> View {
@@ -227,7 +227,7 @@ extension AssignmentRoutes {
                 latestSubmissionID: latest?.id ?? "",
                 latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
                 additionalSubmissionCount: max(history.count - 1, 0),
-                fullHistoryURL: "/assignments/\(assignmentIDRaw)/students/\(studentID.uuidString)/history"
+                fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history"
             )
         }
 
@@ -242,7 +242,7 @@ extension AssignmentRoutes {
         )
     }
 
-    // MARK: - GET /assignments/:assignmentID/students/:studentID/history
+    // MARK: - GET /instructor/:assignmentID/students/:studentID/history
 
     @Sendable
     func studentSubmissionHistoryPage(req: Request) async throws -> View {
@@ -315,13 +315,13 @@ extension AssignmentRoutes {
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 studentID: student.username,
-                historyPath: "/assignments/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
+                historyPath: "/instructor/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
                 rows: rows
             )
         )
     }
 
-    // MARK: - POST /assignments/:assignmentID/submissions/:submissionID/retest
+    // MARK: - POST /instructor/:assignmentID/submissions/:submissionID/retest
 
     @Sendable
     func retestSubmission(req: Request) async throws -> Response {
@@ -354,7 +354,7 @@ extension AssignmentRoutes {
         }
 
         let body = try? req.content.decode(RetestBody.self)
-        let fallbackPath = "/assignments/\(assignmentIDRaw)/submissions"
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
         let redirectPath = sanitizedAssignmentReturnPath(
             body?.returnTo,
             assignmentIDRaw: assignmentIDRaw,

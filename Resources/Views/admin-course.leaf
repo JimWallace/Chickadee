@@ -108,7 +108,7 @@
                     #endif
                 </td>
                 <td>
-                    <a href="/assignments/#(assignment.id)/submissions"
+                    <a href="/instructor/#(assignment.id)/submissions"
                        class="btn action-btn">Submissions</a>
                 </td>
             </tr>

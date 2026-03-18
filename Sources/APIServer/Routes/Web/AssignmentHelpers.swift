@@ -170,7 +170,7 @@ func sanitizedAssignmentReturnPath(
         return fallbackPath
     }
 
-    let expectedPrefix = "/assignments/\(assignmentIDRaw)"
+    let expectedPrefix = "/instructor/\(assignmentIDRaw)"
     guard path == expectedPrefix || path.hasPrefix(expectedPrefix + "/") else {
         return fallbackPath
     }
@@ -218,7 +218,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
         }
         return CurrentFileLink(
             name: fileName,
-            url: "/assignments/\(assignmentID)/files/notebook"
+            url: "/instructor/\(assignmentID)/files/notebook"
         )
     }()
 
@@ -239,11 +239,11 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
         if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }) {
             return CurrentFileLink(
                 name: solutionEntry,
-                url: "/assignments/\(assignmentID)/files/item?name=\(urlEncode(solutionEntry))"
+                url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(solutionEntry))"
             )
         }
         if hasValidationSolution {
-            return CurrentFileLink(name: "solution.ipynb", url: "/assignments/\(assignmentID)/files/solution")
+            return CurrentFileLink(name: "solution.ipynb", url: "/instructor/\(assignmentID)/files/solution")
         }
         return nil
     }()
@@ -261,7 +261,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
         let entry = testMap[name]
         return EditableSuiteRow(
             name: name,
-            url: "/assignments/\(assignmentID)/files/item?name=\(urlEncode(name))",
+            url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(name))",
             isTest: entry != nil,
             tier: entry?.tier ?? "support",
             order: entry?.order ?? (idx + 1),

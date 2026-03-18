@@ -39,10 +39,10 @@ Marmoset import result — #(courseCode)
                     #endif
                 </td>
                 <td style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <a href="/assignments/#(a.publicID)/validate" class="btn action-btn btn-primary">Validate</a>
-                    <a href="/assignments/#(a.publicID)/edit" class="btn action-btn">Edit</a>
+                    <a href="/instructor/#(a.publicID)/validate" class="btn action-btn btn-primary">Validate</a>
+                    <a href="/instructor/#(a.publicID)/edit" class="btn action-btn">Edit</a>
                     #if(a.hasCanonical):
-                    <a href="/assignments/import-marmoset/canonical/#(a.setupID)"
+                    <a href="/instructor/import-marmoset/canonical/#(a.setupID)"
                        class="btn action-btn">Download canonical</a>
                     #endif
                 </td>
@@ -53,8 +53,8 @@ Marmoset import result — #(courseCode)
     #endif
 
     <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap">
-        <a href="/assignments" class="btn btn-primary">Assignments</a>
-        <a href="/assignments/import-marmoset" class="btn">Import another</a>
+        <a href="/instructor" class="btn btn-primary">Assignments</a>
+        <a href="/instructor/import-marmoset" class="btn">Import another</a>
     </div>
 </section>
 

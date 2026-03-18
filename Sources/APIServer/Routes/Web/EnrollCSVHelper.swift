@@ -55,7 +55,7 @@ struct EnrollCSVResultContext: Encodable {
     let enrolledCount: Int
     let alreadyEnrolledCount: Int
     let notFoundUsernames: [String]
-    /// URL the back-button should link to (admin course page or /assignments).
+    /// URL the back-button should link to (admin course page or /instructor).
     let returnURL: String
     // Precomputed for easy Leaf truthiness check.
     var hasNotFound: Bool { !notFoundUsernames.isEmpty }

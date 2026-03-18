@@ -18,7 +18,7 @@ Two deployment paths are documented here:
 > scipy, matplotlib) and R base out of the box. If your test scripts require
 > additional packages, create a `Dockerfile.local` that extends the image:
 > ```dockerfile
-> FROM chickadee:latest
+> FROM ghcr.io/jimwallace/chickadee:latest
 > USER root
 > RUN pip3 install --no-cache-dir mypackage
 > RUN Rscript -e "install.packages('tidyverse', repos='https://cloud.r-project.org')"
@@ -43,15 +43,16 @@ Edit `.env`:
 | `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
 | `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
 
-### 2. Build and start
+### 2. Pull and start
 
 ```bash
-docker compose up -d --build
+docker compose pull   # downloads the pre-built image from GitHub Container Registry
+docker compose up -d
 ```
 
-The first build compiles both Swift binaries inside the container — this takes
-5–15 minutes depending on your machine. Subsequent builds without source changes
-use the cached layers and are nearly instant.
+The image is built automatically by GitHub Actions on every push to `main` — no
+Swift toolchain is required on the server. The first pull downloads ~500 MB;
+subsequent pulls only fetch changed layers.
 
 Check status:
 
@@ -103,13 +104,41 @@ docker compose up -d
 
 ### 5. Updating
 
+Use the deploy script from the repo root — it backs up the database, pulls the
+new image, restarts services, and confirms the health check passes:
+
 ```bash
-git pull
-docker compose up -d --build
+scripts/server-deploy.sh
 ```
 
 The entrypoint script automatically syncs fresh templates and JupyterLite assets
-from the new image into the data volume on each restart.
+from the new image into the data volume on each restart. Fluent schema migrations
+also run automatically on startup.
+
+**Rollback** to a specific build (replace the SHA with one from the
+[GHCR package page](https://github.com/JimWallace/Chickadee/pkgs/container/chickadee)
+or the Actions run summary):
+
+```bash
+CHICKADEE_IMAGE=ghcr.io/jimwallace/chickadee:sha-abc1234 scripts/server-deploy.sh
+```
+
+### CI/CD pipeline
+
+Every push to `main` triggers `.github/workflows/docker-build.yml`, which:
+
+1. Builds the Docker image using BuildKit (Swift dependency layer is cached,
+   so incremental builds take ~5–7 minutes)
+2. Pushes two tags to GitHub Container Registry:
+   - `ghcr.io/jimwallace/chickadee:latest` — always the current `main` build
+   - `ghcr.io/jimwallace/chickadee:sha-<commit>` — immutable, used for rollback
+3. On version tags (`v0.x.y`): also pushes `ghcr.io/jimwallace/chickadee:v0.x.y`
+
+Pull requests build the image but do **not** push, catching build failures
+before they reach `main`.
+
+Browse available image tags at:
+https://github.com/JimWallace/Chickadee/pkgs/container/chickadee
 
 ### Scaling the runner
 
