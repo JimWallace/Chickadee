@@ -148,15 +148,18 @@ struct MarmosetImportRoutes: RouteCollection {
                     at: stagingDir.appendingPathComponent(name))
             }
 
-            // ── 4b. Inject solution.ipynb from canonical zip (if any) ──
+            // ── 4b. Read canonical solution for validation (NOT injected into test setup zip) ──
+            //
+            // We intentionally do NOT add the canonical file to the test setup zip.
+            // Test suites that use chickadee.py's load_submission_modules() scan the working
+            // directory for all .py files; adding solution.<ext> here would create a duplicate
+            // when the runner also places the validation submission in the same directory,
+            // causing "Multiple definitions of '<func>' found" errors.
 
             var canonicalSolution: (data: Data, originalFilename: String)? = nil
             let canonicalSrcPath = projectsDir.appendingPathComponent("\(n)-canonical.zip").path
             if FileManager.default.fileExists(atPath: canonicalSrcPath),
                let solution = try? extractSolutionFromCanonicalZip(zipPath: canonicalSrcPath) {
-                let solutionExt = solution.ext.isEmpty ? "py" : solution.ext
-                let solutionFilename = "solution.\(solutionExt)"
-                try solution.data.write(to: stagingDir.appendingPathComponent(solutionFilename))
                 canonicalSolution = (data: solution.data, originalFilename: solution.originalFilename)
             }
             let hasCanonical = canonicalSolution != nil
