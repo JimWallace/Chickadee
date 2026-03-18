@@ -148,7 +148,7 @@ a { color: var(--blue); }
 }
 
 .nav-link:hover {
-    color: #EAAB00;
+    color: #97DFEF;  /* health-teal-light — AHS palette, pale teal on black */
 }
 
 /* ── AHS colour bar ──────────────────────────────────── */
@@ -219,9 +219,9 @@ h2 { font-size: 1rem;   margin-bottom: .4rem; }
 }
 
 .action-danger {
-    color: var(--red);
-    border-color: var(--danger-border);
-    background: var(--danger-bg);
+    color: var(--gray-600);
+    border-color: var(--gray-400);
+    background: var(--gray-100);
 }
 
 /* ── Forms ───────────────────────────────────────────── */
