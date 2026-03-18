@@ -11,6 +11,7 @@
 
 import Vapor
 import Fluent
+import Core
 import Foundation
 
 struct AdminRoutes: RouteCollection {
@@ -741,10 +742,10 @@ private struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let users: [AdminUserRow]
     let workers: [AdminWorkerRow]
-    let version: String
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
+    let version: String
 }
 
 private struct AdminUserDetailContext: Encodable {
