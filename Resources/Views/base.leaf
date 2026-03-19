@@ -47,6 +47,7 @@
 <nav class="course-tabs" aria-label="Courses">
     #for(course in currentUser.enrolledCourses):
     <form method="post" action="/courses/#(course.id)/activate" style="display:contents">
+        #csrfFormField()
         <button type="submit"
                 class="course-tab #if(course.isActive):course-tab-active#endif"
                 aria-current="#if(course.isActive):page#else:false#endif">

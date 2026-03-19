@@ -23,6 +23,7 @@ Import from Marmoset — #(courseCode)
           action="/instructor/import-marmoset"
           enctype="multipart/form-data"
           style="display:flex;flex-direction:column;gap:1rem;max-width:480px">
+        #csrfFormField()
         #if(sectionID):
         <input type="hidden" name="sectionID" value="#(sectionID)">
         #endif

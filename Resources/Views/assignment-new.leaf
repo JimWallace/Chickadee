@@ -19,6 +19,7 @@ Create Assignment
 #endif
 
 <form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data">
+    #csrfFormField()
     <label class="form-label">
         Assignment Name
         <input class="form-input" type="text" name="assignmentName" required

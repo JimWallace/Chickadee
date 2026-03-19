@@ -378,6 +378,7 @@
         #if(currentUser.activeCourse):
         #if(!courseIsArchived):
         <form method="post" action="/courses/#(currentUser.activeCourse.id)/open-enrollment" style="margin:0">
+            #csrfFormField()
             <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
                 <input type="checkbox" name="openEnrollment" value="on"
                        #if(courseOpenEnrollment):checked#endif
@@ -387,6 +388,7 @@
         </form>
         <form method="post" action="/courses/#(currentUser.activeCourse.id)/enroll-csv"
               enctype="multipart/form-data" style="margin:0;margin-left:auto">
+            #csrfFormField()
             <label class="btn btn-primary" style="cursor:pointer;margin:0">
                 Enrol from CSV
                 <input type="file" name="file" accept=".csv,.txt" required

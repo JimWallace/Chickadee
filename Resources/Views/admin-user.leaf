@@ -35,6 +35,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
                     <form method="post"
                           action="/admin/users/#(targetUserID)/unenroll/#(course.id)"
                           style="display:inline">
+                        #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit">Remove</button>
                     </form>
                 </td>
@@ -59,6 +60,7 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
     <form method="post"
           action="/admin/users/#(targetUserID)/enroll"
           style="display:flex;gap:.5rem;align-items:center;max-width:500px">
+        #csrfFormField()
         <select name="courseID" class="form-input" style="flex:1">
             #for(course in availableCourses):
             <option value="#(course.id)">#(course.code) — #(course.name)</option>

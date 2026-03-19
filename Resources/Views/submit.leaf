@@ -6,6 +6,7 @@ Submit Code
 <h1>Submit to <code>#(testSetupID)</code></h1>
 <form class="form" id="submit-form" method="post"
     action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
+    #csrfFormField()
     <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-controls="file-input" aria-describedby="drop-zone-help">
         <p id="drop-zone-help">Drag your file here, or press Enter/Space to choose</p>
         <input type="file" name="files" id="file-input" accept=".zip,.ipynb,.py,.r" required>

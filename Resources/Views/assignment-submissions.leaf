@@ -51,6 +51,7 @@
             <td>
                 #if(row.hasLatestSubmission):
                     <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')">
+                        #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                         <button class="btn action-btn" type="submit">Re-test</button>
                     </form>

@@ -33,6 +33,7 @@ Validate — #(title)
     <p style="margin:0 0 .75rem;color:var(--green);font-weight:600">✓ All tests passed — ready to go live!</p>
     <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
         <form method="post" action="/instructor/#(assignmentID)/open">
+            #csrfFormField()
             <button class="btn btn-primary" type="submit">Go live</button>
         </form>
         <a class="btn" href="/instructor">Not yet — back to assignments</a>

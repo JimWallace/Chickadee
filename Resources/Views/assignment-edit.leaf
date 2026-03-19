@@ -28,6 +28,7 @@
 </div>
 
 <form class="form" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
+    #csrfFormField()
     <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
     <div id="assign-header-edit" style="display:none;margin-bottom:1.25rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
         <div style="display:flex;align-items:center;margin-bottom:.6rem">

@@ -5,7 +5,7 @@ Upload Test Setup
 #export("content"):
 <h1>Upload Test Setup</h1>
 <form class="form" method="post" action="/testsetups/new" enctype="multipart/form-data">
-
+    #csrfFormField()
     <!-- ── Grading mode ─────────────────────────────────────── -->
     <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:1.25rem">
         <legend style="padding:0 .4rem;font-weight:600;font-size:.9rem">Grading mode</legend>

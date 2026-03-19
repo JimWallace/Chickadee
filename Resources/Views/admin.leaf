@@ -68,6 +68,7 @@ Admin
     <!-- Hidden import form — triggered by the button above -->
     <form method="post" action="/admin/courses/import" enctype="multipart/form-data"
           id="importCourseForm">
+        #csrfFormField()
         <input type="file" name="file" accept=".zip" id="importCourseFile" style="display:none">
     </form>
 

@@ -18,6 +18,7 @@
     <h2>Course details</h2>
     <form method="post" action="/admin/courses"
           style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px">
+        #csrfFormField()
         <label class="form-label" style="flex:0 0 auto">
             Code
             <input class="form-input" type="text" name="code" placeholder="e.g. CMSC131" required autofocus
@@ -46,6 +47,7 @@
     #endif
     <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
         <form method="post" action="/admin/courses/#(course.id)/archive" style="margin:0">
+            #csrfFormField()
             #if(course.isArchived):
             <button class="btn action-danger" type="submit"
                     onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>
@@ -63,6 +65,7 @@
     <h2>Edit course</h2>
     <form method="post" action="/admin/courses/#(course.id)/edit"
           style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;max-width:700px">
+        #csrfFormField()
         <label class="form-label" style="flex:0 0 auto">
             Code
             <input class="form-input" type="text" name="code" value="#(course.code)"
@@ -124,6 +127,7 @@
         <h2 style="margin:0">Enrolled students (#(course.enrollmentCount))</h2>
         #if(!isNew):
         <form method="post" action="/admin/courses/#(course.id)/open-enrollment" style="margin:0">
+            #csrfFormField()
             <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
                 <input type="checkbox" name="openEnrollment" value="on"
                        #if(course.openEnrollment):checked#endif
@@ -134,6 +138,7 @@
         #if(!course.isArchived):
         <form method="post" action="/admin/courses/#(course.id)/enroll-csv"
               enctype="multipart/form-data" style="margin:0;margin-left:auto">
+            #csrfFormField()
             <label class="btn btn-primary" style="cursor:pointer;margin:0">
                 Enrol from CSV
                 <input type="file" name="file" accept=".csv,.txt" required
@@ -172,6 +177,7 @@
                        class="btn action-btn">Manage</a>
                     <form method="post" action="/admin/courses/#(course.id)/unenroll/#(user.id)"
                           style="display:inline;margin:0">
+                        #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Remove @#(user.username) from #(course.code)?')">Remove</button>
                     </form>
