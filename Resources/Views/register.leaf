@@ -13,6 +13,7 @@ Register
     <div class="error-box" style="margin-bottom:1rem"><p>Password must be at least 8 characters.</p></div>
     #endif
     <form class="form" method="post" action="/register">
+        #csrfFormField()
         <label class="form-label">
             Username
             <input class="form-input" type="text" name="username"

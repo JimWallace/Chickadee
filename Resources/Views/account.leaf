@@ -53,6 +53,7 @@ My Account
                 <td>#(course.name)</td>
                 <td>
                     <form method="post" action="/account/unenroll/#(course.id)" style="display:inline">
+                        #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Leave #(course.code)?')">Leave</button>
                     </form>
@@ -83,6 +84,7 @@ My Account
                 <td>#(course.name)</td>
                 <td>
                     <form method="post" action="/account/enroll" style="display:inline">
+                        #csrfFormField()
                         <input type="hidden" name="courseID" value="#(course.id)">
                         <button class="btn btn-primary" type="submit">Join</button>
                     </form>

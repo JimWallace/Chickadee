@@ -5,6 +5,7 @@ import Fluent
 import FluentSQLiteDriver
 import SQLKit
 import Leaf
+import CSRF
 import Core
 import Foundation
 
@@ -121,6 +122,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     // MARK: - Views + static files
 
     app.views.use(.leaf)
+    app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     // COOP/COEP headers enable SharedArrayBuffer in browsers, required for
     // WebR (R WASM kernel) and the browser-side WASM runner (Issue #96/#77).
@@ -509,7 +511,7 @@ private func environmentBool(_ key: String) -> Bool? {
     }
 }
 
-private func parseSSOIdentityAllowlist(_ raw: String?) -> Set<String> {
+func parseSSOIdentityAllowlist(_ raw: String?) -> Set<String> {
     guard let raw else { return [] }
     let values = raw
         .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isNewline })

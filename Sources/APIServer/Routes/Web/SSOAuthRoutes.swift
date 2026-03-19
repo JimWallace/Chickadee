@@ -302,7 +302,7 @@ struct SSOAuthRoutes: RouteCollection {
     }
 }
 
-private extension SSOAuthRoutes {
+extension SSOAuthRoutes {
     func mappedSSORole(
         username: String,
         userIdentifier: String,

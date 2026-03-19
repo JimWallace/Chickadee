@@ -1,14 +1,16 @@
 // APIServer/routes.swift
 
 import Vapor
+import CSRF
 
 func routes(_ app: Application) throws {
     let sessionAuth = UserSessionAuthenticator()
+    let csrf = CSRF()
 
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: HealthRoutes())
-    try app.register(collection: AuthRoutes())
+    try app.grouped(csrf).register(collection: AuthRoutes())
     if app.authMode != .local {
         try app.register(collection: SSOAuthRoutes())
     }
@@ -20,7 +22,7 @@ func routes(_ app: Application) throws {
 
     // MARK: - Any authenticated user
 
-    let auth = app.grouped(sessionAuth, RoleMiddleware(required: .authenticated))
+    let auth = app.grouped(sessionAuth, RoleMiddleware(required: .authenticated), csrf)
     try auth.register(collection: WebRoutes())
     try auth.register(collection: EnrollmentRoutes())
     try auth.register(collection: AccountRoutes())
@@ -35,7 +37,7 @@ func routes(_ app: Application) throws {
 
     // MARK: - Instructor or admin only
 
-    let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor))
+    let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor), csrf)
     try instructor.register(collection: AssignmentRoutes())
     try instructor.register(collection: MarmosetImportRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
@@ -44,7 +46,7 @@ func routes(_ app: Application) throws {
 
     // MARK: - Admin only
 
-    let admin = app.grouped(sessionAuth, RoleMiddleware(required: .admin))
+    let admin = app.grouped(sessionAuth, RoleMiddleware(required: .admin), csrf)
     try admin.register(collection: AdminRoutes())
     try admin.register(collection: CourseBundleRoutes())
 }

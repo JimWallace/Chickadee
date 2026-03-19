@@ -27,6 +27,7 @@ Log in
     #endif
     #if(showLocalLogin):
     <form class="form" method="post" action="/login">
+        #csrfFormField()
         <label class="form-label">
             Username
             <input class="form-input" type="text" name="username"

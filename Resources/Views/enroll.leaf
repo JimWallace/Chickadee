@@ -13,6 +13,7 @@ Choose Your Courses
 <p class="empty">No courses are available to enroll in right now. Please check back later or contact your instructor.</p>
 #else:
 <form method="post" action="/enroll">
+    #csrfFormField()
     <p style="margin-bottom:1.25rem;color:var(--gray-600)">
         Select the courses you are enrolled in. You can change your enrollment later on your
         <a href="/account">account page</a>.

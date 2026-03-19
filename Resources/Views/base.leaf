@@ -35,6 +35,7 @@
             #endif
         </a>
         <form method="post" action="/logout" style="display:inline;margin:0">
+            #csrfFormField()
             <button class="btn-link nav-link" type="submit">Log out</button>
         </form>
     #else:
