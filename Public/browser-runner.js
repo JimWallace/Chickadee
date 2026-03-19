@@ -273,6 +273,9 @@ for _module_name in student_module_names_in_load_order():
         const stem    = filename.replace(/\.ipynb$/i, '');
         const outPath = `${workDir}/${stem}.${ext}`;
 
+        // Per-cell marker regex: # CELL: name=<identifier>
+        const cellNameRe = /^#\s*CELL:\s*name=(\w+)/;
+
         let code = `# Generated from ${filename}\n\n`;
         for (const cell of (notebook.cells || [])) {
             if (cell.cell_type !== 'code') continue;
@@ -281,6 +284,16 @@ for _module_name in student_module_names_in_load_order():
                 : (cell.source || '');
             const trimmed = src.replace(/\s+$/, '');
             if (trimmed.trim()) code += trimmed + '\n\n';
+
+            // If the first non-empty line carries a # CELL: name=<id> marker,
+            // also write the cell source to cell_<name>.<ext> for per-cell grading.
+            const firstLine = src.split('\n').find(l => l.trim() !== '');
+            if (firstLine) {
+                const m = cellNameRe.exec(firstLine);
+                if (m) {
+                    py.FS.writeFile(`${workDir}/cell_${m[1]}.${ext}`, trimmed);
+                }
+            }
         }
 
         py.FS.writeFile(outPath, code);
