@@ -18,9 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: swift:6.0-jammy
+      # --privileged lets unshare(1) create user namespaces inside the container,
+      # which is required by SandboxedScriptRunner's Linux implementation.
+      options: --privileged
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install system test dependencies
+        # zip/unzip are needed by CourseBundleRoutes (export/import).
+        # The swift:6.0-jammy image is a minimal build image that omits them.
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
 
       - name: Run Swift tests
         run: swift test --parallel
