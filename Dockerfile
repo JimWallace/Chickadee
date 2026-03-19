@@ -18,10 +18,14 @@ RUN swift package resolve --skip-update
 # even for targets it isn't building — so the directories must exist.
 COPY Sources ./Sources
 COPY Tests   ./Tests
-RUN swift build -c release \
-    --static-swift-stdlib \
-    --product chickadee-server \
-    --product chickadee-runner
+
+# Build products one at a time so each gets its own log output.
+# --static-swift-stdlib embeds the runtime so Stage 2 needs no Swift libs.
+RUN swift build -c release --static-swift-stdlib --product chickadee-server
+RUN swift build -c release --static-swift-stdlib --product chickadee-runner
+
+# Verify both binaries were produced — fail fast with a clear message if not.
+RUN ls -lh .build/release/chickadee-server .build/release/chickadee-runner
 
 # ============================================================
 # Stage 2 — Runtime
