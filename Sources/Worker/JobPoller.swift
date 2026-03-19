@@ -4,6 +4,9 @@
 // Returns nil (204) when there is nothing to do.
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking  // URLSession, URLRequest on Linux
+#endif
 import Core
 
 struct JobPoller: Sendable {

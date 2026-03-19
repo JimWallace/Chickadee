@@ -3,6 +3,9 @@
 // Posts a completed TestOutcomeCollection back to the API server.
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking  // URLSession, URLRequest on Linux
+#endif
 import Core
 
 struct Reporter: Sendable {

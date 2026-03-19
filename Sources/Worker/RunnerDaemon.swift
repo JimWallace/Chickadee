@@ -1,6 +1,9 @@
 // Worker/RunnerDaemon.swift
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking  // URLSession, URLRequest on Linux
+#endif
 import ArgumentParser
 import Core
 
