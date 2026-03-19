@@ -182,29 +182,6 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
-def load_cell(name: str, namespace: Optional[dict] = None) -> dict:
-    """Load and exec a named cell by its ``# CELL: name=<name>`` marker.
-
-    The cell must have been extracted to ``cell_<name>.py`` by the runner or
-    browser grader before this is called.  Returns the resulting namespace
-    dict so callers can inspect variables the cell produced.
-
-    Pass a prior namespace dict via *namespace* to chain cells — the later
-    cell will see the earlier cell's variables in its execution environment::
-
-        ns = load_cell("setup")
-        ns = load_cell("warmup", namespace=ns)
-        assert ns["result"] == 17
-    """
-    cell_file = Path(f"cell_{name}.py")
-    if not cell_file.exists():
-        errored(f"Cell '{name}' not found (expected file: cell_{name}.py)")
-    ns: dict = dict(namespace) if namespace else {}
-    code = cell_file.read_text(encoding="utf-8")
-    exec(compile(code, str(cell_file), "exec"), ns)  # noqa: S102
-    return ns
-
-
 def require_function(name: str):
     modules = load_student_modules()
     for key in _loaded_student_order:
