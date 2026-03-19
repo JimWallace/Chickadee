@@ -10,7 +10,24 @@ env:
   IMAGE: ghcr.io/jimwallace/chickadee
 
 jobs:
+  # ── Swift test suite ──────────────────────────────────────────────────────
+  # Runs swift test on Linux using the exact same Swift/Ubuntu version as the
+  # Dockerfile so we catch Linux-specific build and runtime failures early.
+  # The build-and-push job below will not run if this job fails.
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.0-jammy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Swift tests
+        run: swift test --parallel
+
+  # ── Build & push Docker image ─────────────────────────────────────────────
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
