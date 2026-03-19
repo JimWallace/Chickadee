@@ -682,9 +682,10 @@ let testRuntimeR = #"""
 # Source at the top of each R test script: source("test_runtime.R")
 #
 # API:
-#   passed(message = NULL)     — exit 0  (pass)
-#   failed(message = "failed") — exit 1  (fail)
-#   errored(message = "error") — exit 2  (error)
+#   passed(message = NULL)          — exit 0  (pass)
+#   failed(message = "failed")      — exit 1  (fail)
+#   errored(message = "error")      — exit 2  (error)
+#   load_cell(name, env = NULL)     — exec cell_<name>.R, return its environment
 #
 # No external package dependencies; JSON is hand-formatted so this works
 # on bare R installs without jsonlite.
@@ -742,6 +743,17 @@ errored <- function(message = "error") {
     .chickadee_emit("error", paste0(label, ": ", msg), error = msg)
     quit(status = 2L, save = "no")
 }
+
+load_cell <- function(name, env = NULL) {
+    cell_file <- paste0("cell_", name, ".R")
+    if (!file.exists(cell_file)) {
+        errored(paste0("Cell '", name, "' not found (expected file: ", cell_file, ")"))
+    }
+    parent <- if (!is.null(env)) env else baseenv()
+    e      <- new.env(parent = parent)
+    source(cell_file, local = e)
+    e
+}
 """#
 
 // MARK: - Notebook extraction
@@ -784,6 +796,11 @@ func extractNotebooksToCode(in directory: URL) throws {
         let stem   = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
+        // Regex for the per-cell naming marker: # CELL: name=<identifier>
+        let cellNamePattern = try? NSRegularExpression(
+            pattern: #"^#\s*CELL:\s*name=(\w+)"#
+        )
+
         var output = "# Generated from \(item.lastPathComponent)\n\n"
         for cell in cells {
             guard cell["cell_type"] as? String == "code" else { continue }
@@ -799,6 +816,20 @@ func extractNotebooksToCode(in directory: URL) throws {
             while src.last?.isWhitespace == true { src.removeLast() }
             guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
             output += src + "\n\n"
+
+            // If the first non-empty line carries a # CELL: name=<id> marker,
+            // also write the cell source to cell_<name>.<ext> for per-cell grading.
+            if let pattern = cellNamePattern,
+               let firstLine = raw.components(separatedBy: "\n")
+                   .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                let nsRange = NSRange(firstLine.startIndex..., in: firstLine)
+                if let match = pattern.firstMatch(in: firstLine, range: nsRange),
+                   let nameRange = Range(match.range(at: 1), in: firstLine) {
+                    let cellName = String(firstLine[nameRange])
+                    let cellURL = directory.appendingPathComponent("cell_\(cellName).\(ext)")
+                    try src.write(to: cellURL, atomically: true, encoding: .utf8)
+                }
+            }
         }
 
         try output.write(to: outURL, atomically: true, encoding: .utf8)

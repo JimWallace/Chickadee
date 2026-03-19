@@ -2,9 +2,10 @@
 # Source at the top of each R test script: source("test_runtime.R")
 #
 # API:
-#   passed(message = NULL)     — exit 0  (pass)
-#   failed(message = "failed") — exit 1  (fail)
-#   errored(message = "error") — exit 2  (error)
+#   passed(message = NULL)          — exit 0  (pass)
+#   failed(message = "failed")      — exit 1  (fail)
+#   errored(message = "error")      — exit 2  (error)
+#   load_cell(name, env = NULL)     — exec cell_<name>.R, return its environment
 #
 # No external package dependencies; JSON is hand-formatted so this works
 # on bare R installs without jsonlite.
@@ -65,4 +66,26 @@ errored <- function(message = "error") {
     msg   <- as.character(message)
     .chickadee_emit("error", paste0(label, ": ", msg), error = msg)
     quit(status = 2L, save = "no")
+}
+
+load_cell <- function(name, env = NULL) {
+    # Load and eval a named cell by its # CELL: name=<name> marker.
+    #
+    # The cell must have been extracted to cell_<name>.R by the runner before
+    # this is called.  Returns the environment in which the cell was evaluated
+    # so callers can inspect variables the cell produced.
+    #
+    # Pass a prior environment via env to chain cells — the later cell will
+    # see the earlier cell's variables through the parent environment chain:
+    #   e1 <- load_cell("setup")
+    #   e2 <- load_cell("warmup", env = e1)
+    #   stopifnot(e2$result == 17)
+    cell_file <- paste0("cell_", name, ".R")
+    if (!file.exists(cell_file)) {
+        errored(paste0("Cell '", name, "' not found (expected file: ", cell_file, ")"))
+    }
+    parent <- if (!is.null(env)) env else baseenv()
+    e      <- new.env(parent = parent)
+    source(cell_file, local = e)
+    e
 }
