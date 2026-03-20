@@ -81,18 +81,16 @@ Admin
                 <th data-sort-key="code" data-sort-type="text" tabindex="0" aria-sort="none">Code</th>
                 <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
                 <th data-sort-key="students" data-sort-type="text" tabindex="0" aria-sort="none">Students</th>
-                <th data-sort-key="assignments" data-sort-type="text" tabindex="0" aria-sort="none">Assignments</th>
                 <th data-sort-key="status" data-sort-type="text" tabindex="0" aria-sort="none">Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
         #for(course in courses):
-            <tr>
+            <tr class="#if(course.isArchived):status-closed#else:status-open#endif">
                 <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
-                <td>#(course.assignmentCount)</td>
                 <td>
                     #if(course.isArchived):
                     <span class="tier tier-closed">archived</span>
@@ -101,6 +99,19 @@ Admin
                     #endif
                 </td>
                 <td style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    #if(course.isArchived):
+                    <a class="btn action-btn" href="/admin/courses/#(course.id)/export">Export</a>
+                    <form method="post" action="/admin/courses/#(course.id)/delete" style="display:inline;margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                onclick="return confirm('Permanently delete #(course.code) and all its data? This cannot be undone.')">Delete</button>
+                    </form>
+                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn" type="submit"
+                                onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>
+                    </form>
+                    #else:
                     <form method="post" action="/admin/courses/#(course.id)/copy" style="display:inline;margin:0">
                         #csrfFormField()
                         <button class="btn action-btn" type="submit"
@@ -108,14 +119,10 @@ Admin
                     </form>
                     <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
                         #csrfFormField()
-                        #if(course.isArchived):
-                        <button class="btn action-btn action-danger" type="submit"
-                                onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>
-                        #else:
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">Archive</button>
-                        #endif
                     </form>
+                    #endif
                 </td>
             </tr>
         #endfor

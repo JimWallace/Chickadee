@@ -30,6 +30,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
         admin.post("courses", ":courseID", "copy",    use: copyCourse)
+        admin.post("courses", ":courseID", "delete",  use: deleteCourse)
         admin.post("courses", ":courseID", "open-enrollment", use: toggleOpenEnrollment)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
@@ -336,6 +337,68 @@ struct AdminRoutes: RouteCollection {
 
         req.logger.info("Admin copied course \(source.code) → \(newCode) (new ID: \(newCourseID))")
         return req.redirect(to: "/admin/courses/\(newCourseID.uuidString)")
+    }
+
+    // MARK: - POST /admin/courses/:courseID/delete
+
+    @Sendable
+    func deleteCourse(req: Request) async throws -> Response {
+        guard
+            let idString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: idString),
+            let course   = try await APICourse.find(courseID, on: req.db)
+        else { throw Abort(.notFound) }
+        guard course.isArchived else {
+            throw Abort(.badRequest, reason: "Only archived courses can be deleted.")
+        }
+
+        let setupsDir = req.application.testSetupsDirectory
+
+        try await req.db.transaction { db in
+            // 1. Test setups for this course.
+            let setups = try await APITestSetup.query(on: db)
+                .filter(\.$courseID == courseID).all()
+            let setupIDs = setups.compactMap { $0.id }
+
+            // 2. Submissions → results → delete.
+            let submissions = try await APISubmission.query(on: db)
+                .filter(\.$testSetupID ~~ setupIDs).all()
+            let subIDs = submissions.compactMap { $0.id }
+            if !subIDs.isEmpty {
+                try await APIResult.query(on: db)
+                    .filter(\.$submissionID ~~ subIDs).delete()
+            }
+
+            // 3. Delete submission zip files then submission records.
+            for sub in submissions {
+                try? FileManager.default.removeItem(atPath: sub.zipPath)
+            }
+            if !setupIDs.isEmpty {
+                try await APISubmission.query(on: db)
+                    .filter(\.$testSetupID ~~ setupIDs).delete()
+            }
+
+            // 4. Assignments.
+            try await APIAssignment.query(on: db)
+                .filter(\.$courseID == courseID).delete()
+
+            // 5. Test setup files then setup records.
+            for setup in setups {
+                guard let sid = setup.id else { continue }
+                try? FileManager.default.removeItem(atPath: setupsDir + "\(sid).zip")
+                try? FileManager.default.removeItem(atPath: setupsDir + "\(sid).ipynb")
+            }
+            try await APITestSetup.query(on: db)
+                .filter(\.$courseID == courseID).delete()
+
+            // 6. Enrollments then course record.
+            try await APICourseEnrollment.query(on: db)
+                .filter(\.$course.$id == courseID).delete()
+            try await course.delete(on: db)
+        }
+
+        req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
+        return req.redirect(to: "/admin")
     }
 
     // MARK: - POST /admin/courses/:courseID/edit
