@@ -14,6 +14,7 @@ import Foundation
 enum ZipArchiverError: Error, CustomStringConvertible {
     case processFailed(String, Int32)
     case executableNotFound(String)
+    case pathTraversalDetected(String)
 
     var description: String {
         switch self {
@@ -21,6 +22,8 @@ enum ZipArchiverError: Error, CustomStringConvertible {
             return "\(cmd) exited with status \(code)"
         case .executableNotFound(let path):
             return "Executable not found: \(path)"
+        case .pathTraversalDetected(let entry):
+            return "Zip entry would escape destination directory: \(entry)"
         }
     }
 }
@@ -42,7 +45,33 @@ func createZipArchive(sourceDir: URL, outputPath: String) async throws {
 /// Extracts a ZIP archive into `destinationDir`, creating it if needed.
 ///
 /// Equivalent to: /usr/bin/unzip -q <zipPath> -d <destinationDir>
+///
+/// Guards against zip-slip path traversal by validating every entry's resolved
+/// path stays inside `destinationDir` before invoking the extractor.
 func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
+    // --- Zip-slip guard ---
+    // List all entries first and reject any that would land outside destinationDir
+    // after resolving ".."-style components or absolute paths.
+    let entries = try listZipContents(zipPath: zipPath)
+    let destStandardized = destinationDir.standardized
+    // Canonical prefix with trailing slash so "/tmp/destfoo" ≠ "/tmp/dest".
+    let destPrefix = destStandardized.path.hasSuffix("/")
+        ? destStandardized.path
+        : destStandardized.path + "/"
+    for entry in entries {
+        // Explicitly reject absolute paths (unzip -Z1 may produce these for
+        // malformed archives even though modern unzip typically strips them).
+        guard !entry.hasPrefix("/") else {
+            throw ZipArchiverError.pathTraversalDetected(entry)
+        }
+        // Resolve ".." components lexically and confirm the result is still
+        // inside the destination directory.
+        let resolved = destStandardized.appendingPathComponent(entry).standardized.path
+        guard resolved.hasPrefix(destPrefix) else {
+            throw ZipArchiverError.pathTraversalDetected(entry)
+        }
+    }
+    // --- Extraction ---
     try FileManager.default.createDirectory(at: destinationDir,
                                             withIntermediateDirectories: true)
     try await runZipProcess(

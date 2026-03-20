@@ -127,6 +127,9 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     // COOP/COEP headers enable SharedArrayBuffer in browsers, required for
     // WebR (R WASM kernel) and the browser-side WASM runner (Issue #96/#77).
     app.middleware.use(COEPMiddleware())
+    // Defence-in-depth headers: X-Content-Type-Options, X-Frame-Options,
+    // Referrer-Policy (see SecurityHeadersMiddleware.swift for rationale).
+    app.middleware.use(SecurityHeadersMiddleware())
 
     // MARK: - Database
 
