@@ -131,11 +131,13 @@
                     #if(row.assignmentID && row.validationStatus == "passed"):
                     <form method="post" action="/instructor/#(row.assignmentID)/status">
                         #csrfFormField()
-                        <select class="form-input" name="status" onchange="this.form.submit()"
+                        <label class="visually-hidden" for="status-#(row.assignmentID)">Status for #(row.title)</label>
+                        <select id="status-#(row.assignmentID)" class="form-input" name="status"
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
+                        <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                     </form>
                     #elseif(row.assignmentID):
                     <span class="tier tier-closed">closed</span>
@@ -273,11 +275,14 @@
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
                     <form method="post" action="/instructor/#(row.assignmentID)/status">
-                        <select class="form-input" name="status" onchange="this.form.submit()"
+                        #csrfFormField()
+                        <label class="visually-hidden" for="status-u-#(row.assignmentID)">Status for #(row.title)</label>
+                        <select id="status-u-#(row.assignmentID)" class="form-input" name="status"
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
+                        <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                     </form>
                     #elseif(row.assignmentID):
                     <span class="tier tier-closed">closed</span>
@@ -382,18 +387,18 @@
             <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
                 <input type="checkbox" name="openEnrollment" value="on"
                        #if(courseOpenEnrollment):checked#endif
-                       onchange="this.form.submit()">
+                       >
                 Open enrolment
             </label>
+            <button class="btn" type="submit" style="font-size:.8rem;padding:.2rem .5rem">Save</button>
         </form>
         <form method="post" action="/courses/#(currentUser.activeCourse.id)/enroll-csv"
               enctype="multipart/form-data" style="margin:0;margin-left:auto">
             #csrfFormField()
-            <label class="btn btn-primary" style="cursor:pointer;margin:0">
-                Enrol from CSV
-                <input type="file" name="file" accept=".csv,.txt" required
-                       style="display:none" onchange="this.closest('form').submit()">
-            </label>
+            <label class="visually-hidden" for="enroll-csv-file">CSV file</label>
+            <input id="enroll-csv-file" type="file" name="file" accept=".csv,.txt" required
+                   style="font-size:.8rem;max-width:12rem">
+            <button class="btn btn-primary" type="submit" style="margin:0">Enrol</button>
         </form>
         #endif
         #endif
