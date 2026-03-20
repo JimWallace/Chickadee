@@ -50,6 +50,7 @@ final class CourseBundleTests: XCTestCase {
         app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
+        configureLeaf(app)
         try routes(app)
     }
 
@@ -61,33 +62,11 @@ final class CourseBundleTests: XCTestCase {
     // MARK: - Auth helpers
 
     private func loginAsAdmin() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let user = APIUser(username: "testadmin_cb", passwordHash: hash, role: "admin")
-        try await user.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "testadmin_cb", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "testadmin_cb", password: "testpassword", role: "admin", on: app)
     }
 
     private func loginAsStudent() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let user = APIUser(username: "teststudent_cb", passwordHash: hash, role: "student")
-        try await user.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "teststudent_cb", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "teststudent_cb", password: "testpassword", role: "student", on: app)
     }
 
     // MARK: - Fixture helpers
@@ -185,9 +164,15 @@ final class CourseBundleTests: XCTestCase {
         return try Data(contentsOf: URL(fileURLWithPath: outPath))
     }
 
-    /// Constructs a multipart/form-data body with a single "file" field.
-    private func makeMultipartBody(fileData: Data, boundary: String) -> ByteBuffer {
+    /// Constructs a multipart/form-data body with an optional CSRF token field and a "file" field.
+    private func makeMultipartBody(fileData: Data, boundary: String, csrfToken: String? = nil) -> ByteBuffer {
         var buf = ByteBuffer()
+        if let token = csrfToken {
+            buf.writeString("--\(boundary)\r\n")
+            buf.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
+            buf.writeString(token)
+            buf.writeString("\r\n")
+        }
         buf.writeString("--\(boundary)\r\n")
         buf.writeString("Content-Disposition: form-data; name=\"file\"; filename=\"bundle.zip\"\r\n")
         buf.writeString("Content-Type: application/zip\r\n\r\n")
@@ -196,19 +181,21 @@ final class CourseBundleTests: XCTestCase {
         return buf
     }
 
-    /// Posts a bundle ZIP to /admin/courses/import.
+    /// Posts a bundle ZIP to /admin/courses/import, including a valid CSRF token.
     private func postImport(cookie: String, zipData: Data) async throws
         -> (status: HTTPStatus, body: String)
     {
+        // Fetch a CSRF token bound to this session before submitting the form.
+        let (csrf, sessionCookie) = try await csrfFields(for: "/admin", cookie: cookie, on: app)
         let boundary = "cb-boundary-\(UUID().uuidString)"
         var result: (HTTPStatus, String) = (.internalServerError, "")
         try await app.test(.POST, "/admin/courses/import",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.contentType = HTTPMediaType(
                     type: "multipart", subType: "form-data",
                     parameters: ["boundary": boundary])
-                req.body = self.makeMultipartBody(fileData: zipData, boundary: boundary)
+                req.body = self.makeMultipartBody(fileData: zipData, boundary: boundary, csrfToken: csrf)
             }, afterResponse: { res in
                 result = (res.status, res.body.string)
             }

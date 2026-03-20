@@ -50,6 +50,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
+        configureLeaf(app)
         try routes(app)
     }
 
@@ -62,18 +63,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
 
     /// Seeds an admin user and returns the Set-Cookie header value for subsequent requests.
     private func loginAsAdmin() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let admin = APIUser(username: "testadmin", passwordHash: hash, role: "admin")
-        try await admin.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "testadmin", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "testadmin", password: "testpassword", role: "admin", on: app)
     }
 
     // MARK: - Helpers
@@ -478,32 +468,11 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     }
 
     private func loginAsStudent(username: String = "student_tier") async throws -> String {
-        // Create only once per test (setUp re-creates the DB each time).
-        let hash = try Bcrypt.hash("pass")
-        let user = APIUser(username: username, passwordHash: hash, role: "student")
-        try await user.save(on: app.db)
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": username, "password": "pass"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: username, password: "pass", role: "student", on: app)
     }
 
     private func loginAsInstructor(username: String = "instructor_tier") async throws -> String {
-        let hash = try Bcrypt.hash("pass")
-        let user = APIUser(username: username, passwordHash: hash, role: "instructor")
-        try await user.save(on: app.db)
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": username, "password": "pass"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: username, password: "pass", role: "instructor", on: app)
     }
 
     /// Student cannot see `release` or `secret` outcomes before the deadline.

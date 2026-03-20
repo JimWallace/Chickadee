@@ -53,6 +53,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
+        configureLeaf(app)
         try routes(app)
     }
 
@@ -64,17 +65,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     // MARK: - Helpers
 
     private func loginAsStudent() async throws -> String {
-        let hash = try Bcrypt.hash("pass")
-        let user = APIUser(username: "student1", passwordHash: hash, role: "student")
-        try await user.save(on: app.db)
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "student1", "password": "pass"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "student1", password: "pass", role: "student", on: app)
     }
 
     /// Creates a test setup with a given manifest JSON and a small dummy zip.
@@ -251,6 +242,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testBrowserResultAcceptsDependencySkippedOutcomes() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         let nb      = minimalNotebook()
 
         // Simulate the collection the browser runner produces when test_build
@@ -302,10 +294,10 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         var submissionID = ""
         try await app.test(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
                 req.body = .init(buffer: multipartBody(
                     boundary: "dep-test-boundary",
-                    fields: [("collection", collection), ("testSetupID", setupID)],
+                    fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
                     file: ("notebook", "notebook.ipynb", nb)
                 ))
                 req.headers.contentType = HTTPMediaType(

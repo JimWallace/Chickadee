@@ -66,6 +66,8 @@ let package = Package(
                 .target(name: "chickadee-server"),
                 .product(name: "XCTVapor", package: "vapor"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
+                .product(name: "CSRF", package: "CSRF"),
+                .product(name: "Leaf", package: "leaf"),
             ],
             path: "Tests/APITests"
         ),

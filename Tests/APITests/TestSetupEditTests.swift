@@ -48,6 +48,7 @@ final class TestSetupEditTests: XCTestCase {
         app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
+        configureLeaf(app)
         try routes(app)
     }
 
@@ -59,33 +60,11 @@ final class TestSetupEditTests: XCTestCase {
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let user = APIUser(username: "testinstructor_edit", passwordHash: hash, role: "instructor")
-        try await user.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "testinstructor_edit", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "testinstructor_edit", password: "testpassword", role: "instructor", on: app)
     }
 
     private func loginAsStudent() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let user = APIUser(username: "teststudent_edit", passwordHash: hash, role: "student")
-        try await user.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "teststudent_edit", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "teststudent_edit", password: "testpassword", role: "student", on: app)
     }
 
     // MARK: - Setup helpers
@@ -195,11 +174,13 @@ final class TestSetupEditTests: XCTestCase {
 
     func testPutAssignmentSavesFileToDisk() async throws {
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put1")
 
         try await app.test(.PUT, "/api/v1/testsetups/setup_put1/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
             }, afterResponse: { res in
@@ -215,11 +196,13 @@ final class TestSetupEditTests: XCTestCase {
 
     func testPutAssignmentUpdatesNotebookPathInDB() async throws {
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put2")
 
         try await app.test(.PUT, "/api/v1/testsetups/setup_put2/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
             }, afterResponse: { res in
@@ -234,11 +217,13 @@ final class TestSetupEditTests: XCTestCase {
 
     func testPutAssignmentNormalizesPython3KernelBeforeSaving() async throws {
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_kernel")
 
         try await app.test(.PUT, "/api/v1/testsetups/setup_put_kernel/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: python3NotebookJSON)
             }, afterResponse: { res in
@@ -312,11 +297,13 @@ final class TestSetupEditTests: XCTestCase {
 
     func testPutAssignmentRejectsNonJSON() async throws {
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_bad")
 
         try await app.test(.PUT, "/api/v1/testsetups/setup_bad/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "this is not JSON!!!")
             }, afterResponse: { res in
@@ -327,10 +314,12 @@ final class TestSetupEditTests: XCTestCase {
 
     func testPutAssignmentReturnsNotFoundForUnknownSetup() async throws {
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
         try await app.test(.PUT, "/api/v1/testsetups/does_not_exist/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
             }, afterResponse: { res in
@@ -409,11 +398,13 @@ final class TestSetupEditTests: XCTestCase {
 
     func testPutAssignmentNormalizesIRKernelToWebR() async throws {
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_ir")
 
         try await app.test(.PUT, "/api/v1/testsetups/setup_put_ir/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: irNotebookJSON)
             }, afterResponse: { res in
@@ -459,11 +450,13 @@ final class TestSetupEditTests: XCTestCase {
     func testNormalizationPreservesPythonKernelUnchanged() async throws {
         // PUT a Python notebook and verify it still normalizes to Pyodide (not webr).
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_py_check")
 
         try await app.test(.PUT, "/api/v1/testsetups/setup_put_py_check/assignment",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: python3NotebookJSON)
             }, afterResponse: { res in

@@ -59,6 +59,7 @@ final class NotebookDownloadTests: XCTestCase {
         app.migrations.add(AddCourseOpenEnrollment())
         try await app.autoMigrate().get()
 
+        configureLeaf(app)
         try routes(app)
     }
 
@@ -70,33 +71,11 @@ final class NotebookDownloadTests: XCTestCase {
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let user = APIUser(username: "testinstructor", passwordHash: hash, role: "instructor")
-        try await user.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "testinstructor", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "testinstructor", password: "testpassword", role: "instructor", on: app)
     }
 
     private func loginAsStudent() async throws -> String {
-        let hash = try Bcrypt.hash("testpassword")
-        let user = APIUser(username: "teststudent", passwordHash: hash, role: "student")
-        try await user.save(on: app.db)
-
-        var cookie = ""
-        try await app.test(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "teststudent", "password": "testpassword"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            cookie = res.headers.first(name: .setCookie) ?? ""
-        })
-        return cookie
+        return try await loginUser(username: "teststudent", password: "testpassword", role: "student", on: app)
     }
 
     // MARK: - Setup helper
@@ -246,13 +225,24 @@ final class NotebookDownloadTests: XCTestCase {
 
     func testStudentCannotUploadTestSetup() async throws {
         let cookie = try await loginAsStudent()
+        // Obtain a valid CSRF token so the middleware passes and the role check fires.
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        // POST to /api/v1/testsetups as a student should return 403.
+        // POST to /api/v1/testsetups as a student should return 403 (instructor-only).
+        let boundary = "RoleCheck"
+        var body = ByteBufferAllocator().buffer(capacity: 256)
+        body.writeString("--\(boundary)\r\n")
+        body.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
+        body.writeString(csrf)
+        body.writeString("\r\n--\(boundary)--\r\n")
+
         try await app.test(.POST, "/api/v1/testsetups",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-                // Minimal multipart — will be rejected before content is parsed.
-                req.headers.contentType = .formData
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary])
+                req.body = .init(buffer: body)
             }, afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             })
@@ -263,6 +253,7 @@ final class NotebookDownloadTests: XCTestCase {
     func testBrowserSubmitMergesTestCells() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
         // Simulate the student's notebook: only the public cell + solution cell
         // (as if they downloaded the filtered version).
@@ -287,7 +278,7 @@ final class NotebookDownloadTests: XCTestCase {
 
         try await app.test(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
                 // Build multipart body.
                 var body = ByteBufferAllocator().buffer(capacity: 1024)
                 let boundary = "TestBoundary12345"
@@ -308,6 +299,7 @@ final class NotebookDownloadTests: XCTestCase {
                     body.writeString("\r\n")
                 }
 
+                appendPart(name: "_csrf",       value: csrf)
                 appendPart(name: "collection",  value: collectionJSON)
                 appendPart(name: "testSetupID", value: setupID)
                 appendFilePart(name: "notebook", filename: "notebook.ipynb", data: studentNotebookData)
@@ -339,6 +331,7 @@ final class NotebookDownloadTests: XCTestCase {
     func testBrowserSubmitCreatesSingleBrowserCompleteSubmission() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
         let notebookData   = mixedNotebookJSON.data(using: .utf8)!
         let collectionJSON = """
@@ -353,7 +346,7 @@ final class NotebookDownloadTests: XCTestCase {
 
         try await app.test(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
                 var body = ByteBufferAllocator().buffer(capacity: 1024)
                 let boundary = "Boundary9876"
                 req.headers.contentType = HTTPMediaType(type: "multipart", subType: "form-data",
@@ -370,6 +363,7 @@ final class NotebookDownloadTests: XCTestCase {
                     body.writeBytes(data)
                     body.writeString("\r\n")
                 }
+                part("_csrf",       csrf)
                 part("collection",  collectionJSON)
                 part("testSetupID", setupID)
                 filePart("notebook", "notebook.ipynb", notebookData)
@@ -406,6 +400,7 @@ final class NotebookDownloadTests: XCTestCase {
         // submissions/file is instructor-tier (defensive endpoint, no student UI);
         // use an instructor cookie for this test.
         let cookie  = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
         // Simulate the student uploading a filtered notebook (no secret/release cells).
         let studentNotebookJSON = """
@@ -420,7 +415,7 @@ final class NotebookDownloadTests: XCTestCase {
 
         try await app.test(.POST, "/api/v1/submissions/file",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: .cookie, value: sessionCookie)
                 var body = ByteBufferAllocator().buffer(capacity: 1024)
                 let boundary = "TestBoundary67890"
                 req.headers.contentType = HTTPMediaType(type: "multipart", subType: "form-data",
@@ -440,6 +435,7 @@ final class NotebookDownloadTests: XCTestCase {
                     body.writeString("\r\n")
                 }
 
+                appendPart(name: "_csrf",       value: csrf)
                 appendPart(name: "testSetupID", value: setupID)
                 appendPart(name: "filename",    value: "solution.ipynb")
                 appendFilePart(name: "file", filename: "solution.ipynb", data: studentNotebookData)
