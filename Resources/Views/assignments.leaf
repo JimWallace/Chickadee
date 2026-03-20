@@ -131,7 +131,8 @@
                     #if(row.assignmentID && row.validationStatus == "passed"):
                     <form method="post" action="/instructor/#(row.assignmentID)/status">
                         #csrfFormField()
-                        <select class="form-input" name="status"
+                        <label class="visually-hidden" for="status-s-#(row.assignmentID)">Status for #(row.title)</label>
+                        <select id="status-s-#(row.assignmentID)" class="form-input" name="status"
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
@@ -275,7 +276,8 @@
                     #if(row.assignmentID && row.validationStatus == "passed"):
                     <form method="post" action="/instructor/#(row.assignmentID)/status">
                         #csrfFormField()
-                        <select class="form-input" name="status"
+                        <label class="visually-hidden" for="status-u-#(row.assignmentID)">Status for #(row.title)</label>
+                        <select id="status-u-#(row.assignmentID)" class="form-input" name="status"
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>

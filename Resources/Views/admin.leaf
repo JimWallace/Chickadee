@@ -159,7 +159,8 @@ Admin
                     <form method="post" action="/admin/users/#(user.id)/role"
                           style="display:flex;gap:.4rem;align-items:center">
                         #csrfFormField()
-                        <select name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
+                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
                             <option value="student"    #if(user.role == "student"):selected#endif>student</option>
                             <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
                             <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>
