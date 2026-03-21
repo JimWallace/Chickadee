@@ -123,6 +123,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
 
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
+    app.leaf.tags["csrfToken"] = CSRFTokenTag()
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     // COOP/COEP headers enable SharedArrayBuffer in browsers, required for
     // WebR (R WASM kernel) and the browser-side WASM runner (Issue #96/#77).

@@ -488,7 +488,7 @@ sys.stderr = sys.__stderr__
 
         const res = await fetch('/api/v1/submissions/browser-result', {
             method:  'POST',
-            headers: { 'X-CSRF-Token': getCsrfToken() },
+            headers: { 'x-csrf-token': getCsrfToken() },
             body:    formData,
         });
         if (!res.ok) {
