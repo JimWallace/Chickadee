@@ -61,6 +61,6 @@
 <main class="main" id="main-content">
     #import("content")
 </main>
-<script src="/app.js"></script>
+<script src="/app.js?v=0.4.4"></script>
 </body>
 </html>
