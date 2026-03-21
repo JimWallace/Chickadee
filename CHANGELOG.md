@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows Semantic Versioning.
 
+## [0.4.2] - 2026-03-21
+
+### Security
+
+- **Browser runner enrollment gate**: `GET /api/v1/browser-runner/testsetups/:id/download` and `.../manifest` now verify the caller is enrolled in the course that owns the test setup (or is an instructor/admin). Previously any authenticated user could download test setups from courses they were not enrolled in.
+- **Submission error messages**: removed user-supplied `testSetupID` from `400` error responses to avoid echoing untrusted input.
+
 ## [0.4.1] - 2026-03-19
 
 ### Security
