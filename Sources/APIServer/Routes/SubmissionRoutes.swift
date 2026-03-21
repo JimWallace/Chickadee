@@ -23,7 +23,7 @@ struct SubmissionRoutes: RouteCollection {
         let body = try req.content.decode(CreateSubmissionBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+            throw Abort(.badRequest, reason: "Invalid testSetupID")
         }
 
         let submissionsDir = req.application.submissionsDirectory
@@ -63,7 +63,7 @@ struct SubmissionRoutes: RouteCollection {
         let body = try req.content.decode(SubmitFileBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+            throw Abort(.badRequest, reason: "Invalid testSetupID")
         }
 
         let submissionsDir = req.application.submissionsDirectory
