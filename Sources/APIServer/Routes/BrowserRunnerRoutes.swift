@@ -48,7 +48,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        try await requireEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
@@ -72,7 +72,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        try await requireEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
@@ -80,16 +80,4 @@ struct BrowserRunnerRoutes: RouteCollection {
                         body: .init(string: setup.manifest))
     }
 
-    // MARK: - Helpers
-
-    /// Allows access if the caller is an instructor/admin, or is enrolled in the given course.
-    private func requireEnrollment(caller: APIUser, courseID: UUID, db: Database) async throws {
-        guard !caller.isInstructor else { return }
-        guard let callerID = caller.id else { throw Abort(.unauthorized) }
-        let enrolled = try await APICourseEnrollment.query(on: db)
-            .filter(\.$userID == callerID)
-            .filter(\.$course.$id == courseID)
-            .count() > 0
-        guard enrolled else { throw Abort(.forbidden) }
-    }
 }
