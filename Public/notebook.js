@@ -696,8 +696,9 @@ else:
         formData.append('filename', filename);
 
         const res = await fetch('/api/v1/submissions/runner-submit', {
-            method: 'POST',
-            body:   formData,
+            method:  'POST',
+            headers: { 'X-CSRF-Token': getCsrfToken() },
+            body:    formData,
         });
         if (!res.ok) {
             const text = await res.text();

@@ -1,3 +1,9 @@
+// Returns the CSRF token embedded by #csrfFormField() in the page.
+// Used by JS fetch calls to satisfy the CSRF middleware on POST endpoints.
+function getCsrfToken() {
+    return document.querySelector('input[name="_csrf"]')?.value ?? '';
+}
+
 // Drag-drop zone on the submission form
 const dropZone   = document.getElementById('drop-zone');
 const fileInput  = document.getElementById('file-input');
