@@ -487,8 +487,9 @@ sys.stderr = sys.__stderr__
         formData.append('testSetupID', setupID);
 
         const res = await fetch('/api/v1/submissions/browser-result', {
-            method: 'POST',
-            body:   formData,
+            method:  'POST',
+            headers: { 'X-CSRF-Token': getCsrfToken() },
+            body:    formData,
         });
         if (!res.ok) {
             const text = await res.text();
