@@ -932,3 +932,43 @@ func removeMaterializedNotebookFiles(req: Request, setupID: String) {
         }
     }
 }
+
+// MARK: - Support file extraction
+
+/// Extracts "support" files (zip entries that are neither test suite scripts nor the
+/// canonical notebooks) to `{testSetupsDirectory}/shared/{setupID}/`.
+///
+/// Called after every test setup create/update so the shared directory always reflects
+/// the current zip contents. The runner is unaffected — it re-extracts the full zip
+/// to a temp directory per job.
+func extractSupportFilesToSharedDirectory(
+    zipPath: String,
+    setupID: String,
+    testSuiteScripts: Set<String>,
+    testSetupsDirectory: String
+) {
+    let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    let allEntries = listZipEntries(zipPath: zipPath)
+    let supportNames = allEntries.filter {
+        !testSuiteScripts.contains($0) && !reservedNames.contains($0)
+    }
+    guard !supportNames.isEmpty else { return }
+
+    let sharedDir = testSetupsDirectory + "shared/\(setupID)/"
+    let fm = FileManager.default
+    do {
+        // Remove stale shared dir before re-extracting (zip may have changed on edit).
+        if fm.fileExists(atPath: sharedDir) {
+            try fm.removeItem(atPath: sharedDir)
+        }
+        try fm.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
+        for name in supportNames {
+            guard let data = extractZipEntry(zipPath: zipPath, entryName: name) else { continue }
+            try data.write(to: URL(fileURLWithPath: sharedDir + name))
+        }
+    } catch {
+        // Non-fatal: support files are a convenience; log and continue.
+        // (Structured logging not available in a free function; print suffices here.)
+        print("[chickadee] Warning: failed to extract support files for \(setupID): \(error)")
+    }
+}
