@@ -697,7 +697,7 @@ else:
 
         const res = await fetch('/api/v1/submissions/runner-submit', {
             method:  'POST',
-            headers: { 'X-CSRF-Token': getCsrfToken() },
+            headers: { 'x-csrf-token': getCsrfToken() },
             body:    formData,
         });
         if (!res.ok) {

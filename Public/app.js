@@ -1,7 +1,9 @@
-// Returns the CSRF token embedded by #csrfFormField() in the page.
+// Returns the CSRF token from the <meta name="csrf-token"> tag in <head>.
 // Used by JS fetch calls to satisfy the CSRF middleware on POST endpoints.
 function getCsrfToken() {
-    return document.querySelector('input[name="_csrf"]')?.value ?? '';
+    return document.querySelector('meta[name="csrf-token"]')?.content
+        ?? document.querySelector('input[name="_csrf"]')?.value
+        ?? '';
 }
 
 // Drag-drop zone on the submission form
