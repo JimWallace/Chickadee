@@ -288,17 +288,19 @@ struct TestSetupRoutes: RouteCollection {
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
-    // MARK: - GET /api/v1/testsetups/:id/assignment  [any authenticated user]
+    // MARK: - GET /api/v1/testsetups/:id/assignment  [enrolled students + instructors]
 
     @Sendable
     func getAssignment(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
               let setup   = try await APITestSetup.find(setupID, on: req.db)
         else { throw Abort(.notFound) }
 
-        let raw    = try notebookData(for: setup)
-        let caller = req.auth.get(APIUser.self)
-        let data   = (caller?.isInstructor == true)
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+
+        let raw  = try notebookData(for: setup)
+        let data = caller.isInstructor
             ? raw
             : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
@@ -309,16 +311,19 @@ struct TestSetupRoutes: RouteCollection {
         )
     }
 
-    // MARK: - GET /api/v1/testsetups/:id/assignment/download  [any authenticated user]
+    // MARK: - GET /api/v1/testsetups/:id/assignment/download  [enrolled students + instructors]
 
     @Sendable
     func downloadAssignment(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
               let setup   = try await APITestSetup.find(setupID, on: req.db)
         else { throw Abort(.notFound) }
 
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+
         let raw      = try notebookData(for: setup)
-        let filtered = filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
+        let filtered = caller.isInstructor ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
         // Determine a safe filename from the assignment title (if present).
         let assignment = try await APIAssignment.query(on: req.db)

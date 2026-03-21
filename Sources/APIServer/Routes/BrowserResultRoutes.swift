@@ -32,8 +32,10 @@ struct BrowserResultRoutes: RouteCollection {
 
         // Validate the referenced test setup exists.
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+            throw Abort(.badRequest, reason: "Unknown testSetupID")
         }
+
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         // Decode the TestOutcomeCollection the browser sent.
         let decoder = JSONDecoder()
@@ -107,8 +109,10 @@ struct BrowserResultRoutes: RouteCollection {
         let body = try req.content.decode(RunnerSubmitBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+            throw Abort(.badRequest, reason: "Unknown testSetupID")
         }
+
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let subsDir = req.application.submissionsDirectory
         let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"

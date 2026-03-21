@@ -484,6 +484,8 @@ struct WebRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
+        try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
+
         let query = try? req.query.decode(NotebookQuery.self)
         let queryTitle = (query?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignment = try await APIAssignment.query(on: req.db)
@@ -558,6 +560,8 @@ struct WebRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
+
+        try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
 
         let payload = try await ensureUserNotebookWorkingCopy(
             req: req,
