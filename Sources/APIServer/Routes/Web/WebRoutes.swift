@@ -958,6 +958,7 @@ private func ensureUserNotebookWorkingCopy(
     if let overwriteWith {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
+        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         removeLegacyUserNotebookCopies(req: req, userID: userID)
         return overwriteWith
     }
@@ -965,6 +966,9 @@ private func ensureUserNotebookWorkingCopy(
     if let existingData = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
        !existingData.isEmpty,
        (try? JSONSerialization.jsonObject(with: existingData)) != nil {
+        // Symlinks are idempotent — run on every visit so existing working copies
+        // also pick up support files when the feature is first deployed.
+        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         removeLegacyUserNotebookCopies(req: req, userID: userID)
         return existingData
     }
@@ -978,6 +982,7 @@ private func ensureUserNotebookWorkingCopy(
 
     try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
     try seedData.write(to: URL(fileURLWithPath: workingCopyPath))
+    createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
 
     removeLegacyUserNotebookCopies(req: req, userID: userID)
     return seedData
@@ -1137,6 +1142,44 @@ private struct SubmitFormBody: Content {
     var files: Data
     /// Original filename from the browser's multipart upload (nil for older clients).
     var uploadFilename: String?
+}
+
+// MARK: - Support file symlinks
+
+/// Creates read-only symlinks for support files (zip entries that are not test suite
+/// scripts or canonical notebooks) inside the student's JupyterLite working directory.
+///
+/// Symlinks point to the shared extraction in `{testSetupsDir}/shared/{setupID}/`
+/// that is populated by `extractSupportFilesToSharedDirectory` when the test setup
+/// is created or edited. Only files that exist in the shared directory are linked;
+/// missing files are silently skipped so a missing shared dir never breaks notebook access.
+private func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: String) {
+    guard let setupID = setup.id else { return }
+
+    // Derive the list of support files: everything in the zip except test suite scripts
+    // and the canonical notebooks.
+    guard let manifestData = setup.manifest.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
+    else { return }
+
+    let testScriptNames = Set(props.testSuites.map { $0.script })
+    let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    let allEntries = listZipEntries(zipPath: setup.zipPath)
+    let supportNames = allEntries.filter {
+        !testScriptNames.contains($0) && !reservedNames.contains($0)
+    }
+    guard !supportNames.isEmpty else { return }
+
+    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    let fm = FileManager.default
+
+    for name in supportNames {
+        let src  = sharedDir + name
+        let dest = studentDir + "/" + name
+        guard !fm.fileExists(atPath: dest) else { continue }   // idempotent
+        guard  fm.fileExists(atPath: src)  else { continue }   // skip if not yet extracted
+        try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
+    }
 }
 
 private func inferredRawSubmissionExtension(data: Data, uploadFilename: String?) -> String {

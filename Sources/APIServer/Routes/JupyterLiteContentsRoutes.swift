@@ -117,7 +117,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             "format": format,
             "mimetype": mimetype,
             "size": fileData.count,
-            "writable": true,
+            "writable": !isSymlink(url: targetURL),
             "type": isNotebook ? "notebook" : "file"
         ]
         return try jsonResponse(model)
@@ -160,7 +160,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 "format": "json",
                 "mimetype": isDir ? "application/json" : (isNotebook ? "application/x-ipynb+json" : "application/octet-stream"),
                 "size": isDir ? 0 : ((childAttributes[.size] as? NSNumber)?.intValue ?? 0),
-                "writable": true,
+                "writable": isDir ? true : !isSymlink(url: child),
                 "type": isDir ? "directory" : (isNotebook ? "notebook" : "file")
             ]
         }
@@ -191,6 +191,11 @@ struct JupyterLiteContentsRoutes: RouteCollection {
 
     private func isDirectory(url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// Returns true if `url` is a symbolic link (used to mark support files read-only).
+    private func isSymlink(url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
     }
 
     private func attributesForItem(url: URL, fileManager: FileManager) -> [FileAttributeKey: Any] {

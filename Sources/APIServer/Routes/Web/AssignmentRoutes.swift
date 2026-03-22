@@ -445,6 +445,12 @@ struct AssignmentRoutes: RouteCollection {
             courseID: courseID
         )
         try await setup.save(on: req.db)
+        extractSupportFilesToSharedDirectory(
+            zipPath: zipPath,
+            setupID: setupID,
+            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
+            testSetupsDirectory: req.application.testSetupsDirectory
+        )
 
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
@@ -1012,6 +1018,12 @@ struct AssignmentRoutes: RouteCollection {
         )
         setup.notebookPath = notebookPath
         try await setup.save(on: req.db)
+        extractSupportFilesToSharedDirectory(
+            zipPath: setup.zipPath,
+            setupID: setup.id!,
+            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
+            testSetupsDirectory: req.application.testSetupsDirectory
+        )
 
         assignment.title = title
         assignment.dueAt = due
