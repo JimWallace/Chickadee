@@ -761,6 +761,14 @@ func extractNotebooksToCode(in directory: URL) throws {
     )) ?? []
 
     for item in items where item.pathExtension.lowercased() == "ipynb" {
+        // Skip the assignment template and instructor solution.  Extracting
+        // these to .py would put instructor code into the working directory
+        // alongside the student's extracted .py, causing duplicate function
+        // definition errors in load_submission_modules().  Only the student's
+        // submission (placed by the runner under the original submission
+        // filename) should be converted.
+        let name = item.lastPathComponent
+        guard name != "assignment.ipynb" && name != "solution.ipynb" else { continue }
         guard
             let data     = try? Data(contentsOf: item),
             let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
