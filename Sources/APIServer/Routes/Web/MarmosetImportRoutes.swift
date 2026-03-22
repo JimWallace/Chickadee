@@ -26,7 +26,7 @@ import Foundation
 
 struct MarmosetImportRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        let r = routes.grouped("assignments", "import-marmoset")
+        let r = routes.grouped("instructor", "import-marmoset")
         r.get(use: importForm)
         r.post(use: processImport)
     }
