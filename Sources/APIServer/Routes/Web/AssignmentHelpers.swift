@@ -599,7 +599,6 @@ func defaultNotebookData(title: String) -> Data {
 
 func createRunnerSetupZip(
     assignmentNotebookData: Data,
-    solutionNotebookData: Data?,
     suiteFiles: [File],
     suiteConfigJSON: String?,
     zipPath: String
@@ -637,10 +636,13 @@ func createRunnerSetupZip(
 
     let notebookURL = tempDir.appendingPathComponent("assignment.ipynb")
     try assignmentNotebookData.write(to: notebookURL)
-    if let solutionNotebookData {
-        let solutionURL = tempDir.appendingPathComponent("solution.ipynb")
-        try solutionNotebookData.write(to: solutionURL)
-    }
+    // solution.ipynb is intentionally NOT written to the runner zip.
+    // The runner's extractNotebooksToCode() converts every .ipynb in the
+    // working directory to .py; if solution.ipynb were present it would
+    // produce solution.py alongside the student's submitted .py, causing
+    // "Multiple definitions of '<func>' found" errors in load_submission_modules().
+    // The solution is persisted separately as a validation-submission artifact
+    // and can be downloaded by instructors via /instructor/:id/files/solution.
 
     let testSuites = try buildSuiteEntries(
         suiteFiles: suiteFiles,

@@ -412,7 +412,6 @@ struct AssignmentRoutes: RouteCollection {
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
         let setupPackage = try createRunnerSetupZip(
             assignmentNotebookData: assignmentNotebook,
-            solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
             suiteFiles: suiteFiles,
             suiteConfigJSON: suiteConfigRaw,
             zipPath: zipPath
@@ -920,9 +919,16 @@ struct AssignmentRoutes: RouteCollection {
         let uploadedSuiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
 
         let hasUploadedAssignmentNotebook = assignmentNotebookFile?.data.readableBytes ?? 0 > 0
+        // Marmoset-style worker-mode imports often have no starter .ipynb.
+        // Fall back to an empty notebook so the edit can proceed without
+        // requiring the instructor to upload one on every save.
+        // The empty notebook produces no .py code when extractNotebooksToCode
+        // runs, so it doesn't conflict with the student submission.
+        let minimalEmptyNotebook = Data(
+            #"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
         let assignmentNotebookRaw: Data = {
             guard let assignmentNotebookFile, hasUploadedAssignmentNotebook else {
-                return (try? notebookData(for: setup)) ?? Data()
+                return (try? notebookData(for: setup)) ?? minimalEmptyNotebook
             }
             return Data(assignmentNotebookFile.data.readableBytesView)
         }()
@@ -994,7 +1000,6 @@ struct AssignmentRoutes: RouteCollection {
 
         let setupPackage = try createRunnerSetupZip(
             assignmentNotebookData: assignmentNotebook,
-            solutionNotebookData: normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw),
             suiteFiles: resolvedSuite.files,
             suiteConfigJSON: resolvedSuite.reindexedSuiteConfigJSON,
             zipPath: setup.zipPath
