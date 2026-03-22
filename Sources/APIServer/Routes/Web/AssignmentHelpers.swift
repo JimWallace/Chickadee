@@ -952,15 +952,17 @@ func extractSupportFilesToSharedDirectory(
     let supportNames = allEntries.filter {
         !testSuiteScripts.contains($0) && !reservedNames.contains($0)
     }
-    guard !supportNames.isEmpty else { return }
 
     let sharedDir = testSetupsDirectory + "shared/\(setupID)/"
     let fm = FileManager.default
     do {
-        // Remove stale shared dir before re-extracting (zip may have changed on edit).
+        // Always remove the stale shared dir before re-extracting so a support
+        // file removed on edit doesn't linger (and so student symlinks to it
+        // become visibly broken rather than silently stale).
         if fm.fileExists(atPath: sharedDir) {
             try fm.removeItem(atPath: sharedDir)
         }
+        guard !supportNames.isEmpty else { return }
         try fm.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         for name in supportNames {
             guard let data = extractZipEntry(zipPath: zipPath, entryName: name) else { continue }

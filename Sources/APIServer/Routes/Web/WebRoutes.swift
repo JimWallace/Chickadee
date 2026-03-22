@@ -958,6 +958,7 @@ private func ensureUserNotebookWorkingCopy(
     if let overwriteWith {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
+        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         removeLegacyUserNotebookCopies(req: req, userID: userID)
         return overwriteWith
     }
@@ -965,6 +966,9 @@ private func ensureUserNotebookWorkingCopy(
     if let existingData = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
        !existingData.isEmpty,
        (try? JSONSerialization.jsonObject(with: existingData)) != nil {
+        // Symlinks are idempotent — run on every visit so existing working copies
+        // also pick up support files when the feature is first deployed.
+        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         removeLegacyUserNotebookCopies(req: req, userID: userID)
         return existingData
     }
