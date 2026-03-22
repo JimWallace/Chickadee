@@ -62,5 +62,30 @@
     #import("content")
 </main>
 <script src="/app.js?v=0.4.4"></script>
+<script>
+// All multipart/form-data uploads bypass the hidden _csrf body field because
+// the body stream is not collected before CSRF middleware runs.  Intercept
+// every such form and re-submit via fetch with x-csrf-token in the header.
+(function () {
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form || form.enctype !== 'multipart/form-data') return;
+        e.preventDefault();
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var csrfToken = meta ? meta.getAttribute('content') : '';
+        var btn = form.querySelector('[type="submit"]');
+        if (btn) btn.disabled = true;
+        fetch(form.action, {
+            method: form.method.toUpperCase() || 'POST',
+            headers: { 'x-csrf-token': csrfToken },
+            body: new FormData(form)
+        }).then(function (res) {
+            window.location.href = res.url || window.location.href;
+        }).catch(function () {
+            if (btn) btn.disabled = false;
+        });
+    }, true);
+}());
+</script>
 </body>
 </html>

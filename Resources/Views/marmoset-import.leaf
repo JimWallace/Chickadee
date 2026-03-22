@@ -72,31 +72,5 @@ Import from Marmoset — #(courseCode)
         (the file students must submit) and then run validation before opening.
     </p>
 </section>
-
-<script>
-(function () {
-    // Multipart file-upload bodies are not collected before the CSRF middleware
-    // runs, so the hidden _csrf field can't be read from the body. Instead,
-    // intercept the submit and send via fetch with x-csrf-token in the header,
-    // which the CSRF middleware checks before attempting to read the body.
-    var form = document.querySelector('form[action="/instructor/import-marmoset"]');
-    if (!form) return;
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        var csrfToken = meta ? meta.getAttribute('content') : '';
-        fetch(form.action, {
-            method: 'POST',
-            headers: { 'x-csrf-token': csrfToken },
-            body: new FormData(form)
-        }).then(function (res) {
-            // fetch follows the server's 303 redirect; res.url is the final URL.
-            window.location.href = res.url || '/instructor';
-        }).catch(function () {
-            window.location.href = '/instructor/import-marmoset?error=Network+error.';
-        });
-    });
-}());
-</script>
 #endexport
 #endextend
