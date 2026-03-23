@@ -26,7 +26,7 @@ jobs:
           BIN=$(swift build --show-bin-path)
           PROFDATA=$(find .build -name 'default.profdata' -type f)
           XCTEST=$(find "$BIN" -name 'ChickadeePackageTests.xctest' -type f)
-          xcrun llvm-cov export \
+          llvm-cov export \
             -format=lcov \
             -instr-profile="$PROFDATA" \
             "$XCTEST" \
