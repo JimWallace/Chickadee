@@ -158,10 +158,12 @@ actor WorkerDaemon {
         // Remove the starter notebook template from the test directory so
         // grading scripts that scan for *.ipynb don't see both the template
         // and the student/canonical submission.
-        let starterNotebook = testSetupDir.appendingPathComponent("assignment.ipynb")
-        if FileManager.default.fileExists(atPath: starterNotebook.path),
-           job.submissionFilename != "assignment.ipynb" {
-            try FileManager.default.removeItem(at: starterNotebook)
+        if let starterName = manifest.starterNotebook {
+            let starterPath = testSetupDir.appendingPathComponent(starterName)
+            if FileManager.default.fileExists(atPath: starterPath.path),
+               job.submissionFilename != starterName {
+                try FileManager.default.removeItem(at: starterPath)
+            }
         }
 
         // Optional make step.

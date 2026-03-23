@@ -765,7 +765,8 @@ func normalizeTier(_ raw: String?) -> String {
 func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
-    gradingMode: String = "worker"
+    gradingMode: String = "worker",
+    starterNotebook: String? = "assignment.ipynb"
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -784,7 +785,7 @@ func makeWorkerManifestJSON(
         }
         return dict
     }
-    let manifest: [String: Any] = [
+    var manifest: [String: Any] = [
         "schemaVersion": 1,
         "gradingMode": gradingMode,
         "requiredFiles": [],
@@ -792,6 +793,9 @@ func makeWorkerManifestJSON(
         "timeLimitSeconds": 10,
         "makefile": includeMakefile ? ["target": NSNull()] : NSNull()
     ]
+    if let starterNotebook {
+        manifest["starterNotebook"] = starterNotebook
+    }
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
 }

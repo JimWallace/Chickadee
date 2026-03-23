@@ -63,6 +63,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
     public let testSuites: [TestSuiteEntry]
     public let timeLimitSeconds: Int
     public let makefile: MakefileConfig?
+    /// Filename of the starter/template notebook bundled in the test setup zip
+    /// (e.g. "assignment.ipynb").  The runner removes this file before executing
+    /// tests so grading scripts don't confuse it with the student's submission.
+    /// Nil when the assignment has no notebook template.
+    public let starterNotebook: String?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -72,5 +77,6 @@ public struct TestProperties: Codable, Equatable, Sendable {
         testSuites       = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites)       ?? []
         timeLimitSeconds = try c.decodeIfPresent(Int.self,              forKey: .timeLimitSeconds) ?? 10
         makefile         = try c.decodeIfPresent(MakefileConfig.self,   forKey: .makefile)
+        starterNotebook  = try c.decodeIfPresent(String.self,           forKey: .starterNotebook)
     }
 }

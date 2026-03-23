@@ -258,7 +258,8 @@ func convertToChickadeeManifest(project: MarmosetProject) throws -> String {
         "requiredFiles": [],
         "testSuites":    suites,
         "timeLimitSeconds": 10,
-        "makefile": NSNull()  // Marmoset Makefiles are stripped; runner handles .ipynb→.py natively
+        "makefile": NSNull(),  // Marmoset Makefiles are stripped; runner handles .ipynb→.py natively
+        "starterNotebook": "assignment.ipynb"
     ]
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
