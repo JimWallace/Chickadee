@@ -10,9 +10,12 @@ Submission #(submissionID)
 <div class="submission-header">
     <div class="submission-header-row">
         <h1>Submission</h1>
-        #if(openInNotebookURL):
-        <a class="btn action-btn" href="#(openInNotebookURL)">Open in notebook</a>
-        #endif
+        <div class="submission-actions">
+            <a class="btn action-btn" href="/api/v1/submissions/#(submissionID)/download">#if(submissionFilename):Download #(submissionFilename)#else:Download submission#endif</a>
+            #if(openInNotebookURL):
+            <a class="btn action-btn" href="#(openInNotebookURL)">Open in notebook</a>
+            #endif
+        </div>
     </div>
     #if(isPending):
     #else:

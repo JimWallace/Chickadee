@@ -26,10 +26,9 @@ Submission History
             <td>#(row.gradeText)</td>
             <td>
                 <a class="btn action-btn" href="/submissions/#(row.submissionID)">View results</a>
+                <a class="btn action-btn" href="/api/v1/submissions/#(row.submissionID)/download">Download</a>
                 #if(row.canOpenInNotebook):
                 <a class="btn action-btn" href="#(row.openInNotebookURL)">Open</a>
-                #else:
-                —
                 #endif
             </td>
         </tr>

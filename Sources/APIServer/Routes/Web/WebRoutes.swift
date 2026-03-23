@@ -454,6 +454,7 @@ struct WebRoutes: RouteCollection {
                 status: submission.status,
                 submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
                 gradeText: gradeText,
+                submissionFilename: submission.filename,
                 canOpenInNotebook: canOpenInNotebook,
                 openInNotebookURL: openInNotebookURL
             )
@@ -767,6 +768,7 @@ struct WebRoutes: RouteCollection {
             testSetupID:       submission.testSetupID,
             status:            submission.status,
             attemptNumber:     submission.attemptNumber ?? 1,
+            submissionFilename: submission.filename,
             openInNotebookURL: openInNotebookURL,
             isPending:         isPending,
             isBrowserComplete: isBrowserComplete,
@@ -859,6 +861,7 @@ private struct SubmissionHistoryRow: Encodable {
     let status: String
     let submittedAt: String
     let gradeText: String
+    let submissionFilename: String?
     let canOpenInNotebook: Bool
     let openInNotebookURL: String?
 }
@@ -904,6 +907,7 @@ private struct SubmissionContext: Encodable {
     let testSetupID: String
     let status: String
     let attemptNumber: Int
+    let submissionFilename: String?
     let openInNotebookURL: String?
     let isPending: Bool
     /// True when the browser run is done but the worker hasn't reported yet.

@@ -124,7 +124,10 @@ struct SubmissionDownloadRoute: RouteCollection {
         if !caller.isInstructor && submission.userID != caller.id {
             throw Abort(.forbidden)
         }
-        return try await req.fileio.asyncStreamFile(at: submission.zipPath)
+        let downloadName = submission.filename
+            ?? URL(fileURLWithPath: submission.zipPath).lastPathComponent
+        let data = try Data(contentsOf: URL(fileURLWithPath: submission.zipPath))
+        return buildFileResponse(data: data, filename: downloadName)
     }
 }
 
