@@ -38,7 +38,7 @@ actor UWImportantDatesCache {
             }
             var body = response.body ?? ByteBuffer()
             let text = body.readString(length: body.readableBytes) ?? ""
-            let parsed = parseICS(text).filter { isRelevantEvent($0.title) }
+            let parsed = parseICSEvents(text).filter { isRelevantUWEvent($0.title) }
             cached = parsed
             cachedAt = Date()
             return parsed
@@ -48,109 +48,96 @@ actor UWImportantDatesCache {
         }
     }
 
-    // MARK: - iCalendar Parser
 
-    /// Extracts VEVENT blocks and returns one UWImportantDate per event.
-    /// Handles both DATE-only (DTSTART;VALUE=DATE:YYYYMMDD) and DATE-TIME forms.
-    private func parseICS(_ text: String) -> [UWImportantDate] {
-        var results: [UWImportantDate] = []
+}
 
-        // Split on VEVENT boundaries
-        let blocks = text.components(separatedBy: "BEGIN:VEVENT")
-        for block in blocks.dropFirst() {
-            guard let startDate = extractDate(key: "DTSTART", from: block),
-                  let title = extractSummary(from: block) else {
-                continue
+// MARK: - iCalendar Parsing (free functions, testable)
+
+/// Extracts VEVENT blocks and returns one UWImportantDate per event.
+func parseICSEvents(_ text: String) -> [UWImportantDate] {
+    var results: [UWImportantDate] = []
+    let blocks = text.components(separatedBy: "BEGIN:VEVENT")
+    for block in blocks.dropFirst() {
+        guard let startDate = extractICSDate(key: "DTSTART", from: block),
+              let title = extractICSSummary(from: block) else {
+            continue
+        }
+        let endDate = extractICSDate(key: "DTEND", from: block) ?? nextDayISO(startDate)
+        results.append(UWImportantDate(startDate: startDate, endDate: endDate, title: title))
+    }
+    return results
+}
+
+/// Extracts a line like DTSTART;VALUE=DATE:20260321 or DTSTART:20260321 → "2026-03-21"
+func extractICSDate(key: String, from block: String) -> String? {
+    for line in block.components(separatedBy: "\n") {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(key) else { continue }
+        let colonIdx = trimmed.firstIndex(of: ":") ?? trimmed.endIndex
+        let raw = String(trimmed[trimmed.index(after: colonIdx)...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let digits = raw.prefix(8)
+        guard digits.count == 8, digits.allSatisfy(\.isNumber) else { continue }
+        let y = digits.prefix(4)
+        let m = digits.dropFirst(4).prefix(2)
+        let d = digits.dropFirst(6).prefix(2)
+        return "\(y)-\(m)-\(d)"
+    }
+    return nil
+}
+
+/// Extracts SUMMARY, handling folded lines (continuation lines start with a space/tab).
+func extractICSSummary(from block: String) -> String? {
+    let lines = block.components(separatedBy: "\n")
+    var inSummary = false
+    var accumulated = ""
+    for line in lines {
+        let raw = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+        if raw.hasPrefix("SUMMARY:") || raw.hasPrefix("SUMMARY;") {
+            if let colonIdx = raw.firstIndex(of: ":") {
+                accumulated = String(raw[raw.index(after: colonIdx)...])
             }
-            // DTEND is exclusive in iCalendar; default to startDate + 1 day if absent
-            let endDate = extractDate(key: "DTEND", from: block) ?? nextDay(startDate)
-            results.append(UWImportantDate(startDate: startDate, endDate: endDate, title: title))
-        }
-
-        return results
-    }
-
-    /// Extracts a line like DTSTART;VALUE=DATE:20260321 or DTSTART:20260321 → "2026-03-21"
-    private func extractDate(key: String, from block: String) -> String? {
-        for line in block.components(separatedBy: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Match e.g. "DTSTART;VALUE=DATE:20260321" or "DTSTART:20260321"
-            guard trimmed.hasPrefix(key) else { continue }
-            let colonIdx = trimmed.firstIndex(of: ":") ?? trimmed.endIndex
-            let raw = String(trimmed[trimmed.index(after: colonIdx)...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            // Take the date portion (first 8 digits)
-            let digits = raw.prefix(8)
-            guard digits.count == 8, digits.allSatisfy(\.isNumber) else { continue }
-            let y = digits.prefix(4)
-            let m = digits.dropFirst(4).prefix(2)
-            let d = digits.dropFirst(6).prefix(2)
-            return "\(y)-\(m)-\(d)"
-        }
-        return nil
-    }
-
-    /// Extracts SUMMARY, handling folded lines (continuation lines start with a space/tab).
-    private func extractSummary(from block: String) -> String? {
-        let lines = block.components(separatedBy: "\n")
-        var inSummary = false
-        var accumulated = ""
-        for line in lines {
-            let raw = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
-            if raw.hasPrefix("SUMMARY:") || raw.hasPrefix("SUMMARY;") {
-                // Drop the property name
-                if let colonIdx = raw.firstIndex(of: ":") {
-                    accumulated = String(raw[raw.index(after: colonIdx)...])
-                }
-                inSummary = true
-            } else if inSummary {
-                if raw.hasPrefix(" ") || raw.hasPrefix("\t") {
-                    // Folded continuation line
-                    accumulated += raw.dropFirst()
-                } else {
-                    break
-                }
+            inSummary = true
+        } else if inSummary {
+            if raw.hasPrefix(" ") || raw.hasPrefix("\t") {
+                accumulated += raw.dropFirst()
+            } else {
+                break
             }
         }
-        let trimmed = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Unescape iCalendar backslash sequences
-        let unescaped = trimmed
-            .replacingOccurrences(of: "\\,", with: ",")
-            .replacingOccurrences(of: "\\;", with: ";")
-            .replacingOccurrences(of: "\\n", with: " ")
-            .replacingOccurrences(of: "\\N", with: " ")
-            .replacingOccurrences(of: "\\\\", with: "\\")
-        return unescaped.isEmpty ? nil : unescaped
     }
+    let trimmed = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+    let unescaped = trimmed
+        .replacingOccurrences(of: "\\,", with: ",")
+        .replacingOccurrences(of: "\\;", with: ";")
+        .replacingOccurrences(of: "\\n", with: " ")
+        .replacingOccurrences(of: "\\N", with: " ")
+        .replacingOccurrences(of: "\\\\", with: "\\")
+    return unescaped.isEmpty ? nil : unescaped
+}
 
-    /// Returns true if the event title represents a closure, holiday, break, or exam period
-    /// that would make it unreasonable to set an assignment due date on or near that date.
-    private func isRelevantEvent(_ title: String) -> Bool {
-        let lower = title.lowercased()
-        let keywords: [String] = [
-            // Statutory holidays
-            "good friday", "easter", "victoria day", "canada day", "civic holiday",
-            "labour day", "thanksgiving", "remembrance day", "christmas", "boxing day",
-            "new year",
-            // University closures
-            "university closed", "holiday", "closure",
-            // Academic breaks
-            "reading week", "spring vacation", "spring break", "winter break",
-            "study break", "intersession",
-            // Exam periods
-            "final examination", "final exam", "exam period",
-        ]
-        return keywords.contains { lower.contains($0) }
-    }
+/// Returns true if the event title represents a closure, holiday, break, or exam period.
+func isRelevantUWEvent(_ title: String) -> Bool {
+    let lower = title.lowercased()
+    let keywords: [String] = [
+        "good friday", "easter", "victoria day", "canada day", "civic holiday",
+        "labour day", "thanksgiving", "remembrance day", "christmas", "boxing day",
+        "new year",
+        "university closed", "holiday", "closure",
+        "reading week", "spring vacation", "spring break", "winter break",
+        "study break", "intersession",
+        "final examination", "final exam", "exam period",
+    ]
+    return keywords.contains { lower.contains($0) }
+}
 
-    private func nextDay(_ isoDate: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        guard let date = formatter.date(from: isoDate) else { return isoDate }
-        let next = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: date) ?? date
-        return formatter.string(from: next)
-    }
+func nextDayISO(_ isoDate: String) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    guard let date = formatter.date(from: isoDate) else { return isoDate }
+    let next = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: date) ?? date
+    return formatter.string(from: next)
 }
 
 // MARK: - Application Storage
