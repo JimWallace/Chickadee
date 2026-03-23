@@ -467,7 +467,8 @@ struct AssignmentRoutes: RouteCollection {
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
             req: req,
             setupID: setupID,
-            solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw)
+            solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
+            filename: solutionNotebookFile.filename
         )
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)
