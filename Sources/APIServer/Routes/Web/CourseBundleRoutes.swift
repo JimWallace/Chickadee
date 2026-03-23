@@ -345,36 +345,42 @@ struct CourseBundleRoutes: RouteCollection {
             }
         }
 
-        // ── 5. Check for course code conflicts ────────────────────────────
-
-        let existingCourse = try await APICourse.query(on: req.db)
-            .filter(\.$code == manifest.course.code)
-            .first()
-        if let existing = existingCourse, !existing.isArchived {
-            throw Abort(.conflict,
-                        reason: """
-                        A course with code "\(manifest.course.code)" already exists and is active. \
-                        Archive it first, then re-import.
-                        """)
-        }
-
-        // ── 6. Collect directories ────────────────────────────────────────
+        // ── 5. Collect directories ────────────────────────────────────────
 
         let setupsDir = req.application.testSetupsDirectory
         let subsDir   = req.application.submissionsDirectory
 
-        // ── 7. Transactional import ───────────────────────────────────────
-        // Return a tally from the closure to avoid captured-var mutation warnings
-        // (which are errors in Swift 6 strict mode).
+        // ── 6. Transactional import ───────────────────────────────────────
+        // The conflict check (formerly step 5) is now the first thing inside the
+        // transaction so there is no outstanding req.db cursor before the transaction
+        // begins. On SQLite this prevents "busy: cannot commit transaction — SQL
+        // statements in progress" errors caused by an open cursor from a pre-transaction
+        // query lingering when the COMMIT fires.
+        //
+        // Returns a tally from the closure to avoid captured-var mutation warnings
+        // (errors in Swift 6 strict mode).
 
         let tally = try await req.db.transaction { (db) -> ImportTally in
+
+            // 6a. Check for course code conflicts (moved inside transaction)
+            let existingCourse = try await APICourse.query(on: db)
+                .filter(\.$code == manifest.course.code)
+                .first()
+            if let existing = existingCourse, !existing.isArchived {
+                throw Abort(.conflict,
+                            reason: """
+                            A course with code "\(manifest.course.code)" already exists and is active. \
+                            Archive it first, then re-import.
+                            """)
+            }
+
             var t = ImportTally(
                 courseID:   UUID(),
                 courseCode: manifest.course.code,
                 courseName: manifest.course.name
             )
 
-            // 7a. Create course
+            // 6b. Create course
             let newCourse = APICourse(code: manifest.course.code, name: manifest.course.name,
                                       openEnrollment: manifest.course.openEnrollment ?? true)
             try await newCourse.save(on: db)
@@ -382,7 +388,7 @@ struct CourseBundleRoutes: RouteCollection {
             t.courseCode = newCourse.code
             t.courseName = newCourse.name
 
-            // 7b. Resolve users → userIDMap[bundleID] = live UUID
+            // 6c. Resolve users → userIDMap[bundleID] = live UUID
             var userIDMap: [String: UUID] = [:]
             for bundledUser in manifest.users {
                 if let existing = try await APIUser.query(on: db)
@@ -406,7 +412,7 @@ struct CourseBundleRoutes: RouteCollection {
                 }
             }
 
-            // 7c. Create enrollments for enrolled users
+            // 6d. Create enrollments for enrolled users
             for bundleID in manifest.enrolledUserBundleIDs {
                 guard let uid = userIDMap[bundleID] else { continue }
                 // Skip if already enrolled (matched user already in another course).
@@ -420,7 +426,7 @@ struct CourseBundleRoutes: RouteCollection {
                 }
             }
 
-            // 7d. Create test setups → setupIDMap[bundleID] = new live ID
+            // 6e. Create test setups → setupIDMap[bundleID] = new live ID
             var setupIDMap: [String: String] = [:]
             for bundledSetup in manifest.testSetups {
                 let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
@@ -451,7 +457,7 @@ struct CourseBundleRoutes: RouteCollection {
                 t.testSetupsImported += 1
             }
 
-            // 7e. Create assignments
+            // 6f. Create assignments
             for bundledAssign in manifest.assignments {
                 guard let setupID = setupIDMap[bundledAssign.testSetupBundleID] else { continue }
                 let newAssign = APIAssignment(
@@ -467,7 +473,7 @@ struct CourseBundleRoutes: RouteCollection {
                 t.assignmentsImported += 1
             }
 
-            // 7f. Create submissions → subIDMap[bundleID] = new live ID
+            // 6g. Create submissions → subIDMap[bundleID] = new live ID
             var subIDMap: [String: String] = [:]
             for bundledSub in manifest.submissions {
                 guard let setupID = setupIDMap[bundledSub.testSetupBundleID] else { continue }
@@ -496,7 +502,7 @@ struct CourseBundleRoutes: RouteCollection {
                 t.submissionsImported += 1
             }
 
-            // 7g. Create results
+            // 6h. Create results
             for bundledResult in manifest.results {
                 guard let subID = subIDMap[bundledResult.submissionBundleID] else { continue }
                 let newResultID = "res_\(UUID().uuidString.lowercased().prefix(8))"
