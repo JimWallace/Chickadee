@@ -411,7 +411,6 @@ struct AssignmentRoutes: RouteCollection {
         let zipPath = setupsDir + "\(setupID).zip"
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
         let setupPackage = try createRunnerSetupZip(
-            assignmentNotebookData: assignmentNotebook,
             suiteFiles: suiteFiles,
             suiteConfigJSON: suiteConfigRaw,
             zipPath: zipPath
@@ -1006,7 +1005,6 @@ struct AssignmentRoutes: RouteCollection {
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
 
         let setupPackage = try createRunnerSetupZip(
-            assignmentNotebookData: assignmentNotebook,
             suiteFiles: resolvedSuite.files,
             suiteConfigJSON: resolvedSuite.reindexedSuiteConfigJSON,
             zipPath: setup.zipPath

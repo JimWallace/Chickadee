@@ -164,7 +164,12 @@ struct MarmosetImportRoutes: RouteCollection {
             }
             let hasCanonical = canonicalSolution != nil
 
-            // ── 4c. Inject assignment.ipynb from starter files (if any) ─
+            // ── 4c. Persist starter notebook from starter files (if any) ─
+            //
+            // The starter notebook is NOT included in the runner zip — the
+            // runner doesn't need it (the student provides their own file).
+            // It is only stored in notebooks/{setupID}/ for JupyterLite to
+            // serve to students, preserving the original Marmoset filename.
 
             var notebookPath: String? = nil
             let starterZipPath = projectsDir.appendingPathComponent("\(n)-project-starter-files.zip").path
@@ -173,13 +178,12 @@ struct MarmosetImportRoutes: RouteCollection {
                let starterData = try? extractNotebookFromZip(zipPath: starterZipPath,
                                                              filename: starterFilename) {
                 let normalized = normalizeNotebookForJupyterLite(starterData)
-                // Into the zip as assignment.ipynb (canonical name Chickadee uses).
-                try normalized.write(to: stagingDir.appendingPathComponent("assignment.ipynb"))
-                // Also persist to the notebooks/ directory so the JupyterLite route can serve it.
+                let storedName = notebookFilenameForStorage(
+                    uploadedName: starterFilename, fallback: "assignment.ipynb")
                 let notebookDir = setupsDir + "notebooks/\(setupID)/"
                 try FileManager.default.createDirectory(atPath: notebookDir,
                                                         withIntermediateDirectories: true)
-                let nbPath = notebookDir + "assignment.ipynb"
+                let nbPath = notebookDir + storedName
                 try normalized.write(to: URL(fileURLWithPath: nbPath))
                 notebookPath = nbPath
             }

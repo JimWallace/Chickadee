@@ -610,7 +610,6 @@ func defaultNotebookData(title: String) -> Data {
 }
 
 func createRunnerSetupZip(
-    assignmentNotebookData: Data,
     suiteFiles: [File],
     suiteConfigJSON: String?,
     zipPath: String
@@ -646,15 +645,16 @@ func createRunnerSetupZip(
         storedNameByIndex[index] = finalName
     }
 
-    let notebookURL = tempDir.appendingPathComponent("assignment.ipynb")
-    try assignmentNotebookData.write(to: notebookURL)
-    // solution.ipynb is intentionally NOT written to the runner zip.
-    // The runner's extractNotebooksToCode() converts every .ipynb in the
-    // working directory to .py; if solution.ipynb were present it would
-    // produce solution.py alongside the student's submitted .py, causing
-    // "Multiple definitions of '<func>' found" errors in load_submission_modules().
-    // The solution is persisted separately as a validation-submission artifact
-    // and can be downloaded by instructors via /instructor/:id/files/solution.
+    // Neither assignment.ipynb nor solution.ipynb belong in the runner zip.
+    //
+    // assignment.ipynb is the starter template served to students via
+    // JupyterLite (from notebooks/{setupID}/ on disk).  The runner doesn't
+    // need it — the student provides their own submission.  Having it in the
+    // working directory forces the runner to delete it before tests run so
+    // grading scripts don't see two notebooks.
+    //
+    // solution.ipynb is persisted separately as a validation-submission
+    // artifact.  Including it would produce duplicate .py definitions.
 
     let testSuites = try buildSuiteEntries(
         suiteFiles: suiteFiles,
