@@ -157,8 +157,11 @@ actor WorkerDaemon {
 
         // Remove the starter notebook template from the test directory so
         // grading scripts that scan for *.ipynb don't see both the template
-        // and the student/canonical submission.
-        if let starterName = manifest.starterNotebook {
+        // and the student/canonical submission.  Older manifests lack
+        // starterNotebook — fall back to "assignment.ipynb" since that is
+        // the conventional name used by every existing assignment.
+        let starterName = manifest.starterNotebook ?? "assignment.ipynb"
+        do {
             let starterPath = testSetupDir.appendingPathComponent(starterName)
             if FileManager.default.fileExists(atPath: starterPath.path),
                job.submissionFilename != starterName {

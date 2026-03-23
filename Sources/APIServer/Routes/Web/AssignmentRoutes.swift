@@ -955,8 +955,9 @@ struct AssignmentRoutes: RouteCollection {
         }()
         var resolvedSolutionNotebookRaw = solutionNotebookRaw
         if resolvedSolutionNotebookRaw.isEmpty,
-           let existingSolution = try await loadExistingSolutionNotebook(req: req, assignment: assignment) {
-            resolvedSolutionNotebookRaw = existingSolution
+           let existingSolution = try await loadExistingSolution(req: req, assignment: assignment) {
+            resolvedSolutionNotebookRaw = existingSolution.data
+            solutionFilename = existingSolution.filename
         }
         guard !resolvedSolutionNotebookRaw.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"

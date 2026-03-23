@@ -483,23 +483,35 @@ func resolveEditSuiteFiles(
     return ResolvedEditSuiteFiles(files: resolvedFiles, reindexedSuiteConfigJSON: configJSON)
 }
 
-func loadExistingSolutionNotebook(req: Request, assignment: APIAssignment) async throws -> Data? {
+/// Returned by `loadExistingSolution` with both the file data and the
+/// original filename so the edit/save flow can re-submit with the correct name.
+struct ExistingSolution {
+    let data: Data
+    let filename: String
+}
+
+func loadExistingSolution(req: Request, assignment: APIAssignment) async throws -> ExistingSolution? {
     if let validationID = assignment.validationSubmissionID,
        let validationSubmission = try await APISubmission.find(validationID, on: req.db),
        let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
        !data.isEmpty {
-        return data
+        return ExistingSolution(
+            data: data,
+            filename: validationSubmission.filename ?? "solution.ipynb"
+        )
     }
 
     if let fallbackSubmission = try await APISubmission.query(on: req.db)
         .filter(\.$testSetupID == assignment.testSetupID)
         .filter(\.$kind == APISubmission.Kind.validation)
-        .filter(\.$filename == "solution.ipynb")
         .sort(\.$submittedAt, .descending)
         .first(),
        let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
        !data.isEmpty {
-        return data
+        return ExistingSolution(
+            data: data,
+            filename: fallbackSubmission.filename ?? "solution.ipynb"
+        )
     }
 
     return nil
