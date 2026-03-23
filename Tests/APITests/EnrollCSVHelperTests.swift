@@ -105,8 +105,14 @@ final class EnrollCSVHelperTests: XCTestCase {
         // .utf8 may succeed with replacement characters instead.
         // This test verifies the function handles Latin-1 encoded data without
         // crashing and returns reasonable results on all platforms.
-        let latin1Text = "José,Engineering\nAlice,Science\n"
-        let data = latin1Text.data(using: .isoLatin1)!
+        //
+        // Build the bytes manually: "José,Eng\nAlice,Sci\n" in ISO-8859-1.
+        // 0x4A=J 0x6F=o 0x73=s 0xE9=é(Latin-1) 0x2C=, ...
+        let bytes: [UInt8] = [
+            0x4A, 0x6F, 0x73, 0xE9, 0x2C, 0x45, 0x6E, 0x67, 0x0A,  // José,Eng\n
+            0x41, 0x6C, 0x69, 0x63, 0x65, 0x2C, 0x53, 0x63, 0x69, 0x0A  // Alice,Sci\n
+        ]
+        let data = Data(bytes)
         let result = parseUsernamesFromCSV(data)
         // "Alice" is pure ASCII on line 2 and should always parse correctly
         // regardless of whether the UTF-8 or Latin-1 path is taken.
