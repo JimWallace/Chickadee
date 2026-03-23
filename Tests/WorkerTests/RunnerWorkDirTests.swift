@@ -105,8 +105,10 @@ final class RunnerWorkDirTests: XCTestCase {
         // (zip submissions would unzip into workDir; not tested here since the
         // arrangement is the same after extraction)
 
-        // 3. Remove starter notebook
-        if let starterName = manifest.starterNotebook {
+        // 3. Remove starter notebook (defaults to "assignment.ipynb" for
+        //    older manifests that lack the field)
+        let starterName = manifest.starterNotebook ?? "assignment.ipynb"
+        do {
             let starterPath = workDir.appendingPathComponent(starterName)
             if fm.fileExists(atPath: starterPath.path),
                submissionFilename != starterName {
@@ -458,6 +460,71 @@ final class RunnerWorkDirTests: XCTestCase {
 
         let hint = try readFile(".chickadee_student_module")
         XCTAssertEqual(hint, "submission.py")
+    }
+
+    // =========================================================================
+    // MARK: - Scenario 6b: Legacy manifest with notebook assignment
+    //   - starterNotebook is nil (old manifest), but assignment.ipynb is in zip
+    //   - Must still remove assignment.ipynb (default fallback)
+    // =========================================================================
+
+    func testLegacyManifest_notebookAssignment_starterStillRemoved() throws {
+        let manifest = try makeManifest("""
+        {
+            "schemaVersion": 1,
+            "testSuites": [{"tier": "public", "script": "test_public.py"}],
+            "timeLimitSeconds": 10
+        }
+        """)
+
+        XCTAssertNil(manifest.starterNotebook)
+
+        try simulateRunnerSetup(
+            setupFiles: [
+                ("assignment.ipynb", minimalNotebook),
+                ("test_public.py", "import test_runtime")
+            ],
+            submissionFilename: "solution.ipynb",
+            submissionContent: notebook(defining: "solve"),
+            manifest: manifest
+        )
+
+        // Even without starterNotebook in manifest, assignment.ipynb is removed
+        XCTAssertFalse(fileExists("assignment.ipynb"),
+                        "Legacy manifests must still remove assignment.ipynb by default")
+        XCTAssertFalse(fileExists("assignment.py"),
+                        "Starter should not be extracted to .py")
+
+        // Solution extracted correctly
+        XCTAssertTrue(fileExists("solution.py"))
+        let py = try readFile("solution.py")
+        XCTAssertTrue(py.contains("def solve()"))
+    }
+
+    /// Legacy manifest, student submits assignment.ipynb — should NOT be removed.
+    func testLegacyManifest_studentSubmitsAssignment_notRemoved() throws {
+        let manifest = try makeManifest("""
+        {
+            "schemaVersion": 1,
+            "testSuites": [{"tier": "public", "script": "test_public.py"}],
+            "timeLimitSeconds": 10
+        }
+        """)
+
+        try simulateRunnerSetup(
+            setupFiles: [
+                ("assignment.ipynb", minimalNotebook),
+                ("test_public.py", "import test_runtime")
+            ],
+            submissionFilename: "assignment.ipynb",
+            submissionContent: notebook(defining: "student_work"),
+            manifest: manifest
+        )
+
+        XCTAssertTrue(fileExists("assignment.ipynb"))
+        XCTAssertTrue(fileExists("assignment.py"))
+        let py = try readFile("assignment.py")
+        XCTAssertTrue(py.contains("def student_work()"))
     }
 
     // =========================================================================
