@@ -839,26 +839,31 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        if let data = extractZipEntry(zipPath: setup.zipPath, entryName: "solution.ipynb") {
-            return buildFileResponse(data: data, filename: "solution.ipynb")
+        // Look for a solution.* entry inside the test setup zip.
+        let solutionZipEntry = listZipEntries(zipPath: setup.zipPath)
+            .first(where: { $0.hasPrefix("solution.") })
+        if let entryName = solutionZipEntry,
+           let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName) {
+            return buildFileResponse(data: data, filename: entryName)
         }
 
+        // Fall back to the most recent validation submission, preserving
+        // the instructor's original filename (e.g. bmi.py, dna.py).
         if let validationID = assignment.validationSubmissionID,
            let validationSubmission = try await APISubmission.find(validationID, on: req.db),
            let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
            !data.isEmpty {
-            return buildFileResponse(data: data, filename: "solution.ipynb")
+            return buildFileResponse(data: data, filename: validationSubmission.filename ?? "solution.ipynb")
         }
 
         if let fallbackSubmission = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.validation)
-            .filter(\.$filename == "solution.ipynb")
             .sort(\.$submittedAt, .descending)
             .first(),
            let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
            !data.isEmpty {
-            return buildFileResponse(data: data, filename: "solution.ipynb")
+            return buildFileResponse(data: data, filename: fallbackSubmission.filename ?? "solution.ipynb")
         }
 
         throw Abort(.notFound, reason: "No solution notebook is available for this assignment yet")
