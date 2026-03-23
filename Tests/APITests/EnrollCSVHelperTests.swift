@@ -100,18 +100,18 @@ final class EnrollCSVHelperTests: XCTestCase {
     }
 
     func testISOLatin1Fallback() {
-        // Create data that is valid ISO-8859-1 but not valid UTF-8.
-        // Byte sequence 0xC0 0x20 is invalid UTF-8 (overlong), forcing the
-        // Latin-1 fallback path on all platforms.
-        var bytes: [UInt8] = Array("user_alice".utf8)
-        bytes.append(0xC0)  // invalid UTF-8 start byte
-        bytes.append(0x20)  // space (not a valid continuation byte)
-        bytes.append(contentsOf: Array("\nbob\n".utf8))
-        let data = Data(bytes)
+        // On macOS, String(data:encoding:.utf8) returns nil for invalid UTF-8,
+        // triggering the isoLatin1 fallback. On Linux (swift-corelibs-foundation),
+        // .utf8 may succeed with replacement characters instead.
+        // This test verifies the function handles Latin-1 encoded data without
+        // crashing and returns reasonable results on all platforms.
+        let latin1Text = "José,Engineering\nAlice,Science\n"
+        let data = latin1Text.data(using: .isoLatin1)!
         let result = parseUsernamesFromCSV(data)
-        // The first line contains the invalid bytes but should still parse via Latin-1.
-        // "bob" should always be present regardless of how the first line is handled.
-        XCTAssertTrue(result.contains("bob"), "Expected 'bob' in results: \(result)")
+        // "Alice" is pure ASCII on line 2 and should always parse correctly
+        // regardless of whether the UTF-8 or Latin-1 path is taken.
+        XCTAssertTrue(result.contains("Alice"), "Expected 'Alice' in results: \(result)")
+        XCTAssertGreaterThanOrEqual(result.count, 1)
     }
 
     func testWindowsLineEndings() {
