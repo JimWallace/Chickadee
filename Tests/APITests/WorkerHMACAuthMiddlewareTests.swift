@@ -158,6 +158,40 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         })
     }
 
+    /// Regression test: sends a real HTTP request through Vapor's HTTP server
+    /// to verify the middleware collects the streaming body before hashing.
+    ///
+    /// The in-memory `.test()` helper pre-buffers the body, so `request.body.data`
+    /// is always non-nil. In production, the body arrives as a stream and must be
+    /// explicitly collected in middleware before `request.body.data` is available.
+    /// Without the `body.collect()` call in the middleware, the body hash is always
+    /// SHA256(""), causing every signed POST to fail with "Invalid worker signature."
+    func testAcceptsValidSignatureOverRealHTTP() throws {
+        let app = try makeApp()
+        defer { app.shutdown() }
+
+        let path = "/internal/worker/ping"
+        let now = Int64(Date().timeIntervalSince1970)
+        let body = ByteBuffer(string: #"{"workerID":"test","hostname":"localhost"}"#)
+        let headers = signedHeaders(
+            method: .POST,
+            path: path,
+            body: body,
+            timestamp: now,
+            nonce: UUID().uuidString
+        )
+
+        try app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            .POST, path,
+            headers: headers,
+            body: body
+        ) { res in
+            XCTAssertEqual(res.status, .ok,
+                "HMAC with non-empty body must succeed over real HTTP — "
+                + "middleware must collect() the streaming body before computing the hash")
+        }
+    }
+
     private func hmacSHA256Hex(message: String, secret: String) -> String {
         let key = SymmetricKey(data: Data(secret.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
