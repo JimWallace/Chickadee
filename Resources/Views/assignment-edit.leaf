@@ -91,11 +91,12 @@
                     <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
                     <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
                     <div class="suite-file-hint">
-                        <a href="#(row.url)"><code>#(row.name)</code></a>
                         <button class="btn-link suite-edit-btn" type="button"
                                 data-filename="#(row.name)"
-                                style="font-size:.75rem;margin-left:.4rem;color:var(--blue,#0070c9)"
-                                title="Edit script in browser">Edit</button>
+                                style="font-size:inherit;padding:0;color:var(--blue)"
+                                title="Edit script in browser"><code>#(row.name)</code></button>
+                        <a href="#(row.url)" style="font-size:.7rem;margin-left:.4rem;color:var(--gray-500)"
+                           title="Download script" download>↓</a>
                     </div>
                 </td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
@@ -132,7 +133,7 @@
 <!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
 <div id="script-editor-overlay"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--bg,#fff);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
                 display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
 
         <!-- Header -->
@@ -169,7 +170,7 @@
                 </label>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--meta)">Template:</span>
+                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
                 <select id="template-select" class="form-input"
                         style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
                     <optgroup label="Python">
@@ -200,7 +201,7 @@
                     border-top:1px solid var(--border,#ddd);flex-shrink:0">
             <button class="btn btn-primary" id="editor-save-btn" type="button">Save</button>
             <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--meta);margin-left:.5rem"></span>
+            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
         </div>
     </div>
 </div>
@@ -570,6 +571,38 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 /* CodeMirror 6 host element */
 #cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
 #cm-editor-mount .cm-scroller { overflow: auto; }
+/* Dark-mode overrides for the CodeMirror editor */
+@media (prefers-color-scheme: dark) {
+    #cm-editor-mount .cm-editor {
+        background: var(--gray-100);
+    }
+    #cm-editor-mount .cm-gutters {
+        background: var(--gray-200);
+        border-color: var(--gray-200);
+        color: var(--gray-500);
+    }
+    #cm-editor-mount .cm-content {
+        color: var(--gray-900);
+        caret-color: var(--gray-900);
+    }
+    #cm-editor-mount .cm-activeLine {
+        background: var(--gray-200);
+    }
+    #cm-editor-mount .cm-selectionBackground,
+    #cm-editor-mount ::selection {
+        background: var(--hover-bg) !important;
+    }
+    #cm-editor-mount .cm-cursor {
+        border-left-color: var(--gray-900);
+    }
+    /* Modal inputs & selects */
+    #script-editor-overlay input,
+    #script-editor-overlay select {
+        background: var(--gray-100);
+        color: var(--gray-900);
+        border-color: var(--gray-200);
+    }
+}
 </style>
 <script type="module">
 // ── CodeMirror 6 script editor ─────────────────────────────────────────────
@@ -627,6 +660,7 @@ const templateSel = document.getElementById('template-select');
 const applyTplBtn = document.getElementById('apply-template-btn');
 const newScriptBtn = document.getElementById('new-script-btn');
 const assignmentID = '#(assignmentID)';
+const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
 let view = null;
 let currentFilename = null;  // null when creating a new file
@@ -671,7 +705,9 @@ document.addEventListener('click', function(e) {
     if (!filename) return;
     statusEl.textContent = 'Loading…';
     overlay.style.display = 'flex';
-    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename))
+    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename), {
+        headers: { 'x-csrf-token': csrfToken }
+    })
         .then(r => r.ok ? r.text() : Promise.reject(r.statusText))
         .then(content => openEditor(filename, content))
         .catch(err => { statusEl.textContent = 'Error: ' + err; });
@@ -767,7 +803,7 @@ saveBtn.addEventListener('click', function() {
         saveBtn.disabled = true;
         fetch('/instructor/' + assignmentID + '/scripts', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
             body: JSON.stringify({ filename, content, tier, points, isTest })
         })
         .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
@@ -787,7 +823,7 @@ saveBtn.addEventListener('click', function() {
         saveBtn.disabled = true;
         fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(currentFilename), {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
             body: JSON.stringify({ content })
         })
         .then(r => {
