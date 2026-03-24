@@ -40,8 +40,10 @@
     #else:
     <span class="tier tier-open">active</span>
     #endif
-    #if(course.openEnrollment):
+    #if(course.enrollmentMode == "open"):
     <span class="tier tier-open">open enrolment</span>
+    #elseif(course.enrollmentMode == "auto"):
+    <span class="tier tier-open">auto enrolment</span>
     #else:
     <span class="tier tier-closed">closed enrolment</span>
     #endif
@@ -126,13 +128,17 @@
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
         <h2 style="margin:0">Enrolled students (#(course.enrollmentCount))</h2>
         #if(!isNew):
-        <form method="post" action="/admin/courses/#(course.id)/open-enrollment" style="margin:0">
+        <form method="post" action="/admin/courses/#(course.id)/enrollment-mode" style="margin:0">
             #csrfFormField()
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
-                <input type="checkbox" name="openEnrollment" value="on"
-                       #if(course.openEnrollment):checked#endif
-                       onchange="this.form.submit()">
-                Open enrolment
+            <label class="form-label" style="font-size:.875rem;margin:0">
+                Enrolment
+                <select name="enrollmentMode" class="form-input"
+                        style="display:block;font-size:.875rem"
+                        onchange="this.form.submit()">
+                    <option value="open"   #if(course.enrollmentMode == "open"):selected#endif>Open enrolment</option>
+                    <option value="auto"   #if(course.enrollmentMode == "auto"):selected#endif>Auto enrolment</option>
+                    <option value="closed" #if(course.enrollmentMode == "closed"):selected#endif>Closed enrolment</option>
+                </select>
             </label>
         </form>
         #if(!course.isArchived):

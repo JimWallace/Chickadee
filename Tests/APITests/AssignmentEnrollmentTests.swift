@@ -1,7 +1,7 @@
 // Tests/APITests/AssignmentEnrollmentTests.swift
 //
 // Integration tests for AssignmentRoutes+Enrollment:
-//   POST /courses/:courseID/open-enrollment  — toggle open-enrol flag
+//   POST /courses/:courseID/enrollment-mode  — set enrollment mode
 //   POST /courses/:courseID/enroll-csv       — bulk-enrol from CSV upload
 
 import XCTest
@@ -9,6 +9,7 @@ import XCTVapor
 @testable import chickadee_server
 import FluentSQLiteDriver
 import Foundation
+import Core
 
 final class AssignmentEnrollmentTests: XCTestCase {
 
@@ -42,6 +43,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         app.migrations.add(CreatePerformanceIndexes())
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
+        app.migrations.add(AddCourseEnrollmentMode())
         try await app.autoMigrate().get()
         configureLeaf(app)
         try routes(app)
@@ -54,8 +56,9 @@ final class AssignmentEnrollmentTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeCourse(code: String, openEnrollment: Bool = false) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Test \(code)", openEnrollment: openEnrollment)
+    private func makeCourse(code: String,
+                            mode: CourseEnrollmentMode = .closed) async throws -> APICourse {
+        let course = APICourse(code: code, name: "Test \(code)", enrollmentMode: mode)
         try await course.save(on: app.db)
         return course
     }
@@ -67,69 +70,68 @@ final class AssignmentEnrollmentTests: XCTestCase {
         return user
     }
 
-    // MARK: - POST /courses/:courseID/open-enrollment
+    // MARK: - POST /courses/:courseID/enrollment-mode
 
-    func testToggleOpenEnrollment_instructorCanEnable() async throws {
-        let course = try await makeCourse(code: "OE_TOGGLE1", openEnrollment: false)
+    func testSetEnrollmentMode_instructorCanSetToOpen() async throws {
+        let course = try await makeCourse(code: "OE_TOGGLE1", mode: .closed)
         let cookie = try await loginUser(username: "oe_instructor1", password: "pw",
                                          role: "instructor", on: app)
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(courseID)/open-enrollment", beforeRequest: { req in
+        try await app.test(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
-            try req.content.encode(["openEnrollment": "on", "_csrf": token], as: .urlEncodedForm)
+            try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
         })
 
         let updated = try await APICourse.find(course.id, on: app.db)
-        XCTAssertEqual(updated?.openEnrollment, true)
+        XCTAssertEqual(updated?.enrollmentMode, .open)
     }
 
-    func testToggleOpenEnrollment_uncheckDisables() async throws {
-        let course = try await makeCourse(code: "OE_TOGGLE2", openEnrollment: true)
+    func testSetEnrollmentMode_instructorCanSetToClosed() async throws {
+        let course = try await makeCourse(code: "OE_TOGGLE2", mode: .open)
         let cookie = try await loginUser(username: "oe_instructor2", password: "pw",
                                          role: "instructor", on: app)
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        // Unchecked checkbox → no field sent → treated as false
-        try await app.test(.POST, "/courses/\(courseID)/open-enrollment", beforeRequest: { req in
+        try await app.test(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
-            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+            try req.content.encode(["enrollmentMode": "closed", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
         })
 
         let updated = try await APICourse.find(course.id, on: app.db)
-        XCTAssertEqual(updated?.openEnrollment, false)
+        XCTAssertEqual(updated?.enrollmentMode, .closed)
     }
 
-    func testToggleOpenEnrollment_studentForbidden() async throws {
+    func testSetEnrollmentMode_studentForbidden() async throws {
         let course = try await makeCourse(code: "OE_TOGGLE3")
         let cookie = try await loginUser(username: "oe_student1", password: "pw",
                                          role: "student", on: app)
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(courseID)/open-enrollment", beforeRequest: { req in
+        try await app.test(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
-            try req.content.encode(["openEnrollment": "on", "_csrf": token], as: .urlEncodedForm)
+            try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
         })
     }
 
-    func testToggleOpenEnrollment_notFound() async throws {
+    func testSetEnrollmentMode_notFound() async throws {
         let cookie = try await loginUser(username: "oe_instructor3", password: "pw",
                                          role: "instructor", on: app)
         let bogusID = UUID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(bogusID)/open-enrollment", beforeRequest: { req in
+        try await app.test(.POST, "/courses/\(bogusID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
-            try req.content.encode(["openEnrollment": "on", "_csrf": token], as: .urlEncodedForm)
+            try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
         })

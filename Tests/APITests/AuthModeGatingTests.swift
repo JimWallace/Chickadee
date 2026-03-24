@@ -30,6 +30,7 @@ final class AuthModeGatingTests: XCTestCase {
         app.migrations.add(CreatePerformanceIndexes())
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
+        app.migrations.add(AddCourseEnrollmentMode())
         try app.autoMigrate().wait()
 
         try routes(app)

@@ -31,7 +31,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
         admin.post("courses", ":courseID", "copy",    use: copyCourse)
         admin.post("courses", ":courseID", "delete",  use: deleteCourse)
-        admin.post("courses", ":courseID", "open-enrollment", use: toggleOpenEnrollment)
+        admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.get("users", ":userID", use: userDetail)
@@ -75,7 +75,7 @@ struct AdminRoutes: RouteCollection {
                 code: course.code,
                 name: course.name,
                 isArchived: course.isArchived,
-                openEnrollment: course.openEnrollment,
+                enrollmentMode: course.enrollmentMode.rawValue,
                 enrollmentCount: enrollmentCounts[id] ?? 0,
                 assignmentCount: assignmentCounts[id] ?? 0,
                 createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
@@ -183,7 +183,7 @@ struct AdminRoutes: RouteCollection {
             code:            "",
             name:            "",
             isArchived:      false,
-            openEnrollment:  true,
+            enrollmentMode:  CourseEnrollmentMode.open.rawValue,
             enrollmentCount: 0,
             assignmentCount: 0,
             createdAt:       ""
@@ -234,11 +234,11 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 
-    // MARK: - POST /admin/courses/:courseID/open-enrollment
+    // MARK: - POST /admin/courses/:courseID/enrollment-mode
 
     @Sendable
-    func toggleOpenEnrollment(req: Request) async throws -> Response {
-        struct Body: Content { var openEnrollment: String? }
+    func setEnrollmentMode(req: Request) async throws -> Response {
+        struct Body: Content { var enrollmentMode: String? }
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
@@ -246,9 +246,8 @@ struct AdminRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        // An unchecked checkbox sends no field at all (empty body); treat that as false.
         let body = try? req.content.decode(Body.self)
-        course.openEnrollment = (body?.openEnrollment == "on")
+        course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
     }
@@ -523,7 +522,7 @@ struct AdminRoutes: RouteCollection {
             code:            course.code,
             name:            course.name,
             isArchived:      course.isArchived,
-            openEnrollment:  course.openEnrollment,
+            enrollmentMode:  course.enrollmentMode.rawValue,
             enrollmentCount: enrollmentCounts[courseID] ?? 0,
             assignmentCount: assignmentCounts[courseID] ?? 0,
             createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
@@ -795,7 +794,7 @@ private struct AdminCourseRow: Encodable {
     let code: String
     let name: String
     let isArchived: Bool
-    let openEnrollment: Bool
+    let enrollmentMode: String
     let enrollmentCount: Int
     let assignmentCount: Int
     let createdAt: String

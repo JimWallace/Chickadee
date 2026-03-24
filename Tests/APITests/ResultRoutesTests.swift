@@ -41,6 +41,7 @@ final class ResultRoutesTests: XCTestCase {
         app.migrations.add(CreatePerformanceIndexes())
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
+        app.migrations.add(AddCourseEnrollmentMode())
         try await app.autoMigrate().get()
 
         try routes(app)

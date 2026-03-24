@@ -54,6 +54,7 @@ final class WorkerRoutesTests: XCTestCase {
         app.migrations.add(CreatePerformanceIndexes())
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
+        app.migrations.add(AddCourseEnrollmentMode())
         try await app.autoMigrate().get()
         configureLeaf(app)
         try routes(app)
@@ -87,7 +88,7 @@ final class WorkerRoutesTests: XCTestCase {
         let zipPath = try makeDummyZip(named: "\(id).zip",
                                        in: tmpDir.appendingPathComponent("testsetups"))
         // Each test setup needs a course (FK constraint); create a throw-away one.
-        let course = APICourse(code: "WK_\(id)", name: "Worker Test Course", openEnrollment: false)
+        let course = APICourse(code: "WK_\(id)", name: "Worker Test Course", enrollmentMode: .closed)
         try await course.save(on: app.db)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath,
                                  courseID: try course.requireID())
