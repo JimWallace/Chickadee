@@ -647,17 +647,28 @@ private func resolveStartupWorkerSecret(
     workerSecretFilePath: String,
     workerSecretWordlistPath: String
 ) -> String {
+    // 1. Explicit CLI argument — highest priority.
     if let cli = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines),
        !cli.isEmpty,
        !isPlaceholderWorkerSecret(cli) {
         writeWorkerSecretToDisk(secret: cli, workerSecretFilePath: workerSecretFilePath)
         return cli
     }
+    // 2. RUNNER_SHARED_SECRET environment variable — how Docker Compose and systemd
+    //    configure the secret.  Checked before the disk file so that setting the env
+    //    var is always sufficient to sync the server and runner; the disk file is only
+    //    used when no env var is present (development / auto-generated mode).
+    if let envSecret = runnerSharedSecretFromEnvironment(),
+       !isPlaceholderWorkerSecret(envSecret) {
+        return envSecret
+    }
+    // 3. Previously persisted secret on disk (written by auto-generate or admin panel).
     if let previous = readWorkerSecretFromDisk(workerSecretFilePath: workerSecretFilePath),
        !previous.isEmpty,
        !isPlaceholderWorkerSecret(previous) {
         return previous
     }
+    // 4. Auto-generate a diceware passphrase (dev / first-time startup with no env var).
     let generated = randomWorkerPassphrase(workerSecretWordlistPath: workerSecretWordlistPath)
     writeWorkerSecretToDisk(secret: generated, workerSecretFilePath: workerSecretFilePath)
     return generated
