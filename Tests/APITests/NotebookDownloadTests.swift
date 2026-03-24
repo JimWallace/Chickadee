@@ -85,7 +85,7 @@ final class NotebookDownloadTests: XCTestCase {
         if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
             return try existing.requireID()
         }
-        let course = APICourse(code: "TEST101", name: "Test Course")
+        let course = APICourse(code: "TEST101", name: "Test Course", enrollmentMode: .auto)
         try await course.save(on: app.db)
         return try course.requireID()
     }

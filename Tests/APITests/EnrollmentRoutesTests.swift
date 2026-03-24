@@ -459,7 +459,7 @@ final class EnrollmentRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "ins_mode_instructor", password: "pw",
                                          role: "instructor", on: app)
 
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         try await app.test(.POST, "/courses/\(courseID.uuidString)/enrollment-mode",
                            beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
