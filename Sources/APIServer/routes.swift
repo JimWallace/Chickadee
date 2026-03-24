@@ -14,11 +14,13 @@ func routes(_ app: Application) throws {
     if app.authMode != .local {
         try app.register(collection: SSOAuthRoutes())
     }
-    try app.register(collection: WorkerJobRoutes())
-    try app.register(collection: WorkerArtifactRoutes())
-    // Worker result reporting is called by the worker daemon, not the browser.
-    // It uses its own workerID for identification (Phase 7 will add worker tokens).
-    try app.register(collection: ResultRoutes())
+    // Worker routes — authenticated by per-request HMAC signatures.
+    // WorkerHMACAuthMiddleware validates X-Worker-Timestamp / X-Worker-Nonce /
+    // X-Worker-Signature against the server's effective shared secret.
+    let workerAuth = app.grouped(WorkerHMACAuthMiddleware())
+    try workerAuth.register(collection: WorkerJobRoutes())
+    try workerAuth.register(collection: WorkerArtifactRoutes())
+    try workerAuth.register(collection: ResultRoutes())
 
     // MARK: - Any authenticated user
 

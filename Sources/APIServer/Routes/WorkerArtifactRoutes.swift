@@ -11,8 +11,6 @@ struct WorkerArtifactRoutes: RouteCollection {
 
     @Sendable
     func downloadSubmission(req: Request) async throws -> Response {
-        try await requireWorkerSecret(req)
-
         guard let subID = req.parameters.get("submissionID"),
               let submission = try await APISubmission.find(subID, on: req.db)
         else {
@@ -23,8 +21,6 @@ struct WorkerArtifactRoutes: RouteCollection {
 
     @Sendable
     func downloadTestSetup(req: Request) async throws -> Response {
-        try await requireWorkerSecret(req)
-
         guard let setupID = req.parameters.get("testSetupID"),
               let setup = try await APITestSetup.find(setupID, on: req.db)
         else {

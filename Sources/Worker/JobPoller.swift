@@ -12,7 +12,13 @@ import Core
 struct JobPoller: Sendable {
     let apiBaseURL: URL
     let workerID: String
-    let workerSecret: String
+    private let signer: WorkerRequestSigner
+
+    init(apiBaseURL: URL, workerID: String, workerSecret: String) {
+        self.apiBaseURL = apiBaseURL
+        self.workerID   = workerID
+        self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+    }
 
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.default
@@ -23,20 +29,17 @@ struct JobPoller: Sendable {
 
     /// POST /api/v1/worker/request → Job, or nil when no work is available.
     func requestJob() async throws -> Core.Job? {
-        let url     = apiBaseURL.appendingPathComponent("api/v1/worker/request")
+        let url = apiBaseURL.appendingPathComponent("api/v1/worker/request")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !workerSecret.isEmpty {
-            request.setValue(workerSecret, forHTTPHeaderField: "X-Worker-Secret")
-            request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
-        }
 
         let body = WorkerRequestPayload(
             workerID: workerID,
             hostname: ProcessInfo.processInfo.hostName
         )
         request.httpBody = try JSONEncoder().encode(body)
+        signer.sign(&request)
 
         let (data, response) = try await Self.session.data(for: request)
 

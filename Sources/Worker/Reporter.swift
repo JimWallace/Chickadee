@@ -11,7 +11,13 @@ import Core
 struct Reporter: Sendable {
     let apiBaseURL: URL
     let workerID: String
-    let workerSecret: String
+    private let signer: WorkerRequestSigner
+
+    init(apiBaseURL: URL, workerID: String, workerSecret: String) {
+        self.apiBaseURL = apiBaseURL
+        self.workerID   = workerID
+        self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+    }
 
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.default
@@ -21,18 +27,15 @@ struct Reporter: Sendable {
     }()
 
     func report(_ collection: TestOutcomeCollection) async throws {
-        let url     = apiBaseURL.appendingPathComponent("api/v1/worker/results")
+        let url = apiBaseURL.appendingPathComponent("api/v1/worker/results")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !workerSecret.isEmpty {
-            request.setValue(workerSecret, forHTTPHeaderField: "X-Worker-Secret")
-            request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
-        }
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(collection)
+        signer.sign(&request)
 
         let (data, response) = try await Self.session.data(for: request)
 

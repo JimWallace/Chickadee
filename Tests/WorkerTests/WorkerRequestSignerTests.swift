@@ -1,69 +1,55 @@
 import XCTest
-import Vapor
 import Crypto
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import chickadee_runner
 
 final class WorkerRequestSignerTests: XCTestCase {
+
     func testSignerProducesExpectedHeadersAndSignature() {
         let signer = WorkerRequestSigner(sharedSecret: "secret-123", workerID: "worker-1")
-        let path = "/internal/worker/ping"
-        let body = ByteBuffer(string: #"{"submission":"sub_1"}"#)
+        let url = URL(string: "http://localhost:8080/internal/worker/ping")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = #"{"submission":"sub_1"}"#.data(using: .utf8)
+
         let timestamp: Int64 = 1_700_000_000
         let nonce = "nonce-abc"
+        signer.sign(&request, timestamp: timestamp, nonce: nonce)
 
-        let headers = signer.signedHeaders(
-            method: .POST,
-            path: path,
-            body: body,
-            timestamp: timestamp,
-            nonce: nonce
-        )
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Id"), "worker-1")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Timestamp"), String(timestamp))
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Nonce"), nonce)
 
-        XCTAssertEqual(headers.first(name: "X-Worker-Id"), "worker-1")
-        XCTAssertEqual(headers.first(name: "X-Worker-Timestamp"), String(timestamp))
-        XCTAssertEqual(headers.first(name: "X-Worker-Nonce"), nonce)
-
-        var bodyCopy = body
-        let bodyBytes = bodyCopy.readBytes(length: bodyCopy.readableBytes) ?? []
-        let bodyHash = SHA256.hash(data: Data(bodyBytes)).hexString
-        let payload = [
-            "POST",
-            path,
-            bodyHash,
-            String(timestamp),
-            nonce
-        ].joined(separator: "\n")
+        let bodyBytes = Array(#"{"submission":"sub_1"}"#.utf8)
+        let bodyHash = Data(SHA256.hash(data: Data(bodyBytes))).hexEncodedString()
+        let payload = ["POST", "/internal/worker/ping", bodyHash, String(timestamp), nonce]
+            .joined(separator: "\n")
         let expected = hmacSHA256Hex(message: payload, secret: "secret-123")
 
-        XCTAssertEqual(headers.first(name: "X-Worker-Signature"), expected)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Signature"), expected)
     }
 
     func testSignerOmitsWorkerIDWhenNil() {
         let signer = WorkerRequestSigner(sharedSecret: "secret-123", workerID: nil)
-        let headers = signer.signedHeaders(
-            method: .GET,
-            path: "/internal/worker/ping",
-            body: nil,
-            timestamp: 1_700_000_000,
-            nonce: "nonce-xyz"
-        )
+        let url = URL(string: "http://localhost:8080/internal/worker/ping")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
 
-        XCTAssertNil(headers.first(name: "X-Worker-Id"))
-        XCTAssertNotNil(headers.first(name: "X-Worker-Signature"))
-        XCTAssertNotNil(headers.first(name: "X-Worker-Timestamp"))
-        XCTAssertNotNil(headers.first(name: "X-Worker-Nonce"))
+        signer.sign(&request, timestamp: 1_700_000_000, nonce: "nonce-xyz")
+
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Worker-Id"))
+        XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Signature"))
+        XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Timestamp"))
+        XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Nonce"))
     }
 
     private func hmacSHA256Hex(message: String, secret: String) -> String {
         let key = SymmetricKey(data: Data(secret.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
         return Data(mac).hexEncodedString()
-    }
-}
-
-private extension Digest {
-    var hexString: String {
-        Data(self).hexEncodedString()
     }
 }
 

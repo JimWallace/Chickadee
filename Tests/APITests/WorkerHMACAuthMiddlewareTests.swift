@@ -9,14 +9,8 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
 
     private func makeApp() throws -> Application {
         let app = Application(.testing)
-        let middleware = WorkerHMACAuthMiddleware(
-            configuration: .init(
-                sharedSecret: sharedSecret,
-                maxClockSkewSeconds: 60,
-                nonceTTLSeconds: 300,
-                requiredWorkerID: workerID
-            )
-        )
+        app.workerSecretStore = WorkerSecretStore(initialOverride: sharedSecret)
+        let middleware = WorkerHMACAuthMiddleware(maxClockSkewSeconds: 60, nonceTTLSeconds: 300)
         app.grouped(middleware).post("internal", "worker", "ping") { _ in
             HTTPStatus.ok
         }
@@ -32,7 +26,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
     ) -> HTTPHeaders {
         var bodyCopy = body
         let bodyBytes = bodyCopy.readBytes(length: bodyCopy.readableBytes) ?? []
-        let bodyHash = SHA256.hash(data: Data(bodyBytes)).hexString
+        let bodyHash = Data(SHA256.hash(data: Data(bodyBytes))).hexEncodedString()
         let payload = [
             method.rawValue.uppercased(),
             path,
@@ -168,12 +162,6 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         let key = SymmetricKey(data: Data(secret.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
         return Data(mac).hexEncodedString()
-    }
-}
-
-private extension Digest {
-    var hexString: String {
-        Data(self).hexEncodedString()
     }
 }
 

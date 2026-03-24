@@ -2,72 +2,54 @@ import Crypto
 import Foundation
 import Vapor
 
-/// Authenticates internal worker requests using HMAC signatures.
+/// Authenticates internal worker requests using per-request HMAC signatures.
 ///
-/// Not wired into routes yet. Intended usage later:
-///   let workerAuth = WorkerHMACAuthMiddleware(configuration: .fromEnvironment(app.environment))
-///   let worker = app.grouped("internal", "worker").grouped(workerAuth)
-///   worker.post("heartbeat") { ... }
+/// Signed payload format (fields joined by newlines):
+///   METHOD\nPATH\nBODY_SHA256\nTIMESTAMP\nNONCE
+///
+/// Required request headers:
+///   X-Worker-Timestamp  — Unix timestamp (seconds, Int64)
+///   X-Worker-Nonce      — UUID or other unique string
+///   X-Worker-Signature  — HMAC-SHA256 hex of the signed payload
+///   X-Worker-Id         — Worker identifier (optional; logged and used for activity tracking)
+///
+/// The shared secret is read from the application's WorkerSecretStore on every
+/// request so that admin-panel secret rotations take effect without a restart.
 struct WorkerHMACAuthMiddleware: AsyncMiddleware {
-    struct Configuration {
-        let sharedSecret: String
-        let maxClockSkewSeconds: Int64
-        let nonceTTLSeconds: Int64
-        let requiredWorkerID: String?
+    let maxClockSkewSeconds: Int64
+    let nonceTTLSeconds: Int64
 
-        static func fromEnvironment(_ env: Environment) -> Self {
-            // Expected env vars:
-            // - RUNNER_SHARED_SECRET (required; WORKER_SHARED_SECRET accepted as legacy fallback)
-            // - WORKER_MAX_CLOCK_SKEW_SECONDS (optional, default 60)
-            // - WORKER_NONCE_TTL_SECONDS (optional, default 300)
-            // - WORKER_REQUIRED_ID (optional)
-            _ = env // placeholder in case you want env-specific defaults later.
-            return Self(
-                sharedSecret: Environment.get("RUNNER_SHARED_SECRET")
-                    ?? Environment.get("WORKER_SHARED_SECRET")
-                    ?? "",
-                maxClockSkewSeconds: Int64(Environment.get("WORKER_MAX_CLOCK_SKEW_SECONDS") ?? "60") ?? 60,
-                nonceTTLSeconds: Int64(Environment.get("WORKER_NONCE_TTL_SECONDS") ?? "300") ?? 300,
-                requiredWorkerID: Environment.get("WORKER_REQUIRED_ID")
-            )
-        }
-    }
-
-    private let configuration: Configuration
-    private let nonceStore: WorkerNonceStore
-
-    init(configuration: Configuration, nonceStore: WorkerNonceStore = .init()) {
-        self.configuration = configuration
-        self.nonceStore = nonceStore
+    init(maxClockSkewSeconds: Int64 = 60, nonceTTLSeconds: Int64 = 300) {
+        self.maxClockSkewSeconds = maxClockSkewSeconds
+        self.nonceTTLSeconds = nonceTTLSeconds
     }
 
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
-        guard !configuration.sharedSecret.isEmpty else {
-            request.logger.warning("Worker HMAC auth is enabled but RUNNER_SHARED_SECRET is empty.")
+        let sharedSecret = (await request.application.workerSecretStore.effectiveSecret() ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !sharedSecret.isEmpty else {
+            request.logger.warning("Worker HMAC auth: RUNNER_SHARED_SECRET is not configured.")
             throw Abort(.unauthorized, reason: "Worker auth is not configured.")
         }
 
-        let timestampHeader = try request.requireHeader("X-Worker-Timestamp")
-        let nonce = try request.requireHeader("X-Worker-Nonce")
-        let signature = try request.requireHeader("X-Worker-Signature")
-        let workerID = request.headers.first(name: "X-Worker-Id")
-
-        if let required = configuration.requiredWorkerID, workerID != required {
-            throw Abort(.unauthorized, reason: "Invalid worker identity.")
-        }
+        let timestampHeader = try request.requireWorkerHeader("X-Worker-Timestamp")
+        let nonce           = try request.requireWorkerHeader("X-Worker-Nonce")
+        let signature       = try request.requireWorkerHeader("X-Worker-Signature")
+        let workerID        = request.headers.first(name: "X-Worker-Id")
 
         guard let timestamp = Int64(timestampHeader) else {
             throw Abort(.unauthorized, reason: "Invalid worker timestamp.")
         }
 
         let now = Int64(Date().timeIntervalSince1970)
-        let drift = abs(now - timestamp)
-        guard drift <= configuration.maxClockSkewSeconds else {
+        guard abs(now - timestamp) <= maxClockSkewSeconds else {
             throw Abort(.unauthorized, reason: "Worker request timestamp is outside the accepted window.")
         }
 
         let nonceKey = (workerID ?? "_anonymous") + ":" + nonce
-        let wasInserted = await nonceStore.insertIfNew(nonceKey, now: now, ttlSeconds: configuration.nonceTTLSeconds)
+        let wasInserted = await request.application.workerNonceStore
+            .insertIfNew(nonceKey, now: now, ttlSeconds: nonceTTLSeconds)
         guard wasInserted else {
             throw Abort(.unauthorized, reason: "Replay detected.")
         }
@@ -81,23 +63,47 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             nonce
         ].joined(separator: "\n")
 
-        let expectedSignature = hmacSHA256Hex(message: signedPayload, secret: configuration.sharedSecret)
+        let expectedSignature = hmacSHA256Hex(message: signedPayload, secret: sharedSecret)
         guard constantTimeEquals(expectedSignature.lowercased(), signature.lowercased()) else {
             throw Abort(.unauthorized, reason: "Invalid worker signature.")
+        }
+
+        if let workerID, !workerID.isEmpty {
+            await request.application.workerActivityStore.markActive(workerID: workerID)
         }
 
         return try await next.respond(to: request)
     }
 }
 
+// MARK: - Application storage for the nonce store
+
+struct WorkerNonceStoreKey: StorageKey {
+    typealias Value = WorkerNonceStore
+}
+
+extension Application {
+    var workerNonceStore: WorkerNonceStore {
+        get {
+            if let existing = storage[WorkerNonceStoreKey.self] {
+                return existing
+            }
+            let created = WorkerNonceStore()
+            storage[WorkerNonceStoreKey.self] = created
+            return created
+        }
+        set { storage[WorkerNonceStoreKey.self] = newValue }
+    }
+}
+
+// MARK: - Nonce store (replay protection)
+
 actor WorkerNonceStore {
     private var seen: [String: Int64] = [:]
 
     func insertIfNew(_ nonce: String, now: Int64, ttlSeconds: Int64) -> Bool {
         purgeExpired(now: now)
-        if seen[nonce] != nil {
-            return false
-        }
+        if seen[nonce] != nil { return false }
         seen[nonce] = now + ttlSeconds
         return true
     }
@@ -107,8 +113,10 @@ actor WorkerNonceStore {
     }
 }
 
+// MARK: - Private helpers
+
 private extension Request {
-    func requireHeader(_ name: String) throws -> String {
+    func requireWorkerHeader(_ name: String) throws -> String {
         guard let value = headers.first(name: name), !value.isEmpty else {
             throw Abort(.unauthorized, reason: "Missing worker auth header: \(name)")
         }
@@ -117,15 +125,12 @@ private extension Request {
 }
 
 private func bodyBytes(_ request: Request) -> [UInt8] {
-    guard var data = request.body.data else {
-        return []
-    }
+    guard var data = request.body.data else { return [] }
     return data.readBytes(length: data.readableBytes) ?? []
 }
 
 private func sha256Hex(_ bytes: [UInt8]) -> String {
-    let digest = SHA256.hash(data: Data(bytes))
-    return digest.hexString
+    Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
 }
 
 private func hmacSHA256Hex(message: String, secret: String) -> String {
@@ -135,20 +140,11 @@ private func hmacSHA256Hex(message: String, secret: String) -> String {
 }
 
 private func constantTimeEquals(_ lhs: String, _ rhs: String) -> Bool {
-    let left = Array(lhs.utf8)
-    let right = Array(rhs.utf8)
+    let left = Array(lhs.utf8), right = Array(rhs.utf8)
     guard left.count == right.count else { return false }
     var result: UInt8 = 0
-    for i in left.indices {
-        result |= left[i] ^ right[i]
-    }
+    for i in left.indices { result |= left[i] ^ right[i] }
     return result == 0
-}
-
-private extension Digest {
-    var hexString: String {
-        Data(self).hexEncodedString()
-    }
 }
 
 private extension Data {

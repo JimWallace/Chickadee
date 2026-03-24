@@ -1,11 +1,18 @@
 import Crypto
 import Foundation
-import Vapor
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
-/// Builds HMAC-signed headers for worker -> server internal requests.
+/// Signs worker → server requests with per-request HMAC signatures.
 ///
-/// This is intentionally not wired into request sending yet.
-struct WorkerRequestSigner {
+/// Call `sign(_:)` on a fully-configured URLRequest (method and body already
+/// set) before sending it. The added headers are validated server-side by
+/// `WorkerHMACAuthMiddleware`.
+///
+/// Signed payload format (fields joined by newlines):
+///   METHOD\nPATH\nBODY_SHA256\nTIMESTAMP\nNONCE
+struct WorkerRequestSigner: Sendable {
     let sharedSecret: String
     let workerID: String?
 
@@ -14,48 +21,41 @@ struct WorkerRequestSigner {
         self.workerID = workerID
     }
 
-    /// Generates headers matching `WorkerHMACAuthMiddleware` expectations.
-    /// Signed payload format:
-    ///   METHOD\nPATH\nBODY_SHA256\nTIMESTAMP\nNONCE
-    func signedHeaders(
-        method: HTTPMethod,
-        path: String,
-        body: ByteBuffer? = nil,
-        timestamp: Int64 = Int64(Date().timeIntervalSince1970),
-        nonce: String = UUID().uuidString
-    ) -> HTTPHeaders {
-        let bodyBytes = bytes(from: body)
-        let bodyHash = sha256Hex(bodyBytes)
-
-        let timestampString = String(timestamp)
-        let payload = [
-            method.rawValue.uppercased(),
-            path,
-            bodyHash,
-            timestampString,
-            nonce
-        ].joined(separator: "\n")
-
-        let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
-
-        var headers = HTTPHeaders()
-        headers.replaceOrAdd(name: "X-Worker-Timestamp", value: timestampString)
-        headers.replaceOrAdd(name: "X-Worker-Nonce", value: nonce)
-        headers.replaceOrAdd(name: "X-Worker-Signature", value: signature)
-        if let workerID, !workerID.isEmpty {
-            headers.replaceOrAdd(name: "X-Worker-Id", value: workerID)
-        }
-        return headers
+    /// Adds HMAC auth headers to `request` in-place.
+    /// The request's `httpMethod` and `httpBody` must be set before calling this.
+    func sign(_ request: inout URLRequest) {
+        applySignature(
+            to: &request,
+            timestamp: Int64(Date().timeIntervalSince1970),
+            nonce: UUID().uuidString
+        )
     }
 
-    private func bytes(from body: ByteBuffer?) -> [UInt8] {
-        guard var copy = body else { return [] }
-        return copy.readBytes(length: copy.readableBytes) ?? []
+    /// Adds HMAC auth headers with explicit timestamp and nonce (for testing).
+    func sign(_ request: inout URLRequest, timestamp: Int64, nonce: String) {
+        applySignature(to: &request, timestamp: timestamp, nonce: nonce)
+    }
+
+    private func applySignature(to request: inout URLRequest, timestamp: Int64, nonce: String) {
+        let method   = (request.httpMethod ?? "GET").uppercased()
+        let path     = request.url?.path ?? "/"
+        let bodyBytes = request.httpBody.map { Array($0) } ?? []
+
+        let tsString  = String(timestamp)
+        let bodyHash  = sha256Hex(bodyBytes)
+        let payload   = [method, path, bodyHash, tsString, nonce].joined(separator: "\n")
+        let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
+
+        request.setValue(tsString, forHTTPHeaderField: "X-Worker-Timestamp")
+        request.setValue(nonce,    forHTTPHeaderField: "X-Worker-Nonce")
+        request.setValue(signature, forHTTPHeaderField: "X-Worker-Signature")
+        if let workerID, !workerID.isEmpty {
+            request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
+        }
     }
 
     private func sha256Hex(_ bytes: [UInt8]) -> String {
-        let digest = SHA256.hash(data: Data(bytes))
-        return Data(digest).hexEncodedString()
+        Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
     }
 
     private func hmacSHA256Hex(message: String, secret: String) -> String {

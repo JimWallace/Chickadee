@@ -116,14 +116,16 @@ final class ResultRoutesTests: XCTestCase {
 
     // MARK: - Tests
 
+    private let resultsPath = "/api/v1/worker/results"
+
     func testReportResultsReturnsReceived() throws {
         let collection = makeCollection()
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
-        try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
-            req.headers.contentType = .json
-            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
             req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -137,9 +139,9 @@ final class ResultRoutesTests: XCTestCase {
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
-        try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
-            req.headers.contentType = .json
-            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
             req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -155,9 +157,9 @@ final class ResultRoutesTests: XCTestCase {
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
-        try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
-            req.headers.contentType = .json
-            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
             req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -167,19 +169,20 @@ final class ResultRoutesTests: XCTestCase {
     }
 
     func testReportResultsRejectsMalformedJSON() throws {
-        try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
-            req.headers.contentType = .json
-            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
-            req.body = ByteBuffer(string: "not valid json")
+        let badBody = ByteBuffer(string: "not valid json")
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: badBody, workerSecret: self.workerSecret)
+            req.body = badBody
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .unprocessableEntity)
         })
     }
 
     func testReportResultsRejectsEmptyBody() throws {
-        try app.test(.POST, "/api/v1/worker/results", beforeRequest: { req in
-            req.headers.contentType = .json
-            req.headers.replaceOrAdd(name: "X-Worker-Secret", value: self.workerSecret)
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            workerSecret: self.workerSecret)
         }, afterResponse: { res in
             // Either 400 or 422 is acceptable for empty body
             XCTAssertTrue(
