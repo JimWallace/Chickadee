@@ -839,7 +839,7 @@ saveBtn.addEventListener('click', function() {
         })
         .then(r => {
             if (r.ok || r.status === 204) {
-                statusEl.textContent = 'Saved.';
+                closeEditor();
             } else {
                 return r.text().then(t => Promise.reject(t));
             }

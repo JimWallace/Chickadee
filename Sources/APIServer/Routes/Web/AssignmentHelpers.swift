@@ -1059,7 +1059,7 @@ func enqueueRunnerValidationSubmission(
 func waitForRunnerValidation(
     req: Request,
     submissionID: String,
-    timeoutSeconds: TimeInterval = 45
+    timeoutSeconds: TimeInterval = 20
 ) async throws -> RunnerValidationOutcome {
     let started = Date()
     let decoder = JSONDecoder()
