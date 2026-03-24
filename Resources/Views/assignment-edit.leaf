@@ -350,7 +350,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         // File link shown below the name input as a hint
         var fileHint = isNew
             ? '<div class="suite-file-hint"><code>' + escHtml(item.name) + '</code> <span class="card-meta">(new)</span>' + errBadge + '</div>'
-            : '<div class="suite-file-hint"><a href="' + escAttr(item.url || '#') + '"><code>' + escHtml(item.name) + '</code></a></div>';
+            : '<div class="suite-file-hint">'
+                + '<button class="btn-link suite-edit-btn" type="button" data-filename="' + escAttr(item.name) + '" style="font-size:inherit;padding:0;color:var(--blue)" title="Edit script in browser"><code>' + escHtml(item.name) + '</code></button>'
+                + '<a href="' + escAttr(item.url || '#') + '" style="font-size:.7rem;margin-left:.4rem;color:var(--gray-500)" title="Download script" download>\u2193</a>'
+                + '</div>';
         var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
         var checked   = item.isTest ? ' checked' : '';
