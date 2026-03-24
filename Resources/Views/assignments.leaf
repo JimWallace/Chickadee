@@ -481,6 +481,9 @@ tr.assignment-draggable td {
     // Dragging to a different tbody triggers a section-move API call + reload.
     // Dragging within the same tbody triggers a reorder API call.
 
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
     var assignDragged = null;
     var assignStartTbody = null;
     var assignStartOrder = '';
@@ -494,7 +497,7 @@ tr.assignment-draggable td {
     async function persistReorder(tbody) {
         var res = await fetch('/instructor/reorder', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
             body: JSON.stringify({ assignmentIDs: currentOrder(tbody) })
         });
         if (!res.ok) window.location.reload();
@@ -598,7 +601,7 @@ tr.assignment-draggable td {
             var assignmentID = row.getAttribute('data-assignment-id');
             fetch('/instructor/' + assignmentID + '/section', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                 body: JSON.stringify({ sectionID: newSectionID })
             }).then(function () {
                 window.location.reload();
@@ -654,7 +657,7 @@ tr.assignment-draggable td {
             try {
                 var res = await fetch('/instructor/sections/reorder', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                     body: JSON.stringify({ sectionIDs: order })
                 });
                 if (!res.ok) window.location.reload();
