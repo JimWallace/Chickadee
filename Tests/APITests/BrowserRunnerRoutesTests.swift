@@ -51,6 +51,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         app.migrations.add(CreatePerformanceIndexes())
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
+        app.migrations.add(AddCourseEnrollmentMode())
         try await app.autoMigrate().get()
 
         configureLeaf(app)
@@ -76,7 +77,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let emptyZip = Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
         try emptyZip.write(to: URL(fileURLWithPath: zipPath))
 
-        let course = APICourse(code: "BR101", name: "Browser Runner Course")
+        let course = APICourse(code: "BR101", name: "Browser Runner Course", enrollmentMode: .auto)
         try await course.save(on: app.db)
 
         let setup = APITestSetup(

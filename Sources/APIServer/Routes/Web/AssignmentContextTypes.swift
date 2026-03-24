@@ -39,7 +39,7 @@ struct AssignmentsContext: Encodable {
     let enrolledStudents: [EnrolledStudentRow]
     let hasEnrolledStudents: Bool       // explicit flag — Leaf's array.isEmpty is unreliable
     let enrolledStudentCount: Int
-    let courseOpenEnrollment: Bool
+    let courseEnrollmentMode: String
     let courseIsArchived: Bool
 }
 

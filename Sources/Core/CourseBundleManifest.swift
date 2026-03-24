@@ -70,12 +70,19 @@ public struct CourseBundleManifest: Codable, Sendable {
 public struct BundledCourse: Codable, Sendable {
     public let code: String
     public let name: String
-    /// nil in bundles exported before this field was added; defaults to true on import.
+    /// Enrollment mode; nil in bundles exported before this field was added.
+    /// When nil, fall back to `openEnrollment` for backward compatibility.
+    public let enrollmentMode: CourseEnrollmentMode?
+    /// Deprecated. Present only in bundles exported before `enrollmentMode` was added.
+    /// Ignored when `enrollmentMode` is non-nil.
     public let openEnrollment: Bool?
 
-    public init(code: String, name: String, openEnrollment: Bool? = nil) {
+    public init(code: String, name: String,
+                enrollmentMode: CourseEnrollmentMode? = nil,
+                openEnrollment: Bool? = nil) {
         self.code           = code
         self.name           = name
+        self.enrollmentMode = enrollmentMode
         self.openEnrollment = openEnrollment
     }
 }

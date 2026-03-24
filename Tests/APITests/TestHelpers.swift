@@ -6,6 +6,7 @@ import XCTest
 import XCTVapor
 import CSRF
 import Leaf
+import LeafKit
 @testable import chickadee_server
 import FluentSQLiteDriver
 import Foundation
@@ -17,6 +18,16 @@ import Foundation
 /// containing the `#csrfFormField()` hidden input, which is how tests obtain
 /// a valid session-bound CSRF token.
 func configureLeaf(_ app: Application) {
+    // LeafKit's sandbox rejects any path that contains a hidden directory component
+    // (e.g. ".claude"). When running from a git worktree under .claude, create a
+    // symlink from a clean temp path so the string-level path checks pass.
+    let viewsDir = app.directory.viewsDirectory
+    if viewsDir.contains("/.") {
+        let cleanPath = NSTemporaryDirectory() + "chickadee-leaf-\(UUID().uuidString)"
+        try? FileManager.default.removeItem(atPath: cleanPath)
+        try? FileManager.default.createSymbolicLink(atPath: cleanPath, withDestinationPath: viewsDir)
+        app.leaf.configuration = LeafConfiguration(rootDirectory: cleanPath + "/")
+    }
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
 }

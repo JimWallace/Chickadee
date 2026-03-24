@@ -47,12 +47,15 @@ struct WebRoutes: RouteCollection {
             enrolledCourses: courseState.all
         )
 
-        // If active (non-archived) courses exist but user has no active enrollment → redirect to /enroll.
+        // If the user has no active enrollment but open-mode courses exist → redirect to /enroll.
+        // We only redirect when self-enrolment is actually possible; if all courses are closed
+        // or auto the /enroll page would be empty and the redirect would be confusing.
         if courseState.active == nil {
-            let activeCourseCount = try await APICourse.query(on: req.db)
+            let openCourseCount = try await APICourse.query(on: req.db)
                 .filter(\.$isArchived == false)
+                .filter(\.$enrollmentModeRaw == CourseEnrollmentMode.open.rawValue)
                 .count()
-            if activeCourseCount > 0 {
+            if openCourseCount > 0 {
                 return req.redirect(to: "/enroll")
             }
         }

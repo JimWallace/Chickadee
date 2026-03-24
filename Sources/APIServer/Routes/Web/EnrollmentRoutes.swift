@@ -8,6 +8,7 @@
 
 import Vapor
 import Fluent
+import Core
 
 struct EnrollmentRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -25,7 +26,7 @@ struct EnrollmentRoutes: RouteCollection {
 
         let allCourses = try await APICourse.query(on: req.db)
             .filter(\.$isArchived == false)
-            .filter(\.$openEnrollment == true)
+            .filter(\.$enrollmentModeRaw == CourseEnrollmentMode.open.rawValue)
             .sort(\.$code)
             .all()
 
@@ -71,7 +72,7 @@ struct EnrollmentRoutes: RouteCollection {
             : try await APICourse.query(on: req.db)
                 .filter(\.$id ~~ selectedIDs)
                 .filter(\.$isArchived == false)
-                .filter(\.$openEnrollment == true)
+                .filter(\.$enrollmentModeRaw == CourseEnrollmentMode.open.rawValue)
                 .all()
         let validIDs = Set(validCourses.compactMap(\.id))
 

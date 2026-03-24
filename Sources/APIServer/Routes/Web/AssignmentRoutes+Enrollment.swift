@@ -5,14 +5,15 @@
 
 import Vapor
 import Fluent
+import Core
 
 extension AssignmentRoutes {
 
-    // MARK: - POST /courses/:courseID/open-enrollment
+    // MARK: - POST /courses/:courseID/enrollment-mode
 
     @Sendable
-    func toggleCourseOpenEnrollment(req: Request) async throws -> Response {
-        struct Body: Content { var openEnrollment: String? }
+    func setCourseEnrollmentMode(req: Request) async throws -> Response {
+        struct Body: Content { var enrollmentMode: String? }
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
@@ -20,9 +21,8 @@ extension AssignmentRoutes {
         else {
             throw Abort(.notFound)
         }
-        // An unchecked checkbox sends no field at all (empty body); treat that as false.
         let body = try? req.content.decode(Body.self)
-        course.openEnrollment = (body?.openEnrollment == "on")
+        course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
         return req.redirect(to: "/instructor")
     }

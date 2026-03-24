@@ -189,7 +189,7 @@ struct CourseBundleRoutes: RouteCollection {
             exportedBy:           caller.username,
             chickadeeVersion:     ChickadeeVersion.current,
             course:               BundledCourse(code: course.code, name: course.name,
-                                               openEnrollment: course.openEnrollment),
+                                               enrollmentMode: course.enrollmentMode),
             users:                bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
             assignments:          bundledAssignments,
@@ -381,8 +381,17 @@ struct CourseBundleRoutes: RouteCollection {
             )
 
             // 6b. Create course
+            // Resolve enrollment mode: prefer the new field; fall back to the legacy bool.
+            let importedMode: CourseEnrollmentMode
+            if let mode = manifest.course.enrollmentMode {
+                importedMode = mode
+            } else if manifest.course.openEnrollment == false {
+                importedMode = .closed
+            } else {
+                importedMode = .open
+            }
             let newCourse = APICourse(code: manifest.course.code, name: manifest.course.name,
-                                      openEnrollment: manifest.course.openEnrollment ?? true)
+                                      enrollmentMode: importedMode)
             try await newCourse.save(on: db)
             t.courseID   = newCourse.id!
             t.courseCode = newCourse.code

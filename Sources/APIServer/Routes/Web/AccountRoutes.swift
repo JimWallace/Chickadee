@@ -8,6 +8,7 @@
 
 import Vapor
 import Fluent
+import Core
 
 struct AccountRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -39,14 +40,21 @@ struct AccountRoutes: RouteCollection {
         let enrolledRows = enrollments
             .compactMap { e -> AccountCourseRow? in
                 guard let id = e.course.id else { return nil }
-                return AccountCourseRow(id: id.uuidString, code: e.course.code, name: e.course.name)
+                return AccountCourseRow(
+                    id: id.uuidString,
+                    code: e.course.code,
+                    name: e.course.name,
+                    enrollmentMode: e.course.enrollmentMode.rawValue
+                )
             }
             .sorted { $0.code < $1.code }
 
         let availableRows = allCourses
             .compactMap { c -> AccountCourseRow? in
-                guard let id = c.id, !enrolledIDs.contains(id) else { return nil }
-                return AccountCourseRow(id: id.uuidString, code: c.code, name: c.name)
+                guard let id = c.id, !enrolledIDs.contains(id),
+                      c.enrollmentMode == .open else { return nil }
+                return AccountCourseRow(id: id.uuidString, code: c.code, name: c.name,
+                                        enrollmentMode: c.enrollmentMode.rawValue)
             }
 
         return try await req.view.render("account", AccountContext(
@@ -105,6 +113,15 @@ struct AccountRoutes: RouteCollection {
             throw Abort(.badRequest)
         }
 
+        // Only open-mode courses can be self-left.
+        // Closed courses are instructor-managed; auto courses are mandatory.
+        guard let course = try await APICourse.find(courseID, on: req.db) else {
+            throw Abort(.notFound)
+        }
+        guard course.enrollmentMode == .open else {
+            throw Abort(.forbidden, reason: "You cannot leave a \(course.enrollmentMode.rawValue)-enrolment course.")
+        }
+
         try await APICourseEnrollment.query(on: req.db)
             .filter(\.$userID == userID)
             .filter(\.$course.$id == courseID)
@@ -136,4 +153,5 @@ private struct AccountCourseRow: Encodable {
     let id: String
     let code: String
     let name: String
+    let enrollmentMode: String
 }

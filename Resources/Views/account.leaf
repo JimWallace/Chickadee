@@ -52,11 +52,17 @@ My Account
                 <td><strong>#(course.code)</strong></td>
                 <td>#(course.name)</td>
                 <td>
+                    #if(course.enrollmentMode == "open"):
                     <form method="post" action="/account/unenroll/#(course.id)" style="display:inline">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Leave #(course.code)?')">Leave</button>
                     </form>
+                    #elseif(course.enrollmentMode == "auto"):
+                    <span class="badge badge-info" title="Auto-enrolled — contact your instructor to be removed">Auto</span>
+                    #else:
+                    <span class="badge badge-secondary" title="Managed by instructor — contact them to be removed">Managed</span>
+                    #endif
                 </td>
             </tr>
         #endfor

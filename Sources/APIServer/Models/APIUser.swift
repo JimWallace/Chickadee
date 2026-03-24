@@ -7,6 +7,7 @@
 
 import Fluent
 import Vapor
+import Core
 
 final class APIUser: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context,
@@ -133,7 +134,7 @@ extension Request {
     private static let activeCourseSessionKey = "activeCourseID"
 
     /// Resolves the active course for `user`, consulting the session and DB.
-    /// Auto-enrolls the user when exactly one non-archived course exists.
+    /// Auto-enrolls the user in every course with enrollmentMode == .auto.
     /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
     func resolveActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
         guard let userID = user.id else {
@@ -153,13 +154,19 @@ extension Request {
         // Fetch current enrollments.
         var enrolledContexts = try await loadEnrolledCourseContexts(userID: userID)
 
-        // Auto-enroll when there is exactly one non-archived, open-enrollment course.
-        if enrolledContexts.isEmpty, allCourses.count == 1,
-           let onlyCourse = allCourses.first,
-           onlyCourse.openEnrollment,
-           let courseID = onlyCourse.id {
-            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try? await enrollment.save(on: db)
+        // Auto-enroll in every course whose mode is .auto that the user isn't already in.
+        let autoCourses = allCourses.filter { $0.enrollmentMode == .auto }
+        var didEnroll = false
+        for course in autoCourses {
+            guard let courseID = course.id else { continue }
+            let alreadyEnrolled = enrolledContexts.contains { $0.id == courseID.uuidString }
+            if !alreadyEnrolled {
+                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+                try? await enrollment.save(on: db)
+                didEnroll = true
+            }
+        }
+        if didEnroll {
             enrolledContexts = try await loadEnrolledCourseContexts(userID: userID)
         }
 

@@ -15,6 +15,7 @@
 
 import Vapor
 import Fluent
+import Core
 
 struct AuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -148,29 +149,37 @@ struct AuthRoutes: RouteCollection {
 // MARK: - Post-login redirect helper
 
 /// Called after any successful login (local or SSO).
-/// - If the user has no enrollments and exactly one active course exists, auto-enroll them silently.
-/// - If the user has no enrollments and multiple courses exist, redirect to /enroll.
+/// - Auto-enrolls the user in every course with enrollmentMode == .auto.
+/// - If the user still has no enrollments and open-enrollment courses exist, redirect to /enroll.
 /// - Otherwise redirect to /.
 func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
     guard let userID = user.id else { return req.redirect(to: "/") }
+
+    let allCourses = try await APICourse.query(on: req.db)
+        .filter(\.$isArchived == false)
+        .all()
+
+    // Auto-enroll in every .auto course the user is not already in.
+    let autoCourses = allCourses.filter { $0.enrollmentMode == .auto }
+    for course in autoCourses {
+        guard let courseID = course.id else { continue }
+        let existing = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == courseID)
+            .count()
+        if existing == 0 {
+            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+            try? await enrollment.save(on: req.db)
+        }
+    }
 
     let enrollmentCount = try await APICourseEnrollment.query(on: req.db)
         .filter(\.$userID == userID)
         .count()
 
     if enrollmentCount == 0 {
-        let courses = try await APICourse.query(on: req.db)
-            .filter(\.$isArchived == false)
-            .all()
-
-        let openCourses = courses.filter { $0.openEnrollment }
-
-        if courses.count == 1, let course = courses.first,
-           course.openEnrollment, let courseID = course.id {
-            // Exactly one active course with open enrollment: silently auto-enroll.
-            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try? await enrollment.save(on: req.db)
-        } else if openCourses.count > 1 {
+        let hasOpenCourses = allCourses.contains { $0.enrollmentMode == .open }
+        if hasOpenCourses {
             return req.redirect(to: "/enroll")
         }
     }

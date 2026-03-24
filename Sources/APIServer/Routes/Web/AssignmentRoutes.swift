@@ -29,7 +29,7 @@ import Crypto
 struct AssignmentRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         // Course-scoped instructor actions (not under the /instructor prefix).
-        routes.post("courses", ":courseID", "open-enrollment", use: toggleCourseOpenEnrollment)
+        routes.post("courses", ":courseID", "enrollment-mode", use: setCourseEnrollmentMode)
         routes.post("courses", ":courseID", "enroll-csv",      use: instructorBulkEnrollCSV)
 
         let r = routes.grouped("instructor")
@@ -251,12 +251,12 @@ struct AssignmentRoutes: RouteCollection {
             enrolledStudents = []
         }
 
-        // Fetch open-enrollment and archived state for the active course.
-        var courseOpenEnrollment = false
+        // Fetch enrollment mode and archived state for the active course.
+        var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
         var courseIsArchived = false
         if let activeCourseUUID = courseState.activeCourseUUID,
            let activeCourseModel = try await APICourse.find(activeCourseUUID, on: req.db) {
-            courseOpenEnrollment = activeCourseModel.openEnrollment
+            courseEnrollmentMode = activeCourseModel.enrollmentMode.rawValue
             courseIsArchived     = activeCourseModel.isArchived
         }
 
@@ -269,7 +269,7 @@ struct AssignmentRoutes: RouteCollection {
             enrolledStudents: enrolledStudents,
             hasEnrolledStudents: !enrolledStudents.isEmpty,
             enrolledStudentCount: enrolledStudents.count,
-            courseOpenEnrollment: courseOpenEnrollment,
+            courseEnrollmentMode: courseEnrollmentMode,
             courseIsArchived: courseIsArchived
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)

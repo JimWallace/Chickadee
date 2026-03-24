@@ -3,11 +3,12 @@
 // A course groups assignments, submissions, and students together.
 // Users enroll in one or more courses. Assignments belong to a course.
 //
-// Admins manage courses (create, archive). Students and instructors self-enroll.
-// When only one course exists, enrollment is automatic and no course UI is shown.
+// Admins manage courses (create, archive). Enrollment policy is set per course
+// via CourseEnrollmentMode: open (self-enroll), auto (all users), or closed (admin-managed).
 
 import Fluent
 import Vapor
+import Core
 
 final class APICourse: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context.
@@ -28,9 +29,15 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @Field(key: "is_archived")
     var isArchived: Bool
 
-    /// When false, students cannot self-enroll. Admin-managed enrollment still works.
-    @Field(key: "open_enrollment")
-    var openEnrollment: Bool
+    /// Enrollment policy stored as raw string in DB; use `enrollmentMode` for typed access.
+    @Field(key: "enrollment_mode")
+    var enrollmentModeRaw: String
+
+    /// Typed accessor for `enrollmentModeRaw`. Defaults to `.open` if the stored value is unrecognised.
+    var enrollmentMode: CourseEnrollmentMode {
+        get { CourseEnrollmentMode(rawValue: enrollmentModeRaw) ?? .open }
+        set { enrollmentModeRaw = newValue.rawValue }
+    }
 
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
@@ -41,11 +48,11 @@ final class APICourse: Model, Content, @unchecked Sendable {
     init() {}
 
     init(id: UUID? = nil, code: String, name: String,
-         isArchived: Bool = false, openEnrollment: Bool = true) {
-        self.id             = id
-        self.code           = code
-        self.name           = name
-        self.isArchived     = isArchived
-        self.openEnrollment = openEnrollment
+         isArchived: Bool = false, enrollmentMode: CourseEnrollmentMode = .open) {
+        self.id                 = id
+        self.code               = code
+        self.name               = name
+        self.isArchived         = isArchived
+        self.enrollmentModeRaw  = enrollmentMode.rawValue
     }
 }

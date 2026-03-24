@@ -382,15 +382,18 @@
         <h2 style="font-size:1.05rem;font-weight:600;margin:0">Enrolled students (#(enrolledStudentCount))</h2>
         #if(currentUser.activeCourse):
         #if(!courseIsArchived):
-        <form method="post" action="/courses/#(currentUser.activeCourse.id)/open-enrollment" style="margin:0">
+        <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" style="margin:0">
             #csrfFormField()
-            <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer;user-select:none">
-                <input type="checkbox" name="openEnrollment" value="on"
-                       #if(courseOpenEnrollment):checked#endif
-                       >
-                Open enrolment
+            <label class="form-label" style="font-size:.875rem;margin:0">
+                Enrolment
+                <select name="enrollmentMode" class="form-input"
+                        style="display:block;font-size:.875rem"
+                        onchange="this.form.submit()">
+                    <option value="open"   #if(courseEnrollmentMode == "open"):selected#endif>Open enrolment</option>
+                    <option value="auto"   #if(courseEnrollmentMode == "auto"):selected#endif>Auto enrolment</option>
+                    <option value="closed" #if(courseEnrollmentMode == "closed"):selected#endif>Closed enrolment</option>
+                </select>
             </label>
-            <button class="btn" type="submit" style="font-size:.8rem;padding:.2rem .5rem">Save</button>
         </form>
         <form method="post" action="/courses/#(currentUser.activeCourse.id)/enroll-csv"
               enctype="multipart/form-data" style="margin:0;margin-left:auto">
