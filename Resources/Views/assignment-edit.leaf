@@ -669,16 +669,25 @@ let view = null;
 let currentFilename = null;  // null when creating a new file
 let isCreating = false;
 
+function initView(content, filename) {
+    if (view) { view.destroy(); view = null; }
+    try {
+        view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
+    } catch (e) {
+        statusEl.textContent = 'Editor failed to load: ' + e.message;
+        console.error('EditorView init error:', e);
+    }
+}
+
 function openEditor(filename, content) {
     currentFilename = filename;
     isCreating = false;
     titleEl.textContent = 'Edit: ' + filename;
     newControls.style.display = 'none';
     statusEl.textContent = '';
-    if (view) { view.destroy(); }
-    view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
     overlay.style.display = 'flex';
-    view.focus();
+    initView(content, filename);
+    if (view) view.focus();
 }
 
 function openCreator() {
@@ -688,9 +697,8 @@ function openCreator() {
     newControls.style.display = '';
     newNameInput.value = '';
     statusEl.textContent = '';
-    if (view) { view.destroy(); }
-    view = new EditorView({ state: makeEditorState('', ''), parent: mount });
     overlay.style.display = 'flex';
+    initView('', '');
     newNameInput.focus();
 }
 
@@ -711,9 +719,9 @@ document.addEventListener('click', function(e) {
     fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename), {
         headers: { 'x-csrf-token': csrfToken }
     })
-        .then(r => r.ok ? r.text() : Promise.reject(r.statusText))
+        .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(r.status + ' ' + t)))
         .then(content => openEditor(filename, content))
-        .catch(err => { statusEl.textContent = 'Error: ' + err; });
+        .catch(err => { statusEl.textContent = 'Error: ' + err; console.error('getScript error:', err); });
 });
 
 // ── New Script button ──────────────────────────────────────────────────────
@@ -793,7 +801,7 @@ applyTplBtn.addEventListener('click', function() {
 // ── Save ───────────────────────────────────────────────────────────────────
 
 saveBtn.addEventListener('click', function() {
-    if (!view) return;
+    if (!view) { statusEl.textContent = 'Editor not ready — try closing and reopening.'; return; }
     const content = view.state.doc.toString();
 
     if (isCreating) {
