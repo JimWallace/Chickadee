@@ -90,7 +90,13 @@
                 <td>
                     <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
                     <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                    <div class="suite-file-hint"><a href="#(row.url)"><code>#(row.name)</code></a></div>
+                    <div class="suite-file-hint">
+                        <a href="#(row.url)"><code>#(row.name)</code></a>
+                        <button class="btn-link suite-edit-btn" type="button"
+                                data-filename="#(row.name)"
+                                style="font-size:.75rem;margin-left:.4rem;color:var(--blue,#0070c9)"
+                                title="Edit script in browser">Edit</button>
+                    </div>
                 </td>
                 <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
                 <td>
@@ -109,14 +115,95 @@
     </table>
 
     <p class="card-meta">
-        Use Delete to remove a file. Add more files above; they will appear in this table. At least one row marked as a test is required.
+        Use Delete to remove a file. Add more files above, or click <strong>New Script</strong> to create one from a template.
+        At least one row marked as a test is required.
     </p>
+
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem">
+        <button class="btn" type="button" id="new-script-btn">+ New Script</button>
+    </div>
 
     <div style="display:flex;gap:.6rem;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save</button>
         <a class="btn" href="/instructor">Cancel</a>
     </div>
 </form>
+
+<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
+<div id="script-editor-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--bg,#fff);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
+                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
+                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
+            <div id="editor-title" style="font-weight:600;flex:1"></div>
+            <button class="btn-link" id="editor-close-btn" type="button"
+                    aria-label="Close editor" title="Close"
+                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+        </div>
+
+        <!-- New-file controls (hidden when editing existing) -->
+        <div id="new-file-controls" style="display:none;padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
+            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
+                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
+                    Filename
+                    <input type="text" id="new-filename-input" class="form-input"
+                           placeholder="e.g. test_correctness.py"
+                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
+                </label>
+                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
+                    Tier
+                    <select id="new-file-tier" class="form-input" style="padding:.25rem .5rem;font-size:.875rem">
+                        <option value="public">public</option>
+                        <option value="secret">secret</option>
+                        <option value="release">release</option>
+                        <option value="support">support (not graded)</option>
+                    </select>
+                </label>
+                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
+                    Points
+                    <input type="number" id="new-file-points" class="form-input" min="1" max="100" value="1"
+                           style="width:4rem;padding:.25rem .5rem;font-size:.875rem">
+                </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                <span style="font-size:.8rem;color:var(--meta)">Template:</span>
+                <select id="template-select" class="form-input"
+                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
+                    <optgroup label="Python">
+                        <option value="py:exists">Function Exists</option>
+                        <option value="py:correctness">Correctness (input/output pairs)</option>
+                        <option value="py:corner_cases">Corner Cases</option>
+                        <option value="py:exception">Exception Handling</option>
+                        <option value="py:type_check">Return Type Check</option>
+                        <option value="py:performance">Performance / Runtime</option>
+                        <option value="py:differential">Differential (reference solution)</option>
+                    </optgroup>
+                    <optgroup label="Shell">
+                        <option value="sh:always_pass">Always Pass (placeholder)</option>
+                        <option value="sh:file_exists">File Exists Check</option>
+                        <option value="sh:command_output">Command Output Check</option>
+                    </optgroup>
+                    <option value="blank">Blank</option>
+                </select>
+                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
+            </div>
+        </div>
+
+        <!-- CodeMirror editor mount -->
+        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
+
+        <!-- Footer -->
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
+                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
+            <button class="btn btn-primary" id="editor-save-btn" type="button">Save</button>
+            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
+            <span id="editor-status" style="font-size:.8rem;color:var(--meta);margin-left:.5rem"></span>
+        </div>
+    </div>
+</div>
 <style>
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
@@ -478,6 +565,252 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     });
 
 })();
+</script>
+<style>
+/* CodeMirror 6 host element */
+#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
+#cm-editor-mount .cm-scroller { overflow: auto; }
+</style>
+<script type="module">
+// ── CodeMirror 6 script editor ─────────────────────────────────────────────
+import { EditorView, keymap, lineNumbers, highlightActiveLine,
+         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6?bundle';
+import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6?bundle';
+import { defaultKeymap, history, historyKeymap, indentWithTab }
+                                      from 'https://esm.sh/@codemirror/commands@6?bundle';
+import { syntaxHighlighting, defaultHighlightStyle }
+                                      from 'https://esm.sh/@codemirror/language@6?bundle';
+import { python }                     from 'https://esm.sh/@codemirror/lang-python@6?bundle';
+import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6?bundle';
+import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell?bundle';
+import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r?bundle';
+
+const langComp = new Compartment();
+
+function langExtensionFor(filename) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    if (ext === 'py') return python();
+    if (ext === 'r')  return StreamLanguage.define(r);
+    return StreamLanguage.define(shell);
+}
+
+function makeEditorState(content, filename) {
+    return EditorState.create({
+        doc: content,
+        extensions: [
+            lineNumbers(),
+            highlightActiveLine(),
+            drawSelection(),
+            dropCursor(),
+            history(),
+            syntaxHighlighting(defaultHighlightStyle),
+            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+            langComp.of(langExtensionFor(filename)),
+            EditorView.lineWrapping,
+            EditorView.theme({ '&': { height: '100%' } })
+        ]
+    });
+}
+
+const overlay    = document.getElementById('script-editor-overlay');
+const mount      = document.getElementById('cm-editor-mount');
+const titleEl    = document.getElementById('editor-title');
+const statusEl   = document.getElementById('editor-status');
+const saveBtn    = document.getElementById('editor-save-btn');
+const cancelBtn  = document.getElementById('editor-cancel-btn');
+const closeBtn   = document.getElementById('editor-close-btn');
+const newControls = document.getElementById('new-file-controls');
+const newNameInput = document.getElementById('new-filename-input');
+const tierSelect  = document.getElementById('new-file-tier');
+const pointsInput = document.getElementById('new-file-points');
+const templateSel = document.getElementById('template-select');
+const applyTplBtn = document.getElementById('apply-template-btn');
+const newScriptBtn = document.getElementById('new-script-btn');
+const assignmentID = '#(assignmentID)';
+
+let view = null;
+let currentFilename = null;  // null when creating a new file
+let isCreating = false;
+
+function openEditor(filename, content) {
+    currentFilename = filename;
+    isCreating = false;
+    titleEl.textContent = 'Edit: ' + filename;
+    newControls.style.display = 'none';
+    statusEl.textContent = '';
+    if (view) { view.destroy(); }
+    view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
+    overlay.style.display = 'flex';
+    view.focus();
+}
+
+function openCreator() {
+    currentFilename = null;
+    isCreating = true;
+    titleEl.textContent = 'New Test Script';
+    newControls.style.display = '';
+    newNameInput.value = '';
+    statusEl.textContent = '';
+    if (view) { view.destroy(); }
+    view = new EditorView({ state: makeEditorState('', ''), parent: mount });
+    overlay.style.display = 'flex';
+    newNameInput.focus();
+}
+
+function closeEditor() {
+    overlay.style.display = 'none';
+    if (view) { view.destroy(); view = null; }
+}
+
+// ── Edit buttons on existing rows ─────────────────────────────────────────
+
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest && e.target.closest('.suite-edit-btn');
+    if (!btn) return;
+    const filename = btn.getAttribute('data-filename');
+    if (!filename) return;
+    statusEl.textContent = 'Loading…';
+    overlay.style.display = 'flex';
+    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename))
+        .then(r => r.ok ? r.text() : Promise.reject(r.statusText))
+        .then(content => openEditor(filename, content))
+        .catch(err => { statusEl.textContent = 'Error: ' + err; });
+});
+
+// ── New Script button ──────────────────────────────────────────────────────
+
+if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
+
+// ── Template apply ─────────────────────────────────────────────────────────
+
+// Pre-loaded templates fetched from the server (populated on first template apply).
+let templateCache = null;
+
+function fetchTemplates() {
+    if (templateCache) return Promise.resolve(templateCache);
+    // Fetch generic templates (no function-specific personalisation) by scanning an empty notebook.
+    return fetch('/instructor/scan-notebook', {
+        method: 'POST',
+        body: JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }),
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.ok ? r.json() : [])
+    .then(functions => {
+        // If the notebook has no functions the endpoint returns [].
+        // Fall back to server-generated generic templates via the template-info endpoint.
+        templateCache = null;
+        return null;
+    });
+}
+
+// Inline template content matching server templates (avoids a round-trip for the
+// generic "no function name" versions).  These are identical to what the server
+// returns for pythonTestScript / shellTestScript with default args.
+const INLINE_TEMPLATES = {
+    'py:exists':       '# Test: my_function is defined and callable\nrequire_function("my_function")\npassed("my_function is defined and callable")\n',
+    'py:correctness':  '# Test: my_function returns the correct output for known inputs\ntest_cases = [\n    ((), None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.my_function(*args)\n    if result != expected:\n        failures.append(f"  my_function{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n',
+    'py:corner_cases': '# Test: my_function handles edge / corner cases\ncorner_cases = [\n    ((None,),   None),\n    ((0,),      None),\n    ((-1,),     None),\n    (([],),     None),\n    (("",),     None),\n]\nfailures = []\nfor args, expected in corner_cases:\n    try:\n        result = student_module.my_function(*args)\n        if expected is not None and result != expected:\n            failures.append(f"  my_function{args} = {result!r}, expected {expected!r}")\n    except Exception as e:\n        failures.append(f"  my_function{args} raised {type(e).__name__}: {e}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(corner_cases)} corner case(s) handled")\n',
+    'py:exception':    '# Test: my_function raises the expected exception\nexpected_exc = ValueError  # TODO: change to expected exception type\ntry:\n    student_module.my_function()  # TODO: add arguments\n    failed(f"Expected {expected_exc.__name__} but no exception was raised")\nexcept expected_exc:\n    passed(f"Correctly raises {expected_exc.__name__}")\nexcept Exception as e:\n    failed(f"Wrong exception: expected {expected_exc.__name__}, got {type(e).__name__}: {e}")\n',
+    'py:type_check':   '# Test: my_function returns the expected type\nexpected_type = list  # TODO: change to the expected return type\nresult = student_module.my_function()  # TODO: add arguments\nif not isinstance(result, expected_type):\n    failed(f"my_function() returned {type(result).__name__}, expected {expected_type.__name__}")\nelse:\n    passed(f"my_function() returned {type(result).__name__} as expected")\n',
+    'py:performance':  '# Test: my_function completes within the time limit\nimport time\ntime_limit_ms = 100  # TODO: adjust\nstart = time.perf_counter()\nstudent_module.my_function()  # TODO: add arguments\nelapsed_ms = (time.perf_counter() - start) * 1000\nif elapsed_ms < time_limit_ms:\n    passed(f"Completed in {elapsed_ms:.1f} ms (limit: {time_limit_ms} ms)")\nelse:\n    failed(f"Too slow: {elapsed_ms:.1f} ms (limit: {time_limit_ms} ms)")\n',
+    'py:differential': '# Test: my_function matches a reference implementation\ndef _reference_my_function(*args, **kwargs):\n    pass  # TODO: implement reference solution\ntest_inputs = []\nfailures = []\nfor args in test_inputs:\n    args = args if isinstance(args, tuple) else (args,)\n    expected = _reference_my_function(*args)\n    actual   = student_module.my_function(*args)\n    if actual != expected:\n        failures.append(f"  my_function{args} = {actual!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_inputs)} case(s) match reference")\n',
+    'sh:always_pass':    '#!/bin/sh\n# TODO: replace this placeholder with a real test\necho "passed"\nexit 0\n',
+    'sh:file_exists':    '#!/bin/sh\nFILE="solution.py"  # TODO: change to the expected filename\nif [ -f "$FILE" ]; then\n    echo "File $FILE found"\n    exit 0\nelse\n    echo "File $FILE not found" >&2\n    exit 1\nfi\n',
+    'sh:command_output': '#!/bin/sh\nEXPECTED="expected output"  # TODO: replace\nACTUAL=$(python3 -c "import solution; print(solution.main())" 2>&1)\nif [ "$ACTUAL" = "$EXPECTED" ]; then\n    echo "Output matches"\n    exit 0\nelse\n    printf \'Expected: %s\\nActual:   %s\\n\' "$EXPECTED" "$ACTUAL" >&2\n    exit 1\nfi\n',
+    'blank': ''
+};
+
+// Auto-update filename extension when template language changes.
+templateSel.addEventListener('change', function() {
+    const [lang] = (templateSel.value || '').split(':');
+    const name = (newNameInput.value || '').trim();
+    if (!name) return;
+    const baseStem = name.replace(/\.[^.]*$/, '');
+    if (lang === 'py') newNameInput.value = baseStem + '.py';
+    if (lang === 'sh') newNameInput.value = baseStem + '.sh';
+});
+
+applyTplBtn.addEventListener('click', function() {
+    const tpl = INLINE_TEMPLATES[templateSel.value];
+    if (tpl === undefined) return;
+    // Auto-fill filename if empty.
+    if (!newNameInput.value.trim()) {
+        const [lang] = (templateSel.value || '').split(':');
+        const ext = lang === 'py' ? 'py' : lang === 'sh' ? 'sh' : 'py';
+        newNameInput.value = 'test_new.' + ext;
+    }
+    if (view) {
+        view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: tpl }
+        });
+        // Re-apply language for new filename.
+        view.dispatch({
+            effects: langComp.reconfigure(langExtensionFor(newNameInput.value))
+        });
+        view.focus();
+    }
+});
+
+// ── Save ───────────────────────────────────────────────────────────────────
+
+saveBtn.addEventListener('click', function() {
+    if (!view) return;
+    const content = view.state.doc.toString();
+
+    if (isCreating) {
+        const filename = (newNameInput.value || '').trim();
+        if (!filename) { statusEl.textContent = 'Enter a filename first.'; return; }
+        const tier   = tierSelect ? tierSelect.value : 'public';
+        const points = Math.max(1, parseInt(pointsInput ? pointsInput.value : '1') || 1);
+        const isTest = tier !== 'support';
+        statusEl.textContent = 'Saving…';
+        saveBtn.disabled = true;
+        fetch('/instructor/' + assignmentID + '/scripts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename, content, tier, points, isTest })
+        })
+        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
+        .then(data => {
+            statusEl.textContent = 'Saved.';
+            saveBtn.disabled = false;
+            // Reload the page so the new file appears in the table.
+            window.location.reload();
+        })
+        .catch(err => {
+            statusEl.textContent = 'Error: ' + err;
+            saveBtn.disabled = false;
+        });
+    } else {
+        if (!currentFilename) return;
+        statusEl.textContent = 'Saving…';
+        saveBtn.disabled = true;
+        fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(currentFilename), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        })
+        .then(r => {
+            if (r.ok || r.status === 204) {
+                statusEl.textContent = 'Saved.';
+            } else {
+                return r.text().then(t => Promise.reject(t));
+            }
+        })
+        .catch(err => { statusEl.textContent = 'Error: ' + err; })
+        .finally(() => { saveBtn.disabled = false; });
+    }
+});
+
+// ── Close ──────────────────────────────────────────────────────────────────
+
+[cancelBtn, closeBtn].forEach(btn => btn && btn.addEventListener('click', closeEditor));
+overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeEditor();
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
+});
 </script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {

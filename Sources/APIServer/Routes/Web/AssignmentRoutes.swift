@@ -57,6 +57,13 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "open",    use: openAssignment)
         r.post(":assignmentID", "close",   use: closeAssignment)
         r.post(":assignmentID", "delete",  use: deleteAssignment)
+
+        // Script editor — inline CRUD for individual test/support files in the setup zip.
+        r.post("scan-notebook", use: scanNotebook)
+        r.get(":assignmentID",  "scripts", ":filename", use: getScript)
+        r.put(":assignmentID",  "scripts", ":filename", use: updateScript)
+        r.post(":assignmentID", "scripts",              use: createScript)
+        r.delete(":assignmentID", "scripts", ":filename", use: deleteScript)
     }
 
     // MARK: - GET /instructor
@@ -1072,4 +1079,237 @@ struct AssignmentRoutes: RouteCollection {
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
     }
+
+    // MARK: - GET /instructor/:assignmentID/scripts/:filename
+    //
+    // Returns the raw text content of a single file from the setup zip.
+
+    @Sendable
+    func getScript(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+
+        let idStr    = try assignmentPublicIDParameter(from: req)
+        let filename = try safeScriptFilename(from: req)
+
+        guard
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
+            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
+            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+        }
+        var headers = HTTPHeaders()
+        headers.contentType = .plainText
+        return Response(status: .ok, headers: headers, body: .init(string: content))
+    }
+
+    // MARK: - PUT /instructor/:assignmentID/scripts/:filename
+    //
+    // Replaces the content of an existing script in the setup zip.
+    // Body (JSON): { "content": "..." }
+
+    @Sendable
+    func updateScript(req: Request) async throws -> HTTPStatus {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+
+        let idStr    = try assignmentPublicIDParameter(from: req)
+        let filename = try safeScriptFilename(from: req)
+
+        struct UpdateBody: Content { var content: String }
+        let body = try req.content.decode(UpdateBody.self)
+
+        guard
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
+            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        // Verify the file exists before writing.
+        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
+            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+        }
+
+        do {
+            try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: body.content)
+        } catch ScriptZipError.zipFailed {
+            throw Abort(.internalServerError, reason: "Failed to update setup zip")
+        }
+        return .noContent
+    }
+
+    // MARK: - POST /instructor/:assignmentID/scripts
+    //
+    // Creates a new script file in the setup zip and adds a TestSuiteEntry
+    // to the manifest (default: public tier, 1 point, no dependencies).
+    // Body (JSON): { "filename": "test_new.py", "content": "...", "tier": "public", "points": 1 }
+
+    @Sendable
+    func createScript(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+
+        let idStr = try assignmentPublicIDParameter(from: req)
+
+        struct CreateBody: Content {
+            var filename: String
+            var content:  String
+            var tier:     String?
+            var points:   Int?
+            var isTest:   Bool?
+        }
+        let body = try req.content.decode(CreateBody.self)
+
+        // Validate filename: must be a simple filename (no path separators).
+        let cleaned = sanitizeSuiteFilename(body.filename)
+        guard !cleaned.isEmpty, cleaned == body.filename else {
+            throw Abort(.badRequest, reason: "Invalid filename '\(body.filename)'")
+        }
+
+        guard
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
+            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        // Reject duplicate filenames.
+        if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
+            throw Abort(.conflict, reason: "A file named '\(cleaned)' already exists in this setup")
+        }
+
+        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
+
+        let tier       = normalizeTier(body.tier)
+        let points     = max(1, body.points ?? 1)
+        let shouldTest = (body.isTest ?? true) && tier != "support"
+
+        if shouldTest {
+            let entry = ConfiguredSuiteEntry(
+                script: cleaned, tier: tier, order: 0,
+                dependsOn: [], points: points, displayName: nil
+            )
+            if let updated = updateManifestAddingScript(manifestJSON: setup.manifest, entry: entry) {
+                setup.manifest = updated
+                try await setup.save(on: req.db)
+            }
+        }
+
+        struct CreatedResponse: Content {
+            var filename: String
+            var tier: String
+            var points: Int
+            var isTest: Bool
+            var editURL: String
+        }
+        let resp = CreatedResponse(
+            filename: cleaned,
+            tier: tier,
+            points: points,
+            isTest: shouldTest,
+            editURL: "/instructor/\(idStr)/scripts/\(urlEncode(cleaned))"
+        )
+        return try await resp.encodeResponse(status: .created, for: req)
+    }
+
+    // MARK: - DELETE /instructor/:assignmentID/scripts/:filename
+    //
+    // Removes a script from the setup zip and manifest.
+    // Returns 409 if other scripts in the manifest depend on this one.
+
+    @Sendable
+    func deleteScript(req: Request) async throws -> HTTPStatus {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+
+        let idStr    = try assignmentPublicIDParameter(from: req)
+        let filename = try safeScriptFilename(from: req)
+
+        guard
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
+            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
+            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+        }
+
+        let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
+        guard dependents.isEmpty else {
+            throw Abort(.conflict,
+                reason: "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))")
+        }
+
+        do {
+            try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
+        } catch ScriptZipError.zipFailed {
+            throw Abort(.internalServerError, reason: "Failed to update setup zip")
+        }
+
+        if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
+            setup.manifest = updated
+            try await setup.save(on: req.db)
+        }
+        return .noContent
+    }
+
+    // MARK: - POST /instructor/scan-notebook
+    //
+    // Scans a solution notebook for Python function definitions and returns
+    // one entry per public top-level function, along with pre-generated
+    // script templates.
+    //
+    // Body: raw .ipynb JSON bytes (Content-Type: application/json or application/octet-stream)
+
+    @Sendable
+    func scanNotebook(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor else { throw Abort(.forbidden) }
+
+        guard let buffer = req.body.data else {
+            throw Abort(.badRequest, reason: "Request body is empty")
+        }
+        let notebookData = Data(buffer.readableBytesView)
+        guard !notebookData.isEmpty else {
+            throw Abort(.badRequest, reason: "Notebook data is empty")
+        }
+
+        let functions = scanNotebookForFunctions(notebookData)
+
+        struct FunctionResult: Content {
+            var name: String
+            var paramNames: [String]
+            var paramCount: Int
+            var hasTypeHints: Bool
+            var hasDocstring: Bool
+            var templates: [TestTemplateInfo]
+        }
+
+        let results = functions.map { fn in
+            FunctionResult(
+                name: fn.name,
+                paramNames: fn.paramNames,
+                paramCount: fn.paramCount,
+                hasTypeHints: fn.hasTypeHints,
+                hasDocstring: fn.hasDocstring,
+                templates: allTemplateInfos(functionName: fn.name, paramNames: fn.paramNames)
+            )
+        }
+
+        return try await results.encodeResponse(for: req)
+    }
+}
+
+// MARK: - Route parameter helpers
+
+/// Extracts and validates the `:filename` route parameter.
+/// Rejects any value that contains path separators or traversal components.
+private func safeScriptFilename(from req: Request) throws -> String {
+    guard let raw = req.parameters.get("filename"), !raw.isEmpty else {
+        throw Abort(.badRequest, reason: "Missing filename parameter")
+    }
+    let cleaned = (raw as NSString).lastPathComponent
+    guard cleaned == raw, !cleaned.isEmpty, cleaned != ".", cleaned != ".." else {
+        throw Abort(.badRequest, reason: "Invalid filename '\(raw)'")
+    }
+    return cleaned
 }
