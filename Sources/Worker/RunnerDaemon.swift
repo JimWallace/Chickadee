@@ -74,7 +74,7 @@ actor WorkerDaemon {
     private let reporter: Reporter
     private let runner:   any ScriptRunner
     private let workerID: String
-    private let workerSecret: String
+    private let signer:   WorkerRequestSigner
     private let maxConcurrentJobs: Int
 
     init(
@@ -89,7 +89,7 @@ actor WorkerDaemon {
         self.reporter          = reporter
         self.runner            = runner
         self.workerID          = workerID
-        self.workerSecret      = workerSecret
+        self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.maxConcurrentJobs = maxConcurrentJobs
     }
 
@@ -346,8 +346,8 @@ actor WorkerDaemon {
 
     private func download(url: URL, to destination: URL) async throws {
         var request = URLRequest(url: url)
-        request.setValue(workerSecret, forHTTPHeaderField: "X-Worker-Secret")
-        request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
+        request.httpMethod = "GET"
+        signer.sign(&request)
         let (tmpURL, response) = try await URLSession.shared.download(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw WorkerDaemonError.downloadFailed(url)

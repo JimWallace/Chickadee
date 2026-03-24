@@ -33,6 +33,7 @@ Two deployment paths are documented here:
 git clone https://github.com/JimWallace/Chickadee.git
 cd Chickadee
 cp .env.example .env
+chmod 600 .env   # secrets file — restrict to owner only
 ```
 
 Edit `.env`:

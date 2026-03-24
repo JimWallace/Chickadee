@@ -59,7 +59,7 @@ final class WorkerRoutesTests: XCTestCase {
         configureLeaf(app)
         try routes(app)
 
-        // Inject the worker secret so requireWorkerSecret passes
+        // Set the shared secret so WorkerHMACAuthMiddleware validates signed requests
         await app.workerSecretStore.setRuntimeOverride(workerSecret)
     }
 
@@ -70,11 +70,8 @@ final class WorkerRoutesTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func workerHeaders() -> HTTPHeaders {
-        var h = HTTPHeaders()
-        h.add(name: "X-Worker-Secret", value: workerSecret)
-        h.contentType = .json
-        return h
+    private func workerHeaders(method: HTTPMethod = .POST, path: String, body: ByteBuffer? = nil) -> HTTPHeaders {
+        workerHMACHeaders(method: method, path: path, body: body, workerSecret: workerSecret)
     }
 
     private func makeDummyZip(named filename: String, in dir: URL) throws -> String {
@@ -119,10 +116,15 @@ final class WorkerRoutesTests: XCTestCase {
     }
 
     func testRequestJob_wrongSecret_returns401() async throws {
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
-            req.headers.add(name: "X-Worker-Secret", value: "wrong-secret")
-            req.headers.contentType = .json
-            req.body = .init(string: #"{"workerID":"w1"}"#)
+        // Sending a bad/absent signature should still yield 401
+        let path = "/api/v1/worker/request"
+        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        var badHeaders = workerHMACHeaders(method: .POST, path: path, body: body,
+                                           workerSecret: "wrong-secret")
+        badHeaders.contentType = .json
+        try await app.test(.POST, path, beforeRequest: { req in
+            req.headers = badHeaders
+            req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .unauthorized)
         })
@@ -143,9 +145,11 @@ final class WorkerRoutesTests: XCTestCase {
     // MARK: - POST /api/v1/worker/request
 
     func testRequestJob_noPendingJobs_returns204() async throws {
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
-            req.headers = workerHeaders()
-            req.body = .init(string: #"{"workerID":"w1"}"#)
+        let path = "/api/v1/worker/request"
+        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        try await app.test(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .noContent)
         })
@@ -155,9 +159,11 @@ final class WorkerRoutesTests: XCTestCase {
         let setup = try await makeTestSetup(id: "wsetup_01", manifest: workerManifestJSON)
         let sub   = try await makeSubmission(id: "wsub_01", setupID: setup.id!)
 
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
-            req.headers = workerHeaders()
-            req.body = .init(string: #"{"workerID":"w1"}"#)
+        let path = "/api/v1/worker/request"
+        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        try await app.test(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let job = try res.content.decode(Job.self)
@@ -177,9 +183,11 @@ final class WorkerRoutesTests: XCTestCase {
         let setup = try await makeTestSetup(id: "bsetup_01", manifest: browserManifestJSON)
         _ = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
 
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
-            req.headers = workerHeaders()
-            req.body = .init(string: #"{"workerID":"w1"}"#)
+        let path = "/api/v1/worker/request"
+        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        try await app.test(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .noContent)
         })
@@ -191,9 +199,11 @@ final class WorkerRoutesTests: XCTestCase {
         let sub   = try await makeSubmission(id: "vsub_01", setupID: setup.id!,
                                               kind: APISubmission.Kind.validation)
 
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
-            req.headers = workerHeaders()
-            req.body = .init(string: #"{"workerID":"w2"}"#)
+        let path = "/api/v1/worker/request"
+        let body = ByteBuffer(string: #"{"workerID":"w2"}"#)
+        try await app.test(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let job = try res.content.decode(Job.self)
@@ -209,9 +219,11 @@ final class WorkerRoutesTests: XCTestCase {
         _ = try await makeSubmission(id: "psub_val", setupID: setup.id!,
                                      kind: APISubmission.Kind.validation)
 
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
-            req.headers = workerHeaders()
-            req.body = .init(string: #"{"workerID":"w3"}"#)
+        let path = "/api/v1/worker/request"
+        let body = ByteBuffer(string: #"{"workerID":"w3"}"#)
+        try await app.test(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let job = try res.content.decode(Job.self)
@@ -226,18 +238,18 @@ final class WorkerRoutesTests: XCTestCase {
         let setup = try await makeTestSetup(id: "dlsetup_01", manifest: workerManifestJSON)
         let sub   = try await makeSubmission(id: "dlsub_01", setupID: setup.id!)
 
-        try await app.test(.GET, "/api/v1/worker/submissions/\(sub.id!)/download",
-        beforeRequest: { req in
-            req.headers.add(name: "X-Worker-Secret", value: workerSecret)
+        let path = "/api/v1/worker/submissions/\(sub.id!)/download"
+        try await app.test(.GET, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
         })
     }
 
     func testDownloadSubmission_notFound_returns404() async throws {
-        try await app.test(.GET, "/api/v1/worker/submissions/nonexistent/download",
-        beforeRequest: { req in
-            req.headers.add(name: "X-Worker-Secret", value: workerSecret)
+        let path = "/api/v1/worker/submissions/nonexistent/download"
+        try await app.test(.GET, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
         })
@@ -248,18 +260,18 @@ final class WorkerRoutesTests: XCTestCase {
     func testDownloadTestSetup_existingFile_returns200() async throws {
         let setup = try await makeTestSetup(id: "dlts_01", manifest: workerManifestJSON)
 
-        try await app.test(.GET, "/api/v1/worker/testsetups/\(setup.id!)/download",
-        beforeRequest: { req in
-            req.headers.add(name: "X-Worker-Secret", value: workerSecret)
+        let path = "/api/v1/worker/testsetups/\(setup.id!)/download"
+        try await app.test(.GET, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
         })
     }
 
     func testDownloadTestSetup_notFound_returns404() async throws {
-        try await app.test(.GET, "/api/v1/worker/testsetups/nonexistent/download",
-        beforeRequest: { req in
-            req.headers.add(name: "X-Worker-Secret", value: workerSecret)
+        let path = "/api/v1/worker/testsetups/nonexistent/download"
+        try await app.test(.GET, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
         })
