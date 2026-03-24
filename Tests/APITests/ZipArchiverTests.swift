@@ -175,4 +175,122 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         XCTAssertTrue(entries.contains(where: { $0.hasSuffix("alpha.txt") }))
         XCTAssertTrue(entries.contains(where: { $0.hasSuffix("beta.txt") }))
     }
+
+    // MARK: - readScriptFromZip
+
+    func testReadScriptFromZip_returnsCorrectContent() throws {
+        let zipPath = tmpDir.appendingPathComponent("read_test.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "test_foo.py", content: "def foo():\n    pass\n")
+        ])
+
+        let content = readScriptFromZip(zipPath: zipPath, filename: "test_foo.py")
+        XCTAssertEqual(content, "def foo():\n    pass\n")
+    }
+
+    func testReadScriptFromZip_returnsNilForMissingEntry() throws {
+        let zipPath = tmpDir.appendingPathComponent("read_missing.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "test_a.py", content: "pass\n")
+        ])
+
+        let content = readScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py")
+        XCTAssertNil(content, "Expected nil for missing entry")
+    }
+
+    // MARK: - updateScriptInZip
+
+    func testUpdateScriptInZip_replacesExistingFile() throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
+              FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
+            throw XCTSkip("zip/unzip not available")
+        }
+        let zipPath = tmpDir.appendingPathComponent("update_test.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "test_bar.py", content: "# old\n")
+        ])
+
+        try updateScriptInZip(zipPath: zipPath, filename: "test_bar.py", content: "# new\n")
+
+        let content = readScriptFromZip(zipPath: zipPath, filename: "test_bar.py")
+        XCTAssertEqual(content, "# new\n", "Expected updated content after updateScriptInZip")
+    }
+
+    func testUpdateScriptInZip_addsNewFile() throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
+              FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
+            throw XCTSkip("zip/unzip not available")
+        }
+        let zipPath = tmpDir.appendingPathComponent("add_test.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "existing.py", content: "pass\n")
+        ])
+
+        try updateScriptInZip(zipPath: zipPath, filename: "new_file.py", content: "# added\n")
+
+        let existing = readScriptFromZip(zipPath: zipPath, filename: "existing.py")
+        XCTAssertNotNil(existing, "Existing file should still be present")
+        let added = readScriptFromZip(zipPath: zipPath, filename: "new_file.py")
+        XCTAssertEqual(added, "# added\n", "Newly added file should be readable")
+    }
+
+    func testUpdateScriptInZip_preservesOtherFiles() throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
+              FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
+            throw XCTSkip("zip/unzip not available")
+        }
+        let zipPath = tmpDir.appendingPathComponent("preserve_test.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "a.py", content: "# a\n"),
+            (name: "b.py", content: "# b\n"),
+            (name: "c.py", content: "# c\n")
+        ])
+
+        try updateScriptInZip(zipPath: zipPath, filename: "b.py", content: "# b updated\n")
+
+        XCTAssertEqual(readScriptFromZip(zipPath: zipPath, filename: "a.py"), "# a\n")
+        XCTAssertEqual(readScriptFromZip(zipPath: zipPath, filename: "b.py"), "# b updated\n")
+        XCTAssertEqual(readScriptFromZip(zipPath: zipPath, filename: "c.py"), "# c\n")
+    }
+
+    // MARK: - removeScriptFromZip
+
+    func testRemoveScriptFromZip_removesFile() throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
+              FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
+            throw XCTSkip("zip/unzip not available")
+        }
+        let zipPath = tmpDir.appendingPathComponent("remove_test.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "keep.py", content: "pass\n"),
+            (name: "remove_me.py", content: "pass\n")
+        ])
+
+        try removeScriptFromZip(zipPath: zipPath, filename: "remove_me.py")
+
+        let removed = readScriptFromZip(zipPath: zipPath, filename: "remove_me.py")
+        XCTAssertNil(removed, "Removed file should no longer be in zip")
+
+        let kept = readScriptFromZip(zipPath: zipPath, filename: "keep.py")
+        XCTAssertNotNil(kept, "Unrelated file should remain in zip")
+    }
+
+    func testRemoveScriptFromZip_throwsForMissingFile() throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
+              FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
+            throw XCTSkip("zip/unzip not available")
+        }
+        let zipPath = tmpDir.appendingPathComponent("remove_missing.zip").path
+        try makePythonZip(at: zipPath, entries: [
+            (name: "test_a.py", content: "pass\n")
+        ])
+
+        XCTAssertThrowsError(try removeScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py")) { error in
+            guard case ScriptZipError.fileNotFound(let name) = error else {
+                XCTFail("Expected fileNotFound, got \(error)")
+                return
+            }
+            XCTAssertEqual(name, "does_not_exist.py")
+        }
+    }
 }

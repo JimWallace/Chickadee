@@ -300,6 +300,176 @@ func listZipEntries(zipPath: String) -> [String] {
         .filter { !$0.isEmpty && !$0.hasSuffix("/") }
 }
 
+// MARK: - Script zip read/write helpers
+
+enum ScriptZipError: Error {
+    case fileNotFound(String)
+    case invalidUTF8
+    case zipFailed
+}
+
+/// Reads a single file from a test setup zip and returns it as a UTF-8 string.
+/// Returns `nil` if the entry does not exist.
+func readScriptFromZip(zipPath: String, filename: String) -> String? {
+    guard let data = extractZipEntry(zipPath: zipPath, entryName: filename) else { return nil }
+    return String(data: data, encoding: .utf8)
+}
+
+/// Replaces or adds a file in the test setup zip with new UTF-8 text content.
+///
+/// Strategy: extract all entries to a temp directory, overwrite/add the target
+/// file, delete the original zip, then re-create it from the temp directory.
+func updateScriptInZip(zipPath: String, filename: String, content: String) throws {
+    guard let contentData = content.data(using: .utf8) else {
+        throw ScriptZipError.invalidUTF8
+    }
+    let fm = FileManager.default
+    let tempDir = fm.temporaryDirectory
+        .appendingPathComponent("chickadee_zip_edit_\(UUID().uuidString)")
+    try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tempDir) }
+
+    // Extract all current entries.
+    for entry in listZipEntries(zipPath: zipPath) {
+        guard let data = extractZipEntry(zipPath: zipPath, entryName: entry) else { continue }
+        let dest = tempDir.appendingPathComponent(entry)
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: dest)
+    }
+
+    // Write the new/updated file.
+    let fileURL = tempDir.appendingPathComponent(filename)
+    try fm.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try contentData.write(to: fileURL)
+
+    // Remove old zip and re-create from temp directory.
+    try? fm.removeItem(atPath: zipPath)
+    let zip = Process()
+    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+    zip.currentDirectoryURL = tempDir
+    zip.arguments = ["-q", "-r", zipPath, "."]
+    zip.standardOutput = Pipe()
+    zip.standardError  = Pipe()
+    try zip.run()
+    zip.waitUntilExit()
+    guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+}
+
+/// Removes a file from the test setup zip.
+/// Throws `ScriptZipError.fileNotFound` if the entry does not exist.
+func removeScriptFromZip(zipPath: String, filename: String) throws {
+    let entries = listZipEntries(zipPath: zipPath)
+    guard entries.contains(filename) else {
+        throw ScriptZipError.fileNotFound(filename)
+    }
+    let fm = FileManager.default
+    let tempDir = fm.temporaryDirectory
+        .appendingPathComponent("chickadee_zip_edit_\(UUID().uuidString)")
+    try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tempDir) }
+
+    // Extract all entries except the one to remove.
+    for entry in entries where entry != filename {
+        guard let data = extractZipEntry(zipPath: zipPath, entryName: entry) else { continue }
+        let dest = tempDir.appendingPathComponent(entry)
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: dest)
+    }
+
+    // Remove old zip and re-create.
+    try? fm.removeItem(atPath: zipPath)
+    let zip = Process()
+    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+    zip.currentDirectoryURL = tempDir
+    zip.arguments = ["-q", "-r", zipPath, "."]
+    zip.standardOutput = Pipe()
+    zip.standardError  = Pipe()
+    try zip.run()
+    zip.waitUntilExit()
+    guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+}
+
+// MARK: - Manifest update helpers
+
+/// Returns the scripts in the manifest that list `filename` in their `dependsOn`.
+func manifestDependents(manifestJSON: String, filename: String) -> [String] {
+    guard let data = manifestJSON.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+        return []
+    }
+    return props.testSuites
+        .filter { $0.dependsOn.contains(filename) }
+        .map(\.script)
+}
+
+/// Returns updated manifest JSON with a new `TestSuiteEntry` appended.
+/// Preserves all existing entries, grading mode, makefile config, and starterNotebook.
+/// Returns `nil` if the manifest JSON cannot be decoded.
+func updateManifestAddingScript(
+    manifestJSON: String,
+    entry: ConfiguredSuiteEntry
+) -> String? {
+    guard let data = manifestJSON.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+        return nil
+    }
+    let existing = props.testSuites.enumerated().map { idx, e in
+        ConfiguredSuiteEntry(
+            script: e.script,
+            tier: e.tier.rawValue,
+            order: idx + 1,
+            dependsOn: e.dependsOn,
+            points: e.points,
+            displayName: e.name
+        )
+    }
+    let nextOrder = (existing.map(\.order).max() ?? 0) + 1
+    let newEntry = ConfiguredSuiteEntry(
+        script: entry.script,
+        tier: entry.tier,
+        order: nextOrder,
+        dependsOn: entry.dependsOn,
+        points: entry.points,
+        displayName: entry.displayName
+    )
+    let updated = existing + [newEntry]
+    return try? makeWorkerManifestJSON(
+        testSuites: updated,
+        includeMakefile: props.makefile != nil,
+        gradingMode: props.gradingMode.rawValue,
+        starterNotebook: props.starterNotebook
+    )
+}
+
+/// Returns updated manifest JSON with the entry for `filename` removed.
+/// Also clears references to `filename` in other entries' `dependsOn` arrays.
+/// Returns `nil` if the manifest JSON cannot be decoded.
+func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
+    guard let data = manifestJSON.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+        return nil
+    }
+    let updated = props.testSuites
+        .filter { $0.script != filename }
+        .enumerated()
+        .map { idx, e in
+            ConfiguredSuiteEntry(
+                script: e.script,
+                tier: e.tier.rawValue,
+                order: idx + 1,
+                dependsOn: e.dependsOn.filter { $0 != filename },
+                points: e.points,
+                displayName: e.name
+            )
+        }
+    return try? makeWorkerManifestJSON(
+        testSuites: updated,
+        includeMakefile: props.makefile != nil,
+        gradingMode: props.gradingMode.rawValue,
+        starterNotebook: props.starterNotebook
+    )
+}
+
 func extractZipEntry(zipPath: String, entryName: String) -> Data? {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")

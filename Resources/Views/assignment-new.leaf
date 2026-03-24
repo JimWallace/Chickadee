@@ -58,6 +58,34 @@ Create Assignment
         <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb" required>
     </label>
 
+    <!-- Generate Tests from Solution -->
+    <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
+            <span style="font-size:.875rem;font-weight:600">Generate Starter Tests</span>
+            <button class="btn" type="button" id="scan-solution-btn" style="padding:.2rem .6rem;font-size:.8rem">Scan Solution for Functions</button>
+            <span id="scan-status" style="font-size:.8rem;color:var(--meta)"></span>
+        </div>
+        <div id="scan-results" style="display:none">
+            <p class="card-meta" style="margin-bottom:.4rem">Select the functions to generate starter tests for:</p>
+            <div id="fn-checklist" style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-bottom:.6rem"></div>
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
+                <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem">
+                    Template:
+                    <select id="gen-template-select" class="form-input" style="padding:.2rem .5rem;font-size:.8rem">
+                        <option value="py:exists">Function Exists</option>
+                        <option value="py:correctness" selected>Correctness (input/output pairs)</option>
+                        <option value="py:corner_cases">Corner Cases</option>
+                        <option value="py:exception">Exception Handling</option>
+                        <option value="py:type_check">Return Type Check</option>
+                        <option value="py:performance">Performance / Runtime</option>
+                        <option value="py:differential">Differential (reference solution)</option>
+                    </select>
+                </label>
+            </div>
+            <button class="btn btn-primary" type="button" id="add-gen-tests-btn" style="font-size:.8rem;padding:.25rem .6rem">Add Selected Tests to Suite</button>
+        </div>
+    </div>
+
     <label class="form-label">
         <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>)</span>
         <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple required>
@@ -321,6 +349,119 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     body.addEventListener('input',  function () { syncConfig(); });
 
     filesInput.addEventListener('change', loadFromFiles);
+
+    // ── Generate Tests from Solution ─────────────────────────────────────────
+
+    var solutionInput   = document.querySelector('input[name="solutionNotebookFile"]');
+    var genPanel        = document.getElementById('gen-tests-panel');
+    var scanBtn         = document.getElementById('scan-solution-btn');
+    var scanStatus      = document.getElementById('scan-status');
+    var scanResults     = document.getElementById('scan-results');
+    var fnChecklist     = document.getElementById('fn-checklist');
+    var genTplSelect    = document.getElementById('gen-template-select');
+    var addGenTestsBtn  = document.getElementById('add-gen-tests-btn');
+
+    var scannedFunctions = [];  // [{name, paramNames}]
+
+    // Inline Python template function (mirrors TestScriptTemplates.swift)
+    function genPyTemplate(type, fnName, paramNames) {
+        var argList = paramNames.join(', ');
+        switch (type) {
+        case 'py:exists':
+            var numArgs = paramNames.length ? ', num_args=' + paramNames.length : '';
+            return '# Test: ' + fnName + ' is defined and callable\nrequire_function("' + fnName + '"' + numArgs + ')\npassed("' + fnName + ' is defined and callable")\n';
+        case 'py:correctness':
+            var argTuple = paramNames.length === 0 ? '()' : paramNames.length === 1 ? '(' + paramNames[0] + ',)' : '(' + argList + ')';
+            return '# Test: ' + fnName + ' returns the correct output for known inputs\ntest_cases = [\n    (' + argTuple + ', None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.' + fnName + '(*args)\n    if result != expected:\n        failures.append(f"  ' + fnName + '{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n';
+        case 'py:corner_cases':
+            return '# Test: ' + fnName + ' handles edge / corner cases\ncorner_cases = [\n    ((None,), None),\n    ((0,), None),\n    ((-1,), None),\n    (([],), None),\n    (("",), None),\n]\nfailures = []\nfor args, expected in corner_cases:\n    try:\n        result = student_module.' + fnName + '(*args)\n        if expected is not None and result != expected:\n            failures.append(f"  ' + fnName + '{args} = {result!r}, expected {expected!r}")\n    except Exception as e:\n        failures.append(f"  ' + fnName + '{args} raised {type(e).__name__}: {e}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(corner_cases)} corner case(s) handled")\n';
+        default:
+            return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
+        }
+    }
+
+    if (solutionInput) {
+        solutionInput.addEventListener('change', function () {
+            genPanel.style.display = solutionInput.files.length > 0 ? '' : 'none';
+            scanResults.style.display = 'none';
+            fnChecklist.innerHTML = '';
+            scannedFunctions = [];
+        });
+    }
+
+    if (scanBtn) {
+        scanBtn.addEventListener('click', function () {
+            if (!solutionInput || solutionInput.files.length === 0) {
+                scanStatus.textContent = 'Select a solution notebook first.';
+                return;
+            }
+            var file = solutionInput.files[0];
+            scanStatus.textContent = 'Scanning…';
+            scanResults.style.display = 'none';
+
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var notebookBytes = e.target.result;
+                fetch('/instructor/scan-notebook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: notebookBytes
+                })
+                .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
+                .then(function (functions) {
+                    scannedFunctions = functions || [];
+                    scanStatus.textContent = scannedFunctions.length === 0
+                        ? 'No top-level functions found in notebook.'
+                        : scannedFunctions.length + ' function(s) found.';
+                    fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
+                        var id = 'fn-chk-' + fn.name;
+                        var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
+                        return '<label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer">'
+                            + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
+                            + '<code>' + escHtml(label) + '</code></label>';
+                    }).join('');
+                    if (scannedFunctions.length > 0) {
+                        scanResults.style.display = '';
+                    }
+                })
+                .catch(function (err) {
+                    scanStatus.textContent = 'Scan failed: ' + err;
+                });
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    if (addGenTestsBtn) {
+        addGenTestsBtn.addEventListener('click', function () {
+            var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
+            var checked = Array.from(fnChecklist.querySelectorAll('input[type=checkbox]:checked'));
+            if (checked.length === 0) {
+                scanStatus.textContent = 'Select at least one function.';
+                return;
+            }
+
+            var dt = new DataTransfer();
+            // Preserve existing files
+            for (var i = 0; i < filesInput.files.length; i++) {
+                dt.items.add(filesInput.files[i]);
+            }
+            // Add generated scripts
+            checked.forEach(function (chk) {
+                var fnName = chk.value;
+                var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
+                var params = fn ? (fn.paramNames || []) : [];
+                var content = genPyTemplate(tplType, fnName, params);
+                var filename = 'test_' + fnName + '.py';
+                dt.items.add(new File([content], filename, { type: 'text/plain' }));
+            });
+
+            filesInput.files = dt.files;
+            filesInput.dispatchEvent(new Event('change'));
+            scanStatus.textContent = checked.length + ' test file(s) added to suite.';
+            scanResults.style.display = 'none';
+        });
+    }
 
     // Form submit validation
     var form = filesInput.closest('form');
