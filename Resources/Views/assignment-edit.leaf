@@ -574,16 +574,16 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 <script type="module">
 // ── CodeMirror 6 script editor ─────────────────────────────────────────────
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6?bundle';
-import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6?bundle';
+         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
+import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
 import { defaultKeymap, history, historyKeymap, indentWithTab }
-                                      from 'https://esm.sh/@codemirror/commands@6?bundle';
+                                      from 'https://esm.sh/@codemirror/commands@6';
 import { syntaxHighlighting, defaultHighlightStyle }
-                                      from 'https://esm.sh/@codemirror/language@6?bundle';
-import { python }                     from 'https://esm.sh/@codemirror/lang-python@6?bundle';
-import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6?bundle';
-import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell?bundle';
-import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r?bundle';
+                                      from 'https://esm.sh/@codemirror/language@6';
+import { python }                     from 'https://esm.sh/@codemirror/lang-python@6';
+import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6';
+import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell';
+import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r';
 
 const langComp = new Compartment();
 
