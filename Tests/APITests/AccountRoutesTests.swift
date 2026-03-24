@@ -1,0 +1,244 @@
+// Tests/APITests/AccountRoutesTests.swift
+//
+// Integration tests for AccountRoutes:
+//   POST /account/unenroll/:courseID   — leave a course
+//
+// Key behaviours under test:
+//   - Only open-mode courses can be self-left (closed and auto return 403)
+//   - Leaving does NOT delete submissions
+//   - Unauthenticated access redirects to /login
+//   - Invalid course ID returns 400; unknown ID returns 404
+
+import XCTest
+import XCTVapor
+@testable import chickadee_server
+import FluentSQLiteDriver
+import Foundation
+import Core
+import Crypto
+
+final class AccountRoutesTests: XCTestCase {
+
+    private var app: Application!
+    private var tmpDir: String!
+
+    override func setUp() async throws {
+        app = Application(.testing)
+
+        tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chickadee-acct-\(UUID().uuidString)/")
+            .path
+        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+        for dir in dirs {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+        app.resultsDirectory     = dirs[0]
+        app.testSetupsDirectory  = dirs[1]
+        app.submissionsDirectory = dirs[2]
+
+        app.sessions.use(.memory)
+        app.middleware.use(app.sessions.middleware)
+        app.databases.use(.sqlite(.memory), as: .sqlite)
+        app.migrations.add(CreateUsers())
+        app.migrations.add(CreateCourses())
+        app.migrations.add(CreateCourseEnrollments())
+        app.migrations.add(CreateTestSetups())
+        app.migrations.add(CreateSubmissions())
+        app.migrations.add(CreateResults())
+        app.migrations.add(CreateAssignments())
+        app.migrations.add(CreatePerformanceIndexes())
+        app.migrations.add(AddCourseSections())
+        app.migrations.add(AddCourseOpenEnrollment())
+        app.migrations.add(AddCourseEnrollmentMode())
+        try await app.autoMigrate().get()
+        configureLeaf(app)
+        try routes(app)
+    }
+
+    override func tearDown() async throws {
+        app.shutdown()
+        try? FileManager.default.removeItem(atPath: tmpDir)
+    }
+
+    // MARK: - Helpers
+
+    private func makeCourse(code: String,
+                            mode: CourseEnrollmentMode = .open) async throws -> APICourse {
+        let c = APICourse(code: code, name: "Course \(code)", enrollmentMode: mode)
+        try await c.save(on: app.db)
+        return c
+    }
+
+    private func makeStudent(username: String) async throws -> APIUser {
+        let hash = try Bcrypt.hash("pw")
+        let user = APIUser(username: username, passwordHash: hash, role: "student")
+        try await user.save(on: app.db)
+        return user
+    }
+
+    private func enroll(user: APIUser, in course: APICourse) async throws {
+        let e = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
+        try await e.save(on: app.db)
+    }
+
+    private func enrollmentCount(user: APIUser, in course: APICourse) async throws -> Int {
+        try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$userID == user.requireID())
+            .filter(\.$course.$id == course.requireID())
+            .count()
+    }
+
+    // MARK: - Unauthenticated access
+
+    func testLeaveCourse_unauthenticated_redirectsToLogin() async throws {
+        let course = try await makeCourse(code: "UNAUTH_LEAVE")
+        let courseID = try course.requireID().uuidString
+        try await app.test(.POST, "/account/unenroll/\(courseID)") { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/login")
+        }
+    }
+
+    // MARK: - Invalid / missing course
+
+    func testLeaveCourse_invalidCourseID_returns400() async throws {
+        let cookie = try await loginUser(username: "leave_bad_id", password: "pw",
+                                         role: "student", on: app)
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+        try await app.test(.POST, "/account/unenroll/not-a-uuid", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .badRequest)
+        })
+    }
+
+    func testLeaveCourse_unknownCourseID_returns404() async throws {
+        let cookie = try await loginUser(username: "leave_unknown", password: "pw",
+                                         role: "student", on: app)
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+        let bogus = UUID().uuidString
+        try await app.test(.POST, "/account/unenroll/\(bogus)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
+    // MARK: - Mode enforcement
+
+    func testLeaveCourse_openMode_removesEnrollment() async throws {
+        let course = try await makeCourse(code: "LEAVE_OPEN", mode: .open)
+        let student = try await makeStudent(username: "leave_open_s1")
+        try await enroll(user: student, in: course)
+
+        let cookie = try await loginUser(username: "leave_open_s1", password: "pw",
+                                         role: "student", on: app)
+        let courseID = try course.requireID().uuidString
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        let count = try await enrollmentCount(user: student, in: course)
+        XCTAssertEqual(count, 0, "Enrollment should be removed after leaving an open course")
+    }
+
+    func testLeaveCourse_closedMode_returns403() async throws {
+        let course = try await makeCourse(code: "LEAVE_CLOSED", mode: .closed)
+        let student = try await makeStudent(username: "leave_closed_s1")
+        try await enroll(user: student, in: course)
+
+        let cookie = try await loginUser(username: "leave_closed_s1", password: "pw",
+                                         role: "student", on: app)
+        let courseID = try course.requireID().uuidString
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden,
+                           "Closed-mode course: student should not be able to self-leave")
+        })
+
+        let count = try await enrollmentCount(user: student, in: course)
+        XCTAssertEqual(count, 1, "Enrollment should remain after forbidden leave attempt")
+    }
+
+    func testLeaveCourse_autoMode_returns403() async throws {
+        let course = try await makeCourse(code: "LEAVE_AUTO", mode: .auto)
+        let student = try await makeStudent(username: "leave_auto_s1")
+        try await enroll(user: student, in: course)
+
+        let cookie = try await loginUser(username: "leave_auto_s1", password: "pw",
+                                         role: "student", on: app)
+        let courseID = try course.requireID().uuidString
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden,
+                           "Auto-mode course: student should not be able to self-leave")
+        })
+
+        let count = try await enrollmentCount(user: student, in: course)
+        XCTAssertEqual(count, 1, "Enrollment should remain after forbidden leave attempt")
+    }
+
+    // MARK: - Submissions preserved
+
+    func testLeaveCourse_preservesSubmissions() async throws {
+        // Create a course and a test setup so we can create a submission.
+        let course  = try await makeCourse(code: "LEAVE_SUBS", mode: .open)
+        let student = try await makeStudent(username: "leave_subs_s1")
+        try await enroll(user: student, in: course)
+
+        // Create a minimal test setup and submission record.
+        let setupID = UUID().uuidString
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try Data("PK".utf8).write(to: URL(fileURLWithPath: zipPath))
+        let manifest = """
+            {"schemaVersion":1,"testSuites":[{"tier":"public","script":"t.sh"}],"timeLimitSeconds":5}
+            """
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath,
+                                 courseID: try course.requireID())
+        try await setup.save(on: app.db)
+
+        let subID = UUID().uuidString
+        let subZip = tmpDir + "submissions/\(subID).zip"
+        try Data("PK".utf8).write(to: URL(fileURLWithPath: subZip))
+        let sub = APISubmission(id: subID, testSetupID: setupID, zipPath: subZip,
+                                attemptNumber: 1, status: "complete",
+                                filename: "sub.zip", userID: try student.requireID(),
+                                kind: APISubmission.Kind.student)
+        try await sub.save(on: app.db)
+
+        // Now leave the course.
+        let cookie = try await loginUser(username: "leave_subs_s1", password: "pw",
+                                         role: "student", on: app)
+        let courseID = try course.requireID().uuidString
+        let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        // Enrollment removed.
+        let enrollCount = try await enrollmentCount(user: student, in: course)
+        XCTAssertEqual(enrollCount, 0, "Enrollment should be removed")
+
+        // Submission still exists.
+        let subStillExists = try await APISubmission.find(subID, on: app.db)
+        XCTAssertNotNil(subStillExists, "Submission must not be deleted when leaving a course")
+    }
+}

@@ -9,7 +9,13 @@
 <h1>Assignments</h1>
 #endif
 #if(!hasSections && !hasUngrouped):
+#if(currentUser.activeCourse):
 <p class="empty">No assignments available yet.</p>
+#else:
+<p class="empty">You are not enrolled in any courses.
+    <a href="/account">Go to My Account</a> to see your course memberships.
+</p>
+#endif
 #else:
 
 #if(hasSections):
