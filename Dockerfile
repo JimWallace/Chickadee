@@ -83,7 +83,7 @@ COPY Resources  ./Resources
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
-RUN chown -R chickadee:chickadee /app
+RUN mkdir -p /data && chown -R chickadee:chickadee /app /data
 
 USER chickadee
 
