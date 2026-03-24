@@ -54,6 +54,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             throw Abort(.unauthorized, reason: "Replay detected.")
         }
 
+        // Collect the request body before hashing so it is available in middleware
+        // even if Vapor delivers it as a stream (defence-in-depth).
+        _ = try? await request.body.collect(upTo: request.application.routes.defaultMaxBodySize.value)
+
         let bodyHash = sha256Hex(bodyBytes(request))
         let signedPayload = [
             request.method.rawValue.uppercased(),

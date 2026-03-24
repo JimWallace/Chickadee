@@ -480,23 +480,7 @@ struct AssignmentRoutes: RouteCollection {
         try await assignment.save(on: req.db)
 
         await ensureValidationRunnerAvailability(req: req)
-        let validation = try await waitForRunnerValidation(req: req, submissionID: validationSubmissionID)
-        switch validation {
-        case .passed(let summary):
-            assignment.validationStatus = "passed"
-            try await assignment.save(on: req.db)
-            req.logger.info("Assignment validation passed for setup \(setupID): \(summary)")
-            return req.redirect(to: "/instructor")
-        case .failed(let summary):
-            assignment.validationStatus = "failed"
-            try await assignment.save(on: req.db)
-            req.logger.warning("Assignment validation failed for setup \(setupID): \(summary) (submission \(validationSubmissionID))")
-            return req.redirect(to: "/submissions/\(validationSubmissionID)")
-        case .timedOut:
-            assignment.validationStatus = "pending"
-            try await assignment.save(on: req.db)
-            return req.redirect(to: "/instructor")
-        }
+        return req.redirect(to: "/instructor")
     }
 
     // MARK: - POST /instructor
@@ -1059,25 +1043,11 @@ struct AssignmentRoutes: RouteCollection {
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)
 
+        // Kick off the runner if needed, then return immediately.
+        // Validation runs in the background; the instructor sees "pending" on the
+        // assignments list and can refresh to see the outcome.
         await ensureValidationRunnerAvailability(req: req)
-        let validation = try await waitForRunnerValidation(req: req, submissionID: validationSubmissionID)
-        switch validation {
-        case .passed(let summary):
-            assignment.validationStatus = "passed"
-            try await assignment.save(on: req.db)
-            req.logger.info("Assignment updated and validated for setup \(setup.id ?? ""): \(summary)")
-            return req.redirect(to: "/instructor")
-        case .failed(let summary):
-            assignment.validationStatus = "failed"
-            try await assignment.save(on: req.db)
-            req.logger.warning("Assignment edit validation failed for setup \(setup.id ?? ""): \(summary) (submission \(validationSubmissionID))")
-            return req.redirect(to: "/submissions/\(validationSubmissionID)")
-        case .timedOut:
-            assignment.validationStatus = "pending"
-            try await assignment.save(on: req.db)
-            let q = "notice=\(urlEncode("Assignment updated and validation started. It is still pending; refresh shortly."))"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
+        return req.redirect(to: "/instructor")
     }
 
     // MARK: - GET /instructor/:assignmentID/scripts/:filename
