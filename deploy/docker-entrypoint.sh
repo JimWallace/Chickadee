@@ -23,7 +23,8 @@ cp -r /app/Public    "${DATA_DIR}/Public"
 cp -r /app/Resources "${DATA_DIR}/Resources"
 
 echo "[entrypoint] Starting chickadee-server ..."
-exec /app/chickadee-server --working-directory "${DATA_DIR}/" serve \
+cd "${DATA_DIR}"
+exec /app/chickadee-server serve \
     --env production \
     --hostname 0.0.0.0 \
     --port 8080 \
