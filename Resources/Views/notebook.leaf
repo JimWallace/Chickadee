@@ -27,7 +27,6 @@ Notebook
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
     src="#(jupyterLiteEditorURL)"
-    allow="cross-origin-isolated"
     loading="eager">
 </iframe>
 <p id="nb-frame-error" class="empty" role="alert" style="display:none;margin-top:.6rem">
@@ -35,7 +34,7 @@ Notebook
 </p>
 <div id="nb-results" class="nb-results" hidden></div>
 <div id="browser-runner-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-<script src="/notebook.js?v=0.4.4"></script>
-<script src="/browser-runner.js?v=0.4.4" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
+<script src="/notebook.js?v=0.5.0"></script>
+<script src="/browser-runner.js?v=0.5.0" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
 #endexport
 #endextend
