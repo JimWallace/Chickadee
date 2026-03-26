@@ -8,6 +8,10 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import Core
 
+protocol Reporting: Sendable {
+    func report(_ collection: TestOutcomeCollection) async throws
+}
+
 struct Reporter: Sendable {
     let apiBaseURL: URL
     let workerID: String
@@ -48,6 +52,8 @@ struct Reporter: Sendable {
         }
     }
 }
+
+extension Reporter: Reporting {}
 
 enum ReporterError: Error, LocalizedError {
     case unexpectedResponse

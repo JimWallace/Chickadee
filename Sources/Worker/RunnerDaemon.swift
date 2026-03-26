@@ -70,16 +70,16 @@ struct WorkerCommand: AsyncParsableCommand {
 // MARK: - WorkerDaemon actor
 
 actor WorkerDaemon {
-    private let poller:   JobPoller
-    private let reporter: Reporter
+    private let poller:   any JobPolling
+    private let reporter: any Reporting
     private let runner:   any ScriptRunner
     private let workerID: String
     private let signer:   WorkerRequestSigner
     private let maxConcurrentJobs: Int
 
     init(
-        poller:   JobPoller,
-        reporter: Reporter,
+        poller:   any JobPolling,
+        reporter: any Reporting,
         runner:   any ScriptRunner,
         workerID: String,
         workerSecret: String,
@@ -106,7 +106,7 @@ actor WorkerDaemon {
 
     private func workerLoop() async throws {
         var backoff = ExponentialBackoff(initial: .seconds(1), max: .seconds(30))
-        while true {
+        while !Task.isCancelled {
             if let job = try await poller.requestJob() {
                 backoff.reset()
                 do {

@@ -9,6 +9,10 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import Core
 
+protocol JobPolling: Sendable {
+    func requestJob() async throws -> Core.Job?
+}
+
 struct JobPoller: Sendable {
     let apiBaseURL: URL
     let workerID: String
@@ -60,6 +64,8 @@ struct JobPoller: Sendable {
         }
     }
 }
+
+extension JobPoller: JobPolling {}
 
 // MARK: - Helpers
 
