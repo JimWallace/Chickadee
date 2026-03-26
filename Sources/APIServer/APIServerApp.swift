@@ -124,12 +124,18 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
+    // FileMiddleware is registered first so static files are served directly.
+    // It short-circuits the responder chain (returns without calling next), so
+    // middleware registered after it only runs for dynamic Leaf-rendered pages.
+    // This is intentional: JupyterLite's static files must NOT receive COEP
+    // require-corp because JupyterLite's service worker produces synthetic
+    // responses (virtual filesystem, contents API) that lack Cross-Origin-
+    // Resource-Policy headers.  COEP on the page would block those responses
+    // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
+    // require SharedArrayBuffer — it uses a service-worker-based synchronisation
+    // fallback — so cross-origin isolation on the iframe document is unnecessary.
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    // COOP/COEP headers enable SharedArrayBuffer in browsers, required for
-    // WebR (R WASM kernel) and the browser-side WASM runner (Issue #96/#77).
     app.middleware.use(COEPMiddleware())
-    // Defence-in-depth headers: X-Content-Type-Options, X-Frame-Options,
-    // Referrer-Policy (see SecurityHeadersMiddleware.swift for rationale).
     app.middleware.use(SecurityHeadersMiddleware())
 
     // MARK: - Database
@@ -477,7 +483,7 @@ actor LocalRunnerManager {
     }
 }
 
-private func normalizedHost(_ raw: String) -> String {
+func normalizedHost(_ raw: String) -> String {
     let host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     if host.isEmpty || host == "0.0.0.0" || host == "::" {
         return "localhost"
@@ -485,7 +491,7 @@ private func normalizedHost(_ raw: String) -> String {
     return host
 }
 
-private func runnerSharedSecretFromEnvironment() -> String? {
+func runnerSharedSecretFromEnvironment() -> String? {
     let primary = Environment.get("RUNNER_SHARED_SECRET")?
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if let primary, !primary.isEmpty { return primary }
@@ -497,7 +503,7 @@ private func runnerSharedSecretFromEnvironment() -> String? {
     return nil
 }
 
-private func environmentBool(_ key: String) -> Bool? {
+func environmentBool(_ key: String) -> Bool? {
     guard let raw = Environment.get(key)?
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased(),
@@ -605,7 +611,7 @@ extension Application {
     }
 }
 
-private func extractWorkerSecretArgument(from env: inout Environment) -> String? {
+func extractWorkerSecretArgument(from env: inout Environment) -> String? {
     let args = env.arguments
     guard !args.isEmpty else { return nil }
 
@@ -642,7 +648,7 @@ private func extractWorkerSecretArgument(from env: inout Environment) -> String?
     return found
 }
 
-private func resolveStartupWorkerSecret(
+func resolveStartupWorkerSecret(
     cliWorkerSecret: String?,
     workerSecretFilePath: String,
     workerSecretWordlistPath: String
@@ -691,7 +697,7 @@ func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
     try? value.write(to: url, atomically: true, encoding: .utf8)
 }
 
-private func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
+func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
     let fallbackWords = [
         "oak", "river", "falcon", "amber", "lumen", "cedar", "thunder", "pebble",
         "meadow", "quartz", "north", "willow", "harbor", "maple", "breeze",
@@ -703,11 +709,11 @@ private func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String 
     return (0..<3).compactMap { _ in source.randomElement() }.joined(separator: "-")
 }
 
-private func isPlaceholderWorkerSecret(_ value: String) -> Bool {
+func isPlaceholderWorkerSecret(_ value: String) -> Bool {
     value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "cli-arg-secret"
 }
 
-private func loadDicewareWords(from path: String) -> [String] {
+func loadDicewareWords(from path: String) -> [String] {
     guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
         return []
     }
@@ -726,7 +732,7 @@ private func loadDicewareWords(from path: String) -> [String] {
     return words
 }
 
-private func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
+func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
           let text = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
