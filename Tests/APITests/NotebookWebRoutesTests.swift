@@ -64,13 +64,17 @@ final class NotebookWebRoutesTests: XCTestCase {
         try? FileManager.default.removeItem(atPath: tmpRoot)
     }
 
-    private func loginAsStudent() async throws -> String {
+    private func loginAsStudent(username: String) async throws -> String {
         try await loginUser(
-            username: "notebook_student",
+            username: username,
             password: "testpassword",
             role: "student",
             on: app
         )
+    }
+
+    private func loginAsStudent() async throws -> String {
+        try await loginAsStudent(username: "notebook_student")
     }
 
     private func studentUser() async throws -> APIUser {
@@ -347,5 +351,126 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
             XCTAssertFalse(contents.contains { $0.hasSuffix(".ipynb") }, "Legacy notebooks should be removed from \(userDir)")
         }
+    }
+
+    func testNotebookSourceReplacesCorruptWorkingCopyWithLatestNotebookSubmission() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enroll(user)
+
+        let setupID = "setup_nb_corrupt"
+        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+        _ = try await insertNotebookSubmission(
+            id: "sub_nb_latest",
+            testSetupID: setupID,
+            userID: userID,
+            notebookJSON: notebookJSON(markdown: "Recovered notebook"),
+            attemptNumber: 3
+        )
+
+        let workingCopy = workingCopyPath(setupID: setupID, userID: userID)
+        try FileManager.default.createDirectory(
+            atPath: (workingCopy as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        try Data("not json".utf8).write(to: URL(fileURLWithPath: workingCopy))
+
+        try await app.test(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertTrue(res.body.string.contains("Recovered notebook"))
+            XCTAssertFalse(res.body.string.contains("Instructor baseline"))
+        })
+
+        let replaced = try String(contentsOfFile: workingCopy)
+        XCTAssertTrue(replaced.contains("Recovered notebook"))
+        XCTAssertFalse(replaced.contains("not json"))
+    }
+
+    func testNotebookPageRejectsHistorySelectionFromDifferentAssignment() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enroll(user)
+
+        let setupID = "setup_nb_mismatch"
+        let otherSetupID = "setup_nb_other"
+        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Primary setup"))
+        _ = try await insertSetup(id: otherSetupID, notebookJSON: notebookJSON(markdown: "Other setup"))
+        _ = try await insertNotebookSubmission(
+            id: "sub_nb_other_setup",
+            testSetupID: otherSetupID,
+            userID: userID,
+            notebookJSON: notebookJSON(markdown: "Wrong assignment"),
+            attemptNumber: 1
+        )
+
+        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .badRequest)
+        })
+    }
+
+    func testNotebookPageRejectsNonNotebookHistorySelection() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enroll(user)
+
+        let setupID = "setup_nb_non_ipynb"
+        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+
+        let plainTextPath = tmpDir + "submissions/sub_nb_text.txt"
+        try Data("hello world".utf8).write(to: URL(fileURLWithPath: plainTextPath))
+        let submission = APISubmission(
+            id: "sub_nb_text",
+            testSetupID: setupID,
+            zipPath: plainTextPath,
+            attemptNumber: 1,
+            status: "complete",
+            filename: "sub_nb_text.txt",
+            userID: userID,
+            kind: APISubmission.Kind.student
+        )
+        try await submission.save(on: app.db)
+
+        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .badRequest)
+        })
+    }
+
+    func testNotebookPageRejectsHistorySelectionOwnedByAnotherStudent() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enroll(user)
+
+        let otherCookie = try await loginAsStudent(username: "notebook_student_other")
+        XCTAssertFalse(otherCookie.isEmpty)
+        let fetchedOtherUser = try await APIUser.query(on: app.db)
+            .filter(\.$username == "notebook_student_other")
+            .first()
+        let otherUser = try XCTUnwrap(fetchedOtherUser)
+        try await enroll(otherUser)
+
+        let setupID = "setup_nb_other_user"
+        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+        _ = try await insertNotebookSubmission(
+            id: "sub_nb_other_user",
+            testSetupID: setupID,
+            userID: try otherUser.requireID(),
+            notebookJSON: notebookJSON(markdown: "Other student's notebook"),
+            attemptNumber: 1
+        )
+
+        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden)
+        })
     }
 }
