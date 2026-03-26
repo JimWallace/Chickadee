@@ -5,17 +5,6 @@ import JWT
 
 final class OIDCTests: XCTestCase {
 
-    private actor PortAllocator {
-        private var nextPort = 18180
-
-        func allocate() -> Int {
-            defer { nextPort += 1 }
-            return nextPort
-        }
-    }
-
-    private static let portAllocator = PortAllocator()
-
     private struct EnvironmentOverride {
         let key: String
         let previousValue: String?
@@ -65,7 +54,7 @@ final class OIDCTests: XCTestCase {
     }
 
     private func makeOIDCApp(publicBaseURL: String? = nil) -> Application {
-        let app = Application(.testing)
+        let app = Application(Environment(name: "testing", arguments: ["test"]))
         app.securityConfiguration = AppSecurityConfiguration(
             publicBaseURL: publicBaseURL.flatMap(URL.init(string:)),
             enforceHTTPS: false,
@@ -81,14 +70,16 @@ final class OIDCTests: XCTestCase {
         jwksStatus: HTTPResponseStatus = .ok,
         jwksBody: String = #"{"keys":[]}"#
     ) async throws -> (app: Application, port: Int) {
-        let port = await Self.portAllocator.allocate()
-        let app = Application(.testing)
+        let app = Application(Environment(name: "testing", arguments: ["test"]))
         app.http.server.configuration.hostname = "127.0.0.1"
-        app.http.server.configuration.port = port
+        app.http.server.configuration.port = 0
 
         app.get(.catchall) { req -> Response in
             switch req.url.path {
             case discoveryPath:
+                guard let port = req.application.http.server.shared.localAddress?.port else {
+                    throw Abort(.internalServerError, reason: "mock OIDC provider did not bind a port")
+                }
                 let issuerBase = "http://127.0.0.1:\(port)"
                 let discovery = OIDCDiscovery(
                     issuer: issuerBase + "/issuer",
@@ -112,6 +103,9 @@ final class OIDCTests: XCTestCase {
         }
 
         try app.start()
+        guard let port = app.http.server.shared.localAddress?.port else {
+            throw Abort(.internalServerError, reason: "mock OIDC provider did not expose a bound port")
+        }
         return (app, port)
     }
 
