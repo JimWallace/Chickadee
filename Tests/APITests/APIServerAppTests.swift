@@ -241,4 +241,92 @@ final class APIServerAppTests: XCTestCase {
         XCTAssertEqual(normalizedHost("::"), "localhost")
         XCTAssertEqual(normalizedHost(" example.com "), "example.com")
     }
+
+    func testEnvironmentBoolRecognizesSupportedValuesAndRejectsInvalidInput() {
+        setEnv("BOOL_TRUE", " YeS ")
+        setEnv("BOOL_FALSE", "0")
+        setEnv("BOOL_INVALID", "sometimes")
+        setEnv("BOOL_EMPTY", "   ")
+
+        XCTAssertEqual(environmentBool("BOOL_TRUE"), true)
+        XCTAssertEqual(environmentBool("BOOL_FALSE"), false)
+        XCTAssertNil(environmentBool("BOOL_INVALID"))
+        XCTAssertNil(environmentBool("BOOL_EMPTY"))
+        XCTAssertNil(environmentBool("BOOL_MISSING"))
+    }
+
+    func testRunnerSharedSecretFromEnvironmentPrefersPrimaryOverLegacy() {
+        setEnv("RUNNER_SHARED_SECRET", "primary-secret")
+        setEnv("WORKER_SHARED_SECRET", "legacy-secret")
+        XCTAssertEqual(runnerSharedSecretFromEnvironment(), "primary-secret")
+
+        setEnv("RUNNER_SHARED_SECRET", "   ")
+        XCTAssertEqual(runnerSharedSecretFromEnvironment(), "legacy-secret")
+    }
+
+    func testResolveStartupWorkerSecretIgnoresPlaceholderValues() throws {
+        let dir = try makeTempDir(named: "apiserver-secret-placeholder")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let secretPath = dir + "/.worker-secret"
+        let wordlistPath = dir + "/words.txt"
+        try "cli-arg-secret".write(to: URL(fileURLWithPath: secretPath), atomically: true, encoding: .utf8)
+        try (0..<2500).map { idx in "\(10000 + idx) word\(idx)" }.joined(separator: "\n").write(
+            to: URL(fileURLWithPath: wordlistPath),
+            atomically: true,
+            encoding: .utf8
+        )
+        setEnv("RUNNER_SHARED_SECRET", "cli-arg-secret")
+        setEnv("WORKER_SHARED_SECRET", nil)
+
+        let resolved = resolveStartupWorkerSecret(
+            cliWorkerSecret: "cli-arg-secret",
+            workerSecretFilePath: secretPath,
+            workerSecretWordlistPath: wordlistPath
+        )
+
+        XCTAssertNotEqual(resolved, "cli-arg-secret")
+        XCTAssertEqual(readWorkerSecretFromDisk(workerSecretFilePath: secretPath), resolved)
+    }
+
+    func testReadLocalRunnerAutoStartTreatsFalseyAndMalformedValuesAsDisabled() throws {
+        let dir = try makeTempDir(named: "apiserver-autostart-read")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let path = dir + "/.local-runner-autostart"
+
+        try "off".write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+        XCTAssertEqual(readLocalRunnerAutoStartFromDisk(filePath: path), false)
+
+        try "garbage".write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+        XCTAssertEqual(readLocalRunnerAutoStartFromDisk(filePath: path), false)
+    }
+
+    func testLoadDicewareWordsSkipsMalformedRowsAndTrimsTokens() throws {
+        let dir = try makeTempDir(named: "apiserver-diceware")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let path = dir + "/words.txt"
+        try """
+        11111 alpha
+        invalid-line
+        11112    beta
+        11113
+        11114   gamma delta
+
+        """.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(loadDicewareWords(from: path), ["alpha", "beta", "gamma delta"])
+    }
+
+    func testSecurityConfigurationHonorsExplicitEnvOverrides() {
+        setEnv("PUBLIC_BASE_URL", "http://courses.example.edu")
+        setEnv("ENFORCE_HTTPS", "false")
+        setEnv("TRUST_X_FORWARDED_PROTO", "off")
+        setEnv("SESSION_COOKIE_SECURE", "no")
+
+        let config = AppSecurityConfiguration.fromEnvironment(authMode: .sso)
+
+        XCTAssertEqual(config.publicBaseURL?.absoluteString, "http://courses.example.edu")
+        XCTAssertFalse(config.enforceHTTPS)
+        XCTAssertFalse(config.trustForwardedProto)
+        XCTAssertFalse(config.sessionCookieSecure)
+    }
 }
