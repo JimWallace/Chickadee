@@ -5,6 +5,16 @@ import Vapor
 
 final class AssignmentHelpersTests: XCTestCase {
 
+    private struct DecodedReindexedSuiteConfigRow: Decodable {
+        let index: Int
+        let isTest: Bool
+        let tier: String
+        let order: Int?
+        let dependsOn: [String]?
+        let points: Int
+        let displayName: String?
+    }
+
     private func makeFile(named name: String, contents: String) -> File {
         var buffer = ByteBufferAllocator().buffer(capacity: contents.utf8.count)
         buffer.writeString(contents)
@@ -472,5 +482,201 @@ final class AssignmentHelpersTests: XCTestCase {
     func testUrlEncodeEscapesSpacesAndReservedCharacters() {
         XCTAssertEqual(urlEncode("hello world.py"), "hello%20world.py")
         XCTAssertEqual(urlEncode("data/results?.csv"), "data%2Fresults%3F.csv")
+    }
+
+    func testParseDueDateAndLocalInputStringHandleSupportedFormats() {
+        let isoDate = parseDueDate("2026-03-26T14:30:00Z")
+        XCTAssertNotNil(isoDate)
+
+        let localDate = parseDueDate("2026-03-26T14:30")
+        XCTAssertEqual(dueAtLocalInputString(localDate), "2026-03-26T14:30")
+
+        XCTAssertNil(parseDueDate(""))
+        XCTAssertNil(parseDueDate("not-a-date"))
+        XCTAssertEqual(dueAtLocalInputString(nil), "")
+    }
+
+    func testCurrentSetupFilesUsesManifestOrderingAndSolutionFallbacks() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("current-setup-files-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        let notebookPath = tempRoot.appendingPathComponent("starter.ipynb").path
+        try Data("{}".utf8).write(to: URL(fileURLWithPath: notebookPath))
+        try makeZip(at: zipPath, entries: [
+            ("assignment.ipynb", "{}"),
+            ("02_release.py", "print('release')"),
+            ("notes.txt", "notes"),
+            ("01_public.py", "print('public')")
+        ])
+
+        let setup = APITestSetup(
+            id: "setup_1",
+            manifest: """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": [],
+              "testSuites": [
+                {"tier":"public","script":"01_public.py","name":"Public test"},
+                {"tier":"release","script":"02_release.py","dependsOn":["01_public.py"],"points":3}
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": null
+            }
+            """,
+            zipPath: zipPath,
+            notebookPath: notebookPath,
+            courseID: UUID()
+        )
+
+        let result = currentSetupFiles(for: setup, assignmentID: "asg123", hasValidationSolution: true)
+
+        XCTAssertEqual(result.assignmentFile.name, "starter.ipynb")
+        XCTAssertEqual(result.assignmentFile.url, "/instructor/asg123/files/notebook")
+        XCTAssertEqual(result.solutionFile?.name, "solution.ipynb")
+        XCTAssertEqual(result.solutionFile?.url, "/instructor/asg123/files/solution")
+        XCTAssertEqual(result.existingSuiteRows.map(\.name), ["01_public.py", "02_release.py", "notes.txt"])
+        XCTAssertEqual(result.existingSuiteRows[0].displayName, "Public test")
+        XCTAssertEqual(result.existingSuiteRows[1].dependsOn, ["01_public.py"])
+        XCTAssertEqual(result.existingSuiteRows[1].points, 3)
+        XCTAssertEqual(result.existingSuiteRows[2].tier, "support")
+    }
+
+    func testResolveEditSuiteFilesFallbackPreservesExistingAndAppendsUploads() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("resolve-edit-fallback-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try makeZip(at: zipPath, entries: [
+            ("assignment.ipynb", "{}"),
+            ("solution.ipynb", "{}"),
+            ("02_release.py", "print('release')"),
+            ("readme.txt", "support")
+        ])
+
+        let uploads = [
+            makeFile(named: "10_new.py", contents: "print('new')"),
+            makeFile(named: "extra.txt", contents: "extra")
+        ]
+
+        let resolved = try resolveEditSuiteFiles(
+            setupZipPath: zipPath,
+            setupManifestJSON: """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": [],
+              "testSuites": [
+                {"tier":"release","script":"02_release.py","points":2}
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": null
+            }
+            """,
+            uploadedSuiteFiles: uploads,
+            suiteConfigJSON: nil
+        )
+
+        XCTAssertEqual(resolved.files.map(\.filename), ["02_release.py", "readme.txt", "10_new.py", "extra.txt"])
+        let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
+        let rows = try JSONDecoder().decode([DecodedReindexedSuiteConfigRow].self, from: configData)
+        XCTAssertEqual(rows.map(\.tier), ["release", "support", "public", "support"])
+        XCTAssertEqual(rows.map(\.isTest), [true, false, true, false])
+        XCTAssertEqual(rows[0].points, 2)
+    }
+
+    func testResolveEditSuiteFilesExplicitConfigFiltersAndSanitizesSources() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("resolve-edit-explicit-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try makeZip(at: zipPath, entries: [
+            ("existing.py", "print('existing')"),
+            ("keep.txt", "keep")
+        ])
+
+        let uploads = [
+            makeFile(named: "nested/new.py", contents: "print('upload')"),
+            makeFile(named: "", contents: "fallback name")
+        ]
+
+        let resolved = try resolveEditSuiteFiles(
+            setupZipPath: zipPath,
+            setupManifestJSON: "{}",
+            uploadedSuiteFiles: uploads,
+            suiteConfigJSON: """
+            [
+              {"source":"existing","name":"existing.py","isTest":true,"tier":"SECRET","order":9,"dependsOn":["dep.py"],"points":4,"displayName":"Existing"},
+              {"source":"upload","index":0,"isTest":true,"tier":"release","order":2},
+              {"source":"upload","index":1,"isTest":false,"tier":"support","isIncluded":false},
+              {"source":"existing","name":"../bad.py","isTest":true,"tier":"public"},
+              {"source":"unknown","name":"skip.py","isTest":true}
+            ]
+            """
+        )
+
+        XCTAssertEqual(resolved.files.map(\.filename), ["existing.py", "new.py"])
+        let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
+        let rows = try JSONDecoder().decode([DecodedReindexedSuiteConfigRow].self, from: configData)
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[0].tier, "secret")
+        XCTAssertEqual(rows[0].dependsOn, ["dep.py"])
+        XCTAssertEqual(rows[0].points, 4)
+        XCTAssertEqual(rows[0].displayName, "Existing")
+        XCTAssertEqual(rows[1].tier, "release")
+        XCTAssertEqual(rows[1].isTest, true)
+    }
+
+    func testNormalizeTierAndInferredOrderHandleFallbackCases() {
+        XCTAssertEqual(normalizeTier(nil), "public")
+        XCTAssertEqual(normalizeTier("VISIBLE"), "public")
+        XCTAssertEqual(normalizeTier("secret"), "secret")
+        XCTAssertEqual(normalizeTier("release"), "release")
+        XCTAssertEqual(normalizeTier("mystery"), "public")
+
+        XCTAssertEqual(inferredOrder(from: "12_release.py"), 12)
+        XCTAssertEqual(inferredOrder(from: "007_secret.py"), 7)
+        XCTAssertNil(inferredOrder(from: "notes.txt"))
+    }
+
+    func testCreateRunnerSetupZipRejectsConfigsWithoutSelectedTests() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("runner-setup-empty-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        let suiteFiles = [
+            makeFile(named: "10_hidden.py", contents: "print('hidden')")
+        ]
+        let configJSON = """
+            [
+              {
+                "index": 0,
+                "tier": "secret",
+                "isTest": false,
+                "points": 5
+              }
+            ]
+            """
+
+        do {
+            _ = try createRunnerSetupZip(
+                suiteFiles: suiteFiles,
+                suiteConfigJSON: configJSON,
+                zipPath: zipPath
+            )
+            XCTFail("Expected createRunnerSetupZip to reject configs without selected tests")
+        } catch let error as AbortError {
+            XCTAssertEqual(error.status, .badRequest)
+            XCTAssertEqual(error.reason, "Select at least one test file in the suite file list")
+        }
     }
 }
