@@ -423,4 +423,54 @@ final class AssignmentHelpersTests: XCTestCase {
             )
         }
     }
+
+    func testGradePercentFromCollectionJSONPrefersWeightedPointsAndFallsBackToCounts() {
+        XCTAssertEqual(
+            gradePercentFromCollectionJSON(
+                #"{"earnedPoints":7,"totalPoints":8,"passCount":1,"totalTests":4}"#
+            ),
+            88
+        )
+
+        XCTAssertEqual(
+            gradePercentFromCollectionJSON(
+                #"{"passCount":3,"totalTests":4}"#
+            ),
+            75
+        )
+
+        XCTAssertNil(gradePercentFromCollectionJSON(#"{"passCount":0,"totalTests":0}"#))
+        XCTAssertNil(gradePercentFromCollectionJSON("not-json"))
+    }
+
+    func testCsvEscapedQuotesOnlyWhenNeeded() {
+        XCTAssertEqual(csvEscaped("plain"), "plain")
+        XCTAssertEqual(csvEscaped("last, first"), "\"last, first\"")
+        XCTAssertEqual(csvEscaped("say \"hi\""), "\"say \"\"hi\"\"\"")
+    }
+
+    func testInferNameFromStudentIDParsesCommaSeparatedNames() {
+        XCTAssertEqual(inferNameFromStudentID("Doe, Jane").surname, "Doe")
+        XCTAssertEqual(inferNameFromStudentID("Doe, Jane").givenNames, "Jane")
+        XCTAssertEqual(inferNameFromStudentID("  ").surname, "—")
+        XCTAssertEqual(inferNameFromStudentID("jdoe123").givenNames, "—")
+    }
+
+    func testDefaultNotebookDataEmbedsAssignmentTitle() throws {
+        let data = defaultNotebookData(title: "Lab \"1\"")
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(json.contains(#"# Lab \"1\""#))
+        XCTAssertTrue(json.contains(#""nbformat": 4"#))
+    }
+
+    func testContentTypeMapsKnownTextAndNotebookTypes() {
+        XCTAssertEqual(contentType(for: "assignment.ipynb"), .json)
+        XCTAssertEqual(contentType(for: "notes.md"), .plainText)
+        XCTAssertEqual(contentType(for: "archive.bin").serialize(), "application/octet-stream")
+    }
+
+    func testUrlEncodeEscapesSpacesAndReservedCharacters() {
+        XCTAssertEqual(urlEncode("hello world.py"), "hello%20world.py")
+        XCTAssertEqual(urlEncode("data/results?.csv"), "data%2Fresults%3F.csv")
+    }
 }
