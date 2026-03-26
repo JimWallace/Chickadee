@@ -1154,7 +1154,12 @@ func extractSupportFilesToSharedDirectory(
         try fm.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         for name in supportNames {
             guard let data = extractZipEntry(zipPath: zipPath, entryName: name) else { continue }
-            try data.write(to: URL(fileURLWithPath: sharedDir + name))
+            let destination = URL(fileURLWithPath: sharedDir + name)
+            try fm.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: destination)
         }
     } catch {
         // Non-fatal: support files are a convenience; log and continue.
