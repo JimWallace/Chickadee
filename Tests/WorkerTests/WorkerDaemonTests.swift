@@ -204,9 +204,29 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.currentDirectoryURL = tempDir
-        process.arguments = ["-q", "-r", zipPath, "."]
+        process.arguments = [
+            "python3",
+            "-c",
+            #"""
+import os
+import sys
+import zipfile
+
+zip_path = sys.argv[1]
+root = sys.argv[2]
+
+with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for current_root, _, filenames in os.walk(root):
+        for filename in filenames:
+            full_path = os.path.join(current_root, filename)
+            archive_name = os.path.relpath(full_path, root)
+            archive.write(full_path, archive_name)
+"""#,
+            zipPath,
+            tempDir.path
+        ]
         try process.run()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
