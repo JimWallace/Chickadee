@@ -12,17 +12,17 @@ jobs:
       matrix:
         include:
           - name: full-worker-suite
-            command: timeout --signal=TERM 10m swift test --filter WorkerTests
+            command: timeout --signal=TERM 4m swift test --skip-build --filter WorkerTests
           - name: unsandboxed-timeout
-            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testScriptTimesOut
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerTests/testScriptTimesOut
           - name: unsandboxed-timeout-child
-            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testScriptTimeoutReapsBackgroundChildProcess
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerTests/testScriptTimeoutReapsBackgroundChildProcess
           - name: sandboxed-timeout
-            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testSandboxedRunnerTimesOut
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerTests/testSandboxedRunnerTimesOut
           - name: sandboxed-timeout-child
-            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testSandboxedRunnerTimeoutReapsBackgroundChildProcess
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerTests/testSandboxedRunnerTimeoutReapsBackgroundChildProcess
           - name: sandboxed-network
-            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testSandboxedRunnerBlocksNetworkAccess
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerTests/testSandboxedRunnerBlocksNetworkAccess
     name: ${{ matrix.name }}
     container:
       image: swift:6.0-jammy
@@ -30,6 +30,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Build tests
+        run: swift test --build-tests
 
       - name: Run ${{ matrix.name }}
         run: ${{ matrix.command }}
