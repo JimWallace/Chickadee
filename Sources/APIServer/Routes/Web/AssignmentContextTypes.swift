@@ -92,12 +92,15 @@ struct NewAssignmentContext: Encodable {
 struct EditAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
+    let testSetupID: String
     let assignmentName: String
     let dueAt: String
     let currentAssignmentFile: String
     let currentAssignmentURL: String
+    let assignmentNotebookEditURL: String
     let currentSolutionFile: String?
     let currentSolutionURL: String?
+    let solutionNotebookEditURL: String?
     let existingSuiteRows: [EditableSuiteRow]
     let notice: String?
     let error: String?

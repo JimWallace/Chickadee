@@ -747,12 +747,17 @@ struct AssignmentRoutes: RouteCollection {
         let ctx = EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
+            testSetupID: setup.id!,
             assignmentName: (q?.assignmentName ?? assignment.title).trimmingCharacters(in: .whitespacesAndNewlines),
             dueAt: q?.dueAt ?? currentDueAt,
             currentAssignmentFile: currentFiles.assignmentFile.name,
             currentAssignmentURL: currentFiles.assignmentFile.url,
+            assignmentNotebookEditURL: "/testsetups/\(setup.id!)/notebook?title=\(urlEncode(assignment.title))",
             currentSolutionFile: currentFiles.solutionFile?.name,
             currentSolutionURL: currentFiles.solutionFile?.url,
+            solutionNotebookEditURL: currentFiles.solutionFile != nil
+                ? "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+                : nil,
             existingSuiteRows: currentFiles.existingSuiteRows,
             notice: q?.notice,
             error: q?.error
