@@ -11,10 +11,14 @@ Notebook
     <div class="notebook-toolbar">
         <span class="nb-status" id="nb-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <div class="notebook-actions">
+            #if(showSubmit):
             <button class="btn btn-primary" id="nb-submit">Submit</button>
+            #endif
+            #if(downloadURL):
             <a class="btn"
-               href="/api/v1/testsetups/#(testSetupID)/assignment/download"
+               href="#(downloadURL)"
                download>Download</a>
+            #endif
         </div>
     </div>
 </div>

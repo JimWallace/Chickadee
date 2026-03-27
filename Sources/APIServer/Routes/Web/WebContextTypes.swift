@@ -63,7 +63,9 @@ struct NotebookContext: Encodable {
     let assignmentTitle: String
     let notebookURL: String
     let jupyterLiteEditorURL: String
+    let downloadURL: String?
     let gradingMode: String          // "browser" | "worker"
+    let showSubmit: Bool
     let currentUser: CurrentUserContext?
 }
 
