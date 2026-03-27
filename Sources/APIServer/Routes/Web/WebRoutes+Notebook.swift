@@ -383,7 +383,8 @@ func latestNotebookSubmissionData(
         let name = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }()
-    return (try notebookData(for: fallbackSetup), fallbackFilename)
+    let fallbackData = (try? notebookData(for: fallbackSetup)) ?? minimalEmptyNotebookData()
+    return (fallbackData, fallbackFilename)
 }
 
 /// Creates read-only symlinks for support files (zip entries that are not test suite

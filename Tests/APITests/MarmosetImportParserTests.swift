@@ -9,6 +9,31 @@ import Core
 
 final class MarmosetImportParserTests: XCTestCase {
 
+    private func makeZip(entries: [(name: String, content: String)]) throws -> String {
+        let zipPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("marmoset-parser-\(UUID().uuidString).zip")
+            .path
+        let entriesCode = entries.map { entry in
+            "z.writestr(\(entry.name.debugDescription), \(entry.content.debugDescription))"
+        }.joined(separator: "\n    ")
+        let script = """
+import zipfile
+with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
+    \(entriesCode)
+"""
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", script]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw XCTSkip("python3 not available or failed to create zip")
+        }
+        return zipPath
+    }
+
     // MARK: - parseJavaProperties
 
     func testParseSimpleProperties() {
@@ -317,5 +342,29 @@ final class MarmosetImportParserTests: XCTestCase {
         XCTAssertTrue(p.secretTests.isEmpty)
         XCTAssertTrue(p.hasMakefile)
         XCTAssertEqual(p.suggestedTitle, "Test Project")
+    }
+
+    func testFirstNotebookInZipFindsNestedNotebook() throws {
+        let zipPath = try makeZip(entries: [
+            ("starter-files/Lab 1.ipynb", "{}"),
+            ("starter-files/readme.txt", "hello")
+        ])
+        defer { try? FileManager.default.removeItem(atPath: zipPath) }
+
+        XCTAssertEqual(try firstNotebookInZip(zipPath: zipPath), "Lab 1.ipynb")
+        let extracted = try extractNotebookFromZip(zipPath: zipPath, filename: "Lab 1.ipynb")
+        XCTAssertEqual(String(data: try XCTUnwrap(extracted), encoding: .utf8), "{}")
+    }
+
+    func testExtractSolutionFromCanonicalZipHandlesNestedEntry() throws {
+        let zipPath = try makeZip(entries: [
+            ("canonical/solution.py", "print('ok')\n")
+        ])
+        defer { try? FileManager.default.removeItem(atPath: zipPath) }
+
+        let solution = try extractSolutionFromCanonicalZip(zipPath: zipPath)
+        XCTAssertEqual(solution?.originalFilename, "solution.py")
+        XCTAssertEqual(solution?.ext, "py")
+        XCTAssertEqual(String(data: try XCTUnwrap(solution?.data), encoding: .utf8), "print('ok')\n")
     }
 }
