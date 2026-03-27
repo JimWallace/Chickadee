@@ -19,6 +19,14 @@ jobs:
             command: timeout --signal=TERM 2m swift test --skip-build --filter ScriptInvocationTests
           - name: worker-daemon
             command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerDaemonTests
+          - name: worker-daemon-cancel
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerDaemonTests/testWorkerDaemonCanBeCancelledWhilePollingForNoWork
+          - name: worker-daemon-synthetic-failure
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerDaemonTests/testWorkerDaemonReportsSyntheticFailureWhenProcessingThrows
+          - name: worker-daemon-fallback-failure
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerDaemonTests/testWorkerDaemonReportsFallbackFailureWhenFinalReportFails
+          - name: worker-daemon-next-job
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerDaemonTests/testWorkerDaemonContinuesToNextJobAfterProcessingFailure
           - name: worker-request-signer
             command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerRequestSignerTests
           - name: worker-core
