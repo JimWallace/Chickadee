@@ -513,4 +513,72 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let workingCells = workingCopyJSON?["cells"] as? [[String: Any]]
         XCTAssertEqual(workingCells?.count, 0)
     }
+
+    func testNotebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enroll(user)
+
+        let setupID = "setup_nb_nested_manifest"
+        let nestedNotebook = notebookJSON(markdown: "Nested manifest starter")
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZipAt(
+            zipPath: zipPath,
+            entries: [
+                ("materials/starter.ipynb", nestedNotebook),
+                ("readme.txt", "nested zip")
+            ]
+        )
+
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"starterNotebook":"starter.ipynb"}"#,
+            zipPath: zipPath,
+            notebookPath: nil,
+            courseID: try await makeCourse().requireID()
+        )
+        try await setup.save(on: app.db)
+
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertTrue(res.body.string.contains("Nested manifest starter"))
+            XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+        })
+    }
+
+    func testNotebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enroll(user)
+
+        let setupID = "setup_nb_nested_first"
+        let nestedNotebook = notebookJSON(markdown: "First nested notebook")
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZipAt(
+            zipPath: zipPath,
+            entries: [
+                ("nested/assignment.ipynb", nestedNotebook),
+                ("nested/support.py", "value = 1")
+            ]
+        )
+
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+            zipPath: zipPath,
+            notebookPath: nil,
+            courseID: try await makeCourse().requireID()
+        )
+        try await setup.save(on: app.db)
+
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertTrue(res.body.string.contains("First nested notebook"))
+            XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+        })
+    }
 }
