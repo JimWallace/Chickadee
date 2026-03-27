@@ -19,50 +19,73 @@ struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
         let proc = Process()
-        let usesSeparateProcessGroup = configureSandboxedProcess(proc, script: script, workDir: workDir)
+        let launch = configureSandboxedProcess(
+            proc,
+            script: script,
+            workDir: workDir,
+            timeLimitSeconds: timeLimitSeconds
+        )
 
         return await executeScriptProcess(
             proc,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script",
-            usesSeparateProcessGroup: usesSeparateProcessGroup
+            usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
+            usesExternalTimeout: launch.usesExternalTimeout
         )
     }
 }
 
 // MARK: - Platform-specific sandbox setup
 
-private func configureSandboxedProcess(_ proc: Process, script: URL, workDir: URL) -> Bool {
+private func configureSandboxedProcess(
+    _ proc: Process,
+    script: URL,
+    workDir: URL,
+    timeLimitSeconds: Int
+) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
 #if os(macOS)
     let profile = macOSSandboxProfile(workDir: workDir)
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
     proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
     proc.currentDirectoryURL = workDir
-    return false
+    return ProcessLaunchConfiguration(
+        usesSeparateProcessGroup: false,
+        usesExternalTimeout: false
+    )
 #elseif os(Linux)
-    // unshare --user  : new user namespace — current UID maps to root inside
-    // unshare --net   : new network namespace — only loopback, no external routes
-    // --map-root-user : write uid_map/gid_map automatically (requires no extra
-    //                   privileges on kernels with unprivileged_userns_clone=1)
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    // timeout owns the deadline; unshare owns the sandbox child lifecycle.
+    // `--fork --kill-child` ensures the namespace child is terminated when the
+    // unshare parent receives TERM/KILL from timeout.
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/timeout")
     proc.arguments = [
-        "setsid",
+        "--signal=TERM",
+        "--kill-after=1s",
+        "\(timeLimitSeconds)s",
         "/usr/bin/unshare",
+        "--fork",
+        "--kill-child",
         "--user",
         "--net",
         "--map-root-user",
         invocation.executableURL.path
     ] + invocation.arguments
     proc.currentDirectoryURL = workDir
-    return true
+    return ProcessLaunchConfiguration(
+        usesSeparateProcessGroup: false,
+        usesExternalTimeout: true
+    )
 #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
     proc.currentDirectoryURL = workDir
-    return false
+    return ProcessLaunchConfiguration(
+        usesSeparateProcessGroup: false,
+        usesExternalTimeout: false
+    )
 #endif
 }
 

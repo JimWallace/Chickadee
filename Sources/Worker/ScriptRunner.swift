@@ -12,6 +12,11 @@ protocol ScriptRunner {
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput
 }
 
+struct ProcessLaunchConfiguration {
+    let usesSeparateProcessGroup: Bool
+    let usesExternalTimeout: Bool
+}
+
 private final class CapturedPipeBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
@@ -34,7 +39,8 @@ func executeScriptProcess(
     _ proc: Process,
     timeLimitSeconds: Int,
     launchErrorPrefix: String,
-    usesSeparateProcessGroup: Bool
+    usesSeparateProcessGroup: Bool,
+    usesExternalTimeout: Bool
 ) async -> ScriptOutput {
     let start = Date()
 
@@ -62,18 +68,28 @@ func executeScriptProcess(
     }
 
     var timedOut = false
-    let timeoutItem = DispatchWorkItem {
-        guard proc.isRunning else { return }
-        timedOut = true
-        terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
+    let timeoutItem: DispatchWorkItem?
+    if usesExternalTimeout {
+        timeoutItem = nil
+    } else {
+        let workItem = DispatchWorkItem {
+            guard proc.isRunning else { return }
+            timedOut = true
+            terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
+        }
+        DispatchQueue.global().asyncAfter(
+            deadline: .now() + .seconds(timeLimitSeconds),
+            execute: workItem
+        )
+        timeoutItem = workItem
     }
-    DispatchQueue.global().asyncAfter(
-        deadline: .now() + .seconds(timeLimitSeconds),
-        execute: timeoutItem
-    )
 
     proc.waitUntilExit()
-    timeoutItem.cancel()
+    timeoutItem?.cancel()
+
+    if usesExternalTimeout && proc.terminationStatus == 124 {
+        timedOut = true
+    }
 
     let elapsed = Int(Date().timeIntervalSince(start) * 1000)
     let stdoutData = finishPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
@@ -125,30 +141,53 @@ struct UnsandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
         let proc = Process()
-        let usesSeparateProcessGroup = configureUnsandboxedProcess(proc, script: script, workDir: workDir)
+        let launch = configureUnsandboxedProcess(
+            proc,
+            script: script,
+            workDir: workDir,
+            timeLimitSeconds: timeLimitSeconds
+        )
 
         return await executeScriptProcess(
             proc,
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch script",
-            usesSeparateProcessGroup: usesSeparateProcessGroup
+            usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
+            usesExternalTimeout: launch.usesExternalTimeout
         )
     }
 }
 
-private func configureUnsandboxedProcess(_ proc: Process, script: URL, workDir: URL) -> Bool {
+private func configureUnsandboxedProcess(
+    _ proc: Process,
+    script: URL,
+    workDir: URL,
+    timeLimitSeconds: Int
+) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
     proc.currentDirectoryURL = workDir
 
 #if os(Linux)
-    // Run each script as its own session leader so timeout handling can reap
-    // the entire subprocess tree, not just the top-level shell.
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    proc.arguments = ["setsid", invocation.executableURL.path] + invocation.arguments
-    return true
+    // Use coreutils timeout on Linux so the deadline is enforced from the
+    // top-level utility rather than relying on Foundation.Process to reap a
+    // subprocess tree it does not fully own.
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/timeout")
+    proc.arguments = [
+        "--signal=TERM",
+        "--kill-after=1s",
+        "\(timeLimitSeconds)s",
+        invocation.executableURL.path
+    ] + invocation.arguments
+    return ProcessLaunchConfiguration(
+        usesSeparateProcessGroup: false,
+        usesExternalTimeout: true
+    )
 #else
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
-    return false
+    return ProcessLaunchConfiguration(
+        usesSeparateProcessGroup: false,
+        usesExternalTimeout: false
+    )
 #endif
 }
