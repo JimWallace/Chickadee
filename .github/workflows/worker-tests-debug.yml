@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Build tests
-        run: swift test --build-tests
+        run: swift build --build-tests
 
       - name: Run ${{ matrix.name }}
         run: ${{ matrix.command }}
