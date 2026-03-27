@@ -7,7 +7,7 @@ on:
     - cron: "30 6 * * *"
 
 jobs:
-  worker-tests:
+  worker-tests-stable:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
@@ -17,5 +17,57 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run WorkerTests
-        run: swift test --filter WorkerTests
+      - name: Run stable worker test targets
+        run: |
+          swift test --filter ScriptInvocationTests
+          swift test --filter WorkerRequestSignerTests
+          swift test --filter WorkerDaemonTests
+          swift test --filter RunnerWorkDirTests
+
+  worker-tests-runner-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: swift:6.0-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run core runner behavior tests
+        run: |
+          swift test \
+            --filter 'WorkerTests.WorkerTests' \
+            --skip 'WorkerTests.WorkerTests/testScriptTimesOut' \
+            --skip 'WorkerTests.WorkerTests/testScriptTimeoutReapsBackgroundChildProcess' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerExitZero' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerExitOne' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerCapturesStdout' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerCapturesStderr' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerTimesOut' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerTimeoutReapsBackgroundChildProcess' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerWorkDir' \
+            --skip 'WorkerTests.WorkerTests/testSandboxedRunnerBlocksNetworkAccess'
+
+  worker-tests-timeouts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: swift:6.0-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run timeout and sandbox-focused worker tests
+        run: |
+          swift test --filter 'WorkerTests.WorkerTests/testScriptTimesOut'
+          swift test --filter 'WorkerTests.WorkerTests/testScriptTimeoutReapsBackgroundChildProcess'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerExitZero'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerExitOne'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerCapturesStdout'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerCapturesStderr'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerTimesOut'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerTimeoutReapsBackgroundChildProcess'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerWorkDir'
+          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerBlocksNetworkAccess'
