@@ -1,0 +1,35 @@
+name: Worker Tests Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  worker-tests-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: full-worker-suite
+            command: timeout --signal=TERM 10m swift test --filter WorkerTests
+          - name: unsandboxed-timeout
+            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testScriptTimesOut
+          - name: unsandboxed-timeout-child
+            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testScriptTimeoutReapsBackgroundChildProcess
+          - name: sandboxed-timeout
+            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testSandboxedRunnerTimesOut
+          - name: sandboxed-timeout-child
+            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testSandboxedRunnerTimeoutReapsBackgroundChildProcess
+          - name: sandboxed-network
+            command: timeout --signal=TERM 6m swift test --filter WorkerTests/testSandboxedRunnerBlocksNetworkAccess
+    name: ${{ matrix.name }}
+    container:
+      image: swift:6.0-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}
