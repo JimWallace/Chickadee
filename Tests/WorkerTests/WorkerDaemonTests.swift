@@ -2,19 +2,22 @@ import XCTest
 @testable import chickadee_runner
 import Core
 import Foundation
+#if os(Linux)
+import Glibc
+#endif
 
 final class WorkerDaemonTests: XCTestCase {
 
     private final class StaticFileServer {
         let process: Process
         let port: Int
+        private let stdout: Pipe
 
         init(directory: URL) throws {
             process = Process()
-            let stdout = Pipe()
-            let stderr = Pipe()
+            stdout = Pipe()
             process.standardOutput = stdout
-            process.standardError = stderr
+            process.standardError = FileHandle.nullDevice
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = [
                 "python3",
@@ -59,7 +62,20 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         func stop() {
             guard process.isRunning else { return }
             process.terminate()
+            for _ in 0..<20 where process.isRunning {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+
+            if process.isRunning {
+#if os(Linux)
+                _ = Glibc.kill(process.processIdentifier, SIGKILL)
+#else
+                _ = Darwin.kill(process.processIdentifier, SIGKILL)
+#endif
+            }
+
             process.waitUntilExit()
+            stdout.fileHandleForReading.closeFile()
         }
     }
 
