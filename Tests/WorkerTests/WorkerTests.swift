@@ -102,6 +102,7 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Script sleeping 60s should time out with a 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Timed-out script should be reaped promptly")
     }
 
     // MARK: - UnsandboxedScriptRunner: working directory
@@ -160,6 +161,7 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
 
     func testSandboxedRunnerWorkDir() async throws {
