@@ -228,7 +228,8 @@ private func executeLinuxScriptProcess(
     installPipeCapture(for: stderrPipe, buffer: stderrBuffer)
 
     let executable = strdup(launch.executablePath)
-    let argvStorage = ([launch.executablePath] + launch.arguments).map(strdup)
+    let rawArguments = [launch.executablePath] + launch.arguments
+    let argvStorage = rawArguments.map { strdup($0) }
     defer {
         if let executable {
             free(executable)
@@ -339,12 +340,21 @@ private func executeLinuxScriptProcess(
 }
 
 private func linuxExitCode(from status: Int32) -> Int32 {
-    if WIFEXITED(status) {
-        return WEXITSTATUS(status)
+    if linuxDidExit(status) {
+        return Int32((status >> 8) & 0xff)
     }
-    if WIFSIGNALED(status) {
-        return -Int32(WTERMSIG(status))
+    if linuxWasSignaled(status) {
+        return -Int32(status & 0x7f)
     }
     return status
+}
+
+private func linuxDidExit(_ status: Int32) -> Bool {
+    (status & 0x7f) == 0
+}
+
+private func linuxWasSignaled(_ status: Int32) -> Bool {
+    let signal = status & 0x7f
+    return signal != 0 && signal != 0x7f
 }
 #endif
