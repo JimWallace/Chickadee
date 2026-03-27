@@ -97,6 +97,25 @@ final class WorkerTests: XCTestCase {
         XCTAssertLessThan(output.executionTimeMs, 10_000, "Timed-out script should be reaped promptly")
     }
 
+#if os(Linux)
+    func testScriptTimeoutReapsBackgroundChildProcess() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        sleep 60 &
+        wait
+        """)
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        XCTAssertTrue(output.timedOut, "Timed-out script with a background child should still time out")
+        XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(
+            output.executionTimeMs,
+            10_000,
+            "Timed-out script should reap inherited stdout/stderr handles from background children"
+        )
+    }
+#endif
+
     // MARK: - UnsandboxedScriptRunner: working directory
 
     func testWorkDirIsSetCorrectly() async throws {
@@ -150,6 +169,25 @@ final class WorkerTests: XCTestCase {
         XCTAssertEqual(output.exitCode, -1)
         XCTAssertLessThan(output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
+
+#if os(Linux)
+    func testSandboxedRunnerTimeoutReapsBackgroundChildProcess() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        sleep 60 &
+        wait
+        """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        XCTAssertTrue(output.timedOut, "Sandboxed script with a background child should still time out")
+        XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(
+            output.executionTimeMs,
+            10_000,
+            "Sandboxed timeout should reap background children without leaving pipes open"
+        )
+    }
+#endif
 
     func testSandboxedRunnerWorkDir() async throws {
         let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")

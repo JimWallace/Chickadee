@@ -18,85 +18,51 @@ import Foundation
 struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
-        let start = Date()
-
         let proc = Process()
-        configureSandboxedProcess(proc, script: script, workDir: workDir)
+        let usesSeparateProcessGroup = configureSandboxedProcess(proc, script: script, workDir: workDir)
 
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        proc.standardOutput = stdoutPipe
-        proc.standardError  = stderrPipe
-
-        do {
-            try proc.run()
-        } catch {
-            let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-            return ScriptOutput(
-                exitCode: 2,
-                stdout: "",
-                stderr: "Failed to launch sandboxed script: \(error.localizedDescription)",
-                executionTimeMs: elapsed,
-                timedOut: false
-            )
-        }
-
-        var timedOut = false
-        let timeoutItem = DispatchWorkItem {
-            if proc.isRunning {
-                timedOut = true
-                proc.terminate()
-                Thread.sleep(forTimeInterval: 0.5)
-                if proc.isRunning {
-                    kill(proc.processIdentifier, SIGKILL)
-                }
-            }
-        }
-        DispatchQueue.global().asyncAfter(
-            deadline: .now() + .seconds(timeLimitSeconds),
-            execute: timeoutItem
-        )
-
-        proc.waitUntilExit()
-        timeoutItem.cancel()
-
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-
-        return ScriptOutput(
-            exitCode: timedOut ? -1 : proc.terminationStatus,
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? "",
-            executionTimeMs: elapsed,
-            timedOut: timedOut
+        return await executeScriptProcess(
+            proc,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: "Failed to launch sandboxed script",
+            usesSeparateProcessGroup: usesSeparateProcessGroup
         )
     }
 }
 
 // MARK: - Platform-specific sandbox setup
 
-private func configureSandboxedProcess(_ proc: Process, script: URL, workDir: URL) {
+private func configureSandboxedProcess(_ proc: Process, script: URL, workDir: URL) -> Bool {
     let invocation = scriptInvocation(for: script)
 #if os(macOS)
     let profile = macOSSandboxProfile(workDir: workDir)
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
     proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
     proc.currentDirectoryURL = workDir
+    return false
 #elseif os(Linux)
     // unshare --user  : new user namespace — current UID maps to root inside
     // unshare --net   : new network namespace — only loopback, no external routes
     // --map-root-user : write uid_map/gid_map automatically (requires no extra
     //                   privileges on kernels with unprivileged_userns_clone=1)
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unshare")
-    proc.arguments = ["--user", "--net", "--map-root-user", invocation.executableURL.path] + invocation.arguments
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    proc.arguments = [
+        "setsid",
+        "/usr/bin/unshare",
+        "--user",
+        "--net",
+        "--map-root-user",
+        invocation.executableURL.path
+    ] + invocation.arguments
     proc.currentDirectoryURL = workDir
+    return true
 #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
     proc.currentDirectoryURL = workDir
+    return false
 #endif
 }
 
