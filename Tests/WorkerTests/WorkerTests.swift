@@ -28,6 +28,12 @@ final class WorkerTests: XCTestCase {
         return url
     }
 
+    private func writeSecretFile(_ value: String, name: String = ".worker-secret") throws -> String {
+        let url = tmpDir.appendingPathComponent(name)
+        try value.write(to: url, atomically: true, encoding: .utf8)
+        return url.path
+    }
+
     // MARK: - UnsandboxedScriptRunner: exit code mapping
 
     func testScriptExitZeroReportsExitCodeZero() async throws {
@@ -179,6 +185,68 @@ final class WorkerTests: XCTestCase {
             output.exitCode, 0,
             "Sandboxed runner should block outbound network access (exit 0 means connection succeeded)"
         )
+    }
+
+    // MARK: - Worker secret resolution
+
+    func testResolveWorkerSharedSecretPrefersCLISecret() throws {
+        _ = try writeSecretFile("file-secret")
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: " cli-secret ",
+            environment: ["RUNNER_SHARED_SECRET": "env-secret"]
+        )
+
+        XCTAssertEqual(resolved, "cli-secret")
+    }
+
+    func testResolveWorkerSharedSecretUsesEnvSecretBeforeFile() throws {
+        _ = try writeSecretFile("file-secret")
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: nil,
+            environment: ["RUNNER_SHARED_SECRET": "env-secret"]
+        )
+
+        XCTAssertEqual(resolved, "env-secret")
+    }
+
+    func testResolveWorkerSharedSecretUsesDefaultFileWhenSecretsUnset() throws {
+        let previous = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(tmpDir.path))
+        defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
+
+        _ = try writeSecretFile("shared-file-secret\n")
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: nil,
+            environment: [:]
+        )
+
+        XCTAssertEqual(resolved, "shared-file-secret")
+    }
+
+    func testDefaultWorkerSecretFilePathsIncludesCurrentDirectoryFileFirst() throws {
+        let previous = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(tmpDir.path))
+        defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
+
+        let paths = defaultWorkerSecretFilePaths()
+
+        XCTAssertEqual(paths.first, tmpDir.appendingPathComponent(".worker-secret").path)
+        XCTAssertTrue(paths.contains("/data/.worker-secret"))
+    }
+
+    func testResolveWorkerSharedSecretReturnsNilWhenAllSourcesMissing() {
+        let emptyDir = tmpDir.appendingPathComponent("empty", isDirectory: true)
+        try? FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
+        let previous = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(emptyDir.path))
+        defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
+
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: nil,
+            environment: [:]
+        )
+
+        XCTAssertNil(resolved)
     }
 
     // MARK: - ScriptInvocation: R extension

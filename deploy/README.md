@@ -40,7 +40,7 @@ Edit `.env`:
 
 | Variable | What to set |
 |---|---|
-| `RUNNER_SHARED_SECRET` | A strong random secret: `openssl rand -base64 32` |
+| `RUNNER_SHARED_SECRET` | Optional. Leave unset to use Chickadee's auto-generated three-word `.worker-secret`, or set a fixed secret explicitly (for example `openssl rand -base64 32`). |
 | `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
 | `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
 
@@ -54,6 +54,11 @@ docker compose up -d
 The image is built automatically by GitHub Actions on every push to `main` — no
 Swift toolchain is required on the server. The first pull downloads ~500 MB;
 subsequent pulls only fetch changed layers.
+
+By default, the Compose runner reads `/data/.worker-secret` from the shared
+named volume, so the server's auto-generated three-word secret works without
+copying it into `.env`. If you set `RUNNER_SHARED_SECRET`, that explicit value
+still overrides the generated file.
 
 Check status:
 

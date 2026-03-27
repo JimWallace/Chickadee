@@ -2,7 +2,7 @@
 #
 # Quick start (local / dev):
 #   cp .env.example .env
-#   # Edit .env: set RUNNER_SHARED_SECRET and any other vars you need
+#   # Edit .env for auth / URL settings as needed
 #   docker compose up -d
 #   open http://localhost:8080
 #
@@ -33,10 +33,6 @@ services:
       AUTH_MODE:                    ${AUTH_MODE:-local}
       ENABLE_NON_SSO_AUTH_MODES:    ${ENABLE_NON_SSO_AUTH_MODES:-true}
 
-      # Required: shared secret between server and runner.
-      # Generate one with: openssl rand -base64 32
-      RUNNER_SHARED_SECRET:         ${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET must be set in .env}
-
       # Public URL — set to your domain in production (e.g. https://chickadee.example.com)
       PUBLIC_BASE_URL:              ${PUBLIC_BASE_URL:-}
       ENFORCE_HTTPS:                ${ENFORCE_HTTPS:-false}
@@ -66,6 +62,8 @@ services:
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
     entrypoint: ["/app/chickadee-runner"]
+    volumes:
+      - chickadee-data:/data:ro
     command:
       - --api-base-url
       - http://server:8080
@@ -78,7 +76,6 @@ services:
       # To enable OS-level sandboxing (Linux unshare namespaces),
       # add "--sandbox" here and "cap_add: [SYS_ADMIN]" to this service.
     environment:
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET must be set in .env}
     networks:
       - chickadee
     depends_on:

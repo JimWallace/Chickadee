@@ -38,12 +38,11 @@ struct WorkerCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        let cliSecret = workerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let env = ProcessInfo.processInfo.environment
-        let envSecret = (env["RUNNER_SHARED_SECRET"] ?? env["WORKER_SHARED_SECRET"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let effectiveWorkerSecret = cliSecret.isEmpty ? envSecret : cliSecret
-        guard !effectiveWorkerSecret.isEmpty else {
+        guard let effectiveWorkerSecret = resolveWorkerSharedSecret(
+            cliWorkerSecret: workerSecret,
+            environment: env
+        ) else {
             fputs("Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n", stderr)
             throw ExitCode.failure
         }
@@ -65,6 +64,52 @@ struct WorkerCommand: AsyncParsableCommand {
         fputs("Runner \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n", stderr)
         try await daemon.run()
     }
+}
+
+func resolveWorkerSharedSecret(
+    cliWorkerSecret: String?,
+    environment: [String: String]
+) -> String? {
+    let cliSecret = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !cliSecret.isEmpty { return cliSecret }
+
+    let envSecret = (environment["RUNNER_SHARED_SECRET"] ?? environment["WORKER_SHARED_SECRET"] ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if !envSecret.isEmpty { return envSecret }
+
+    for path in defaultWorkerSecretFilePaths() {
+        if let fileSecret = readWorkerSecretFromFile(path: path) {
+            return fileSecret
+        }
+    }
+
+    return nil
+}
+
+func defaultWorkerSecretFilePaths() -> [String] {
+    var paths: [String] = []
+
+    let cwd = FileManager.default.currentDirectoryPath
+    if !cwd.isEmpty {
+        paths.append(URL(fileURLWithPath: cwd).appendingPathComponent(".worker-secret").path)
+    }
+
+    let dockerSharedPath = "/data/.worker-secret"
+    if !paths.contains(dockerSharedPath) {
+        paths.append(dockerSharedPath)
+    }
+
+    return paths
+}
+
+func readWorkerSecretFromFile(path: String) -> String? {
+    guard !path.isEmpty,
+          let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+        return nil
+    }
+
+    let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return value.isEmpty ? nil : value
 }
 
 // MARK: - WorkerDaemon actor
