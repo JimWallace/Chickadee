@@ -72,12 +72,16 @@ git clone https://github.com/JimWallace/Chickadee.git
 cd Chickadee
 
 cp .env.example .env
-# Edit .env: set RUNNER_SHARED_SECRET (required) and any other vars
+# Edit .env for auth / URL settings as needed
 
 docker compose up -d --build
 ```
 
 The first build compiles Swift — expect 5–15 minutes. Subsequent builds with no source changes use the cached layers and are nearly instant.
+
+In Docker Compose, the server auto-generates a three-word `.worker-secret` on
+the shared data volume and the runner reads that file automatically. You can
+still set `RUNNER_SHARED_SECRET` explicitly in `.env` if you want a fixed secret.
 
 ```bash
 # Verify
