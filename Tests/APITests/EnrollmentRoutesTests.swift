@@ -22,7 +22,7 @@ final class EnrollmentRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-enr-\(UUID().uuidString)/")
@@ -49,13 +49,13 @@ final class EnrollmentRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -82,7 +82,7 @@ final class EnrollmentRoutesTests: XCTestCase {
 
         let cookie = try await loginUser(username: "enr_student1", password: "pw",
                                          role: "student", on: app)
-        try await app.test(.GET, "/enroll", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/enroll", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -95,7 +95,7 @@ final class EnrollmentRoutesTests: XCTestCase {
     }
 
     func testEnrollPage_unauthenticated_redirects() async throws {
-        try app.test(.GET, "/enroll") { res in
+        try await app.asyncTest(.GET, "/enroll") { res in
             XCTAssertEqual(res.status, .seeOther)
             XCTAssertEqual(res.headers.first(name: .location), "/login")
         }
@@ -110,7 +110,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "student", on: app)
 
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
-        try await app.test(.POST, "/enroll", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/enroll", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             req.headers.contentType = .urlEncodedForm
             req.body = .init(string: "courseIDs=\(courseID.uuidString)&_csrf=\(token)")
@@ -132,7 +132,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "student", on: app)
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/enroll", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/enroll", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -150,7 +150,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "student", on: app)
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/enroll", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/enroll", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             req.headers.contentType = .urlEncodedForm
             req.body = .init(string: "courseIDs=\(closedID.uuidString)&_csrf=\(token)")
@@ -177,7 +177,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "student", on: app)
 
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
-        try await app.test(.POST, "/enroll", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/enroll", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             req.headers.contentType = .urlEncodedForm
             req.body = .init(string: "courseIDs=\(autoID.uuidString)&_csrf=\(token)")
@@ -198,7 +198,7 @@ final class EnrollmentRoutesTests: XCTestCase {
         // Enroll twice
         for _ in 0..<2 {
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
-            try await app.test(.POST, "/enroll", beforeRequest: { req in
+            try await app.asyncTest(.POST, "/enroll", beforeRequest: { req in
                 req.headers.add(name: .cookie, value: newCookie)
                 req.headers.contentType = .urlEncodedForm
                 req.body = .init(string: "courseIDs=\(courseID.uuidString)&_csrf=\(token)")
@@ -305,7 +305,7 @@ final class EnrollmentRoutesTests: XCTestCase {
         try await u.save(on: app.db)
 
         let (csrf, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             req.headers.contentType = .urlEncodedForm
             req.body = .init(string: "username=plr_closed_student&password=pw&_csrf=\(csrf)")
@@ -325,7 +325,7 @@ final class EnrollmentRoutesTests: XCTestCase {
         try await u.save(on: app.db)
 
         let (csrf, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             req.headers.contentType = .urlEncodedForm
             req.body = .init(string: "username=plr_open_student&password=pw&_csrf=\(csrf)")
@@ -346,7 +346,7 @@ final class EnrollmentRoutesTests: XCTestCase {
         let userID = try u.requireID()
 
         let (csrf, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             req.headers.contentType = .urlEncodedForm
             req.body = .init(string: "username=plr_auto_student&password=pw&_csrf=\(csrf)")
@@ -372,7 +372,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "student", on: app)
 
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
-        try await app.test(.POST, "/courses/\(courseID.uuidString)/activate", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID.uuidString)/activate", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -388,7 +388,7 @@ final class EnrollmentRoutesTests: XCTestCase {
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
         // Not enrolled — should still redirect (silently ignored)
-        try await app.test(.POST, "/courses/\(courseID.uuidString)/activate", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID.uuidString)/activate", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -401,7 +401,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "student", on: app)
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/not-a-uuid/activate", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/not-a-uuid/activate", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -419,7 +419,7 @@ final class EnrollmentRoutesTests: XCTestCase {
 
         let (token, newCookie) = try await csrfFields(
             for: "/admin/courses/\(courseID.uuidString)", cookie: cookie, on: app)
-        try await app.test(.POST, "/admin/courses/\(courseID.uuidString)/enrollment-mode",
+        try await app.asyncTest(.POST, "/admin/courses/\(courseID.uuidString)/enrollment-mode",
                            beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             req.headers.contentType = .urlEncodedForm
@@ -440,7 +440,7 @@ final class EnrollmentRoutesTests: XCTestCase {
 
         let (token, newCookie) = try await csrfFields(
             for: "/admin/courses/\(courseID.uuidString)", cookie: cookie, on: app)
-        try await app.test(.POST, "/admin/courses/\(courseID.uuidString)/enrollment-mode",
+        try await app.asyncTest(.POST, "/admin/courses/\(courseID.uuidString)/enrollment-mode",
                            beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             req.headers.contentType = .urlEncodedForm
@@ -460,7 +460,7 @@ final class EnrollmentRoutesTests: XCTestCase {
                                          role: "instructor", on: app)
 
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
-        try await app.test(.POST, "/courses/\(courseID.uuidString)/enrollment-mode",
+        try await app.asyncTest(.POST, "/courses/\(courseID.uuidString)/enrollment-mode",
                            beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             req.headers.contentType = .urlEncodedForm

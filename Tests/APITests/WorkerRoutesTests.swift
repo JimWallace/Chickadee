@@ -29,7 +29,7 @@ final class WorkerRoutesTests: XCTestCase {
     """
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-worker-\(UUID().uuidString)")
@@ -55,7 +55,7 @@ final class WorkerRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
         configureLeaf(app)
         try routes(app)
 
@@ -64,7 +64,7 @@ final class WorkerRoutesTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
@@ -107,7 +107,7 @@ final class WorkerRoutesTests: XCTestCase {
     // MARK: - Auth tests
 
     func testRequestJob_missingSecret_returns401() async throws {
-        try await app.test(.POST, "/api/v1/worker/request", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/worker/request", beforeRequest: { req in
             req.headers.contentType = .json
             req.body = .init(string: #"{"workerID":"w1"}"#)
         }, afterResponse: { res in
@@ -122,7 +122,7 @@ final class WorkerRoutesTests: XCTestCase {
         var badHeaders = workerHMACHeaders(method: .POST, path: path, body: body,
                                            workerSecret: "wrong-secret")
         badHeaders.contentType = .json
-        try await app.test(.POST, path, beforeRequest: { req in
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = badHeaders
             req.body = body
         }, afterResponse: { res in
@@ -131,13 +131,13 @@ final class WorkerRoutesTests: XCTestCase {
     }
 
     func testDownloadSubmission_missingSecret_returns401() async throws {
-        try await app.test(.GET, "/api/v1/worker/submissions/sub1/download") { res in
+        try await app.asyncTest(.GET, "/api/v1/worker/submissions/sub1/download") { res in
             XCTAssertEqual(res.status, .unauthorized)
         }
     }
 
     func testDownloadTestSetup_missingSecret_returns401() async throws {
-        try await app.test(.GET, "/api/v1/worker/testsetups/setup1/download") { res in
+        try await app.asyncTest(.GET, "/api/v1/worker/testsetups/setup1/download") { res in
             XCTAssertEqual(res.status, .unauthorized)
         }
     }
@@ -147,7 +147,7 @@ final class WorkerRoutesTests: XCTestCase {
     func testRequestJob_noPendingJobs_returns204() async throws {
         let path = "/api/v1/worker/request"
         let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
-        try await app.test(.POST, path, beforeRequest: { req in
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
         }, afterResponse: { res in
@@ -161,7 +161,7 @@ final class WorkerRoutesTests: XCTestCase {
 
         let path = "/api/v1/worker/request"
         let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
-        try await app.test(.POST, path, beforeRequest: { req in
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
         }, afterResponse: { res in
@@ -185,7 +185,7 @@ final class WorkerRoutesTests: XCTestCase {
 
         let path = "/api/v1/worker/request"
         let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
-        try await app.test(.POST, path, beforeRequest: { req in
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
         }, afterResponse: { res in
@@ -201,7 +201,7 @@ final class WorkerRoutesTests: XCTestCase {
 
         let path = "/api/v1/worker/request"
         let body = ByteBuffer(string: #"{"workerID":"w2"}"#)
-        try await app.test(.POST, path, beforeRequest: { req in
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
         }, afterResponse: { res in
@@ -221,7 +221,7 @@ final class WorkerRoutesTests: XCTestCase {
 
         let path = "/api/v1/worker/request"
         let body = ByteBuffer(string: #"{"workerID":"w3"}"#)
-        try await app.test(.POST, path, beforeRequest: { req in
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
         }, afterResponse: { res in
@@ -239,7 +239,7 @@ final class WorkerRoutesTests: XCTestCase {
         let sub   = try await makeSubmission(id: "dlsub_01", setupID: setup.id!)
 
         let path = "/api/v1/worker/submissions/\(sub.id!)/download"
-        try await app.test(.GET, path, beforeRequest: { req in
+        try await app.asyncTest(.GET, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -248,7 +248,7 @@ final class WorkerRoutesTests: XCTestCase {
 
     func testDownloadSubmission_notFound_returns404() async throws {
         let path = "/api/v1/worker/submissions/nonexistent/download"
-        try await app.test(.GET, path, beforeRequest: { req in
+        try await app.asyncTest(.GET, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -261,7 +261,7 @@ final class WorkerRoutesTests: XCTestCase {
         let setup = try await makeTestSetup(id: "dlts_01", manifest: workerManifestJSON)
 
         let path = "/api/v1/worker/testsetups/\(setup.id!)/download"
-        try await app.test(.GET, path, beforeRequest: { req in
+        try await app.asyncTest(.GET, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -270,7 +270,7 @@ final class WorkerRoutesTests: XCTestCase {
 
     func testDownloadTestSetup_notFound_returns404() async throws {
         let path = "/api/v1/worker/testsetups/nonexistent/download"
-        try await app.test(.GET, path, beforeRequest: { req in
+        try await app.asyncTest(.GET, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .GET, path: path)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)

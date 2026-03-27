@@ -23,7 +23,7 @@ final class AccountRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-acct-\(UUID().uuidString)/")
@@ -50,13 +50,13 @@ final class AccountRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -93,7 +93,7 @@ final class AccountRoutesTests: XCTestCase {
     func testLeaveCourse_unauthenticated_redirectsToLogin() async throws {
         let course = try await makeCourse(code: "UNAUTH_LEAVE")
         let courseID = try course.requireID().uuidString
-        try await app.test(.POST, "/account/unenroll/\(courseID)") { res in
+        try await app.asyncTest(.POST, "/account/unenroll/\(courseID)") { res in
             XCTAssertEqual(res.status, .seeOther)
             XCTAssertEqual(res.headers.first(name: .location), "/login")
         }
@@ -105,7 +105,7 @@ final class AccountRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "leave_bad_id", password: "pw",
                                          role: "student", on: app)
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
-        try await app.test(.POST, "/account/unenroll/not-a-uuid", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/account/unenroll/not-a-uuid", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -118,7 +118,7 @@ final class AccountRoutesTests: XCTestCase {
                                          role: "student", on: app)
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
         let bogus = UUID().uuidString
-        try await app.test(.POST, "/account/unenroll/\(bogus)", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/account/unenroll/\(bogus)", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -138,7 +138,7 @@ final class AccountRoutesTests: XCTestCase {
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -159,7 +159,7 @@ final class AccountRoutesTests: XCTestCase {
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -181,7 +181,7 @@ final class AccountRoutesTests: XCTestCase {
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -226,7 +226,7 @@ final class AccountRoutesTests: XCTestCase {
                                          role: "student", on: app)
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
-        try await app.test(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/account/unenroll/\(courseID)", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in

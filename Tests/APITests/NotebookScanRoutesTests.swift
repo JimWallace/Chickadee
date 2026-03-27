@@ -15,7 +15,7 @@ final class NotebookScanRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-nbscan-\(UUID().uuidString)/")
@@ -44,14 +44,14 @@ final class NotebookScanRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -120,7 +120,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -141,7 +141,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -159,7 +159,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -180,7 +180,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -201,7 +201,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -219,7 +219,7 @@ final class NotebookScanRoutesTests: XCTestCase {
     func testScanNotebookReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
@@ -234,7 +234,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -265,7 +265,7 @@ final class NotebookScanRoutesTests: XCTestCase {
         }
         """
 
-        try await app.test(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)

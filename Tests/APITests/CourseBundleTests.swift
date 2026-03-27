@@ -20,7 +20,7 @@ final class CourseBundleTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-cbtest-\(UUID().uuidString)/")
@@ -49,14 +49,14 @@ final class CourseBundleTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -190,7 +190,7 @@ final class CourseBundleTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/admin", cookie: cookie, on: app)
         let boundary = "cb-boundary-\(UUID().uuidString)"
         var result: (HTTPStatus, String) = (.internalServerError, "")
-        try await app.test(.POST, "/admin/courses/import",
+        try await app.asyncTest(.POST, "/admin/courses/import",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.contentType = HTTPMediaType(
@@ -211,7 +211,7 @@ final class CourseBundleTests: XCTestCase {
         let course = try await makeTestCourse(code: "EXP_AUTH")
         let id = try course.requireID().uuidString
 
-        try await app.test(.GET, "/admin/courses/\(id)/export",
+        try await app.asyncTest(.GET, "/admin/courses/\(id)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in XCTAssertEqual(res.status, .forbidden) }
         )
@@ -219,7 +219,7 @@ final class CourseBundleTests: XCTestCase {
 
     func testExportNotFoundForUnknownCourse() async throws {
         let cookie = try await loginAsAdmin()
-        try await app.test(.GET, "/admin/courses/\(UUID().uuidString)/export",
+        try await app.asyncTest(.GET, "/admin/courses/\(UUID().uuidString)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in XCTAssertEqual(res.status, .notFound) }
         )
@@ -230,7 +230,7 @@ final class CourseBundleTests: XCTestCase {
         let course = try await makeTestCourse(code: "EXP_EMPTY")
         let id = try course.requireID().uuidString
 
-        try await app.test(.GET, "/admin/courses/\(id)/export",
+        try await app.asyncTest(.GET, "/admin/courses/\(id)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
@@ -252,7 +252,7 @@ final class CourseBundleTests: XCTestCase {
         try await insertAssignment(testSetupID: setup.id!, courseID: courseID)
 
         var zipData = Data()
-        try await app.test(.GET, "/admin/courses/\(courseID.uuidString)/export",
+        try await app.asyncTest(.GET, "/admin/courses/\(courseID.uuidString)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
@@ -493,7 +493,7 @@ final class CourseBundleTests: XCTestCase {
 
         // Export
         var exportedZip = Data()
-        try await app.test(.GET, "/admin/courses/\(courseID.uuidString)/export",
+        try await app.asyncTest(.GET, "/admin/courses/\(courseID.uuidString)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)

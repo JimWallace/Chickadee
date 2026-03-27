@@ -21,7 +21,7 @@ final class AssignmentRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-art-\(UUID().uuidString)/")
@@ -50,14 +50,14 @@ final class AssignmentRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -113,7 +113,7 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testStudentCannotAccessAssignments() async throws {
         let cookie = try await loginAsStudent()
-        try await app.test(.GET, "/instructor", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -122,7 +122,7 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testInstructorCanAccessAssignments() async throws {
         let cookie = try await loginAsInstructor()
-        try await app.test(.GET, "/instructor", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             // 500 expected because Leaf is not configured in tests — but middleware passed (not 401/403).
@@ -138,7 +138,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
         try await insertSetup(id: "setup_pub1")
 
-        try await app.test(.POST, "/instructor", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(
                 ["testSetupID": "setup_pub1", "title": "Lab 1", "_csrf": csrf],
@@ -165,7 +165,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/instructor", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(
                 ["testSetupID": "does_not_exist", "title": "Oops", "_csrf": csrf],
@@ -182,7 +182,7 @@ final class AssignmentRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_dup")
         try await insertAssignment(testSetupID: "setup_dup", title: "Already Published", isOpen: false)
 
-        try await app.test(.POST, "/instructor", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(
                 ["testSetupID": "setup_dup", "title": "Duplicate", "_csrf": csrf],
@@ -209,7 +209,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_open", title: "Draft", isOpen: false)
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/open", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(id)/open", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -230,7 +230,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_close", title: "Open", isOpen: true)
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/close", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(id)/close", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -250,7 +250,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_del", title: "To Remove", isOpen: false)
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/delete", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(id)/delete", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -266,7 +266,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
         let fakeID = "zzzzzz"
 
-        try await app.test(.POST, "/instructor/\(fakeID)/delete", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(fakeID)/delete", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -281,7 +281,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
         let fakeID = "zzzzzz"
 
-        try await app.test(.POST, "/instructor/\(fakeID)/open", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(fakeID)/open", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -311,7 +311,7 @@ final class AssignmentRoutesTests: XCTestCase {
         submission.assignedAt = Date()
         try await submission.save(on: app.db)
 
-        try await app.test(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_1/retest", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_1/retest", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(
                 ["returnTo": "/instructor/\(assignmentID)/submissions", "_csrf": csrf],
@@ -347,7 +347,7 @@ final class AssignmentRoutesTests: XCTestCase {
         )
         try await submission.save(on: app.db)
 
-        try await app.test(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_mismatch/retest", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_mismatch/retest", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in

@@ -16,7 +16,7 @@ final class SubmissionRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-subr-\(UUID().uuidString)/")
@@ -45,14 +45,14 @@ final class SubmissionRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -113,7 +113,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let zipData = Data("PK\u{03}\u{04}fake-zip-content".utf8)
         let base64 = zipData.base64EncodedString()
 
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "setup_001", zipBase64: base64))
@@ -132,7 +132,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let base64 = zipData.base64EncodedString()
 
         var submissionID = ""
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "setup_disk", zipBase64: base64))
@@ -154,7 +154,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let base64 = Data("PK".utf8).base64EncodedString()
 
         // First submission
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "setup_inc", zipBase64: base64))
@@ -162,7 +162,7 @@ final class SubmissionRoutesTests: XCTestCase {
 
         // Second submission
         var secondID = ""
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "setup_inc", zipBase64: base64))
@@ -178,7 +178,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let auth = try await loginAsInstructor()
 
         let base64 = Data("PK".utf8).base64EncodedString()
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "nonexistent", zipBase64: base64))
@@ -191,7 +191,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let auth = try await loginAsInstructor()
         try await ensureSetup(id: "setup_b64")
 
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "setup_b64", zipBase64: "!!!not-base64!!!"))
@@ -205,7 +205,7 @@ final class SubmissionRoutesTests: XCTestCase {
         try await ensureSetup(id: "setup_role")
 
         let base64 = Data("PK".utf8).base64EncodedString()
-        try await app.test(.POST, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(CreateSubmissionBody(testSetupID: "setup_role", zipBase64: base64))
@@ -222,7 +222,7 @@ final class SubmissionRoutesTests: XCTestCase {
         try await ensureSetup(id: "setup_py")
 
         let pyContent = Data("print('hello')".utf8)
-        try await app.test(.POST, "/api/v1/submissions/file", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions/file", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(SubmitFileBody(testSetupID: "setup_py", filename: "solution.py", file: pyContent))
@@ -239,7 +239,7 @@ final class SubmissionRoutesTests: XCTestCase {
 
         let content = Data("x = 1".utf8)
         var subID = ""
-        try await app.test(.POST, "/api/v1/submissions/file", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions/file", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(SubmitFileBody(testSetupID: "setup_ext", filename: "homework.py", file: content))
@@ -256,7 +256,7 @@ final class SubmissionRoutesTests: XCTestCase {
     func testCreateSubmissionFileRejectsBadSetupID() async throws {
         let auth = try await loginAsInstructor()
 
-        try await app.test(.POST, "/api/v1/submissions/file", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/api/v1/submissions/file", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
             try req.content.encode(SubmitFileBody(testSetupID: "bogus", filename: "test.py", file: Data("x".utf8)))
@@ -284,7 +284,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let fileContent = Data("fake-zip-bytes".utf8)
         try fileContent.write(to: URL(fileURLWithPath: sub.zipPath))
 
-        try await app.test(.GET, "/api/v1/submissions/sub_dl_own/download", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_dl_own/download", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -309,7 +309,7 @@ final class SubmissionRoutesTests: XCTestCase {
         try await sub.save(on: app.db)
         try Data("instructor-download".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
 
-        try await app.test(.GET, "/api/v1/submissions/sub_dl_instr/download", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_dl_instr/download", beforeRequest: { req in
             req.headers.add(name: .cookie, value: instrAuth.cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -334,7 +334,7 @@ final class SubmissionRoutesTests: XCTestCase {
         try Data("private".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
 
         let authB = try await loginAsStudent(username: "dl_studentB")
-        try await app.test(.GET, "/api/v1/submissions/sub_dl_forbid/download", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_dl_forbid/download", beforeRequest: { req in
             req.headers.add(name: .cookie, value: authB.cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -344,7 +344,7 @@ final class SubmissionRoutesTests: XCTestCase {
     func testDownloadNotFoundForMissingSubmission() async throws {
         let auth = try await loginAsInstructor()
 
-        try await app.test(.GET, "/api/v1/submissions/nonexistent/download", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/nonexistent/download", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -365,7 +365,7 @@ final class SubmissionRoutesTests: XCTestCase {
         try await sub.save(on: app.db)
         try Data("{}".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
 
-        try await app.test(.GET, "/api/v1/submissions/sub_dl_fname/download", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_dl_fname/download", beforeRequest: { req in
             req.headers.add(name: .cookie, value: auth.cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
