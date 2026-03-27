@@ -1,7 +1,10 @@
 name: Test Coverage
 
 on:
-  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 06:00 UTC is 2:00 AM in Toronto during daylight saving time.
+    - cron: "0 6 * * *"
   push:
     branches: [main]
 
