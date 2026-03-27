@@ -13,6 +13,16 @@ jobs:
         include:
           - name: full-worker-suite
             command: timeout --signal=TERM 4m swift test --skip-build --filter WorkerTests
+          - name: runner-workdir
+            command: timeout --signal=TERM 2m swift test --skip-build --filter RunnerWorkDirTests
+          - name: script-invocation
+            command: timeout --signal=TERM 2m swift test --skip-build --filter ScriptInvocationTests
+          - name: worker-daemon
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerDaemonTests
+          - name: worker-request-signer
+            command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerRequestSignerTests
+          - name: worker-core
+            command: timeout --signal=TERM 3m swift test --skip-build --filter '^WorkerTests\\.WorkerTests/'
           - name: unsandboxed-timeout
             command: timeout --signal=TERM 2m swift test --skip-build --filter WorkerTests/testScriptTimesOut
           - name: unsandboxed-timeout-child
