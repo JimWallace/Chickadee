@@ -476,4 +476,41 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             XCTAssertEqual(res.status, .forbidden)
         })
     }
+
+    func testNotebookPageSeedsEmptyWorkingCopyWhenSetupHasNoStarterNotebookYet() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enroll(user)
+
+        let setupID = "setup_nb_empty_seed"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZipAt(zipPath: zipPath, entries: [("readme.txt", "starter files pending")])
+
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+            zipPath: zipPath,
+            notebookPath: nil,
+            courseID: try await makeCourse().requireID()
+        )
+        try await setup.save(on: app.db)
+
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let json = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
+            let cells = json?["cells"] as? [[String: Any]]
+            XCTAssertEqual(cells?.count, 0)
+        })
+
+        let workingCopy = try String(
+            contentsOfFile: workingCopyPath(setupID: setupID, userID: userID),
+            encoding: .utf8
+        )
+        let workingCopyJSON = try JSONSerialization.jsonObject(with: Data(workingCopy.utf8)) as? [String: Any]
+        let workingCells = workingCopyJSON?["cells"] as? [[String: Any]]
+        XCTAssertEqual(workingCells?.count, 0)
+    }
 }

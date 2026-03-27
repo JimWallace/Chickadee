@@ -388,10 +388,6 @@ struct AssignmentRoutes: RouteCollection {
             return req.redirect(to: "/instructor/new?\(q)")
         }
         let suiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
-        guard !suiteFiles.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=At%20least%20one%20test%20suite%20file%20is%20required"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
 
         let assignmentNotebookRaw = Data(assignmentNotebookFile.data.readableBytesView)
         let solutionNotebookRaw = Data(solutionNotebookFile.data.readableBytesView)
@@ -422,10 +418,6 @@ struct AssignmentRoutes: RouteCollection {
             suiteConfigJSON: suiteConfigRaw,
             zipPath: zipPath
         )
-        guard !setupPackage.testSuites.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
 
         // Resolve the section up front so we can inherit its grading mode.
         let resolvedSectionID: UUID? = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db)
@@ -457,6 +449,7 @@ struct AssignmentRoutes: RouteCollection {
             testSetupsDirectory: req.application.testSetupsDirectory
         )
 
+        let shouldQueueValidation = !setupPackage.testSuites.isEmpty
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
             testSetupID: setupID,
@@ -464,22 +457,23 @@ struct AssignmentRoutes: RouteCollection {
             dueAt: due,
             isOpen: false,
             sortOrder: try await nextAssignmentSortOrder(req: req),
-            validationStatus: "pending",
+            validationStatus: shouldQueueValidation ? "pending" : nil,
             validationSubmissionID: nil,
             sectionID: resolvedSectionID,
             courseID: courseID
         )
 
-        let validationSubmissionID = try await enqueueRunnerValidationSubmission(
-            req: req,
-            setupID: setupID,
-            solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
-            filename: solutionNotebookFile.filename
-        )
-        assignment.validationSubmissionID = validationSubmissionID
-        try await assignment.save(on: req.db)
-
-        await ensureValidationRunnerAvailability(req: req)
+        if shouldQueueValidation {
+            let validationSubmissionID = try await enqueueRunnerValidationSubmission(
+                req: req,
+                setupID: setupID,
+                solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
+                filename: solutionNotebookFile.filename
+            )
+            assignment.validationSubmissionID = validationSubmissionID
+            try await assignment.save(on: req.db)
+            await ensureValidationRunnerAvailability(req: req)
+        }
         return req.redirect(to: "/instructor")
     }
 
@@ -925,11 +919,9 @@ struct AssignmentRoutes: RouteCollection {
         // requiring the instructor to upload one on every save.
         // The empty notebook produces no .py code when extractNotebooksToCode
         // runs, so it doesn't conflict with the student submission.
-        let minimalEmptyNotebook = Data(
-            #"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
         let assignmentNotebookRaw: Data = {
             guard let assignmentNotebookFile, hasUploadedAssignmentNotebook else {
-                return (try? notebookData(for: setup)) ?? minimalEmptyNotebook
+                return (try? notebookData(for: setup)) ?? minimalEmptyNotebookData()
             }
             return Data(assignmentNotebookFile.data.readableBytesView)
         }()

@@ -163,20 +163,55 @@ func notebookData(for setup: APITestSetup) throws -> Data {
        !data.isEmpty {
         return normalizeNotebookForJupyterLite(data)
     }
-    // Fall back to zip extraction.
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments     = ["-p", setup.zipPath, "assignment.ipynb"]
-    let pipe = Pipe()
-    proc.standardOutput = pipe
-    proc.standardError  = Pipe()    // discard stderr
-    try proc.run()
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
-    guard proc.terminationStatus == 0, !data.isEmpty else {
-        throw Abort(.notFound, reason: "No assignment.ipynb in this test setup")
+
+    let entries = listZipEntries(zipPath: setup.zipPath)
+    let preferredEntryNames = notebookCandidateEntryNames(for: setup, entries: entries)
+    for entryName in preferredEntryNames {
+        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
+              !data.isEmpty else { continue }
+        return normalizeNotebookForJupyterLite(data)
     }
-    return normalizeNotebookForJupyterLite(data)
+
+    throw Abort(.notFound, reason: "No assignment notebook in this test setup")
+}
+
+private func notebookCandidateEntryNames(for setup: APITestSetup, entries: [String]) -> [String] {
+    let manifestStarterName: String? = {
+        guard let data = setup.manifest.data(using: .utf8),
+              let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+            return nil
+        }
+        return props.starterNotebook?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }()
+
+    var candidates: [String] = []
+    var seen: Set<String> = []
+
+    func appendCandidate(_ entry: String?) {
+        guard let entry, !entry.isEmpty, !seen.contains(entry) else { return }
+        seen.insert(entry)
+        candidates.append(entry)
+    }
+
+    func appendMatchingEntries(named filename: String?) {
+        guard let filename, !filename.isEmpty else { return }
+        let exactMatches = entries.filter { $0 == filename }
+        if !exactMatches.isEmpty {
+            exactMatches.forEach(appendCandidate)
+            return
+        }
+        entries
+            .filter { ($0 as NSString).lastPathComponent == filename }
+            .forEach(appendCandidate)
+    }
+
+    appendMatchingEntries(named: manifestStarterName)
+    appendMatchingEntries(named: "assignment.ipynb")
+    entries
+        .filter { URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb" }
+        .forEach(appendCandidate)
+
+    return candidates
 }
 
 // MARK: - Route collection
@@ -427,15 +462,12 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
 /// Extracts `assignment.ipynb` from the zip at `zipPath` and returns its Data,
 /// or nil if the file is not present or unzip fails.
 func extractNotebookFromZip(zipPath: String) -> Data? {
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments     = ["-p", zipPath, "assignment.ipynb"]
-    let pipe = Pipe()
-    proc.standardOutput = pipe
-    proc.standardError  = Pipe()
-    guard (try? proc.run()) != nil else { return nil }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
-    guard proc.terminationStatus == 0 else { return nil }
-    return data.isEmpty ? nil : data
+    let entries = listZipEntries(zipPath: zipPath)
+    let candidate = entries.first {
+        ($0 as NSString).lastPathComponent == "assignment.ipynb"
+    } ?? entries.first {
+        URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb"
+    }
+    guard let candidate else { return nil }
+    return extractZipEntry(zipPath: zipPath, entryName: candidate)
 }

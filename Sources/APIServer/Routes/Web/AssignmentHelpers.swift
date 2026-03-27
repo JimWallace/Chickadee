@@ -68,6 +68,10 @@ enum RunnerValidationOutcome {
     case timedOut
 }
 
+func minimalEmptyNotebookData() -> Data {
+    Data(#"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
+}
+
 // MARK: - Free functions
 
 /// Validates a sectionID string (UUID) against the given course and returns the UUID if valid.
@@ -831,24 +835,37 @@ func createRunnerSetupZip(
         storedNameByIndex: storedNameByIndex,
         suiteConfigJSON: suiteConfigJSON
     )
-    guard !testSuites.isEmpty else {
-        throw Abort(.badRequest, reason: "Select at least one test file in the suite file list")
-    }
 
-    let zip = Process()
-    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    zip.currentDirectoryURL = tempDir
-    zip.arguments = ["-q", "-r", zipPath, "."]
-    try zip.run()
-    zip.waitUntilExit()
-    guard zip.terminationStatus == 0 else {
-        throw Abort(.internalServerError, reason: "Failed to package setup zip")
+    if storedNameByIndex.isEmpty {
+        try writeEmptyZip(to: zipPath)
+    } else {
+        let zip = Process()
+        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        zip.currentDirectoryURL = tempDir
+        zip.arguments = ["-q", "-r", zipPath, "."]
+        try zip.run()
+        zip.waitUntilExit()
+        guard zip.terminationStatus == 0 else {
+            throw Abort(.internalServerError, reason: "Failed to package setup zip")
+        }
     }
     let hasMakefile = storedNameByIndex.values.contains {
         let n = $0.lowercased()
         return n == "makefile" || n == "gnumakefile"
     }
     return RunnerSetupPackage(testSuites: testSuites, hasMakefile: hasMakefile)
+}
+
+private func writeEmptyZip(to path: String) throws {
+    let emptyZip = Data([
+        0x50, 0x4b, 0x05, 0x06,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00
+    ])
+    try emptyZip.write(to: URL(fileURLWithPath: path))
 }
 
 func sanitizeSuiteFilename(_ raw: String) -> String {
