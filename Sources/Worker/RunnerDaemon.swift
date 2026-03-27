@@ -119,7 +119,6 @@ actor WorkerDaemon {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest = 5
         cfg.timeoutIntervalForResource = 15
-        cfg.waitsForConnectivity = false
         return URLSession(configuration: cfg)
     }()
 
