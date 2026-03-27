@@ -229,8 +229,11 @@ final class WorkerTests: XCTestCase {
         defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
 
         let paths = defaultWorkerSecretFilePaths()
+        let expectedFirstPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".worker-secret")
+            .path
 
-        XCTAssertEqual(paths.first, tmpDir.appendingPathComponent(".worker-secret").path)
+        XCTAssertEqual(paths.first, expectedFirstPath)
         XCTAssertTrue(paths.contains("/data/.worker-secret"))
     }
 
