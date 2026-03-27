@@ -1,0 +1,76 @@
+name: Worker Tests Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  unsandboxed-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run unsandboxed WorkerTests
+        run: |
+          swift test --filter WorkerTests/testScriptExitZeroReportsExitCodeZero
+          swift test --filter WorkerTests/testScriptExitOneReportsExitCodeOne
+          swift test --filter WorkerTests/testScriptExitTwoReportsExitCodeTwo
+          swift test --filter WorkerTests/testStdoutIsCaptured
+          swift test --filter WorkerTests/testStderrIsCaptured
+          swift test --filter WorkerTests/testStdoutAndStderrAreSeparate
+          swift test --filter WorkerTests/testScriptTimesOut
+          swift test --filter WorkerTests/testWorkDirIsSetCorrectly
+
+  sandboxed-runner-basic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run basic sandbox WorkerTests
+        run: |
+          swift test --filter WorkerTests/testSandboxedRunnerExitZero
+          swift test --filter WorkerTests/testSandboxedRunnerExitOne
+          swift test --filter WorkerTests/testSandboxedRunnerCapturesStdout
+          swift test --filter WorkerTests/testSandboxedRunnerCapturesStderr
+          swift test --filter WorkerTests/testSandboxedRunnerWorkDir
+
+  sandboxed-runner-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run isolation-focused sandbox WorkerTests
+        run: |
+          swift test --filter WorkerTests/testSandboxedRunnerTimesOut
+          swift test --filter WorkerTests/testSandboxedRunnerBlocksNetworkAccess
+
+  worker-daemon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Worker daemon/unit tests
+        run: |
+          swift test --filter WorkerDaemonTests
+          swift test --filter RunnerWorkDirTests
+          swift test --filter ScriptInvocationTests
+          swift test --filter WorkerRequestSignerTests
