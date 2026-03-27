@@ -646,7 +646,7 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertNil(inferredOrder(from: "notes.txt"))
     }
 
-    func testCreateRunnerSetupZipRejectsConfigsWithoutSelectedTests() throws {
+    func testCreateRunnerSetupZipAllowsConfigsWithoutSelectedTests() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-empty-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -667,16 +667,13 @@ final class AssignmentHelpersTests: XCTestCase {
             ]
             """
 
-        do {
-            _ = try createRunnerSetupZip(
-                suiteFiles: suiteFiles,
-                suiteConfigJSON: configJSON,
-                zipPath: zipPath
-            )
-            XCTFail("Expected createRunnerSetupZip to reject configs without selected tests")
-        } catch let error as AbortError {
-            XCTAssertEqual(error.status, .badRequest)
-            XCTAssertEqual(error.reason, "Select at least one test file in the suite file list")
-        }
+        let setupZip = try createRunnerSetupZip(
+            suiteFiles: suiteFiles,
+            suiteConfigJSON: configJSON,
+            zipPath: zipPath
+        )
+
+        XCTAssertEqual(setupZip.testSuites.count, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: zipPath))
     }
 }
