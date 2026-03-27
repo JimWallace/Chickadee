@@ -18,6 +18,19 @@ import Foundation
 struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
+#if os(Linux)
+        let launch = configureLinuxSandboxedProcess(
+            script: script,
+            workDir: workDir
+        )
+
+        return await executeLinuxScriptProcess(
+            launch,
+            workDir: workDir,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: "Failed to launch sandboxed script"
+        )
+#else
         let proc = Process()
         let launch = configureSandboxedProcess(
             proc,
@@ -33,6 +46,7 @@ struct SandboxedScriptRunner: ScriptRunner {
             usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
             usesExternalTimeout: launch.usesExternalTimeout
         )
+#endif
     }
 }
 
@@ -54,28 +68,6 @@ private func configureSandboxedProcess(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
-#elseif os(Linux)
-    // timeout owns the deadline; unshare owns the sandbox child lifecycle.
-    // `--fork --kill-child` ensures the namespace child is terminated when the
-    // unshare parent receives TERM/KILL from timeout.
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/timeout")
-    proc.arguments = [
-        "--signal=TERM",
-        "--kill-after=1s",
-        "\(timeLimitSeconds)s",
-        "/usr/bin/unshare",
-        "--fork",
-        "--kill-child",
-        "--user",
-        "--net",
-        "--map-root-user",
-        invocation.executableURL.path
-    ] + invocation.arguments
-    proc.currentDirectoryURL = workDir
-    return ProcessLaunchConfiguration(
-        usesSeparateProcessGroup: false,
-        usesExternalTimeout: true
-    )
 #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
@@ -90,6 +82,26 @@ private func configureSandboxedProcess(
 }
 
 // MARK: - macOS sandbox profile
+
+#if os(Linux)
+private func configureLinuxSandboxedProcess(
+    script: URL,
+    workDir: URL
+) -> LinuxProcessLaunchConfiguration {
+    let invocation = scriptInvocation(for: script)
+    return LinuxProcessLaunchConfiguration(
+        executablePath: "/usr/bin/unshare",
+        arguments: [
+            "--fork",
+            "--kill-child",
+            "--user",
+            "--net",
+            "--map-root-user",
+            invocation.executableURL.path
+        ] + invocation.arguments
+    )
+}
+#endif
 
 #if os(macOS)
 private func macOSSandboxProfile(workDir: URL) -> String {
