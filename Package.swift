@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.3
 import PackageDescription
 
 let package = Package(
@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.0.0"),
+        .package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "0.4.0"),
     ],
     targets: [
         // MARK: - Core library
@@ -47,6 +48,7 @@ let package = Package(
                 .target(name: "Core"),
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "Subprocess", package: "swift-subprocess"),
             ],
             path: "Sources/Worker",
             exclude: ["README.md"]

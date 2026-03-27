@@ -23,7 +23,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-br-\(UUID().uuidString)/")
@@ -52,14 +52,14 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -95,7 +95,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testManifestRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             afterResponse: { res in
                 XCTAssertTrue(
                     res.status == .unauthorized || res.status == .seeOther,
@@ -107,7 +107,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -122,7 +122,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -157,7 +157,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: manifest)
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -189,7 +189,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testManifestReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -202,7 +202,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testDownloadRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             afterResponse: { res in
                 XCTAssertTrue(
                     res.status == .unauthorized || res.status == .seeOther,
@@ -214,7 +214,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -226,7 +226,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testDownloadReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -293,7 +293,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         """
 
         var submissionID = ""
-        try await app.test(.POST, "/api/v1/submissions/browser-result",
+        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.body = .init(buffer: multipartBody(

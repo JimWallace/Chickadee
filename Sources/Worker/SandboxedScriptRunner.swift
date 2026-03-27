@@ -1,6 +1,6 @@
 // Worker/SandboxedScriptRunner.swift
 //
-// Phase 4: sandboxed subprocess execution.
+// Sandboxed subprocess execution.
 //
 // On Linux  — uses `unshare --user --net --map-root-user` to run the script
 //             inside a private user namespace (no real privileges) and a
@@ -9,94 +9,47 @@
 // On macOS  — uses `sandbox-exec -p <profile>` to enforce a TCC-level policy:
 //             deny all network, allow file-reads from the system prefix, allow
 //             file-writes only inside the working directory.
-//
-// Callers interact through the ScriptRunner protocol; no change is needed at
-// call sites compared to UnsandboxedScriptRunner.
 
 import Foundation
 
 struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
-        let start = Date()
-
-        let proc = Process()
-        configureSandboxedProcess(proc, script: script, workDir: workDir)
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        proc.standardOutput = stdoutPipe
-        proc.standardError  = stderrPipe
-
-        do {
-            try proc.run()
-        } catch {
-            let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-            return ScriptOutput(
-                exitCode: 2,
-                stdout: "",
-                stderr: "Failed to launch sandboxed script: \(error.localizedDescription)",
-                executionTimeMs: elapsed,
-                timedOut: false
-            )
-        }
-
-        var timedOut = false
-        let timeoutItem = DispatchWorkItem {
-            if proc.isRunning {
-                timedOut = true
-                proc.terminate()
-                Thread.sleep(forTimeInterval: 0.5)
-                if proc.isRunning {
-                    kill(proc.processIdentifier, SIGKILL)
-                }
-            }
-        }
-        DispatchQueue.global().asyncAfter(
-            deadline: .now() + .seconds(timeLimitSeconds),
-            execute: timeoutItem
-        )
-
-        proc.waitUntilExit()
-        timeoutItem.cancel()
-
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-
-        return ScriptOutput(
-            exitCode: timedOut ? -1 : proc.terminationStatus,
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? "",
-            executionTimeMs: elapsed,
-            timedOut: timedOut
+        let invocation = sandboxedInvocation(for: script, workDir: workDir)
+        return await executeScript(
+            configuration: invocation,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: "Failed to launch sandboxed script"
         )
     }
 }
 
 // MARK: - Platform-specific sandbox setup
 
-private func configureSandboxedProcess(_ proc: Process, script: URL, workDir: URL) {
+private func sandboxedInvocation(for script: URL, workDir: URL) -> SubprocessConfiguration {
     let invocation = scriptInvocation(for: script)
 #if os(macOS)
     let profile = macOSSandboxProfile(workDir: workDir)
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-    proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
-    proc.currentDirectoryURL = workDir
+    return configuredSubprocess(
+        executableURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+        arguments: ["-p", profile, invocation.executableURL.path] + invocation.arguments,
+        workDir: workDir,
+        isolatesProcessTreeForTimeouts: true
+    )
 #elseif os(Linux)
-    // unshare --user  : new user namespace — current UID maps to root inside
-    // unshare --net   : new network namespace — only loopback, no external routes
-    // --map-root-user : write uid_map/gid_map automatically (requires no extra
-    //                   privileges on kernels with unprivileged_userns_clone=1)
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unshare")
-    proc.arguments = ["--user", "--net", "--map-root-user", invocation.executableURL.path] + invocation.arguments
-    proc.currentDirectoryURL = workDir
+    return configuredSubprocess(
+        executableURL: URL(fileURLWithPath: "/usr/bin/unshare"),
+        arguments: ["--user", "--net", "--map-root-user", invocation.executableURL.path] + invocation.arguments,
+        workDir: workDir,
+        isolatesProcessTreeForTimeouts: true
+    )
 #else
-    // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
-    // behaviour so the worker remains functional on unexpected targets.
-    proc.executableURL = invocation.executableURL
-    proc.arguments = invocation.arguments
-    proc.currentDirectoryURL = workDir
+    return configuredSubprocess(
+        executableURL: invocation.executableURL,
+        arguments: invocation.arguments,
+        workDir: workDir,
+        isolatesProcessTreeForTimeouts: true
+    )
 #endif
 }
 

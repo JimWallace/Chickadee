@@ -12,6 +12,86 @@ import LeafKit
 import FluentSQLiteDriver
 import Foundation
 
+// MARK: - Async XCTVapor helpers
+
+extension Application {
+    @discardableResult
+    func asyncTest(
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        beforeRequest: (inout XCTHTTPRequest) async throws -> Void = { _ in },
+        afterResponse: (XCTHTTPResponse) async throws -> Void = { _ in }
+    ) async throws -> Application {
+        var request = XCTHTTPRequest(
+            method: method,
+            url: .init(path: path),
+            headers: headers,
+            body: body ?? ByteBufferAllocator().buffer(capacity: 0)
+        )
+        try await beforeRequest(&request)
+        do {
+            let response = try await self.performTest(request: request)
+            try await afterResponse(response)
+        } catch {
+            XCTFail("\(String(reflecting: error))", file: file, line: line)
+            throw error
+        }
+        return self
+    }
+
+    func asyncSendRequest(
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        beforeRequest: (inout XCTHTTPRequest) async throws -> Void = { _ in }
+    ) async throws -> XCTHTTPResponse {
+        var request = XCTHTTPRequest(
+            method: method,
+            url: .init(path: path),
+            headers: headers,
+            body: body ?? ByteBufferAllocator().buffer(capacity: 0)
+        )
+        try await beforeRequest(&request)
+        do {
+            return try await self.performTest(request: request)
+        } catch {
+            XCTFail("\(String(reflecting: error))", file: file, line: line)
+            throw error
+        }
+    }
+}
+
+@discardableResult
+func withApp<T>(
+    _ app: Application,
+    perform operation: (Application) async throws -> T
+) async throws -> T {
+    do {
+        let result = try await operation(app)
+        try await app.asyncShutdown()
+        return result
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
+    }
+}
+
+@discardableResult
+func withTestApp<T>(
+    _ makeApp: () async throws -> Application,
+    perform operation: (Application) async throws -> T
+) async throws -> T {
+    let app = try await makeApp()
+    return try await withApp(app, perform: operation)
+}
+
 // MARK: - Leaf / CSRF setup
 
 /// Call in test setUp — after session middleware, before routes() — to enable
@@ -55,7 +135,7 @@ func csrfFields(
 ) async throws -> (token: String, cookie: String) {
     var outToken = ""
     var outCookie = cookie
-    try await app.test(.GET, path, beforeRequest: { req in
+    try await app.asyncTest(.GET, path, beforeRequest: { req in
         if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
     }, afterResponse: { res in
         if let c = res.headers.first(name: .setCookie) { outCookie = c }
@@ -132,7 +212,7 @@ func loginUser(
 
     // Step 2: POST /login with the CSRF token bound to that session.
     var authCookie = sessionCookie
-    try await app.test(.POST, "/login", beforeRequest: { req in
+    try await app.asyncTest(.POST, "/login", beforeRequest: { req in
         req.headers.add(name: .cookie, value: sessionCookie)
         try req.content.encode(
             ["username": username, "password": password, "_csrf": token],

@@ -34,14 +34,6 @@ final class WorkerTests: XCTestCase {
         return url.path
     }
 
-    private func requireStableLinuxSandboxRunner() throws {
-#if os(Linux)
-        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
-            throw XCTSkip("Sandboxed runner tests are unstable on GitHub's containerized Linux runners.")
-        }
-#endif
-    }
-
     // MARK: - UnsandboxedScriptRunner: exit code mapping
 
     func testScriptExitZeroReportsExitCodeZero() async throws {
@@ -102,6 +94,7 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Script sleeping 60s should time out with a 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Timed-out script should be reaped promptly")
     }
 
     // MARK: - UnsandboxedScriptRunner: working directory
@@ -120,7 +113,6 @@ final class WorkerTests: XCTestCase {
     // MARK: - SandboxedScriptRunner: basic execution
 
     func testSandboxedRunnerExitZero() async throws {
-        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -129,7 +121,6 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerExitOne() async throws {
-        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -138,7 +129,6 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerCapturesStdout() async throws {
-        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\necho 'sandbox out'\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -146,7 +136,6 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerCapturesStderr() async throws {
-        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\necho 'sandbox err' >&2\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -154,16 +143,15 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerTimesOut() async throws {
-        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\nsleep 60\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
 
     func testSandboxedRunnerWorkDir() async throws {
-        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")
         let runner = SandboxedScriptRunner()
         _ = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -177,7 +165,6 @@ final class WorkerTests: XCTestCase {
     // MARK: - SandboxedScriptRunner: network isolation
 
     func testSandboxedRunnerBlocksNetworkAccess() async throws {
-        try requireStableLinuxSandboxRunner()
         // Write a script that tries to reach an external host.
         // In a sandboxed network namespace this should fail (exit non-zero from python).
         // The script exits 0 only if the connection SUCCEEDS — so we assert exit != 0.

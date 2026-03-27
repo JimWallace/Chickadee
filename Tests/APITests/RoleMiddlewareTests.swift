@@ -15,7 +15,7 @@ final class RoleMiddlewareTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-role-\(UUID().uuidString)", isDirectory: true)
@@ -43,7 +43,7 @@ final class RoleMiddlewareTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
@@ -71,7 +71,7 @@ final class RoleMiddlewareTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -101,7 +101,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testStudent_authenticatedRoute_returns200() async throws {
         let cookie = try await loginUser(username: "role_student", password: "pw",
                                          role: "student", on: app)
-        try await app.test(.GET, "/__test_auth", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_auth", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -112,7 +112,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testStudent_instructorRoute_returns403() async throws {
         let cookie = try await loginUser(username: "role_student2", password: "pw",
                                          role: "student", on: app)
-        try await app.test(.GET, "/__test_instructor", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -122,7 +122,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testStudent_adminRoute_returns403() async throws {
         let cookie = try await loginUser(username: "role_student3", password: "pw",
                                          role: "student", on: app)
-        try await app.test(.GET, "/__test_admin", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_admin", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -134,7 +134,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testInstructor_authenticatedRoute_returns200() async throws {
         let cookie = try await loginUser(username: "role_instructor", password: "pw",
                                          role: "instructor", on: app)
-        try await app.test(.GET, "/__test_auth", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_auth", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -144,7 +144,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testInstructor_instructorRoute_returns200() async throws {
         let cookie = try await loginUser(username: "role_instructor2", password: "pw",
                                          role: "instructor", on: app)
-        try await app.test(.GET, "/__test_instructor", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -155,7 +155,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testInstructor_adminRoute_returns403() async throws {
         let cookie = try await loginUser(username: "role_instructor3", password: "pw",
                                          role: "instructor", on: app)
-        try await app.test(.GET, "/__test_admin", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_admin", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -167,7 +167,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testAdmin_authenticatedRoute_returns200() async throws {
         let cookie = try await loginUser(username: "role_admin", password: "pw",
                                          role: "admin", on: app)
-        try await app.test(.GET, "/__test_auth", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_auth", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -178,7 +178,7 @@ final class RoleMiddlewareTests: XCTestCase {
         // Admin implies instructor — should be granted access.
         let cookie = try await loginUser(username: "role_admin2", password: "pw",
                                          role: "admin", on: app)
-        try await app.test(.GET, "/__test_instructor", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -189,7 +189,7 @@ final class RoleMiddlewareTests: XCTestCase {
     func testAdmin_adminRoute_returns200() async throws {
         let cookie = try await loginUser(username: "role_admin3", password: "pw",
                                          role: "admin", on: app)
-        try await app.test(.GET, "/__test_admin", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/__test_admin", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)

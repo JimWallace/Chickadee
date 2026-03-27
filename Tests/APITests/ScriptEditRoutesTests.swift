@@ -19,7 +19,7 @@ final class ScriptEditRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-scripts-\(UUID().uuidString)/")
@@ -48,14 +48,14 @@ final class ScriptEditRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -149,7 +149,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_get1", title: "GetTest")
         let id = a.publicID
 
-        try await app.test(.GET, "/instructor/\(id)/scripts/test_foo.py",
+        try await app.asyncTest(.GET, "/instructor/\(id)/scripts/test_foo.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -170,7 +170,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_get2", title: "GetMissing")
         let id = a.publicID
 
-        try await app.test(.GET, "/instructor/\(id)/scripts/does_not_exist.py",
+        try await app.asyncTest(.GET, "/instructor/\(id)/scripts/does_not_exist.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -189,7 +189,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_get3", title: "GetStudent")
         let id = a.publicID
 
-        try await app.test(.GET, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(.GET, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -201,7 +201,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
     func testGetScriptReturns404ForUnknownAssignment() async throws {
         let cookie = try await loginAsInstructor()
 
-        try await app.test(.GET, "/instructor/zzzzzzzzz/scripts/test_a.py",
+        try await app.asyncTest(.GET, "/instructor/zzzzzzzzz/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -224,7 +224,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_put1", title: "PutTest")
         let id = a.publicID
 
-        try await app.test(.PUT, "/instructor/\(id)/scripts/test_bar.py",
+        try await app.asyncTest(.PUT, "/instructor/\(id)/scripts/test_bar.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -251,7 +251,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_put2", title: "PutMissing")
         let id = a.publicID
 
-        try await app.test(.PUT, "/instructor/\(id)/scripts/nonexistent.py",
+        try await app.asyncTest(.PUT, "/instructor/\(id)/scripts/nonexistent.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -273,7 +273,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_put3", title: "PutStudent")
         let id = a.publicID
 
-        try await app.test(.PUT, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(.PUT, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
@@ -297,7 +297,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post1", title: "PostTest")
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -326,7 +326,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post2", title: "PostManifest")
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -356,7 +356,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post3", title: "PostDupe")
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -379,7 +379,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post4", title: "PostBadName")
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -401,7 +401,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post5", title: "PostStudent")
         let id = a.publicID
 
-        try await app.test(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
@@ -428,7 +428,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del1", title: "DeleteTest")
         let id = a.publicID
 
-        try await app.test(.DELETE, "/instructor/\(id)/scripts/test_del.py",
+        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_del.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -467,7 +467,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del2", title: "DeleteManifest")
         let id = a.publicID
 
-        try await app.test(.DELETE, "/instructor/\(id)/scripts/test_rm.py",
+        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_rm.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -506,7 +506,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del3", title: "DeleteConflict")
         let id = a.publicID
 
-        try await app.test(.DELETE, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -527,7 +527,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del4", title: "DeleteMissing")
         let id = a.publicID
 
-        try await app.test(.DELETE, "/instructor/\(id)/scripts/nonexistent.py",
+        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/nonexistent.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -547,7 +547,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del5", title: "DeleteStudent")
         let id = a.publicID
 
-        try await app.test(.DELETE, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in

@@ -20,7 +20,7 @@ final class WebRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-wrt-\(UUID().uuidString)/")
@@ -49,14 +49,14 @@ final class WebRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -217,7 +217,7 @@ final class WebRoutesTests: XCTestCase {
         let c2 = APICourse(code: "CS102", name: "Algorithms")
         try await c2.save(on: app.db)
 
-        try await app.test(.GET, "/", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
@@ -228,7 +228,7 @@ final class WebRoutesTests: XCTestCase {
     func testIndexRendersWhenNoCourses() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -242,7 +242,7 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_vis")
         try await insertAssignment(testSetupID: "setup_vis", title: "Visible Assignment", isOpen: true)
 
-        try await app.test(.GET, "/", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -258,7 +258,7 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_hidden")
         // No assignment created → unpublished
 
-        try await app.test(.GET, "/", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -273,7 +273,7 @@ final class WebRoutesTests: XCTestCase {
         try await enrollUser(instructor)
         try await insertSetup(id: "setup_unpub")
 
-        try await app.test(.GET, "/", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -301,7 +301,7 @@ final class WebRoutesTests: XCTestCase {
             makeOutcome(name: "t5", status: .fail),
         ])
 
-        try await app.test(.GET, "/", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -316,7 +316,7 @@ final class WebRoutesTests: XCTestCase {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "setup_sub")
 
-        try await app.test(.GET, "/testsetups/setup_sub/submit", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/setup_sub/submit", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -326,7 +326,7 @@ final class WebRoutesTests: XCTestCase {
     func testSubmitForm404ForMissingSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/testsetups/nonexistent/submit", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/nonexistent/submit", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -344,7 +344,7 @@ final class WebRoutesTests: XCTestCase {
         try await insertSubmission(id: "sub_h1", testSetupID: "setup_hist", userID: userID, attemptNumber: 1)
         try await insertSubmission(id: "sub_h2", testSetupID: "setup_hist", userID: userID, attemptNumber: 2)
 
-        try await app.test(.GET, "/testsetups/setup_hist/history", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/setup_hist/history", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -356,7 +356,7 @@ final class WebRoutesTests: XCTestCase {
     func testHistory404ForMissingSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/testsetups/nonexistent/history", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/nonexistent/history", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -372,7 +372,7 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_pend")
         try await insertSubmission(id: "sub_pend", testSetupID: "setup_pend", userID: userID, status: "pending")
 
-        try await app.test(.GET, "/submissions/sub_pend", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_pend", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -393,7 +393,7 @@ final class WebRoutesTests: XCTestCase {
             makeOutcome(name: "test_sub", status: .fail),
         ])
 
-        try await app.test(.GET, "/submissions/sub_res", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_res", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -413,7 +413,7 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_priv")
         try await insertSubmission(id: "sub_priv", testSetupID: "setup_priv", userID: otherID)
 
-        try await app.test(.GET, "/submissions/sub_priv", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_priv", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -428,7 +428,7 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_any")
         try await insertSubmission(id: "sub_any", testSetupID: "setup_any", userID: studentID)
 
-        try await app.test(.GET, "/submissions/sub_any", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_any", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -438,7 +438,7 @@ final class WebRoutesTests: XCTestCase {
     func testSubmissionPage404ForMissing() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/submissions/nonexistent", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/nonexistent", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -464,7 +464,7 @@ final class WebRoutesTests: XCTestCase {
             makeOutcome(name: "sec_test", tier: .secret, status: .pass),
         ])
 
-        try await app.test(.GET, "/submissions/sub_tier", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_tier", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -491,7 +491,7 @@ final class WebRoutesTests: XCTestCase {
             makeOutcome(name: "rel_test2", tier: .release, status: .fail),
         ])
 
-        try await app.test(.GET, "/submissions/sub_post", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_post", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -518,7 +518,7 @@ final class WebRoutesTests: XCTestCase {
             makeOutcome(name: "sec_t", tier: .secret, status: .pass),
         ])
 
-        try await app.test(.GET, "/submissions/sub_all", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/submissions/sub_all", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
