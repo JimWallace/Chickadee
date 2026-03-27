@@ -160,6 +160,7 @@ final class SSOAuthFlowTests: XCTestCase {
         let app = try await Application.make(.testing)
         app.http.server.configuration.hostname = "127.0.0.1"
         app.http.server.configuration.port = 0
+        app.environment.arguments = ["serve"]
 
         app.post("token") { req async throws -> Response in
             var body = req.body.data ?? ByteBuffer()
@@ -170,6 +171,7 @@ final class SSOAuthFlowTests: XCTestCase {
             return response
         }
 
+        try await app.asyncBoot()
         try await app.startup()
         guard let port = app.http.server.shared.localAddress?.port else {
             throw XCTSkip("mock provider failed to bind a port")

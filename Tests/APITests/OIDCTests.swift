@@ -73,6 +73,7 @@ final class OIDCTests: XCTestCase {
         let app = try await Application.make(.testing)
         app.http.server.configuration.hostname = "127.0.0.1"
         app.http.server.configuration.port = 0
+        app.environment.arguments = ["serve"]
 
         app.get(.catchall) { req -> Response in
             switch req.url.path {
@@ -102,6 +103,7 @@ final class OIDCTests: XCTestCase {
             }
         }
 
+        try await app.asyncBoot()
         try await app.startup()
         guard let port = app.http.server.shared.localAddress?.port else {
             throw Abort(.internalServerError, reason: "mock OIDC provider did not expose a bound port")
