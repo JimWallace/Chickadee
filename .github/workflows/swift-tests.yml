@@ -43,4 +43,4 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Run WorkerTests
-        run: swift test --parallel --filter WorkerTests
+        run: swift test --filter WorkerTests
