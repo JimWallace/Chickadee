@@ -270,7 +270,14 @@ final class WorkerTests: XCTestCase {
 
         let paths = defaultWorkerSecretFilePaths()
 
-        XCTAssertEqual(paths.first, tmpDir.appendingPathComponent(".worker-secret").path)
+        XCTAssertEqual(URL(fileURLWithPath: paths.first ?? "").lastPathComponent, ".worker-secret")
+        XCTAssertEqual(
+            URL(fileURLWithPath: paths.first ?? "")
+                .deletingLastPathComponent()
+                .resolvingSymlinksInPath()
+                .path,
+            tmpDir.resolvingSymlinksInPath().path
+        )
         XCTAssertTrue(paths.contains("/data/.worker-secret"))
     }
 
