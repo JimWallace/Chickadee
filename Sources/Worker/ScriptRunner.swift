@@ -211,7 +211,7 @@ private func configureLinuxUnsandboxedProcess(
     )
 }
 
-private func executeLinuxScriptProcess(
+func executeLinuxScriptProcess(
     _ launch: LinuxProcessLaunchConfiguration,
     workDir: URL,
     timeLimitSeconds: Int,
