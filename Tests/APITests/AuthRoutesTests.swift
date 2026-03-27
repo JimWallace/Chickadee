@@ -14,7 +14,7 @@ final class AuthRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-auth-\(UUID().uuidString)", isDirectory: true)
@@ -42,14 +42,14 @@ final class AuthRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -57,7 +57,7 @@ final class AuthRoutesTests: XCTestCase {
 
     func testRegisterFirstUserBecomesAdmin() async throws {
         let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.test(.POST, "/register", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "jim", "password": "secret123", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -78,7 +78,7 @@ final class AuthRoutesTests: XCTestCase {
         try await admin.save(on: app.db)
 
         let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.test(.POST, "/register", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "student1", "password": "password2", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -97,7 +97,7 @@ final class AuthRoutesTests: XCTestCase {
         try await existing.save(on: app.db)
 
         let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.test(.POST, "/register", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "jim", "password": "password2", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -109,7 +109,7 @@ final class AuthRoutesTests: XCTestCase {
 
     func testRegisterShortPasswordRedirectsWithError() async throws {
         let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.test(.POST, "/register", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "jim", "password": "short", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -126,7 +126,7 @@ final class AuthRoutesTests: XCTestCase {
         try await user.save(on: app.db)
 
         let (token, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "jim", "password": "mypassword", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -143,7 +143,7 @@ final class AuthRoutesTests: XCTestCase {
         try await user.save(on: app.db)
 
         let (token, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "jim", "password": "wrong", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -154,7 +154,7 @@ final class AuthRoutesTests: XCTestCase {
 
     func testLoginWithUnknownUserRedirectsWithError() async throws {
         let (token, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             try req.content.encode(["username": "nobody", "password": "password", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -166,7 +166,7 @@ final class AuthRoutesTests: XCTestCase {
     // MARK: - Access control
 
     func testUnauthenticatedHomeRedirectsToLogin() async throws {
-        try await app.test(.GET, "/", afterResponse: { res in
+        try await app.asyncTest(.GET, "/", afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
             XCTAssertEqual(res.headers.first(name: .location), "/login")
         })
@@ -180,7 +180,7 @@ final class AuthRoutesTests: XCTestCase {
 
         let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
 
-        try await app.test(.GET, "/testsetups/new", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/new", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -194,7 +194,7 @@ final class AuthRoutesTests: XCTestCase {
 
         let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
 
-        try await app.test(.GET, "/admin", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/admin", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)
@@ -208,7 +208,7 @@ final class AuthRoutesTests: XCTestCase {
 
         let sessionCookie = try await loginUser(username: "student2", password: "pass1234", role: "student", on: app)
 
-        try await app.test(.GET, "/instructor", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)

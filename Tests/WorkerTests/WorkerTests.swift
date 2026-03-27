@@ -102,7 +102,27 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Script sleeping 60s should time out with a 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Timed-out script should be reaped promptly")
     }
+
+#if os(Linux)
+    func testScriptTimeoutReapsBackgroundChildProcess() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        sleep 60 &
+        wait
+        """)
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        XCTAssertTrue(output.timedOut, "Timed-out script with a background child should still time out")
+        XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(
+            output.executionTimeMs,
+            10_000,
+            "Timed-out script should reap inherited stdout/stderr handles from background children"
+        )
+    }
+#endif
 
     // MARK: - UnsandboxedScriptRunner: working directory
 
@@ -160,7 +180,27 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
+
+#if os(Linux)
+    func testSandboxedRunnerTimeoutReapsBackgroundChildProcess() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        sleep 60 &
+        wait
+        """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        XCTAssertTrue(output.timedOut, "Sandboxed script with a background child should still time out")
+        XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(
+            output.executionTimeMs,
+            10_000,
+            "Sandboxed timeout should reap background children without leaving pipes open"
+        )
+    }
+#endif
 
     func testSandboxedRunnerWorkDir() async throws {
         try requireStableLinuxSandboxRunner()
@@ -401,7 +441,7 @@ final class WorkerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: pyURL.path),
                       "Should produce assignment.py from assignment.ipynb")
 
-        let content = try String(contentsOf: pyURL)
+        let content = try String(contentsOf: pyURL, encoding: .utf8)
         XCTAssertTrue(content.contains("def add(a, b):"),
                       "Code cell content should be present")
         XCTAssertTrue(content.contains("result = add(1, 2)"),
@@ -428,7 +468,7 @@ final class WorkerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path),
                        "IR kernel must NOT produce .py file")
 
-        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.R"))
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.R"), encoding: .utf8)
         XCTAssertTrue(content.contains("x <- 42"))
     }
 
@@ -477,7 +517,7 @@ final class WorkerTests: XCTestCase {
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
-        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"))
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         // Only "x = 1" should be present; empty/whitespace cells are skipped.
         XCTAssertTrue(content.contains("x = 1"))
         // The file should not have multiple blank-line groups from empty cells.
@@ -496,7 +536,7 @@ final class WorkerTests: XCTestCase {
 
         try extractNotebooksToCode(in: tmpDir)  // no .ipynb → nothing to do
 
-        let pyContent = try String(contentsOf: pyURL)
+        let pyContent = try String(contentsOf: pyURL, encoding: .utf8)
         XCTAssertEqual(pyContent, "original = True", "Non-notebook files must be untouched")
     }
 
@@ -525,7 +565,7 @@ final class WorkerTests: XCTestCase {
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
-        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"))
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         XCTAssertTrue(content.contains("x = 99"), "String-form source must be extracted")
     }
 }

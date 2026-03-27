@@ -53,8 +53,8 @@ final class OIDCTests: XCTestCase {
         try await operation()
     }
 
-    private func makeOIDCApp(publicBaseURL: String? = nil) -> Application {
-        let app = Application(Environment(name: "testing", arguments: ["test"]))
+    private func makeOIDCApp(publicBaseURL: String? = nil) async throws -> Application {
+        let app = try await Application.make(Environment(name: "testing", arguments: ["test"]))
         app.securityConfiguration = AppSecurityConfiguration(
             publicBaseURL: publicBaseURL.flatMap(URL.init(string:)),
             enforceHTTPS: false,
@@ -70,7 +70,7 @@ final class OIDCTests: XCTestCase {
         jwksStatus: HTTPResponseStatus = .ok,
         jwksBody: String = #"{"keys":[]}"#
     ) async throws -> (app: Application, port: Int) {
-        let app = Application(Environment(name: "testing", arguments: ["test"]))
+        let app = try await Application.make(Environment(name: "testing", arguments: ["test"]))
         app.http.server.configuration.hostname = "127.0.0.1"
         app.http.server.configuration.port = 0
 
@@ -102,7 +102,9 @@ final class OIDCTests: XCTestCase {
             }
         }
 
-        try app.start()
+        app.environment.arguments = ["serve"]
+        try await app.asyncBoot()
+        try await app.startup()
         guard let port = app.http.server.shared.localAddress?.port else {
             throw Abort(.internalServerError, reason: "mock OIDC provider did not expose a bound port")
         }
@@ -113,23 +115,22 @@ final class OIDCTests: XCTestCase {
         let provider = try await makeMockOIDCProvider(
             discoveryPath: "/oidc/test-client/.well-known/openid-configuration"
         )
-        defer { provider.app.shutdown() }
+        try await withApp(provider.app) { _ in
+            try await withEnvironment([
+                "OIDC_CLIENT_ID": "test-client",
+                "OIDC_CLIENT_SECRET": "super-secret",
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client/",
+                "OIDC_CALLBACK": "oidc/callback"
+            ]) {
+                try await withApp(try await makeOIDCApp(publicBaseURL: "https://courses.example.edu/")) { app in
+                    let config = try await OIDCConfiguration.load(from: app)
 
-        try await withEnvironment([
-            "OIDC_CLIENT_ID": "test-client",
-            "OIDC_CLIENT_SECRET": "super-secret",
-            "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client/",
-            "OIDC_CALLBACK": "oidc/callback"
-        ]) {
-            let app = makeOIDCApp(publicBaseURL: "https://courses.example.edu/")
-            defer { app.shutdown() }
-
-            let config = try await OIDCConfiguration.load(from: app)
-
-            XCTAssertEqual(config.clientID, "test-client")
-            XCTAssertEqual(config.clientSecret, "super-secret")
-            XCTAssertEqual(config.redirectURI, "https://courses.example.edu/oidc/callback")
-            XCTAssertEqual(config.discovery.issuer, "http://127.0.0.1:\(provider.port)/issuer")
+                    XCTAssertEqual(config.clientID, "test-client")
+                    XCTAssertEqual(config.clientSecret, "super-secret")
+                    XCTAssertEqual(config.redirectURI, "https://courses.example.edu/oidc/callback")
+                    XCTAssertEqual(config.discovery.issuer, "http://127.0.0.1:\(provider.port)/issuer")
+                }
+            }
         }
     }
 
@@ -137,20 +138,18 @@ final class OIDCTests: XCTestCase {
         let provider = try await makeMockOIDCProvider(
             discoveryPath: "/custom/.well-known/openid-configuration"
         )
-        defer { provider.app.shutdown() }
-
-        try await withEnvironment([
-            "OIDC_CLIENT_ID": "test-client",
-            "OIDC_CLIENT_SECRET": "super-secret",
-            "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/custom/.well-known/openid-configuration",
-            "OIDC_CALLBACK": ""
-        ]) {
-            let app = makeOIDCApp()
-            defer { app.shutdown() }
-
-            let config = try await OIDCConfiguration.load(from: app)
-
-            XCTAssertEqual(config.redirectURI, "http://localhost:8080/auth/sso/callback")
+        try await withApp(provider.app) { _ in
+            try await withEnvironment([
+                "OIDC_CLIENT_ID": "test-client",
+                "OIDC_CLIENT_SECRET": "super-secret",
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/custom/.well-known/openid-configuration",
+                "OIDC_CALLBACK": ""
+            ]) {
+                try await withApp(try await makeOIDCApp()) { app in
+                    let config = try await OIDCConfiguration.load(from: app)
+                    XCTAssertEqual(config.redirectURI, "http://localhost:8080/auth/sso/callback")
+                }
+            }
         }
     }
 
@@ -161,12 +160,11 @@ final class OIDCTests: XCTestCase {
             "OIDC_AUTH_SERVER": "",
             "OIDC_CALLBACK": ""
         ]) {
-            let app = makeOIDCApp()
-            defer { app.shutdown() }
-
-            await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
-                XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
-                XCTAssertTrue("\(error)".contains("OIDC_CLIENT_ID"))
+            try await withApp(try await makeOIDCApp()) { app in
+                await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
+                    XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
+                    XCTAssertTrue("\(error)".contains("OIDC_CLIENT_ID"))
+                }
             }
         }
     }
@@ -178,12 +176,11 @@ final class OIDCTests: XCTestCase {
             "OIDC_AUTH_SERVER": "",
             "OIDC_CALLBACK": ""
         ]) {
-            let app = makeOIDCApp()
-            defer { app.shutdown() }
-
-            await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
-                XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
-                XCTAssertTrue("\(error)".contains("OIDC_CLIENT_SECRET"))
+            try await withApp(try await makeOIDCApp()) { app in
+                await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
+                    XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
+                    XCTAssertTrue("\(error)".contains("OIDC_CLIENT_SECRET"))
+                }
             }
         }
     }
@@ -193,19 +190,18 @@ final class OIDCTests: XCTestCase {
             discoveryPath: "/oidc/test-client/.well-known/openid-configuration",
             discoveryStatus: .badGateway
         )
-        defer { provider.app.shutdown() }
-
-        try await withEnvironment([
-            "OIDC_CLIENT_ID": "test-client",
-            "OIDC_CLIENT_SECRET": "super-secret",
-            "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
-        ]) {
-            let app = makeOIDCApp()
-            defer { app.shutdown() }
-
-            await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
-                XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
-                XCTAssertTrue("\(error)".contains("OIDC discovery failed"))
+        try await withApp(provider.app) { _ in
+            try await withEnvironment([
+                "OIDC_CLIENT_ID": "test-client",
+                "OIDC_CLIENT_SECRET": "super-secret",
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
+            ]) {
+                try await withApp(try await makeOIDCApp()) { app in
+                    await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
+                        XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
+                        XCTAssertTrue("\(error)".contains("OIDC discovery failed"))
+                    }
+                }
             }
         }
     }
@@ -215,19 +211,18 @@ final class OIDCTests: XCTestCase {
             discoveryPath: "/oidc/test-client/.well-known/openid-configuration",
             jwksStatus: .serviceUnavailable
         )
-        defer { provider.app.shutdown() }
-
-        try await withEnvironment([
-            "OIDC_CLIENT_ID": "test-client",
-            "OIDC_CLIENT_SECRET": "super-secret",
-            "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
-        ]) {
-            let app = makeOIDCApp()
-            defer { app.shutdown() }
-
-            await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
-                XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
-                XCTAssertTrue("\(error)".contains("OIDC JWKS fetch failed"))
+        try await withApp(provider.app) { _ in
+            try await withEnvironment([
+                "OIDC_CLIENT_ID": "test-client",
+                "OIDC_CLIENT_SECRET": "super-secret",
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
+            ]) {
+                try await withApp(try await makeOIDCApp()) { app in
+                    await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
+                        XCTAssertEqual((error as? AbortError)?.status, .internalServerError)
+                        XCTAssertTrue("\(error)".contains("OIDC JWKS fetch failed"))
+                    }
+                }
             }
         }
     }
@@ -237,17 +232,16 @@ final class OIDCTests: XCTestCase {
             discoveryPath: "/oidc/test-client/.well-known/openid-configuration",
             jwksBody: "not-json"
         )
-        defer { provider.app.shutdown() }
-
-        try await withEnvironment([
-            "OIDC_CLIENT_ID": "test-client",
-            "OIDC_CLIENT_SECRET": "super-secret",
-            "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
-        ]) {
-            let app = makeOIDCApp()
-            defer { app.shutdown() }
-
-            await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app))
+        try await withApp(provider.app) { _ in
+            try await withEnvironment([
+                "OIDC_CLIENT_ID": "test-client",
+                "OIDC_CLIENT_SECRET": "super-secret",
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
+            ]) {
+                try await withApp(try await makeOIDCApp()) { app in
+                    await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app))
+                }
+            }
         }
     }
 

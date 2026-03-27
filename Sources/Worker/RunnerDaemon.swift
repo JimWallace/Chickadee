@@ -115,6 +115,13 @@ func readWorkerSecretFromFile(path: String) -> String? {
 // MARK: - WorkerDaemon actor
 
 actor WorkerDaemon {
+    private static let downloadSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 5
+        cfg.timeoutIntervalForResource = 15
+        return URLSession(configuration: cfg)
+    }()
+
     private let poller:   any JobPolling
     private let reporter: any Reporting
     private let runner:   any ScriptRunner
@@ -392,8 +399,9 @@ actor WorkerDaemon {
     private func download(url: URL, to destination: URL) async throws {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 5
         signer.sign(&request)
-        let (tmpURL, response) = try await URLSession.shared.download(for: request)
+        let (tmpURL, response) = try await Self.downloadSession.download(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw WorkerDaemonError.downloadFailed(url)
         }

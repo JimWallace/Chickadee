@@ -12,7 +12,7 @@ final class ResultRoutesTests: XCTestCase {
     private let workerSecret = "test-worker-secret"
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         // Use a temp directory so tests don't pollute the project directory
         tmpResultsDir = FileManager.default.temporaryDirectory
@@ -42,13 +42,13 @@ final class ResultRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpResultsDir)
     }
 

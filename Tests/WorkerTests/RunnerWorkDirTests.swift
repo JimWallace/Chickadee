@@ -66,7 +66,7 @@ final class RunnerWorkDirTests: XCTestCase {
     }
 
     private func readFile(_ name: String) throws -> String {
-        try String(contentsOf: workDir.appendingPathComponent(name))
+        try String(contentsOf: workDir.appendingPathComponent(name), encoding: .utf8)
     }
 
     private func listFiles() throws -> Set<String> {

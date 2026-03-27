@@ -13,7 +13,7 @@ final class NotebookWebRoutesTests: XCTestCase {
     private var repoRoot: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         repoRoot = FileManager.default.currentDirectoryPath
         tmpRoot = FileManager.default.temporaryDirectory
@@ -53,14 +53,14 @@ final class NotebookWebRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await app.autoMigrate()
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpRoot)
     }
 
@@ -212,7 +212,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         _ = try await insertSetup(id: setupID, notebookJSON: seedNotebook)
         _ = try await insertAssignment(testSetupID: setupID, title: "Notebook Lab")
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -223,7 +223,10 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             XCTAssertTrue(html.contains("&amp;path=users/"))
         })
 
-        let workingCopy = try String(contentsOfFile: workingCopyPath(setupID: setupID, userID: try user.requireID()))
+        let workingCopy = try String(
+            contentsOfFile: workingCopyPath(setupID: setupID, userID: try user.requireID()),
+            encoding: .utf8
+        )
         XCTAssertTrue(workingCopy.contains("Notebook seed"))
         XCTAssertTrue(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
     }
@@ -245,7 +248,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             .data(using: .utf8)!
             .write(to: URL(fileURLWithPath: workingCopy))
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -280,13 +283,13 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             .data(using: .utf8)!
             .write(to: URL(fileURLWithPath: staleCopyPath))
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_history", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_history", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
         })
 
-        let restored = try String(contentsOfFile: staleCopyPath)
+        let restored = try String(contentsOfFile: staleCopyPath, encoding: .utf8)
         XCTAssertTrue(restored.contains("History selection"))
         XCTAssertFalse(restored.contains("Stale working copy"))
     }
@@ -331,7 +334,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             try Data("legacy".utf8).write(to: URL(fileURLWithPath: userDir + filename))
         }
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -376,7 +379,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         )
         try Data("not json".utf8).write(to: URL(fileURLWithPath: workingCopy))
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -384,7 +387,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             XCTAssertFalse(res.body.string.contains("Instructor baseline"))
         })
 
-        let replaced = try String(contentsOfFile: workingCopy)
+        let replaced = try String(contentsOfFile: workingCopy, encoding: .utf8)
         XCTAssertTrue(replaced.contains("Recovered notebook"))
         XCTAssertFalse(replaced.contains("not json"))
     }
@@ -407,7 +410,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             attemptNumber: 1
         )
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .badRequest)
@@ -437,7 +440,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         )
         try await submission.save(on: app.db)
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .badRequest)
@@ -467,7 +470,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             attemptNumber: 1
         )
 
-        try await app.test(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .forbidden)

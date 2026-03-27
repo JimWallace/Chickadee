@@ -2,19 +2,22 @@ import XCTest
 @testable import chickadee_runner
 import Core
 import Foundation
+#if os(Linux)
+import Glibc
+#endif
 
 final class WorkerDaemonTests: XCTestCase {
 
     private final class StaticFileServer {
         let process: Process
         let port: Int
+        private let stdout: Pipe
 
         init(directory: URL) throws {
             process = Process()
-            let stdout = Pipe()
-            let stderr = Pipe()
+            stdout = Pipe()
             process.standardOutput = stdout
-            process.standardError = stderr
+            process.standardError = FileHandle.nullDevice
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = [
                 "python3",
@@ -59,7 +62,20 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         func stop() {
             guard process.isRunning else { return }
             process.terminate()
+            for _ in 0..<20 where process.isRunning {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+
+            if process.isRunning {
+#if os(Linux)
+                _ = Glibc.kill(process.processIdentifier, SIGKILL)
+#else
+                _ = Darwin.kill(process.processIdentifier, SIGKILL)
+#endif
+            }
+
             process.waitUntilExit()
+            stdout.fileHandleForReading.closeFile()
         }
     }
 
@@ -188,9 +204,29 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.currentDirectoryURL = tempDir
-        process.arguments = ["-q", "-r", zipPath, "."]
+        process.arguments = [
+            "python3",
+            "-c",
+            #"""
+import os
+import sys
+import zipfile
+
+zip_path = sys.argv[1]
+root = sys.argv[2]
+
+with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for current_root, _, filenames in os.walk(root):
+        for filename in filenames:
+            full_path = os.path.join(current_root, filename)
+            archive_name = os.path.relpath(full_path, root)
+            archive.write(full_path, archive_name)
+"""#,
+            zipPath,
+            tempDir.path
+        ]
         try process.run()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)

@@ -379,7 +379,7 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertFalse(extracted.contains("stale.txt"))
     }
 
-    func testRemoveMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() throws {
+    func testRemoveMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("materialized-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -414,23 +414,23 @@ final class AssignmentHelpersTests: XCTestCase {
             )
         }
 
-        let app = Application(.testing)
-        defer { app.shutdown() }
-        app.directory.publicDirectory = publicDirectory
+        try await withApp(try await Application.make(.testing)) { app in
+            app.directory.publicDirectory = publicDirectory
 
-        let req = Request(application: app, on: app.eventLoopGroup.next())
-        removeMaterializedNotebookFiles(req: req, setupID: "setup_123")
+            let req = Request(application: app, on: app.eventLoopGroup.next())
+            removeMaterializedNotebookFiles(req: req, setupID: "setup_123")
 
-        for root in roots {
-            XCTAssertFalse(
-                FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123-work.ipynb")
-            )
-            XCTAssertTrue(
-                FileManager.default.fileExists(atPath: publicDirectory + root + "other-work.ipynb")
-            )
-            XCTAssertTrue(
-                FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123.txt")
-            )
+            for root in roots {
+                XCTAssertFalse(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123-work.ipynb")
+                )
+                XCTAssertTrue(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "other-work.ipynb")
+                )
+                XCTAssertTrue(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123.txt")
+                )
+            }
         }
     }
 

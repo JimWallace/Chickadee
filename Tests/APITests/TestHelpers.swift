@@ -12,6 +12,74 @@ import LeafKit
 import FluentSQLiteDriver
 import Foundation
 
+// MARK: - Async app lifecycle
+
+/// Runs an async test body with a Vapor application and always shuts it down.
+func withApp(_ app: Application, _ body: (Application) async throws -> Void) async throws {
+    do {
+        try await body(app)
+        try await app.asyncShutdown()
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
+    }
+}
+
+extension Application {
+    @discardableResult
+    func asyncTest(
+        method runnerMethod: Method = .inMemory,
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        afterResponse: (XCTHTTPResponse) throws -> Void
+    ) async throws -> XCTApplicationTester {
+        try await self.asyncTest(
+            method: runnerMethod,
+            method,
+            path,
+            headers: headers,
+            body: body,
+            file: file,
+            line: line,
+            beforeRequest: { _ in },
+            afterResponse: afterResponse
+        )
+    }
+
+    @discardableResult
+    func asyncTest(
+        method runnerMethod: Method = .inMemory,
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in },
+        afterResponse: (XCTHTTPResponse) throws -> Void = { _ in }
+    ) async throws -> XCTApplicationTester {
+        let tester = try self.testable(method: runnerMethod)
+        return try await tester.test(
+            method,
+            path,
+            headers: headers,
+            body: body,
+            file: file,
+            line: line,
+            beforeRequest: { request async throws in
+                try beforeRequest(&request)
+            },
+            afterResponse: { response async throws in
+                try afterResponse(response)
+            }
+        )
+    }
+}
+
 // MARK: - Leaf / CSRF setup
 
 /// Call in test setUp — after session middleware, before routes() — to enable
@@ -55,7 +123,7 @@ func csrfFields(
 ) async throws -> (token: String, cookie: String) {
     var outToken = ""
     var outCookie = cookie
-    try await app.test(.GET, path, beforeRequest: { req in
+    try await app.asyncTest(.GET, path, beforeRequest: { req in
         if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
     }, afterResponse: { res in
         if let c = res.headers.first(name: .setCookie) { outCookie = c }
@@ -132,7 +200,7 @@ func loginUser(
 
     // Step 2: POST /login with the CSRF token bound to that session.
     var authCookie = sessionCookie
-    try await app.test(.POST, "/login", beforeRequest: { req in
+    try await app.asyncTest(.POST, "/login", beforeRequest: { req in
         req.headers.add(name: .cookie, value: sessionCookie)
         try req.content.encode(
             ["username": username, "password": password, "_csrf": token],

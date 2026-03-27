@@ -429,7 +429,7 @@ actor LocalRunnerManager {
 
         let logPath = workDir + "results/local-runner.log"
         if !FileManager.default.fileExists(atPath: logPath) {
-            FileManager.default.createFile(atPath: logPath, contents: nil)
+            _ = FileManager.default.createFile(atPath: logPath, contents: nil)
         }
         if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
             _ = try? handle.seekToEnd()
