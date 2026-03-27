@@ -157,7 +157,7 @@ final class SSOAuthFlowTests: XCTestCase {
     private func makeMockOIDCProvider(mode: MockTokenEndpoint.Mode) async throws -> (app: Application, port: Int, endpoint: MockTokenEndpoint) {
         let tokenEndpoint = MockTokenEndpoint(mode: mode)
 
-        let app = Application(Environment(name: "testing", arguments: ["test"]))
+        let app = try await Application.make(.testing)
         app.http.server.configuration.hostname = "127.0.0.1"
         app.http.server.configuration.port = 0
 
@@ -170,7 +170,7 @@ final class SSOAuthFlowTests: XCTestCase {
             return response
         }
 
-        try app.start()
+        try await app.startup()
         guard let port = app.http.server.shared.localAddress?.port else {
             throw XCTSkip("mock provider failed to bind a port")
         }

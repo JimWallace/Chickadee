@@ -95,7 +95,7 @@ final class EnrollmentRoutesTests: XCTestCase {
     }
 
     func testEnrollPage_unauthenticated_redirects() async throws {
-        try app.test(.GET, "/enroll") { res in
+        try await app.asyncTest(.GET, "/enroll") { res in
             XCTAssertEqual(res.status, .seeOther)
             XCTAssertEqual(res.headers.first(name: .location), "/login")
         }

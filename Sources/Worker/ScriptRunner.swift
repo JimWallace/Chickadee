@@ -6,11 +6,15 @@
 
 import Foundation
 import Subprocess
+#if canImport(System)
+import System
+#else
 import SystemPackage
+#endif
 
 /// Runs a single test script and returns raw output.
 /// Implementations are responsible for enforcing the time limit.
-protocol ScriptRunner {
+protocol ScriptRunner: Sendable {
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput
 }
 
@@ -107,7 +111,7 @@ func executeScript(
 private func collectOutput(from sequence: AsyncBufferSequence) async throws -> Data {
     var data = Data()
     for try await buffer in sequence {
-        try buffer.withUnsafeBytes { rawBuffer in
+        buffer.withUnsafeBytes { rawBuffer in
             data.append(contentsOf: rawBuffer)
         }
     }

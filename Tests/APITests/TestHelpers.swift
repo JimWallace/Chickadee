@@ -15,7 +15,6 @@ import Foundation
 // MARK: - Async XCTVapor helpers
 
 extension Application {
-    @discardableResult
     func asyncTest(
         _ method: HTTPMethod,
         _ path: String,
@@ -25,7 +24,7 @@ extension Application {
         line: UInt = #line,
         beforeRequest: (inout XCTHTTPRequest) async throws -> Void = { _ in },
         afterResponse: (XCTHTTPResponse) async throws -> Void = { _ in }
-    ) async throws -> Application {
+    ) async throws {
         var request = XCTHTTPRequest(
             method: method,
             url: .init(path: path),
@@ -40,7 +39,27 @@ extension Application {
             XCTFail("\(String(reflecting: error))", file: file, line: line)
             throw error
         }
-        return self
+    }
+
+    func asyncTest(
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        afterResponse: (XCTHTTPResponse) async throws -> Void
+    ) async throws {
+        try await self.asyncTest(
+            method,
+            path,
+            headers: headers,
+            body: body,
+            file: file,
+            line: line,
+            beforeRequest: { _ in },
+            afterResponse: afterResponse
+        )
     }
 
     func asyncSendRequest(

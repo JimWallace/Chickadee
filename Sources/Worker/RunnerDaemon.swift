@@ -11,7 +11,7 @@ import Core
 
 @main
 struct WorkerCommand: AsyncParsableCommand {
-    static var configuration = CommandConfiguration(
+    static let configuration = CommandConfiguration(
         commandName: "chickadee-runner",
         abstract: "Chickadee build runner — polls the API server and processes submissions",
         version: ChickadeeVersion.current

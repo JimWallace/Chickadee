@@ -184,7 +184,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     func testListSubmissionsEmpty() async throws {
         let cookie = try await loginAsAdmin()
 
-        try app.test(.GET, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -198,7 +198,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         try await insertSubmission(id: "sub_ls1", testSetupID: "setup_001")
         try await insertSubmission(id: "sub_ls2", testSetupID: "setup_002")
 
-        try app.test(.GET, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -213,7 +213,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         try await insertSubmission(id: "sub_f2", testSetupID: "setup_BBB")
         try await insertSubmission(id: "sub_f3", testSetupID: "setup_AAA")
 
-        try app.test(.GET, "/api/v1/submissions?testSetupID=setup_AAA", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions?testSetupID=setup_AAA", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -232,7 +232,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             attemptNumber: 3
         )
 
-        try app.test(.GET, "/api/v1/submissions", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -255,7 +255,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             attemptNumber: 2
         )
 
-        try app.test(.GET, "/api/v1/submissions/sub_gs1", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_gs1", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -271,7 +271,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let cookie = try await loginAsAdmin()
         try await insertSubmission(id: "sub_ts1")
 
-        try app.test(.GET, "/api/v1/submissions/sub_ts1", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_ts1", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -283,7 +283,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     func testGetSubmissionNotFound() async throws {
         let cookie = try await loginAsAdmin()
 
-        try app.test(.GET, "/api/v1/submissions/nonexistent", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/nonexistent", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -295,7 +295,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     func testGetResultsNotFoundForUnknownSubmission() async throws {
         let cookie = try await loginAsAdmin()
 
-        try app.test(.GET, "/api/v1/submissions/no_such_sub/results", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/no_such_sub/results", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -306,7 +306,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let cookie = try await loginAsAdmin()
         try await insertSubmission(id: "sub_pending")
 
-        try app.test(.GET, "/api/v1/submissions/sub_pending/results", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_pending/results", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -322,7 +322,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_res1", collection: collection)
 
-        try app.test(.GET, "/api/v1/submissions/sub_res1/results", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_res1/results", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -357,7 +357,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_fail", collection: collection)
 
-        try app.test(.GET, "/api/v1/submissions/sub_fail/results", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_fail/results", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -381,7 +381,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_tier1", collection: collection)
 
-        try app.test(.GET, "/api/v1/submissions/sub_tier1/results?tiers=public", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_tier1/results?tiers=public", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -408,7 +408,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_tier2", collection: collection)
 
-        try app.test(.GET, "/api/v1/submissions/sub_tier2/results?tiers=public,release", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_tier2/results?tiers=public,release", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
@@ -434,7 +434,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_all", collection: collection)
 
-        try app.test(.GET, "/api/v1/submissions/sub_all/results", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_all/results", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
