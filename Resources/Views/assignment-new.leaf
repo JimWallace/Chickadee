@@ -404,7 +404,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                 var notebookBytes = e.target.result;
                 fetch('/instructor/scan-notebook', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-csrf-token': csrfToken
+                    },
                     body: notebookBytes
                 })
                 .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })

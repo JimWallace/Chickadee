@@ -761,7 +761,10 @@ function fetchTemplates() {
     return fetch('/instructor/scan-notebook', {
         method: 'POST',
         body: JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }),
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken
+        }
     })
     .then(r => r.ok ? r.json() : [])
     .then(functions => {
