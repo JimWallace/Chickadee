@@ -187,6 +187,35 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         }
     }
 
+    func testAcceptsLargeValidSignatureOverRealHTTP() async throws {
+        let path = "/internal/worker/ping"
+        let now = Int64(Date().timeIntervalSince1970)
+        let largeValue = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
+        let body = ByteBuffer(string: #"{"workerID":"test","details":"\#(largeValue)"}"#)
+        let headers = signedHeaders(
+            method: .POST,
+            path: path,
+            body: body,
+            timestamp: now,
+            nonce: UUID().uuidString
+        )
+
+        try await withApp(try await makeApp()) { app in
+            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+                .POST,
+                path,
+                headers: headers,
+                body: body
+            ) { res async in
+                XCTAssertEqual(
+                    res.status,
+                    .ok,
+                    "HMAC with a large streamed body must succeed over real HTTP"
+                )
+            }
+        }
+    }
+
     private func hmacSHA256Hex(message: String, secret: String) -> String {
         let key = SymmetricKey(data: Data(secret.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)

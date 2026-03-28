@@ -56,9 +56,11 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
         // Collect the request body before hashing so it is available in middleware
         // even if Vapor delivers it as a stream (defence-in-depth).
-        _ = try? await request.body.collect(upTo: request.application.routes.defaultMaxBodySize.value)
+        let collectedBody = try? await request.body.collect(
+            upTo: request.application.routes.defaultMaxBodySize.value
+        )
 
-        let bodyHash = sha256Hex(bodyBytes(request))
+        let bodyHash = sha256Hex(bodyBytes(request, collectedBody: collectedBody))
         let signedPayload = [
             request.method.rawValue.uppercased(),
             request.url.path,
@@ -128,7 +130,10 @@ private extension Request {
     }
 }
 
-private func bodyBytes(_ request: Request) -> [UInt8] {
+private func bodyBytes(_ request: Request, collectedBody: ByteBuffer?) -> [UInt8] {
+    if var collectedBody {
+        return collectedBody.readBytes(length: collectedBody.readableBytes) ?? []
+    }
     guard var data = request.body.data else { return [] }
     return data.readBytes(length: data.readableBytes) ?? []
 }
