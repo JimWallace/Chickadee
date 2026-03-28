@@ -282,6 +282,21 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertTrue(props.testSuites.isEmpty)
     }
 
+    func testNewAssignmentPageOmitsLegacyTestColumn() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(.GET, "/instructor/new", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = res.body.string
+            XCTAssertFalse(body.contains("<th>Test?</th>"))
+            XCTAssertTrue(body.contains("<th>Tier</th>"))
+            XCTAssertTrue(body.contains("support"))
+        })
+    }
+
     // MARK: - POST /instructor/:id/open
 
     func testOpenAssignmentSetsIsOpenTrue() async throws {

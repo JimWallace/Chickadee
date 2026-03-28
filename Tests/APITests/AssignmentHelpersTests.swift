@@ -307,6 +307,36 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
     }
 
+    func testBuildSuiteEntriesTreatsAnyNonSupportTierAsATestWhenIsTestIsMissing() throws {
+        let suiteFiles = [
+            makeFile(named: "assignment.ipynb", contents: "{}"),
+            makeFile(named: "test_q1.py", contents: "print('q1')"),
+            makeFile(named: "notes.txt", contents: "support")
+        ]
+
+        let configJSON = """
+        [
+          {"index":0,"tier":"support","order":1},
+          {"index":1,"tier":"release","order":2,"points":2},
+          {"index":2,"tier":"support","order":3}
+        ]
+        """
+
+        let entries = try buildSuiteEntries(
+            suiteFiles: suiteFiles,
+            storedNameByIndex: [
+                0: "assignment.ipynb",
+                1: "test_q1.py",
+                2: "notes.txt"
+            ],
+            suiteConfigJSON: configJSON
+        )
+
+        XCTAssertEqual(entries.map(\.script), ["test_q1.py"])
+        XCTAssertEqual(entries.first?.tier, "release")
+        XCTAssertEqual(entries.first?.points, 2)
+    }
+
     func testCreateRunnerSetupZipDeduplicatesStoredNamesAndDetectsMakefile() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-\(UUID().uuidString)")
@@ -634,12 +664,45 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertEqual(rows[1].isTest, true)
     }
 
+    func testResolveEditSuiteFilesTreatsLegacyUncheckedRowsAsSupport() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("resolve-edit-legacy-support-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try makeZip(at: zipPath, entries: [
+            ("test_q1.py", "print('q1')"),
+            ("notes.txt", "notes")
+        ])
+
+        let resolved = try resolveEditSuiteFiles(
+            setupZipPath: zipPath,
+            setupManifestJSON: "{}",
+            uploadedSuiteFiles: [],
+            suiteConfigJSON: """
+            [
+              {"source":"existing","name":"test_q1.py","isTest":false,"tier":"public","order":1},
+              {"source":"existing","name":"notes.txt","tier":"support","order":2}
+            ]
+            """
+        )
+
+        let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
+        let rows = try JSONDecoder().decode([DecodedReindexedSuiteConfigRow].self, from: configData)
+        XCTAssertEqual(rows.map(\.tier), ["support", "support"])
+        XCTAssertEqual(rows.map(\.isTest), [false, false])
+    }
+
     func testNormalizeTierAndInferredOrderHandleFallbackCases() {
         XCTAssertEqual(normalizeTier(nil), "public")
         XCTAssertEqual(normalizeTier("VISIBLE"), "public")
+        XCTAssertEqual(normalizeTier("support"), "support")
         XCTAssertEqual(normalizeTier("secret"), "secret")
         XCTAssertEqual(normalizeTier("release"), "release")
         XCTAssertEqual(normalizeTier("mystery"), "public")
+        XCTAssertEqual(normalizeTier("public", isTest: false), "support")
+        XCTAssertEqual(normalizeTier(nil, isTest: false), "support")
 
         XCTAssertEqual(inferredOrder(from: "12_release.py"), 12)
         XCTAssertEqual(inferredOrder(from: "007_secret.py"), 7)
@@ -716,5 +779,95 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertNil(extractZipEntry(zipPath: zipPath, entryName: "remove.py"))
         let keepData = try XCTUnwrap(extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
         XCTAssertEqual(String(data: keepData, encoding: .utf8), "print('keep-updated')")
+    }
+
+    func testPracticeLabBrowserSetupRoundTripPreservesAllSuiteFiles() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("practice-lab-roundtrip-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let originalZipPath = tempRoot.appendingPathComponent("practice.zip").path
+        try makeZip(at: originalZipPath, entries: [
+            ("assignment.ipynb", "{}"),
+            ("test.properties.json", #"{"gradingMode":"browser"}"#),
+            ("test_q1_bmi.py", "print('q1')"),
+            ("test_q2_bp.py", "print('q2')"),
+            ("test_q3_hr_zone.py", "print('q3')"),
+            ("test_q4_patients.py", "print('q4')"),
+            ("test_q5_dose.py", "print('q5')"),
+            ("test_q6_risk.py", "print('q6')")
+        ])
+
+        let manifest = """
+        {
+          "schemaVersion": 1,
+          "gradingMode": "browser",
+          "requiredFiles": [],
+          "testSuites": [
+            {"tier":"public","script":"test_q1_bmi.py"},
+            {"tier":"public","script":"test_q2_bp.py"},
+            {"tier":"public","script":"test_q3_hr_zone.py"},
+            {"tier":"public","script":"test_q4_patients.py"},
+            {"tier":"release","script":"test_q5_dose.py"},
+            {"tier":"release","script":"test_q6_risk.py"}
+          ],
+          "timeLimitSeconds": 10,
+          "makefile": null,
+          "starterNotebook": "assignment.ipynb"
+        }
+        """
+
+        let resolved = try resolveEditSuiteFiles(
+            setupZipPath: originalZipPath,
+            setupManifestJSON: manifest,
+            uploadedSuiteFiles: [],
+            suiteConfigJSON: nil
+        )
+
+        XCTAssertEqual(
+            resolved.files.map(\.filename),
+            [
+                "test.properties.json",
+                "test_q1_bmi.py",
+                "test_q2_bp.py",
+                "test_q3_hr_zone.py",
+                "test_q4_patients.py",
+                "test_q5_dose.py",
+                "test_q6_risk.py"
+            ]
+        )
+
+        let rebuiltZipPath = tempRoot.appendingPathComponent("rebuilt.zip").path
+        _ = try createRunnerSetupZip(
+            suiteFiles: resolved.files,
+            suiteConfigJSON: resolved.reindexedSuiteConfigJSON,
+            zipPath: rebuiltZipPath
+        )
+
+        let setup = APITestSetup(
+            id: "practice_lab",
+            manifest: manifest,
+            zipPath: rebuiltZipPath,
+            notebookPath: tempRoot.appendingPathComponent("assignment.ipynb").path,
+            courseID: UUID()
+        )
+        try Data("{}".utf8).write(to: URL(fileURLWithPath: setup.notebookPath ?? ""))
+
+        let result = currentSetupFiles(for: setup, assignmentID: "asg_practice", hasValidationSolution: false)
+
+        XCTAssertEqual(
+            result.existingSuiteRows.map(\.name),
+            [
+                "test_q1_bmi.py",
+                "test_q2_bp.py",
+                "test_q3_hr_zone.py",
+                "test_q4_patients.py",
+                "test_q5_dose.py",
+                "test_q6_risk.py",
+                "test.properties.json"
+            ]
+        )
+        XCTAssertEqual(result.existingSuiteRows.last?.tier, "support")
     }
 }

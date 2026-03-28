@@ -1146,9 +1146,9 @@ struct AssignmentRoutes: RouteCollection {
 
         try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
 
-        let tier       = normalizeTier(body.tier)
+        let tier       = normalizeTier(body.tier, isTest: body.isTest)
         let points     = max(1, body.points ?? 1)
-        let shouldTest = (body.isTest ?? true) && tier != "support"
+        let shouldTest = tier != "support"
 
         if shouldTest {
             let entry = ConfiguredSuiteEntry(
