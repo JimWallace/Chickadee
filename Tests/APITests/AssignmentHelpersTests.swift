@@ -676,4 +676,45 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertEqual(setupZip.testSuites.count, 0)
         XCTAssertTrue(FileManager.default.fileExists(atPath: zipPath))
     }
+
+    func testCreateRunnerSetupZipReplacesExistingArchiveInsteadOfMergingRemovedFiles() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("runner-setup-replace-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+
+        _ = try createRunnerSetupZip(
+            suiteFiles: [
+                makeFile(named: "keep.py", contents: "print('keep')"),
+                makeFile(named: "remove.py", contents: "print('remove')")
+            ],
+            suiteConfigJSON: """
+            [
+              {"index":0,"isTest":true,"tier":"public","points":1},
+              {"index":1,"isTest":true,"tier":"public","points":1}
+            ]
+            """,
+            zipPath: zipPath
+        )
+
+        _ = try createRunnerSetupZip(
+            suiteFiles: [
+                makeFile(named: "keep.py", contents: "print('keep-updated')")
+            ],
+            suiteConfigJSON: """
+            [
+              {"index":0,"isTest":true,"tier":"public","points":1}
+            ]
+            """,
+            zipPath: zipPath
+        )
+
+        let entries = Set(listZipEntries(zipPath: zipPath))
+        XCTAssertEqual(entries, ["keep.py"])
+        XCTAssertNil(extractZipEntry(zipPath: zipPath, entryName: "remove.py"))
+        let keepData = try XCTUnwrap(extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
+        XCTAssertEqual(String(data: keepData, encoding: .utf8), "print('keep-updated')")
+    }
 }
