@@ -819,4 +819,28 @@ for _module_name in _tr.student_module_names_in_load_order():
             setattr(builtins, _name, _value)
 `;
 
+    const testHooks = globalThis.__CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__;
+    if (testHooks) {
+        testHooks.exports = {
+            runAndSubmit,
+            extractNotebook,
+            runPyScript,
+            buildCollection,
+            makeOutcome,
+            removeRecursive,
+            fetchBytes,
+            fetchText,
+            toMessage,
+            __resetStateForTests() {
+                _pyodide = null;
+                _JSZip   = null;
+                if (statusEl) {
+                    statusEl.textContent = '';
+                    statusEl.className   = '';
+                    statusEl.hidden      = false;
+                }
+            },
+        };
+    }
+
 })();
