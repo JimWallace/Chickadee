@@ -352,6 +352,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     // ── Generate Tests from Solution ─────────────────────────────────────────
 
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     var solutionInput   = document.querySelector('input[name="solutionNotebookFile"]');
     var genPanel        = document.getElementById('gen-tests-panel');
     var scanBtn         = document.getElementById('scan-solution-btn');
