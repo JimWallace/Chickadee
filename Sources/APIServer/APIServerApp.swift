@@ -395,7 +395,7 @@ actor LocalRunnerManager {
             return
         }
 
-        let secret = (await app.workerSecretStore.runtimeOverrideValue() ?? "").trimmingCharacters(
+        let secret = (await app.workerSecretStore.effectiveSecret() ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         guard !secret.isEmpty else {
@@ -409,7 +409,10 @@ actor LocalRunnerManager {
         let apiBaseURL = "http://\(host):\(port)"
         let workerID = "autospawn-\(UUID().uuidString.lowercased().prefix(8))"
         let runnerBinary = workDir + ".build/debug/chickadee-runner"
-        let launchViaBinary = FileManager.default.isExecutableFile(atPath: runnerBinary)
+        let launchViaBinary = shouldLaunchLocalRunnerViaBinary(
+            workDir: workDir,
+            runnerBinaryPath: runnerBinary
+        )
         let argsPrefix = launchViaBinary ? [runnerBinary] : ["swift", "run", "chickadee-runner"]
 
         let proc = Process()
@@ -481,6 +484,32 @@ actor LocalRunnerManager {
         }
         process = nil
     }
+}
+
+func shouldLaunchLocalRunnerViaBinary(workDir: String, runnerBinaryPath: String) -> Bool {
+    guard FileManager.default.isExecutableFile(atPath: runnerBinaryPath) else {
+        return false
+    }
+
+    // In local development, `swift run chickadee-server` can rebuild the server
+    // target without refreshing the standalone runner executable. If the server
+    // binary is newer, prefer `swift run chickadee-runner` so autostart uses code
+    // that matches the current checkout instead of a stale cached binary.
+    let serverBinaryPath = workDir + ".build/debug/chickadee-server"
+    guard let runnerModifiedAt = fileModificationDate(path: runnerBinaryPath),
+          let serverModifiedAt = fileModificationDate(path: serverBinaryPath) else {
+        return true
+    }
+
+    return runnerModifiedAt >= serverModifiedAt
+}
+
+func fileModificationDate(path: String) -> Date? {
+    guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+          let modifiedAt = attributes[.modificationDate] as? Date else {
+        return nil
+    }
+    return modifiedAt
 }
 
 func normalizedHost(_ raw: String) -> String {

@@ -242,6 +242,54 @@ final class APIServerAppTests: XCTestCase {
         XCTAssertEqual(normalizedHost(" example.com "), "example.com")
     }
 
+    func testShouldLaunchLocalRunnerViaBinaryRejectsStaleRunnerBinary() throws {
+        let dir = try makeTempDir(named: "apiserver-runner-launch-stale")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+
+        let buildDir = URL(fileURLWithPath: dir).appendingPathComponent(".build/debug", isDirectory: true)
+        try FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
+
+        let runnerPath = buildDir.appendingPathComponent("chickadee-runner").path
+        let serverPath = buildDir.appendingPathComponent("chickadee-server").path
+        XCTAssertTrue(FileManager.default.createFile(atPath: runnerPath, contents: Data()))
+        XCTAssertTrue(FileManager.default.createFile(atPath: serverPath, contents: Data()))
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755, .modificationDate: Date(timeIntervalSince1970: 100)],
+            ofItemAtPath: runnerPath
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 200)],
+            ofItemAtPath: serverPath
+        )
+
+        XCTAssertFalse(shouldLaunchLocalRunnerViaBinary(workDir: dir + "/", runnerBinaryPath: runnerPath))
+    }
+
+    func testShouldLaunchLocalRunnerViaBinaryAcceptsFreshRunnerBinary() throws {
+        let dir = try makeTempDir(named: "apiserver-runner-launch-fresh")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+
+        let buildDir = URL(fileURLWithPath: dir).appendingPathComponent(".build/debug", isDirectory: true)
+        try FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
+
+        let runnerPath = buildDir.appendingPathComponent("chickadee-runner").path
+        let serverPath = buildDir.appendingPathComponent("chickadee-server").path
+        XCTAssertTrue(FileManager.default.createFile(atPath: runnerPath, contents: Data()))
+        XCTAssertTrue(FileManager.default.createFile(atPath: serverPath, contents: Data()))
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755, .modificationDate: Date(timeIntervalSince1970: 300)],
+            ofItemAtPath: runnerPath
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 200)],
+            ofItemAtPath: serverPath
+        )
+
+        XCTAssertTrue(shouldLaunchLocalRunnerViaBinary(workDir: dir + "/", runnerBinaryPath: runnerPath))
+    }
+
     func testEnvironmentBoolRecognizesSupportedValuesAndRejectsInvalidInput() {
         setEnv("BOOL_TRUE", " YeS ")
         setEnv("BOOL_FALSE", "0")

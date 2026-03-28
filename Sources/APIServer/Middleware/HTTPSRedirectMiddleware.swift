@@ -11,6 +11,13 @@ struct HTTPSRedirectMiddleware: AsyncMiddleware {
         guard configuration.enforceHTTPS else {
             return try await next.respond(to: request)
         }
+        // Worker routes use HMAC authentication and commonly run over the
+        // private Docker/network path (`http://server:8080`). Exempt them from
+        // the app-layer HTTPS redirect so runners do not need to traverse the
+        // public TLS terminator to process jobs.
+        guard !request.url.path.hasPrefix("/api/v1/worker/") else {
+            return try await next.respond(to: request)
+        }
         guard !request.isHTTPSRequest(trustForwardedProto: configuration.trustForwardedProto) else {
             return try await next.respond(to: request)
         }

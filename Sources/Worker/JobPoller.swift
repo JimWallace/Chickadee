@@ -8,6 +8,7 @@ import Foundation
 import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import Core
+import Crypto
 
 protocol JobPolling: Sendable {
     func requestJob() async throws -> Core.Job?
@@ -44,6 +45,7 @@ struct JobPoller: Sendable {
         )
         request.httpBody = try JSONEncoder().encode(body)
         signer.sign(&request)
+        logSignedRequest("claim", request: request)
 
         let (data, response) = try await Self.session.data(for: request)
 
@@ -55,7 +57,9 @@ struct JobPoller: Sendable {
         case 200:
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(Core.Job.self, from: data)
+            let job = try decoder.decode(Core.Job.self, from: data)
+            fputs("[\(workerID)] Claimed job \(job.submissionID) submissionURL=\(job.submissionURL.absoluteString) testSetupURL=\(job.testSetupURL.absoluteString)\n", stderr)
+            return job
         case 204:
             return nil
         default:
@@ -74,6 +78,22 @@ private struct WorkerRequestPayload: Encodable {
     let hostname: String
 }
 
+private func logSignedRequest(_ label: String, request: URLRequest) {
+    let method = (request.httpMethod ?? "GET").uppercased()
+    let path = request.url?.path ?? "/"
+    let host = request.url?.host ?? "<nil>"
+    let scheme = request.url?.scheme ?? "<nil>"
+    let timestamp = request.value(forHTTPHeaderField: "X-Worker-Timestamp") ?? "<missing>"
+    let nonce = request.value(forHTTPHeaderField: "X-Worker-Nonce") ?? "<missing>"
+    let signature = request.value(forHTTPHeaderField: "X-Worker-Signature") ?? "<missing>"
+    let bodyHash = sha256Hex(request.httpBody.map(Array.init) ?? [])
+    fputs("[worker-http] \(label) \(method) \(scheme)://\(host)\(path) bodyHash=\(bodyHash) ts=\(timestamp) nonce=\(nonce) sigPrefix=\(String(signature.prefix(12)))\n", stderr)
+}
+
+private func sha256Hex(_ bytes: [UInt8]) -> String {
+    Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
+}
+
 enum JobPollerError: Error, LocalizedError {
     case unexpectedResponse
     case httpError(Int, String)
@@ -85,5 +105,11 @@ enum JobPollerError: Error, LocalizedError {
         case .httpError(let code, let body):
             return "API server returned HTTP \(code): \(body)"
         }
+    }
+}
+
+private extension Data {
+    func hexEncodedString() -> String {
+        map { String(format: "%02x", $0) }.joined()
     }
 }

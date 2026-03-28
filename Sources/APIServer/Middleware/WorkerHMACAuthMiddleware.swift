@@ -27,23 +27,35 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         let sharedSecret = (await request.application.workerSecretStore.effectiveSecret() ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let workerID = request.headers.first(name: "X-Worker-Id")
 
         guard !sharedSecret.isEmpty else {
             request.logger.warning("Worker HMAC auth: RUNNER_SHARED_SECRET is not configured.")
             throw Abort(.unauthorized, reason: "Worker auth is not configured.")
         }
 
-        let timestampHeader = try request.requireWorkerHeader("X-Worker-Timestamp")
-        let nonce           = try request.requireWorkerHeader("X-Worker-Nonce")
-        let signature       = try request.requireWorkerHeader("X-Worker-Signature")
-        let workerID        = request.headers.first(name: "X-Worker-Id")
+        let timestampHeader = try request.requireWorkerHeader("X-Worker-Timestamp", request: request)
+        let nonce           = try request.requireWorkerHeader("X-Worker-Nonce", request: request)
+        let signature       = try request.requireWorkerHeader("X-Worker-Signature", request: request)
 
         guard let timestamp = Int64(timestampHeader) else {
+            logWorkerAuthFailure(
+                request: request,
+                workerID: workerID,
+                reason: "invalid_timestamp",
+                details: "value=\(timestampHeader)"
+            )
             throw Abort(.unauthorized, reason: "Invalid worker timestamp.")
         }
 
         let now = Int64(Date().timeIntervalSince1970)
         guard abs(now - timestamp) <= maxClockSkewSeconds else {
+            logWorkerAuthFailure(
+                request: request,
+                workerID: workerID,
+                reason: "timestamp_out_of_window",
+                details: "value=\(timestamp) now=\(now) skew=\(now - timestamp)"
+            )
             throw Abort(.unauthorized, reason: "Worker request timestamp is outside the accepted window.")
         }
 
@@ -51,6 +63,12 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         let wasInserted = await request.application.workerNonceStore
             .insertIfNew(nonceKey, now: now, ttlSeconds: nonceTTLSeconds)
         guard wasInserted else {
+            logWorkerAuthFailure(
+                request: request,
+                workerID: workerID,
+                reason: "replay_detected",
+                details: "nonce=\(nonce)"
+            )
             throw Abort(.unauthorized, reason: "Replay detected.")
         }
 
@@ -69,6 +87,18 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
         let expectedSignature = hmacSHA256Hex(message: signedPayload, secret: sharedSecret)
         guard constantTimeEquals(expectedSignature.lowercased(), signature.lowercased()) else {
+            logWorkerAuthFailure(
+                request: request,
+                workerID: workerID,
+                reason: "invalid_signature",
+                details: [
+                    "bodyHash=\(bodyHash)",
+                    "timestamp=\(timestampHeader)",
+                    "nonce=\(nonce)",
+                    "expectedPrefix=\(signaturePrefix(expectedSignature))",
+                    "receivedPrefix=\(signaturePrefix(signature))"
+                ].joined(separator: " ")
+            )
             throw Abort(.unauthorized, reason: "Invalid worker signature.")
         }
 
@@ -120,12 +150,36 @@ actor WorkerNonceStore {
 // MARK: - Private helpers
 
 private extension Request {
-    func requireWorkerHeader(_ name: String) throws -> String {
+    func requireWorkerHeader(_ name: String, request: Request) throws -> String {
         guard let value = headers.first(name: name), !value.isEmpty else {
+            logWorkerAuthFailure(
+                request: request,
+                workerID: headers.first(name: "X-Worker-Id"),
+                reason: "missing_header",
+                details: "header=\(name)"
+            )
             throw Abort(.unauthorized, reason: "Missing worker auth header: \(name)")
         }
         return value
     }
+}
+
+private func logWorkerAuthFailure(
+    request: Request,
+    workerID: String?,
+    reason: String,
+    details: String
+) {
+    let workerLabel = (workerID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        ? workerID!
+        : "_anonymous"
+    request.logger.warning(
+        "Worker HMAC auth failed: reason=\(reason) worker=\(workerLabel) method=\(request.method.rawValue.uppercased()) path=\(request.url.path) details=\(details)"
+    )
+}
+
+private func signaturePrefix(_ value: String, count: Int = 12) -> String {
+    String(value.prefix(count))
 }
 
 private func bodyBytes(_ request: Request) -> [UInt8] {

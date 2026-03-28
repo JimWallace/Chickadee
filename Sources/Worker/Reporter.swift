@@ -7,6 +7,7 @@ import Foundation
 import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import Core
+import Crypto
 
 protocol Reporting: Sendable {
     func report(_ collection: TestOutcomeCollection) async throws
@@ -40,6 +41,7 @@ struct Reporter: Sendable {
         encoder.dateEncodingStrategy = .iso8601
         request.httpBody = try encoder.encode(collection)
         signer.sign(&request)
+        logSignedRequest("report", request: request)
 
         let (data, response) = try await Self.session.data(for: request)
 
@@ -51,6 +53,22 @@ struct Reporter: Sendable {
             throw ReporterError.httpError(http.statusCode, body)
         }
     }
+}
+
+private func logSignedRequest(_ label: String, request: URLRequest) {
+    let method = (request.httpMethod ?? "GET").uppercased()
+    let path = request.url?.path ?? "/"
+    let host = request.url?.host ?? "<nil>"
+    let scheme = request.url?.scheme ?? "<nil>"
+    let timestamp = request.value(forHTTPHeaderField: "X-Worker-Timestamp") ?? "<missing>"
+    let nonce = request.value(forHTTPHeaderField: "X-Worker-Nonce") ?? "<missing>"
+    let signature = request.value(forHTTPHeaderField: "X-Worker-Signature") ?? "<missing>"
+    let bodyHash = sha256Hex(request.httpBody.map(Array.init) ?? [])
+    fputs("[worker-http] \(label) \(method) \(scheme)://\(host)\(path) bodyHash=\(bodyHash) ts=\(timestamp) nonce=\(nonce) sigPrefix=\(String(signature.prefix(12)))\n", stderr)
+}
+
+private func sha256Hex(_ bytes: [UInt8]) -> String {
+    Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
 }
 
 extension Reporter: Reporting {}
@@ -66,5 +84,11 @@ enum ReporterError: Error, LocalizedError {
         case .httpError(let code, let body):
             return "API server returned HTTP \(code): \(body)"
         }
+    }
+}
+
+private extension Data {
+    func hexEncodedString() -> String {
+        map { String(format: "%02x", $0) }.joined()
     }
 }

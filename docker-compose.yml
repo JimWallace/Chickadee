@@ -76,6 +76,9 @@ services:
       # To enable OS-level sandboxing (Linux unshare namespaces),
       # add "--sandbox" here and "cap_add: [SYS_ADMIN]" to this service.
     environment:
+      # If a fixed secret is configured in .env, pass it to the runner too.
+      # Otherwise the runner will fall back to /data/.worker-secret.
+      RUNNER_SHARED_SECRET:         ${RUNNER_SHARED_SECRET:-}
     networks:
       - chickadee
     depends_on:

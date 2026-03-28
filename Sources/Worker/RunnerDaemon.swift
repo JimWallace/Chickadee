@@ -401,6 +401,10 @@ actor WorkerDaemon {
         request.httpMethod = "GET"
         request.timeoutInterval = 5
         signer.sign(&request)
+        let timestamp = request.value(forHTTPHeaderField: "X-Worker-Timestamp") ?? "<missing>"
+        let nonce = request.value(forHTTPHeaderField: "X-Worker-Nonce") ?? "<missing>"
+        let signature = request.value(forHTTPHeaderField: "X-Worker-Signature") ?? "<missing>"
+        fputs("[\(workerID)] Downloading \(url.absoluteString) ts=\(timestamp) nonce=\(nonce) sigPrefix=\(String(signature.prefix(12)))\n", stderr)
         let (tmpURL, response) = try await Self.downloadSession.download(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw WorkerDaemonError.downloadFailed(url)

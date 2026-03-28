@@ -27,6 +27,7 @@ final class HTTPSRedirectMiddlewareTests: XCTestCase {
         app.middleware.use(HTTPSRedirectMiddleware(configuration: config))
         app.get("test") { _ in "ok" }
         app.post("submit") { _ in "submitted" }
+        app.post("api", "v1", "worker", "request") { _ in "worker-ok" }
         return app
     }
 
@@ -77,6 +78,17 @@ final class HTTPSRedirectMiddlewareTests: XCTestCase {
                 req.headers.add(name: .host, value: "example.com")
             }, afterResponse: { res async in
                 XCTAssertEqual(res.status, .upgradeRequired)
+            })
+        }
+    }
+
+    func testWorkerPOSTBypassesHTTPSEnforcement() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.POST, "/api/v1/worker/request", beforeRequest: { req async in
+                req.headers.add(name: .host, value: "server:8080")
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, "worker-ok")
             })
         }
     }
