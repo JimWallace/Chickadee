@@ -839,6 +839,11 @@ func createRunnerSetupZip(
     if storedNameByIndex.isEmpty {
         try writeEmptyZip(to: zipPath)
     } else {
+        // Rebuilding an existing setup zip must start from a clean archive.
+        // `zip -r existing.zip .` updates/adds entries but does not remove files
+        // that are absent from the new source directory, which makes deleted
+        // suite/support files reappear on the next edit.
+        try? fm.removeItem(atPath: zipPath)
         let zip = Process()
         zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
         zip.currentDirectoryURL = tempDir
