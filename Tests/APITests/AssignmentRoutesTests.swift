@@ -115,7 +115,9 @@ final class AssignmentRoutesTests: XCTestCase {
         csrf: String,
         assignmentName: String,
         assignmentNotebook: String,
-        solutionNotebook: String
+        solutionNotebook: String,
+        suiteFiles: [(filename: String, contentType: String, content: String)] = [],
+        suiteConfig: String? = nil
     ) -> ByteBuffer {
         var body = ByteBufferAllocator().buffer(capacity: 4096)
 
@@ -146,6 +148,17 @@ final class AssignmentRoutesTests: XCTestCase {
             filename: "solution.ipynb",
             data: Data(solutionNotebook.utf8)
         )
+        for suiteFile in suiteFiles {
+            appendFile(
+                "suiteFiles",
+                filename: suiteFile.filename,
+                contentType: suiteFile.contentType,
+                data: Data(suiteFile.content.utf8)
+            )
+        }
+        if let suiteConfig {
+            appendField("suiteConfig", suiteConfig)
+        }
         body.writeString("--\(boundary)--\r\n")
         return body
     }
@@ -280,6 +293,64 @@ final class AssignmentRoutesTests: XCTestCase {
         let setupManifest = try XCTUnwrap(setup?.manifest.data(using: .utf8))
         let props = try JSONDecoder().decode(TestProperties.self, from: setupManifest)
         XCTAssertTrue(props.testSuites.isEmpty)
+    }
+
+    func testSaveNewAssignmentPreservesMultipleUploadedSuiteFiles() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        let boundary = "Boundary-New-MultiSuites"
+        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+        let suiteConfig = """
+        [
+          {"index":0,"tier":"public","order":1,"points":1},
+          {"index":1,"tier":"public","order":2,"points":1},
+          {"index":2,"tier":"support","order":3,"points":1}
+        ]
+        """
+
+        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartAssignmentBody(
+                boundary: boundary,
+                csrf: csrf,
+                assignmentName: "Practice Lab",
+                assignmentNotebook: notebook,
+                solutionNotebook: notebook,
+                suiteFiles: [
+                    ("test_q1.py", "text/plain", "print('q1')"),
+                    ("test_q2.py", "text/plain", "print('q2')"),
+                    ("test.properties.json", "application/json", #"{"gradingMode":"browser"}"#)
+                ],
+                suiteConfig: suiteConfig
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db)
+            .filter(\.$title == "Practice Lab")
+            .first()
+        let setupID = try XCTUnwrap(assignment?.testSetupID)
+        let setup = try await APITestSetup.find(setupID, on: app.db)
+        XCTAssertNotNil(setup)
+
+        let props = try JSONDecoder().decode(
+            TestProperties.self,
+            from: try XCTUnwrap(setup?.manifest.data(using: .utf8))
+        )
+        XCTAssertEqual(props.testSuites.map(\.script), ["test_q1.py", "test_q2.py"])
+
+        let zipEntries = Set(listZipEntries(zipPath: try XCTUnwrap(setup?.zipPath)))
+        XCTAssertTrue(zipEntries.contains("test_q1.py"))
+        XCTAssertTrue(zipEntries.contains("test_q2.py"))
+        XCTAssertTrue(zipEntries.contains("test.properties.json"))
     }
 
     func testNewAssignmentPageOmitsLegacyTestColumn() async throws {
