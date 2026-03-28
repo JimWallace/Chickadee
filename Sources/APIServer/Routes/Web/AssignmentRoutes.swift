@@ -366,7 +366,9 @@ struct AssignmentRoutes: RouteCollection {
         let sectionIDRaw = bodyMany?.sectionID ?? bodySingle?.sectionID
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw = bodyMany?.suiteFiles ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
+        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+            ?? bodyMany?.suiteFiles
+            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
         let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
 
         let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -900,7 +902,9 @@ struct AssignmentRoutes: RouteCollection {
         let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw = bodyMany?.suiteFiles ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
+        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+            ?? bodyMany?.suiteFiles
+            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
         let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
 
         let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

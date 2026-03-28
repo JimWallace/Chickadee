@@ -88,7 +88,7 @@ Create Assignment
 
     <label class="form-label">
         <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>)</span>
-        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple required>
+        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple required>
     </label>
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 

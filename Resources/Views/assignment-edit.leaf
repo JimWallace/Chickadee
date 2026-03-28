@@ -100,7 +100,7 @@
     </div>
 
     <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple style="display:none">
+    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 
     <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
