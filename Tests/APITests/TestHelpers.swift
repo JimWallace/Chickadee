@@ -78,6 +78,26 @@ extension Application {
             }
         )
     }
+
+    /// Fire a request and return the response directly, without a callback.
+    /// Useful for concurrent tests where multiple responses must be collected.
+    func asyncSendRequest(
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in }
+    ) async throws -> XCTHTTPResponse {
+        var captured: XCTHTTPResponse?
+        try await self.asyncTest(
+            method, path,
+            headers: headers,
+            body: body,
+            beforeRequest: beforeRequest,
+            afterResponse: { captured = $0 }
+        )
+        return captured!
+    }
 }
 
 // MARK: - Leaf / CSRF setup

@@ -7,11 +7,15 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 import ArgumentParser
 import Core
 
+private func writeToStandardError(_ message: String) {
+    FileHandle.standardError.write(Data(message.utf8))
+}
+
 // MARK: - Entry point
 
 @main
 struct WorkerCommand: AsyncParsableCommand {
-    static var configuration = CommandConfiguration(
+    static let configuration = CommandConfiguration(
         commandName: "chickadee-runner",
         abstract: "Chickadee build runner — polls the API server and processes submissions",
         version: ChickadeeVersion.current
@@ -34,7 +38,7 @@ struct WorkerCommand: AsyncParsableCommand {
 
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
-            fputs("Error: invalid --api-base-url '\(apiBaseURL)'\n", stderr)
+            writeToStandardError("Error: invalid --api-base-url '\(apiBaseURL)'\n")
             throw ExitCode.failure
         }
 
@@ -43,7 +47,7 @@ struct WorkerCommand: AsyncParsableCommand {
             cliWorkerSecret: workerSecret,
             environment: env
         ) else {
-            fputs("Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n", stderr)
+            writeToStandardError("Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n")
             throw ExitCode.failure
         }
 
@@ -61,7 +65,7 @@ struct WorkerCommand: AsyncParsableCommand {
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
-        fputs("Runner \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n", stderr)
+        writeToStandardError("Runner \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n")
         try await daemon.run()
     }
 }
@@ -164,7 +168,7 @@ actor WorkerDaemon {
                 do {
                     try await process(job)
                 } catch {
-                    fputs("[\(workerID)] Error processing job \(job.submissionID): \(error)\n", stderr)
+                    writeToStandardError("[\(workerID)] Error processing job \(job.submissionID): \(error)\n")
                     try? await reportProcessingFailure(job: job, error: error)
                 }
             } else {
@@ -177,7 +181,7 @@ actor WorkerDaemon {
     // MARK: - Job processing
 
     private func process(_ job: Job) async throws {
-        fputs("[\(workerID)] Processing submission \(job.submissionID)\n", stderr)
+        writeToStandardError("[\(workerID)] Processing submission \(job.submissionID)\n")
 
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
@@ -267,7 +271,7 @@ actor WorkerDaemon {
 
             let scriptURL = testSetupDir.appendingPathComponent(entry.script)
             guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-                fputs("[\(workerID)] Warning: script not found: \(entry.script)\n", stderr)
+                writeToStandardError("[\(workerID)] Warning: script not found: \(entry.script)\n")
                 continue
             }
 
@@ -288,7 +292,7 @@ actor WorkerDaemon {
         let collection = makeCollection(outcomes: outcomes, job: job)
         try await reporter.report(collection)
 
-        fputs("[\(workerID)] Reported result for \(job.submissionID) — \(collection.buildStatus.rawValue)\n", stderr)
+        writeToStandardError("[\(workerID)] Reported result for \(job.submissionID) — \(collection.buildStatus.rawValue)\n")
     }
 
     // MARK: - Script output interpretation

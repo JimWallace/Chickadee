@@ -11,7 +11,7 @@ import Glibc
 
 /// Runs a single test script and returns raw output.
 /// Implementations are responsible for enforcing the time limit.
-protocol ScriptRunner {
+protocol ScriptRunner: Sendable {
     func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput
 }
 
