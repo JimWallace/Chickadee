@@ -1,9 +1,9 @@
 # ============================================================
 # Stage 1 — Build
 # To update Swift: change the version tag here and in Stage 2.
-# Current: Swift 6.0 on Ubuntu 22.04 (jammy)
+# Current: Swift 6.3 on Ubuntu 22.04 (jammy)
 # ============================================================
-FROM swift:6.0-jammy AS build
+FROM swift:6.3-jammy AS build
 
 WORKDIR /build
 

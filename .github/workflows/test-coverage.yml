@@ -10,7 +10,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     container:
-      image: swift:6.0-jammy
+      image: swift:6.3-jammy
       options: --privileged
     env:
       MIN_COVERAGE_PERCENT: "60.0"

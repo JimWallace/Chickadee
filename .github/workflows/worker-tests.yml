@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: swift:6.0-jammy
+      image: swift:6.3-jammy
       options: --privileged
 
     steps:
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: swift:6.0-jammy
+      image: swift:6.3-jammy
       options: --privileged
 
     steps:
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: swift:6.0-jammy
+      image: swift:6.3-jammy
       options: --privileged
 
     steps:
