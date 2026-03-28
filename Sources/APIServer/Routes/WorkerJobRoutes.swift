@@ -16,61 +16,72 @@ struct WorkerJobRoutes: RouteCollection {
         let body = try req.content.decode(WorkerRequestBody.self)
         await req.application.workerActivityStore.markActive(workerID: body.workerID)
 
-        // Find the oldest pending student submission backed by a worker-mode test setup.
-        // Submissions for browser-mode test setups (gradingMode == .browser) are
-        // handled by the client-side WASM runner and must not be claimed here.
-        let studentCandidates = try await APISubmission.query(on: req.db)
-            .filter(\.$status == "pending")
-            .filter(\.$kind == APISubmission.Kind.student)
-            .sort(\.$submittedAt, .ascending)
-            .all()
+        // Atomically find and claim the best pending job.
+        // WorkerClaimQueue serializes concurrent calls at the application level;
+        // the inner transaction provides the DB-level guarantee for multi-process
+        // deployments where SQLite WAL serializes write transactions.
+        typealias ClaimedJob = (submission: APISubmission, setup: APITestSetup, manifest: TestProperties)
+        let claimed: ClaimedJob? = try await req.application.workerClaimQueue.run {
+        try await req.db.transaction { db -> ClaimedJob? in
+            // Find the oldest pending student submission backed by a worker-mode test setup.
+            // Submissions for browser-mode test setups (gradingMode == .browser) are
+            // handled by the client-side WASM runner and must not be claimed here.
+            let studentCandidates = try await APISubmission.query(on: db)
+                .filter(\.$status == "pending")
+                .filter(\.$kind == APISubmission.Kind.student)
+                .sort(\.$submittedAt, .ascending)
+                .all()
 
-        var workerModeStudent: (submission: APISubmission, setup: APITestSetup, manifest: TestProperties)?
-        for candidate in studentCandidates {
-            guard let setup = try await APITestSetup.find(candidate.testSetupID, on: req.db) else { continue }
-            let data = Data(setup.manifest.utf8)
-            guard
-                let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
-                manifest.gradingMode == .worker
-            else { continue }
-            workerModeStudent = (candidate, setup, manifest)
-            break
-        }
-
-        // Validation submissions are always worker-mode (instructors validate via worker).
-        let pendingValidation = try await APISubmission.query(on: req.db)
-            .filter(\.$status == "pending")
-            .filter(\.$kind == APISubmission.Kind.validation)
-            .sort(\.$submittedAt, .ascending)
-            .first()
-
-        // Prefer student submissions, fall back to validation.
-        let submission: APISubmission
-        let setup: APITestSetup
-        let manifest: TestProperties
-
-        if let wm = workerModeStudent {
-            submission = wm.submission
-            setup      = wm.setup
-            manifest   = wm.manifest
-        } else if let val = pendingValidation {
-            submission = val
-            guard let valSetup = try await APITestSetup.find(submission.testSetupID, on: req.db) else {
-                throw Abort(.internalServerError, reason: "TestSetup \(submission.testSetupID) not found")
+            var workerModeStudent: (APISubmission, APITestSetup, TestProperties)?
+            for candidate in studentCandidates {
+                guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
+                let data = Data(setup.manifest.utf8)
+                guard
+                    let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
+                    manifest.gradingMode == .worker
+                else { continue }
+                workerModeStudent = (candidate, setup, manifest)
+                break
             }
-            let valManifestData = Data(valSetup.manifest.utf8)
-            let valManifest     = try JSONDecoder().decode(TestProperties.self, from: valManifestData)
-            setup    = valSetup
-            manifest = valManifest
-        } else {
+
+            // Validation submissions are always worker-mode (instructors validate via worker).
+            let pendingValidation = try await APISubmission.query(on: db)
+                .filter(\.$status == "pending")
+                .filter(\.$kind == APISubmission.Kind.validation)
+                .sort(\.$submittedAt, .ascending)
+                .first()
+
+            // Prefer student submissions, fall back to validation.
+            let submission: APISubmission
+            let setup: APITestSetup
+            let manifest: TestProperties
+
+            if let wm = workerModeStudent {
+                (submission, setup, manifest) = wm
+            } else if let val = pendingValidation {
+                guard let valSetup = try await APITestSetup.find(val.testSetupID, on: db) else {
+                    throw Abort(.internalServerError, reason: "TestSetup \(val.testSetupID) not found")
+                }
+                let valManifestData = Data(valSetup.manifest.utf8)
+                let valManifest     = try JSONDecoder().decode(TestProperties.self, from: valManifestData)
+                (submission, setup, manifest) = (val, valSetup, valManifest)
+            } else {
+                return nil
+            }
+
+            // Claim inside the transaction — atomic with the select above.
+            submission.status     = "assigned"
+            submission.workerID   = body.workerID
+            submission.assignedAt = Date()
+            try await submission.save(on: db)
+
+            return (submission, setup, manifest)
+        } // end transaction
+        } // end workerClaimQueue.run
+
+        guard let (submission, setup, manifest) = claimed else {
             return Response(status: .noContent)
         }
-
-        // Atomically claim the submission for this worker.
-        submission.status     = "assigned"
-        submission.workerID   = body.workerID
-        submission.assignedAt = Date()
-        try await submission.save(on: req.db)
 
         let base = resolvedWorkerBaseURL(req: req)
 
@@ -136,4 +147,48 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
         return "localhost"
     }
     return host
+}
+
+// MARK: - Application-level claim serializer
+
+/// Ensures at most one worker-job claim operation executes at a time.
+/// This complements the DB transaction: SQLite WAL serializes write
+/// transactions in file-based deployments; this queue does the same for
+/// in-process scenarios (single-node servers, test environments).
+/// NSLock guards the waiting list — @unchecked Sendable is safe here.
+final class WorkerClaimQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var active = false
+
+    func run<T>(_ work: () async throws -> T) async throws -> T {
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            defer { lock.unlock() }
+            if active { waiting.append(c) } else { active = true; c.resume() }
+        }
+        defer { advance() }
+        return try await work()
+    }
+
+    private func advance() {
+        let next: CheckedContinuation<Void, Never>?
+        lock.lock()
+        if waiting.isEmpty { active = false; next = nil } else { next = waiting.removeFirst() }
+        lock.unlock()
+        next?.resume()
+    }
+}
+
+private struct WorkerClaimQueueKey: StorageKey {
+    typealias Value = WorkerClaimQueue
+}
+
+extension Application {
+    var workerClaimQueue: WorkerClaimQueue {
+        if let q = storage[WorkerClaimQueueKey.self] { return q }
+        let q = WorkerClaimQueue()
+        storage[WorkerClaimQueueKey.self] = q
+        return q
+    }
 }

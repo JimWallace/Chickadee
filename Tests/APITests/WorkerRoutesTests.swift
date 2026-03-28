@@ -232,6 +232,47 @@ final class WorkerRoutesTests: XCTestCase {
         })
     }
 
+    func testRequestJob_concurrentClaims_onlyOneSucceeds() async throws {
+        // One pending submission; two workers race to claim it.
+        // The transaction in requestJob must ensure only one succeeds.
+        let setup = try await makeTestSetup(id: "cc_setup", manifest: workerManifestJSON)
+        _ = try await makeSubmission(id: "cc_sub", setupID: setup.id!)
+
+        let path    = "/api/v1/worker/request"
+        let secret  = workerSecret      // String — Sendable
+        let testApp = app!              // Application — @unchecked Sendable
+
+        var responses: [XCTHTTPResponse] = []
+        try await withThrowingTaskGroup(of: XCTHTTPResponse.self) { group in
+            for workerID in ["w1", "w2"] {
+                // Compute per-worker values outside the task so the closure
+                // captures only Sendable types and avoids capturing `self`.
+                let body    = ByteBuffer(string: "{\"workerID\":\"\(workerID)\"}")
+                let headers = workerHMACHeaders(method: .POST, path: path,
+                                                body: body, workerSecret: secret)
+                group.addTask {
+                    return try await testApp.asyncSendRequest(.POST, path) { req in
+                        req.headers = headers
+                        req.body    = body
+                    }
+                }
+            }
+            for try await response in group {
+                responses.append(response)
+            }
+        }
+
+        XCTAssertEqual(responses.count, 2)
+        let statuses = responses.map(\.status)
+        XCTAssertTrue(statuses.contains(.ok),        "One worker must claim the job")
+        XCTAssertTrue(statuses.contains(.noContent), "The other worker must find nothing")
+
+        // The submission must be owned by exactly one worker.
+        let updated = try await APISubmission.find("cc_sub", on: app.db)
+        XCTAssertEqual(updated?.status, "assigned")
+        XCTAssertNotNil(updated?.workerID)
+    }
+
     // MARK: - GET /api/v1/worker/submissions/:id/download
 
     func testDownloadSubmission_existingFile_returns200() async throws {
