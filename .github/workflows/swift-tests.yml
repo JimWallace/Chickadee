@@ -33,6 +33,19 @@ jobs:
       - name: Run APITests
         run: swift test --filter APITests
 
+  browser-runner-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run browser runner execution tests
+        run: node --test Tests/BrowserRunnerJSTests/*.mjs
+
   worker-tests-stable:
     runs-on: ubuntu-latest
     container:
