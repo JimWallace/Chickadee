@@ -40,7 +40,7 @@ struct ResolvedEditSuiteFiles {
 
 struct SuiteConfigRow: Decodable {
     let index: Int
-    let isTest: Bool
+    let isTest: Bool?
     let tier: String?
     let order: Int?
     let dependsOn: [String]?   // script names of prerequisites
@@ -636,8 +636,8 @@ func resolveEditSuiteFiles(
         buffer.writeBytes(data)
         resolvedFiles.append(File(data: buffer, filename: name))
 
-        let tier = normalizeTier(row.tier)
-        let isTest = (row.isTest ?? false) && tier != "support"
+        let tier = normalizeTier(row.tier, isTest: row.isTest)
+        let isTest = tier != "support"
         configRows.append(ReindexedSuiteConfigRow(
             index: resolvedFiles.count - 1,
             isTest: isTest,
@@ -903,9 +903,10 @@ func buildSuiteEntries(
         }
         var selected: [ConfiguredSuiteEntry] = []
         for index in suiteFiles.indices {
-            guard let row = rowsByIndex[index], row.isTest else { continue }
+            guard let row = rowsByIndex[index] else { continue }
             guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
-            let tier = normalizeTier(row.tier)
+            let tier = normalizeTier(row.tier, isTest: row.isTest)
+            guard tier != "support" else { continue }
             selected.append(ConfiguredSuiteEntry(
                 script: script,
                 tier: tier,
@@ -958,11 +959,19 @@ func inferredOrder(from filename: String) -> Int? {
     return Int(base[orderRange])
 }
 
-func normalizeTier(_ raw: String?) -> String {
+func normalizeTier(_ raw: String?, isTest: Bool? = nil) -> String {
+    if isTest == false {
+        return "support"
+    }
     switch (raw ?? "public").lowercased() {
+    case "support":
+        return "support"
     case "secret": return "secret"
     case "release": return "release"
-    default: return "public"
+    case "public":
+        return "public"
+    default:
+        return "public"
     }
 }
 
