@@ -185,6 +185,7 @@ func workerHMACHeaders(
     var headers = HTTPHeaders()
     headers.add(name: "X-Worker-Timestamp", value: String(timestamp))
     headers.add(name: "X-Worker-Nonce",     value: nonce)
+    headers.add(name: "X-Worker-Body-SHA256", value: bodyHash)
     headers.add(name: "X-Worker-Signature", value: signature)
     headers.add(name: "X-Worker-Id",        value: workerID)
     headers.contentType = .json

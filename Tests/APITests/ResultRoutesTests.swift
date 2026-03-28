@@ -24,6 +24,7 @@ final class ResultRoutesTests: XCTestCase {
         )
 
         app.resultsDirectory = tmpResultsDir
+        app.routes.defaultMaxBodySize = "10mb"
 
         // Sessions are required because routes.swift now registers UserSessionAuthenticator.
         app.sessions.use(.memory)
@@ -190,5 +191,48 @@ final class ResultRoutesTests: XCTestCase {
                 "Expected 400 or 422, got \(res.status)"
             )
         })
+    }
+
+    func testReportResultsAcceptsLargeSignedBodyOverRealHTTP() async throws {
+        let largeMessage = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
+        let outcome = TestOutcome(
+            testName: "large_payload_test",
+            testClass: nil,
+            tier: .pub,
+            status: .fail,
+            shortResult: largeMessage,
+            longResult: largeMessage,
+            executionTimeMs: 100,
+            memoryUsageBytes: nil,
+            attemptNumber: 1,
+            isFirstPassSuccess: false
+        )
+        let collection = makeCollection(
+            submissionID: "sub_large_http",
+            buildStatus: .failed,
+            outcomes: [outcome]
+        )
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+        let body = try bodyData(for: collection)
+
+        try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            .POST,
+            self.resultsPath,
+            headers: workerHMACHeaders(
+                method: .POST,
+                path: self.resultsPath,
+                body: body,
+                workerSecret: self.workerSecret
+            ),
+            body: body
+        ) { res async in
+            XCTAssertEqual(res.status, .ok)
+            do {
+                let response = try res.content.decode(ReportResponse.self)
+                XCTAssertTrue(response.received)
+            } catch {
+                XCTFail("Failed to decode ReportResponse: \(error)")
+            }
+        }
     }
 }

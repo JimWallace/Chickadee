@@ -9,6 +9,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
 
     private func makeApp() async throws -> Application {
         let app = try await Application.make(.testing)
+        app.routes.defaultMaxBodySize = "10mb"
         app.workerSecretStore = WorkerSecretStore(initialOverride: sharedSecret)
         let middleware = WorkerHMACAuthMiddleware(maxClockSkewSeconds: 60, nonceTTLSeconds: 300)
         app.grouped(middleware).post("internal", "worker", "ping") { _ in
@@ -40,6 +41,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         headers.replaceOrAdd(name: "X-Worker-Id", value: workerID)
         headers.replaceOrAdd(name: "X-Worker-Timestamp", value: String(timestamp))
         headers.replaceOrAdd(name: "X-Worker-Nonce", value: nonce)
+        headers.replaceOrAdd(name: "X-Worker-Body-SHA256", value: bodyHash)
         headers.replaceOrAdd(name: "X-Worker-Signature", value: signature)
         headers.contentType = .json
         return headers
@@ -154,13 +156,8 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
     }
 
     /// Regression test: sends a real HTTP request through Vapor's HTTP server
-    /// to verify the middleware collects the streaming body before hashing.
-    ///
-    /// The in-memory `.test()` helper pre-buffers the body, so `request.body.data`
-    /// is always non-nil. In production, the body arrives as a stream and must be
-    /// explicitly collected in middleware before `request.body.data` is available.
-    /// Without the `body.collect()` call in the middleware, the body hash is always
-    /// SHA256(""), causing every signed POST to fail with "Invalid worker signature."
+    /// to verify the middleware accepts signed requests without touching the
+    /// streamed body.
     func testAcceptsValidSignatureOverRealHTTP() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
@@ -181,8 +178,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
                 body: body
             ) { res async in
                 XCTAssertEqual(res.status, .ok,
-                    "HMAC with non-empty body must succeed over real HTTP — "
-                    + "middleware must collect() the streaming body before computing the hash")
+                    "HMAC with non-empty body must succeed over real HTTP")
             }
         }
     }

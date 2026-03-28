@@ -10,8 +10,9 @@ import Vapor
 /// Required request headers:
 ///   X-Worker-Timestamp  — Unix timestamp (seconds, Int64)
 ///   X-Worker-Nonce      — UUID or other unique string
-///   X-Worker-Signature  — HMAC-SHA256 hex of the signed payload
-///   X-Worker-Id         — Worker identifier (optional; logged and used for activity tracking)
+///   X-Worker-Body-SHA256 — hex-encoded SHA256 of the request body
+///   X-Worker-Signature   — HMAC-SHA256 hex of the signed payload
+///   X-Worker-Id          — Worker identifier (optional; logged and used for activity tracking)
 ///
 /// The shared secret is read from the application's WorkerSecretStore on every
 /// request so that admin-panel secret rotations take effect without a restart.
@@ -35,6 +36,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
         let timestampHeader = try request.requireWorkerHeader("X-Worker-Timestamp")
         let nonce           = try request.requireWorkerHeader("X-Worker-Nonce")
+        let bodyHashHeader  = try request.requireWorkerHeader("X-Worker-Body-SHA256")
         let signature       = try request.requireWorkerHeader("X-Worker-Signature")
         let workerID        = request.headers.first(name: "X-Worker-Id")
 
@@ -54,17 +56,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             throw Abort(.unauthorized, reason: "Replay detected.")
         }
 
-        // Collect the request body before hashing so it is available in middleware
-        // even if Vapor delivers it as a stream (defence-in-depth).
-        let collectedBody = try? await request.body.collect(
-            upTo: request.application.routes.defaultMaxBodySize.value
-        )
-
-        let bodyHash = sha256Hex(bodyBytes(request, collectedBody: collectedBody))
         let signedPayload = [
             request.method.rawValue.uppercased(),
             request.url.path,
-            bodyHash,
+            bodyHashHeader.lowercased(),
             timestampHeader,
             nonce
         ].joined(separator: "\n")
@@ -128,18 +123,6 @@ private extension Request {
         }
         return value
     }
-}
-
-private func bodyBytes(_ request: Request, collectedBody: ByteBuffer?) -> [UInt8] {
-    if var collectedBody {
-        return collectedBody.readBytes(length: collectedBody.readableBytes) ?? []
-    }
-    guard var data = request.body.data else { return [] }
-    return data.readBytes(length: data.readableBytes) ?? []
-}
-
-private func sha256Hex(_ bytes: [UInt8]) -> String {
-    Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
 }
 
 private func hmacSHA256Hex(message: String, secret: String) -> String {
