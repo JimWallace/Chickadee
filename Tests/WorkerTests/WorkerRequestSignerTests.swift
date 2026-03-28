@@ -19,12 +19,14 @@ final class WorkerRequestSignerTests: XCTestCase {
         let nonce = "nonce-abc"
         signer.sign(&request, timestamp: timestamp, nonce: nonce)
 
+        let bodyBytes = Array(#"{"submission":"sub_1"}"#.utf8)
+        let bodyHash = Data(SHA256.hash(data: Data(bodyBytes))).hexEncodedString()
+
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Id"), "worker-1")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Timestamp"), String(timestamp))
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Nonce"), nonce)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Worker-Body-SHA256"), bodyHash)
 
-        let bodyBytes = Array(#"{"submission":"sub_1"}"#.utf8)
-        let bodyHash = Data(SHA256.hash(data: Data(bodyBytes))).hexEncodedString()
         let payload = ["POST", "/internal/worker/ping", bodyHash, String(timestamp), nonce]
             .joined(separator: "\n")
         let expected = hmacSHA256Hex(message: payload, secret: "secret-123")
@@ -44,6 +46,7 @@ final class WorkerRequestSignerTests: XCTestCase {
         XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Signature"))
         XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Timestamp"))
         XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Nonce"))
+        XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Worker-Body-SHA256"))
     }
 
     private func hmacSHA256Hex(message: String, secret: String) -> String {
