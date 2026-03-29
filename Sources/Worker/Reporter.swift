@@ -9,7 +9,7 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 import Core
 
 protocol Reporting: Sendable {
-    func report(_ collection: TestOutcomeCollection) async throws
+    func report(_ collection: TestOutcomeCollection) async throws(ReporterError)
 }
 
 struct Reporter: Sendable {
@@ -30,7 +30,7 @@ struct Reporter: Sendable {
         return URLSession(configuration: cfg)
     }()
 
-    func report(_ collection: TestOutcomeCollection) async throws {
+    func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/results")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -38,17 +38,18 @@ struct Reporter: Sendable {
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        request.httpBody = try encoder.encode(collection)
+        do { request.httpBody = try encoder.encode(collection) } catch { throw .transportError(error) }
         signer.sign(&request)
 
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do { (data, response) = try await Self.session.data(for: request) } catch { throw .transportError(error) }
 
         guard let http = response as? HTTPURLResponse else {
-            throw ReporterError.unexpectedResponse
+            throw .unexpectedResponse
         }
         guard http.statusCode == 200 else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw ReporterError.httpError(http.statusCode, body)
+            throw .httpError(http.statusCode, body)
         }
     }
 }
@@ -58,6 +59,7 @@ extension Reporter: Reporting {}
 enum ReporterError: Error, LocalizedError {
     case unexpectedResponse
     case httpError(Int, String)
+    case transportError(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -65,6 +67,8 @@ enum ReporterError: Error, LocalizedError {
             return "Non-HTTP response from API server"
         case .httpError(let code, let body):
             return "API server returned HTTP \(code): \(body)"
+        case .transportError(let error):
+            return "Transport error: \(error.localizedDescription)"
         }
     }
 }
