@@ -411,12 +411,13 @@ func detailedScriptOutput(from raw: String?, status: TestStatus) -> String? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
-    if let stderr = extractLabeledOutputSection("stderr", in: trimmed) {
-        return stderr
+    let stderr = extractLabeledOutputSection("stderr", in: trimmed)
+    let stdout = extractLabeledOutputSection("stdout", in: trimmed)
+
+    if let best = bestDetailedSection(stderr: stderr, stdout: stdout) {
+        return best
     }
-    if let stdout = extractLabeledOutputSection("stdout", in: trimmed) {
-        return stdout
-    }
+
     return trimmed
 }
 
@@ -454,6 +455,24 @@ func extractTraceback(in text: String) -> String? {
     }
 
     return nil
+}
+
+private func bestDetailedSection(stderr: String?, stdout: String?) -> String? {
+    let candidates = [stderr, stdout].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+    guard !candidates.isEmpty else { return nil }
+
+    for candidate in candidates {
+        if extractStructuredErrorText(from: candidate) != nil {
+            return candidate
+        }
+    }
+    for candidate in candidates {
+        if extractTraceback(in: candidate) != nil {
+            return candidate
+        }
+    }
+    return stderr ?? stdout
 }
 
 func extractStructuredErrorText(from text: String) -> String? {

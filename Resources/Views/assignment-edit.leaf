@@ -574,6 +574,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         form.addEventListener('submit', function () {
             syncConfig();
         });
+        form.addEventListener('chickadee:before-multipart-submit', function () {
+            syncConfig();
+        });
     }
 
     var addTestBtn = document.getElementById('add-test-btn');

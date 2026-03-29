@@ -490,7 +490,24 @@ final class AssignmentRoutesTests: XCTestCase {
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
             XCTAssertTrue(html.contains("form.addEventListener('submit'"))
+            XCTAssertTrue(html.contains("form.addEventListener('chickadee:before-multipart-submit'"))
             XCTAssertTrue(html.contains("syncConfig();"))
+            XCTAssertTrue(html.contains("chickadee:before-multipart-submit"))
+        })
+    }
+
+    func testNewAssignmentPageSyncsSuiteConfigBeforeMultipartSubmit() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(.GET, "/instructor/new", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("chickadee:before-multipart-submit"))
+            XCTAssertTrue(html.contains("syncConfig();"))
+            XCTAssertTrue(html.contains("if (e.defaultPrevented) return;"))
         })
     }
 

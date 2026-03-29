@@ -477,6 +477,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                 window.alert('Add at least one non-support file to run as a test.');
             }
         });
+        form.addEventListener('chickadee:before-multipart-submit', function () {
+            syncConfig();
+        });
     }
 
     function escHtml(v) {
