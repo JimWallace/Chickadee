@@ -500,6 +500,58 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
   assert.match(result.outcomes[2].shortResult, /WebR/);
 });
 
+test('browser runner keeps display names separate from output and extracts traceback-only details', async () => {
+  const harness = await loadRunnerHarness({
+    zipFiles: {
+      'test_q1_bmi.py': '# q1\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'test_q1_bmi.py', tier: 'public', name: 'Q1: BMI Calculation' },
+      ],
+    },
+    scriptBehaviors: {
+      'test_q1_bmi.py': {
+        stdout: `${JSON.stringify({
+          shortResult: 'Q1: BMI Calculation: Could not test calculate_bmi',
+          status: 'error',
+          test: 'Q1: BMI Calculation',
+          error: 'Could not test calculate_bmi',
+          exception: "NotImplementedError('Implement calculate_bmi')",
+          traceback: 'Traceback (most recent call last):\n  File "test_q1_bmi.py", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n',
+        })}\n`,
+        stderr: '',
+        exitCode: 2,
+      },
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_q1',
+  );
+
+  assert.deepEqual(
+    plain(result.outcomes[0]),
+    {
+      testName: 'test_q1_bmi',
+      testClass: null,
+      tier: 'public',
+      status: 'error',
+      shortResult: 'Could not test calculate_bmi',
+      longResult: 'Traceback (most recent call last):\n  File "test_q1_bmi.py", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi',
+      executionTimeMs: result.outcomes[0].executionTimeMs,
+      memoryUsageBytes: null,
+      attemptNumber: 1,
+      isFirstPassSuccess: false,
+      scriptName: 'test_q1_bmi.py',
+      displayName: 'Q1: BMI Calculation',
+    },
+  );
+});
+
 test('manifest and setup download failures bubble up with browser-runner context', async () => {
   const manifestHarness = await loadRunnerHarness({
     zipFiles: {},
