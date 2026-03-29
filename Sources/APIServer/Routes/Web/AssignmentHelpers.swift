@@ -735,6 +735,17 @@ func multipartFiles(named names: [String], from req: Request) throws -> [File]? 
     return files.isEmpty ? nil : files
 }
 
+func multipartTextField(named names: [String], from req: Request) throws -> String? {
+    guard let parts = try multipartParts(from: req) else { return nil }
+    for name in names {
+        if let part = parts.firstPart(named: name),
+           let value = String(multipart: part) {
+            return value
+        }
+    }
+    return nil
+}
+
 func nextAssignmentSortOrder(req: Request) async throws -> Int {
     let maxOrder = try await APIAssignment.query(on: req.db)
         .all()

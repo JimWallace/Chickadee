@@ -470,6 +470,58 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertEqual(props.testSuites[0].name, "BMI check")
     }
 
+    func testSaveEditedAssignmentShowsUpdatedDisplayNameOnReopen() async throws {
+        let courseID = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+        let setupID = "setup_edit_display_reload"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+        try await setup.save(on: app.db)
+        let assignment = APIAssignment(publicID: "GHI789", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
+        try await assignment.save(on: app.db)
+
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/GHI789/edit", cookie: cookie, on: app)
+        let boundary = "Boundary-Edit-Reload"
+        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+        let suiteConfig = """
+        [
+          {"source":"existing","name":"test_q1.py","tier":"public","order":1,"points":1,"displayName":"BMI check"}
+        ]
+        """
+
+        try await app.asyncTest(.POST, "/instructor/GHI789/edit/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartEditBody(
+                boundary: boundary,
+                csrf: csrf,
+                assignmentName: "Practice Lab",
+                assignmentNotebook: notebook,
+                solutionNotebook: notebook,
+                suiteConfig: suiteConfig
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        try await app.asyncTest(.GET, "/instructor/GHI789/edit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("value=\"BMI check\""), html)
+            XCTAssertFalse(html.contains("value=\"test_q1\""), html)
+        })
+    }
+
     func testEditPageSyncsSuiteConfigOnSubmit() async throws {
         let courseID = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()

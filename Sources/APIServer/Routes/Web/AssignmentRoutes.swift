@@ -361,15 +361,23 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Invalid assignment upload payload")
         }
 
-        let assignmentName = bodyMany?.assignmentName ?? bodySingle?.assignmentName
-        let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
-        let sectionIDRaw = bodyMany?.sectionID ?? bodySingle?.sectionID
+        let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
+            ?? bodyMany?.assignmentName
+            ?? bodySingle?.assignmentName
+        let dueAtRaw = try multipartTextField(named: ["dueAt"], from: req)
+            ?? bodyMany?.dueAt
+            ?? bodySingle?.dueAt
+        let sectionIDRaw = try multipartTextField(named: ["sectionID"], from: req)
+            ?? bodyMany?.sectionID
+            ?? bodySingle?.sectionID
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
         let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
             ?? bodyMany?.suiteFiles
             ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
+        let suiteConfigRaw = try multipartTextField(named: ["suiteConfig"], from: req)
+            ?? bodyMany?.suiteConfig
+            ?? bodySingle?.suiteConfig
 
         let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(dueAtRaw)
@@ -898,14 +906,20 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Invalid assignment upload payload")
         }
 
-        let assignmentName = bodyMany?.assignmentName ?? bodySingle?.assignmentName
-        let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
+        let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
+            ?? bodyMany?.assignmentName
+            ?? bodySingle?.assignmentName
+        let dueAtRaw = try multipartTextField(named: ["dueAt"], from: req)
+            ?? bodyMany?.dueAt
+            ?? bodySingle?.dueAt
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
         let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
             ?? bodyMany?.suiteFiles
             ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
+        let suiteConfigRaw = try multipartTextField(named: ["suiteConfig"], from: req)
+            ?? bodyMany?.suiteConfig
+            ?? bodySingle?.suiteConfig
 
         let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(dueAtRaw)

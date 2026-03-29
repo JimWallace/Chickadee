@@ -137,6 +137,35 @@ struct EditableSuiteRow: Encodable {
         let data = (try? JSONEncoder().encode(dependsOn)) ?? Data("[]".utf8)
         return String(data: data, encoding: .utf8) ?? "[]"
     }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case url
+        case isTest
+        case tier
+        case order
+        case dependsOn
+        case points
+        case displayName
+        case displayNameOrEmpty
+        case displayNameOrStem
+        case dependsOnJSON
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(url, forKey: .url)
+        try container.encode(isTest, forKey: .isTest)
+        try container.encode(tier, forKey: .tier)
+        try container.encode(order, forKey: .order)
+        try container.encode(dependsOn, forKey: .dependsOn)
+        try container.encode(points, forKey: .points)
+        try container.encodeIfPresent(displayName, forKey: .displayName)
+        try container.encode(displayNameOrEmpty, forKey: .displayNameOrEmpty)
+        try container.encode(displayNameOrStem, forKey: .displayNameOrStem)
+        try container.encode(dependsOnJSON, forKey: .dependsOnJSON)
+    }
 }
 
 struct AssignmentStudentHistoryContext: Encodable {
