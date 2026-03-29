@@ -443,7 +443,7 @@ final class WebRoutesTests: XCTestCase {
         let rawJSON = #"""
         {"error":"PythonError","stderr":"Traceback (most recent call last):\n  File \"test_q1.py\", line 7, in <module>\n    assert answer == 42\nAssertionError","headers":{"content-type":"application/json"}}
         """#
-        let formatted = formattedDetailedOutput(from: rawJSON, status: .fail)
+        let formatted = formattedDetailedOutput(primary: rawJSON, fallback: nil, status: .fail)
         XCTAssertEqual(
             formatted,
             """
@@ -480,7 +480,7 @@ final class WebRoutesTests: XCTestCase {
         stdout:
         {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "test": "Q1: BMI Calculation", "error": "Could not test calculate_bmi", "exception": "NotImplementedError('Implement calculate_bmi')", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\n  File \"/chickadee_work_1774744743040/submission.py\", line 27, in calculate_bmi\n    raise NotImplementedError(\"Implement calculate_bmi\")\nNotImplementedError: Implement calculate_bmi\n"}
         """#
-        let formatted = formattedDetailedOutput(from: wrapped, status: .error)
+        let formatted = formattedDetailedOutput(primary: wrapped, fallback: nil, status: .error)
         XCTAssertEqual(
             formatted,
             """
@@ -525,7 +525,7 @@ final class WebRoutesTests: XCTestCase {
         stderr:
         Browser runner reported a structured failure payload
         """#
-        let formatted = formattedDetailedOutput(from: wrapped, status: .error)
+        let formatted = formattedDetailedOutput(primary: wrapped, fallback: nil, status: .error)
         XCTAssertEqual(
             formatted,
             """
@@ -536,6 +536,61 @@ final class WebRoutesTests: XCTestCase {
             NotImplementedError: Implement calculate_bmi
             """
         )
+    }
+
+    func testSubmissionPageFormatsStructuredShortResultInsteadOfShowingJSONBlob() async throws {
+        let shortJSON = #"""
+        {"shortResult":"Q1: BMI Calculation: Could not test calculate_bmi","status":"error","error":"Could not test calculate_bmi","traceback":"Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n"}
+        """#
+
+        XCTAssertEqual(
+            formattedShortResult(from: shortJSON, status: .error),
+            "Q1: BMI Calculation: Could not test calculate_bmi"
+        )
+        XCTAssertEqual(
+            formattedDetailedOutput(primary: nil, fallback: shortJSON, status: .error),
+            """
+            Traceback (most recent call last):
+              File "test_q1_bmi.py", line 12, in <module>
+                result = fn(*args)
+            NotImplementedError: Implement calculate_bmi
+            """
+        )
+
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await insertSetup(id: "setup_short_json")
+        try await insertSubmission(id: "sub_short_json", testSetupID: "setup_short_json", userID: userID)
+        try await insertResult(
+            submissionID: "sub_short_json",
+            outcomes: [
+                TestOutcome(
+                    testName: "Q1: BMI Calculation",
+                    testClass: nil,
+                    tier: .pub,
+                    status: .error,
+                    shortResult: shortJSON,
+                    longResult: nil,
+                    executionTimeMs: 10,
+                    memoryUsageBytes: nil,
+                    attemptNumber: 1,
+                    isFirstPassSuccess: false
+                )
+            ],
+            source: "browser"
+        )
+
+        try await app.asyncTest(.GET, "/submissions/sub_short_json", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Q1: BMI Calculation: Could not test calculate_bmi"))
+            XCTAssertTrue(html.contains("Traceback (most recent call last):"))
+            XCTAssertFalse(html.contains("\"shortResult\""))
+            XCTAssertFalse(html.contains("\"traceback\""))
+        })
     }
 
     func testStudentCannotViewOtherStudentsSubmission() async throws {

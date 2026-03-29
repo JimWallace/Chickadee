@@ -300,7 +300,12 @@ extension WebRoutes {
                 let weighted = totalPoints != visible.totalTests
                 outcomes = visible.outcomes.map { o in
                     let skip = parseSkip(shortResult: o.shortResult)
-                    let longOutput = formattedDetailedOutput(from: o.longResult, status: o.status)
+                    let shortOutput = formattedShortResult(from: o.shortResult, status: o.status)
+                    let longOutput = formattedDetailedOutput(
+                        primary: o.longResult,
+                        fallback: o.shortResult,
+                        status: o.status
+                    )
                     let (markLabel, markClass): (String, String) = {
                         if skip.isSkipped { return ("—", "skipped") }
                         switch o.status {
@@ -321,7 +326,7 @@ extension WebRoutes {
                         testName:       displayNameMap[o.testName] ?? o.testName,
                         tier:           o.tier.rawValue,
                         status:         o.status.rawValue,
-                        shortResult:    o.shortResult,
+                        shortResult:    shortOutput,
                         longResult:     longOutput,
                         markLabel:      markLabel,
                         markClass:      markClass,
@@ -421,9 +426,26 @@ func detailedScriptOutput(from raw: String?, status: TestStatus) -> String? {
     return trimmed
 }
 
-func formattedDetailedOutput(from raw: String?, status: TestStatus) -> String? {
+func formattedShortResult(from raw: String, status: TestStatus) -> String {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return defaultShortResult(for: status) }
+
+    if let summary = extractStructuredSummaryText(from: trimmed) {
+        return summary
+    }
+    if let summary = detailedScriptOutput(from: trimmed, status: status)
+        .flatMap(extractStructuredSummaryText(from:)) {
+        return summary
+    }
+
+    return trimmed
+}
+
+func formattedDetailedOutput(primary raw: String?, fallback: String?, status: TestStatus) -> String? {
     guard status != .pass else { return nil }
-    guard let base = detailedScriptOutput(from: raw, status: status) else { return nil }
+    let base = detailedScriptOutput(from: raw, status: status)
+        ?? detailedScriptOutput(from: fallback, status: status)
+    guard let base else { return nil }
 
     if let extracted = extractStructuredErrorText(from: base) {
         return extracted
@@ -432,6 +454,50 @@ func formattedDetailedOutput(from raw: String?, status: TestStatus) -> String? {
         return traceback
     }
     return base
+}
+
+func extractStructuredSummaryText(from text: String) -> String? {
+    guard let data = text.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) else {
+        return nil
+    }
+    return structuredSummaryText(from: object)
+}
+
+private func structuredSummaryText(from value: Any) -> String? {
+    if let string = value as? String {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    if let dict = value as? [String: Any] {
+        let preferredKeys = ["shortResult", "error", "message", "detail", "reason", "status"]
+        for key in preferredKeys {
+            if let nested = dict[key],
+               let text = structuredSummaryText(from: nested) {
+                return text
+            }
+        }
+    }
+
+    if let array = value as? [Any] {
+        for nested in array {
+            if let text = structuredSummaryText(from: nested) {
+                return text
+            }
+        }
+    }
+
+    return nil
+}
+
+private func defaultShortResult(for status: TestStatus) -> String {
+    switch status {
+    case .pass:    return "passed"
+    case .fail:    return "failed"
+    case .error:   return "error"
+    case .timeout: return "timed out"
+    }
 }
 
 func extractTraceback(in text: String) -> String? {
