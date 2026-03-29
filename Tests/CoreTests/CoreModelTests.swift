@@ -1,7 +1,8 @@
-import XCTest
+import Testing
+import Foundation
 @testable import Core
 
-final class CoreModelTests: XCTestCase {
+struct CoreModelTests {
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -17,67 +18,60 @@ final class CoreModelTests: XCTestCase {
 
     // MARK: - TestStatus
 
-    func testTestStatusRoundTrip() throws {
-        for status in [TestStatus.pass, .fail, .error, .timeout] {
-            let data = try encoder.encode(status)
-            let decoded = try decoder.decode(TestStatus.self, from: data)
-            XCTAssertEqual(status, decoded)
-        }
+    @Test(arguments: [TestStatus.pass, .fail, .error, .timeout])
+    func testStatusRoundTrip(status: TestStatus) throws {
+        let data = try encoder.encode(status)
+        let decoded = try decoder.decode(TestStatus.self, from: data)
+        #expect(status == decoded)
     }
 
     // MARK: - TestTier
 
-    func testTestTierRoundTrip() throws {
-        for tier in [TestTier.pub, .release, .secret] {
-            let data = try encoder.encode(tier)
-            let decoded = try decoder.decode(TestTier.self, from: data)
-            XCTAssertEqual(tier, decoded)
-        }
+    @Test(arguments: [TestTier.pub, .release, .secret])
+    func testTierRoundTrip(tier: TestTier) throws {
+        let data = try encoder.encode(tier)
+        let decoded = try decoder.decode(TestTier.self, from: data)
+        #expect(tier == decoded)
     }
 
-    func testTestTierRawValues() {
-        XCTAssertEqual(TestTier.pub.rawValue, "public")
-        XCTAssertEqual(TestTier.release.rawValue, "release")
-        XCTAssertEqual(TestTier.secret.rawValue, "secret")
+    @Test(arguments: zip(
+        [TestTier.pub, .release, .secret],
+        ["public",     "release", "secret"]
+    ))
+    func testTierRawValue(tier: TestTier, expectedRaw: String) {
+        #expect(tier.rawValue == expectedRaw)
     }
 
     // MARK: - GradingMode
 
-    func testGradingModeDefaultsWorkerWhenAbsent() throws {
-        let json = """
-        { "schemaVersion": 1 }
-        """.data(using: .utf8)!
+    @Test func gradingModeDefaultsWorkerWhenAbsent() throws {
+        let json = #"{ "schemaVersion": 1 }"#.data(using: .utf8)!
         let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertEqual(manifest.gradingMode, .worker)
+        #expect(manifest.gradingMode == .worker)
     }
 
-    func testGradingModeExplicitBrowser() throws {
-        let json = """
-        { "schemaVersion": 1, "gradingMode": "browser" }
-        """.data(using: .utf8)!
-        let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertEqual(manifest.gradingMode, .browser)
+    @Test(arguments: zip(
+        [
+            #"{ "schemaVersion": 1, "gradingMode": "browser" }"#,
+            #"{ "schemaVersion": 1, "gradingMode": "worker"  }"#
+        ],
+        [GradingMode.browser, GradingMode.worker]
+    ))
+    func gradingModeExplicit(json: String, expected: GradingMode) throws {
+        let manifest = try decoder.decode(TestProperties.self, from: json.data(using: .utf8)!)
+        #expect(manifest.gradingMode == expected)
     }
 
-    func testGradingModeExplicitWorker() throws {
-        let json = """
-        { "schemaVersion": 1, "gradingMode": "worker" }
-        """.data(using: .utf8)!
-        let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertEqual(manifest.gradingMode, .worker)
-    }
-
-    func testGradingModeRoundTrip() throws {
-        for mode in [GradingMode.browser, .worker] {
-            let data = try encoder.encode(mode)
-            let decoded = try decoder.decode(GradingMode.self, from: data)
-            XCTAssertEqual(mode, decoded)
-        }
+    @Test(arguments: [GradingMode.browser, .worker])
+    func gradingModeRoundTrip(mode: GradingMode) throws {
+        let data = try encoder.encode(mode)
+        let decoded = try decoder.decode(GradingMode.self, from: data)
+        #expect(mode == decoded)
     }
 
     // MARK: - TestProperties (no Makefile)
 
-    func testTestPropertiesRoundTrip() throws {
+    @Test func testPropertiesRoundTrip() throws {
         let json = """
         {
           "schemaVersion": 1,
@@ -92,23 +86,23 @@ final class CoreModelTests: XCTestCase {
         """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertEqual(manifest.schemaVersion, 1)
-        XCTAssertEqual(manifest.gradingMode, .worker)
-        XCTAssertEqual(manifest.requiredFiles, ["warmup.py"])
-        XCTAssertEqual(manifest.testSuites.count, 2)
-        XCTAssertEqual(manifest.testSuites[0].script, "test_bit_count.sh")
-        XCTAssertEqual(manifest.testSuites[0].tier, .pub)
-        XCTAssertEqual(manifest.timeLimitSeconds, 10)
-        XCTAssertNil(manifest.makefile)
+        #expect(manifest.schemaVersion == 1)
+        #expect(manifest.gradingMode == .worker)
+        #expect(manifest.requiredFiles == ["warmup.py"])
+        #expect(manifest.testSuites.count == 2)
+        #expect(manifest.testSuites[0].script == "test_bit_count.sh")
+        #expect(manifest.testSuites[0].tier == .pub)
+        #expect(manifest.timeLimitSeconds == 10)
+        #expect(manifest.makefile == nil)
 
         let reencoded = try encoder.encode(manifest)
         let redecoded = try decoder.decode(TestProperties.self, from: reencoded)
-        XCTAssertEqual(manifest, redecoded)
+        #expect(manifest == redecoded)
     }
 
     // MARK: - TestProperties (with Makefile)
 
-    func testTestPropertiesWithMakefileRoundTrip() throws {
+    @Test func testPropertiesWithMakefileRoundTrip() throws {
         let json = """
         {
           "schemaVersion": 1,
@@ -123,15 +117,15 @@ final class CoreModelTests: XCTestCase {
         """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertNotNil(manifest.makefile)
-        XCTAssertEqual(manifest.makefile?.target, "build")
+        #expect(manifest.makefile != nil)
+        #expect(manifest.makefile?.target == "build")
 
         let reencoded = try encoder.encode(manifest)
         let redecoded = try decoder.decode(TestProperties.self, from: reencoded)
-        XCTAssertEqual(manifest, redecoded)
+        #expect(manifest == redecoded)
     }
 
-    func testTestPropertiesWithDefaultMakeTarget() throws {
+    @Test func testPropertiesWithDefaultMakeTarget() throws {
         let json = """
         {
           "schemaVersion": 1,
@@ -146,34 +140,31 @@ final class CoreModelTests: XCTestCase {
         """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertNotNil(manifest.makefile)
-        XCTAssertNil(manifest.makefile?.target)  // bare `make`, no target
+        #expect(manifest.makefile != nil)
+        #expect(manifest.makefile?.target == nil)  // bare `make`, no target
     }
 
     // MARK: - TestSuiteEntry dependsOn
 
-    func testTestSuiteEntryDefaultsEmptyDependsOn() throws {
-        let json = """
-        { "tier": "public", "script": "test_foo.sh" }
-        """.data(using: .utf8)!
+    @Test func testSuiteEntryDefaultsEmptyDependsOn() throws {
+        let json = #"{ "tier": "public", "script": "test_foo.sh" }"#.data(using: .utf8)!
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
-        XCTAssertEqual(entry.dependsOn, [])
+        #expect(entry.dependsOn == [])
     }
 
-    func testTestSuiteEntryWithDependsOnRoundTrip() throws {
-        let json = """
-        { "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }
-        """.data(using: .utf8)!
+    @Test func testSuiteEntryWithDependsOnRoundTrip() throws {
+        let json = #"{ "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }"#
+            .data(using: .utf8)!
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
-        XCTAssertEqual(entry.script, "test_bar.sh")
-        XCTAssertEqual(entry.dependsOn, ["test_foo.sh"])
+        #expect(entry.script == "test_bar.sh")
+        #expect(entry.dependsOn == ["test_foo.sh"])
 
         let reencoded = try encoder.encode(entry)
         let redecoded = try decoder.decode(TestSuiteEntry.self, from: reencoded)
-        XCTAssertEqual(entry, redecoded)
+        #expect(entry == redecoded)
     }
 
-    func testTestPropertiesWithDependencyChainRoundTrip() throws {
+    @Test func testPropertiesWithDependencyChainRoundTrip() throws {
         let json = """
         {
           "schemaVersion": 1,
@@ -188,19 +179,19 @@ final class CoreModelTests: XCTestCase {
         """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
-        XCTAssertEqual(manifest.testSuites.count, 3)
-        XCTAssertEqual(manifest.testSuites[0].dependsOn, [])
-        XCTAssertEqual(manifest.testSuites[1].dependsOn, ["test_build.sh"])
-        XCTAssertEqual(manifest.testSuites[2].dependsOn, ["test_build.sh"])
+        #expect(manifest.testSuites.count == 3)
+        #expect(manifest.testSuites[0].dependsOn == [])
+        #expect(manifest.testSuites[1].dependsOn == ["test_build.sh"])
+        #expect(manifest.testSuites[2].dependsOn == ["test_build.sh"])
 
         let reencoded = try encoder.encode(manifest)
         let redecoded = try decoder.decode(TestProperties.self, from: reencoded)
-        XCTAssertEqual(manifest, redecoded)
+        #expect(manifest == redecoded)
     }
 
     // MARK: - TestOutcomeCollection
 
-    func testTestOutcomeCollectionRoundTrip() throws {
+    @Test func testOutcomeCollectionRoundTrip() throws {
         let outcome = TestOutcome(
             testName: "test_foo",
             testClass: nil,
@@ -232,14 +223,14 @@ final class CoreModelTests: XCTestCase {
 
         let data = try encoder.encode(collection)
         let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
-        XCTAssertEqual(decoded.submissionID, "sub_001")
-        XCTAssertEqual(decoded.buildStatus, .passed)
-        XCTAssertEqual(decoded.outcomes.count, 1)
-        XCTAssertEqual(decoded.outcomes[0].testName, "test_foo")
-        XCTAssertTrue(decoded.outcomes[0].isFirstPassSuccess)
+        #expect(decoded.submissionID == "sub_001")
+        #expect(decoded.buildStatus == .passed)
+        #expect(decoded.outcomes.count == 1)
+        #expect(decoded.outcomes[0].testName == "test_foo")
+        #expect(decoded.outcomes[0].isFirstPassSuccess)
     }
 
-    func testFailedCollectionHasNoOutcomes() throws {
+    @Test func failedCollectionHasNoOutcomes() throws {
         let collection = TestOutcomeCollection(
             submissionID: "sub_002",
             testSetupID: "setup_001",
@@ -259,8 +250,8 @@ final class CoreModelTests: XCTestCase {
 
         let data = try encoder.encode(collection)
         let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
-        XCTAssertEqual(decoded.buildStatus, .failed)
-        XCTAssertTrue(decoded.outcomes.isEmpty)
-        XCTAssertEqual(decoded.compilerOutput, "Script not found: test_foo.sh")
+        #expect(decoded.buildStatus == .failed)
+        #expect(decoded.outcomes.isEmpty)
+        #expect(decoded.compilerOutput == "Script not found: test_foo.sh")
     }
 }
