@@ -69,7 +69,7 @@ Submission #(submissionID)
                 #else:
                 #(outcome.shortResult)
                 #if(outcome.longResult):
-                <details><summary>Show output ▸</summary><pre>#(outcome.longResult)</pre></details>
+                <details class="test-output-details"><summary>Show output ▸</summary><pre class="test-output-pre">#(outcome.longResult)</pre></details>
                 #endif
                 #endif
             </td>
@@ -113,5 +113,27 @@ Submission #(submissionID)
 #endif
 
 </div>
+<style>
+.test-output-details {
+    margin-top: .4rem;
+}
+.test-output-details summary {
+    cursor: pointer;
+    color: var(--blue, #0b63ce);
+    font-size: .9rem;
+}
+.test-output-pre {
+    margin-top: .5rem;
+    padding: .85rem 1rem;
+    border-radius: .5rem;
+    background: var(--gray-50, #f7f8fa);
+    border: 1px solid var(--border, #d9dce1);
+    color: var(--gray-900, #1f2937);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+    line-height: 1.45;
+}
+</style>
 #endexport
 #endextend

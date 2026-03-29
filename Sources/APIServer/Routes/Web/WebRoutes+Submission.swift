@@ -246,9 +246,11 @@ extension WebRoutes {
             }
         }
 
-        // Build a stem→displayName map from the current manifest so the page
-        // shows friendly names for both new submissions (where the runner already
-        // embedded the name) and old ones (where testName is still the filename stem).
+        // Build a script/stem→displayName map from the current manifest so the page
+        // shows friendly names for:
+        //  - worker results that already use the display name directly
+        //  - older worker results where testName is the filename stem
+        //  - browser results where testName is the full script filename
         var displayNameMap: [String: String] = [:]
         if let setup = try? await APITestSetup.find(submission.testSetupID, on: req.db),
            let manifestData = setup.manifest.data(using: .utf8),
@@ -257,6 +259,7 @@ extension WebRoutes {
                 guard let displayName = entry.name,
                       !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 let stem = (entry.script as NSString).deletingPathExtension
+                displayNameMap[entry.script] = displayName
                 displayNameMap[stem.isEmpty ? entry.script : stem] = displayName
             }
         }
@@ -297,11 +300,7 @@ extension WebRoutes {
                 let weighted = totalPoints != visible.totalTests
                 outcomes = visible.outcomes.map { o in
                     let skip = parseSkip(shortResult: o.shortResult)
-                    let longOutput: String? = {
-                        guard o.status != .pass else { return nil }
-                        let s = (o.longResult ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                        return s.isEmpty ? nil : s
-                    }()
+                    let longOutput = formattedDetailedOutput(from: o.longResult, status: o.status)
                     let (markLabel, markClass): (String, String) = {
                         if skip.isSkipped { return ("—", "skipped") }
                         switch o.status {
@@ -419,6 +418,119 @@ func stderrScriptOutput(from raw: String?, status: TestStatus) -> String? {
         return nil
     }
     return trimmed
+}
+
+func formattedDetailedOutput(from raw: String?, status: TestStatus) -> String? {
+    guard status != .pass else { return nil }
+    guard let base = stderrScriptOutput(from: raw, status: status) else { return nil }
+
+    if let extracted = extractStructuredErrorText(from: base) {
+        return extracted
+    }
+    if let traceback = extractTraceback(in: base) {
+        return traceback
+    }
+    return base
+}
+
+func extractTraceback(in text: String) -> String? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    let markers = [
+        "Traceback (most recent call last):",
+        "Traceback (most recent call last)",
+        "RRuntimeError:",
+        "PythonError:"
+    ]
+
+    for marker in markers {
+        if let range = trimmed.range(of: marker) {
+            let traceback = String(trimmed[range.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !traceback.isEmpty {
+                return traceback
+            }
+        }
+    }
+
+    return nil
+}
+
+func extractStructuredErrorText(from text: String) -> String? {
+    guard let data = text.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) else {
+        return nil
+    }
+
+    if let traceback = extractTracebackFromJSONObject(object) {
+        return traceback
+    }
+    if let messages = extractStructuredMessages(from: object), !messages.isEmpty {
+        return messages.joined(separator: "\n\n")
+    }
+    return nil
+}
+
+private func extractTracebackFromJSONObject(_ value: Any) -> String? {
+    if let string = value as? String {
+        return extractTraceback(in: string)
+    }
+
+    if let dict = value as? [String: Any] {
+        let preferredKeys = [
+            "traceback", "stackTrace", "stack", "stderr", "error",
+            "message", "detail", "reason", "longResult"
+        ]
+        for key in preferredKeys {
+            if let nested = dict[key],
+               let traceback = extractTracebackFromJSONObject(nested) {
+                return traceback
+            }
+        }
+        for nested in dict.values {
+            if let traceback = extractTracebackFromJSONObject(nested) {
+                return traceback
+            }
+        }
+    }
+
+    if let array = value as? [Any] {
+        for nested in array {
+            if let traceback = extractTracebackFromJSONObject(nested) {
+                return traceback
+            }
+        }
+    }
+
+    return nil
+}
+
+private func extractStructuredMessages(from value: Any) -> [String]? {
+    if let string = value as? String {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : [trimmed]
+    }
+
+    if let dict = value as? [String: Any] {
+        let preferredKeys = ["stderr", "error", "message", "detail", "reason", "longResult"]
+        var messages: [String] = []
+        for key in preferredKeys {
+            guard let nested = dict[key],
+                  let nestedMessages = extractStructuredMessages(from: nested) else { continue }
+            messages.append(contentsOf: nestedMessages)
+        }
+        if !messages.isEmpty {
+            var seen: Set<String> = []
+            return messages.filter { seen.insert($0).inserted }
+        }
+    }
+
+    if let array = value as? [Any] {
+        let messages = array.compactMap { extractStructuredMessages(from: $0) }.flatMap { $0 }
+        return messages.isEmpty ? nil : messages
+    }
+
+    return nil
 }
 
 func extractLabeledOutputSection(_ label: String, in text: String) -> String? {

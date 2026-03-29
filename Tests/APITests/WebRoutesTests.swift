@@ -150,7 +150,8 @@ final class WebRoutesTests: XCTestCase {
     private func makeOutcome(
         name: String,
         tier: TestTier = .pub,
-        status: TestStatus = .pass
+        status: TestStatus = .pass,
+        longResult: String? = nil
     ) -> TestOutcome {
         TestOutcome(
             testName: name,
@@ -158,7 +159,7 @@ final class WebRoutesTests: XCTestCase {
             tier: tier,
             status: status,
             shortResult: status == .pass ? "passed" : "failed",
-            longResult: status == .pass ? nil : "test output here",
+            longResult: status == .pass ? nil : (longResult ?? "test output here"),
             executionTimeMs: 10,
             memoryUsageBytes: nil,
             attemptNumber: 1,
@@ -401,6 +402,76 @@ final class WebRoutesTests: XCTestCase {
             XCTAssertTrue(html.contains("test_add"), "Should show test name")
             XCTAssertTrue(html.contains("Pass") || html.contains("pass"), "Should show pass status")
             XCTAssertTrue(html.contains("Fail") || html.contains("fail"), "Should show fail status")
+        })
+    }
+
+    func testSubmissionPageShowsConfiguredDisplayNameForBrowserResultScriptFilename() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1_bmi.py","name":"BMI check"}],"timeLimitSeconds":10}
+        """
+        let course = try await makeCourse()
+        let courseID = try course.requireID()
+        let setup = APITestSetup(
+            id: "setup_browser_names",
+            manifest: manifest,
+            zipPath: tmpDir + "testsetups/setup_browser_names.zip",
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+        try await insertAssignment(testSetupID: "setup_browser_names", title: "Practice Lab", isOpen: true)
+        try await insertSubmission(id: "sub_browser_names", testSetupID: "setup_browser_names", userID: userID)
+        try await insertResult(
+            submissionID: "sub_browser_names",
+            outcomes: [makeOutcome(name: "test_q1_bmi.py", status: .pass)],
+            source: "browser"
+        )
+
+        try await app.asyncTest(.GET, "/submissions/sub_browser_names", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("BMI check"), "Should show saved display name")
+            XCTAssertFalse(html.contains(">test_q1_bmi.py<"), "Should not fall back to raw script filename")
+        })
+    }
+
+    func testSubmissionPageShowsTracebackInsteadOfStructuredJSONBlob() async throws {
+        let rawJSON = #"""
+        {"error":"PythonError","stderr":"Traceback (most recent call last):\n  File \"test_q1.py\", line 7, in <module>\n    assert answer == 42\nAssertionError","headers":{"content-type":"application/json"}}
+        """#
+        let formatted = formattedDetailedOutput(from: rawJSON, status: .fail)
+        XCTAssertEqual(
+            formatted,
+            """
+            Traceback (most recent call last):
+              File "test_q1.py", line 7, in <module>
+                assert answer == 42
+            AssertionError
+            """
+        )
+
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await insertSetup(id: "setup_traceback")
+        try await insertSubmission(id: "sub_traceback", testSetupID: "setup_traceback", userID: userID)
+        try await insertResult(
+            submissionID: "sub_traceback",
+            outcomes: [makeOutcome(name: "test_q1", status: .fail, longResult: rawJSON)]
+        )
+
+        try await app.asyncTest(.GET, "/submissions/sub_traceback", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Traceback (most recent call last):"))
+            XCTAssertTrue(html.contains("AssertionError"))
+            XCTAssertFalse(html.contains("test output here"))
         })
     }
 
