@@ -2,7 +2,6 @@ import Vapor
 import Fluent
 import Core
 import Foundation
-import Synchronization
 
 struct WorkerJobRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -156,28 +155,27 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
 /// This complements the DB transaction: SQLite WAL serializes write
 /// transactions in file-based deployments; this queue does the same for
 /// in-process scenarios (single-node servers, test environments).
-final class WorkerClaimQueue: Sendable {
-    private struct State {
-        var active = false
-        var waiting: [CheckedContinuation<Void, Never>] = []
-    }
-    private let state = Mutex(State())
+/// NSLock guards the waiting list — @unchecked Sendable is safe here.
+final class WorkerClaimQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var active = false
 
     func run<T>(_ work: () async throws -> T) async throws -> T {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            state.withLock { s in
-                if s.active { s.waiting.append(c) } else { s.active = true; c.resume() }
-            }
+            lock.lock()
+            defer { lock.unlock() }
+            if active { waiting.append(c) } else { active = true; c.resume() }
         }
         defer { advance() }
         return try await work()
     }
 
     private func advance() {
-        let next = state.withLock { s -> CheckedContinuation<Void, Never>? in
-            if s.waiting.isEmpty { s.active = false; return nil }
-            return s.waiting.removeFirst()
-        }
+        let next: CheckedContinuation<Void, Never>?
+        lock.lock()
+        if waiting.isEmpty { active = false; next = nil } else { next = waiting.removeFirst() }
+        lock.unlock()
         next?.resume()
     }
 }
