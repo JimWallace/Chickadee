@@ -383,7 +383,7 @@ func latestNotebookSubmissionData(
         let name = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }()
-    let fallbackData = (try? notebookData(for: fallbackSetup)) ?? minimalEmptyNotebookData()
+    let fallbackData = try notebookData(for: fallbackSetup)
     return (fallbackData, fallbackFilename)
 }
 
