@@ -405,7 +405,7 @@ func parseSkip(shortResult: String) -> (isSkipped: Bool, blockerName: String?) {
     return (true, name.isEmpty ? nil : name)
 }
 
-func stderrScriptOutput(from raw: String?, status: TestStatus) -> String? {
+func detailedScriptOutput(from raw: String?, status: TestStatus) -> String? {
     guard status != .pass else { return nil }
     guard let raw else { return nil }
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -414,15 +414,15 @@ func stderrScriptOutput(from raw: String?, status: TestStatus) -> String? {
     if let stderr = extractLabeledOutputSection("stderr", in: trimmed) {
         return stderr
     }
-    if extractLabeledOutputSection("stdout", in: trimmed) != nil {
-        return nil
+    if let stdout = extractLabeledOutputSection("stdout", in: trimmed) {
+        return stdout
     }
     return trimmed
 }
 
 func formattedDetailedOutput(from raw: String?, status: TestStatus) -> String? {
     guard status != .pass else { return nil }
-    guard let base = stderrScriptOutput(from: raw, status: status) else { return nil }
+    guard let base = detailedScriptOutput(from: raw, status: status) else { return nil }
 
     if let extracted = extractStructuredErrorText(from: base) {
         return extracted

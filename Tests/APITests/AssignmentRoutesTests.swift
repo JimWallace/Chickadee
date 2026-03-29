@@ -163,6 +163,72 @@ final class AssignmentRoutesTests: XCTestCase {
         return body
     }
 
+    private func multipartEditBody(
+        boundary: String,
+        csrf: String,
+        assignmentName: String,
+        assignmentNotebook: String,
+        solutionNotebook: String,
+        suiteConfig: String
+    ) -> ByteBuffer {
+        var body = ByteBufferAllocator().buffer(capacity: 4096)
+
+        func appendField(_ name: String, _ value: String) {
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.writeString(value)
+            body.writeString("\r\n")
+        }
+
+        func appendFile(_ name: String, filename: String, contentType: String = "application/json", data: Data) {
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
+            body.writeString("Content-Type: \(contentType)\r\n\r\n")
+            body.writeBytes(data)
+            body.writeString("\r\n")
+        }
+
+        appendField("_csrf", csrf)
+        appendField("assignmentName", assignmentName)
+        appendFile(
+            "assignmentNotebookFile",
+            filename: "assignment.ipynb",
+            data: Data(assignmentNotebook.utf8)
+        )
+        appendFile(
+            "solutionNotebookFile",
+            filename: "solution.ipynb",
+            data: Data(solutionNotebook.utf8)
+        )
+        appendField("suiteConfig", suiteConfig)
+        body.writeString("--\(boundary)--\r\n")
+        return body
+    }
+
+    private func makeZip(at path: String, entries: [(String, String)]) throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("assignment-routes-zip-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for (name, contents) in entries {
+            let fileURL = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try contents.data(using: .utf8)?.write(to: fileURL)
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        process.currentDirectoryURL = root
+        process.arguments = ["-q", "-r", path, "."]
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+    }
+
     // MARK: - GET /instructor
 
     func testStudentCannotAccessAssignments() async throws {
@@ -351,6 +417,81 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertTrue(zipEntries.contains("test_q1.py"))
         XCTAssertTrue(zipEntries.contains("test_q2.py"))
         XCTAssertTrue(zipEntries.contains("test.properties.json"))
+    }
+
+    func testSaveEditedAssignmentPersistsDisplayNameForExistingSuiteFile() async throws {
+        let courseID = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+        let setupID = "setup_edit_display"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+        try await setup.save(on: app.db)
+        let assignment = APIAssignment(publicID: "ABC123", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
+        try await assignment.save(on: app.db)
+
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/ABC123/edit", cookie: cookie, on: app)
+        let boundary = "Boundary-Edit-DisplayName"
+        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+        let suiteConfig = """
+        [
+          {"source":"existing","name":"test_q1.py","tier":"public","order":1,"points":1,"displayName":"BMI check"}
+        ]
+        """
+
+        try await app.asyncTest(.POST, "/instructor/ABC123/edit/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartEditBody(
+                boundary: boundary,
+                csrf: csrf,
+                assignmentName: "Practice Lab",
+                assignmentNotebook: notebook,
+                solutionNotebook: notebook,
+                suiteConfig: suiteConfig
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        let savedSetup = try await APITestSetup.find(setupID, on: app.db)
+        let props = try JSONDecoder().decode(
+            TestProperties.self,
+            from: try XCTUnwrap(savedSetup?.manifest.data(using: .utf8))
+        )
+        XCTAssertEqual(props.testSuites.count, 1)
+        XCTAssertEqual(props.testSuites[0].name, "BMI check")
+    }
+
+    func testEditPageSyncsSuiteConfigOnSubmit() async throws {
+        let courseID = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+        let setupID = "setup_edit_submit_sync"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+        try await setup.save(on: app.db)
+        let assignment = APIAssignment(publicID: "DEF456", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
+        try await assignment.save(on: app.db)
+
+        try await app.asyncTest(.GET, "/instructor/DEF456/edit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("form.addEventListener('submit'"))
+            XCTAssertTrue(html.contains("syncConfig();"))
+        })
     }
 
     func testNewAssignmentPageOmitsLegacyTestColumn() async throws {
