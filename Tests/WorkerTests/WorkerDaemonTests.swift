@@ -87,7 +87,7 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             self.jobs = jobs
         }
 
-        func requestJob() async throws -> Job? {
+        func requestJob() async throws(JobPollerError) -> Job? {
             requestCount += 1
             if jobs.isEmpty {
                 return nil
@@ -103,7 +103,7 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
     private actor MockReporter: Reporting {
         private var collections: [TestOutcomeCollection] = []
 
-        func report(_ collection: TestOutcomeCollection) async throws {
+        func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
             collections.append(collection)
         }
 
@@ -121,7 +121,7 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             self.failuresRemaining = failuresRemaining
         }
 
-        func report(_ collection: TestOutcomeCollection) async throws {
+        func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
             attempts += 1
             if failuresRemaining > 0 {
                 failuresRemaining -= 1

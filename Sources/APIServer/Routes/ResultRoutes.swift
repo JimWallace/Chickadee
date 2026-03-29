@@ -34,8 +34,10 @@ struct ResultRoutes: RouteCollection {
             throw Abort(.unprocessableEntity, reason: "Invalid TestOutcomeCollection: \(decodingError)")
         }
 
-        try await persistToDB(collection, on: req)
-        try await persistToDisk(collection, on: req)
+        async let dbPersist: Void   = persistToDB(collection, on: req)
+        async let diskPersist: Void = persistToDisk(collection, on: req)
+        try await dbPersist
+        try await diskPersist
 
         // Advance the submission's state machine to "complete".
         if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {

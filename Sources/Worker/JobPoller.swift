@@ -10,7 +10,7 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 import Core
 
 protocol JobPolling: Sendable {
-    func requestJob() async throws -> Core.Job?
+    func requestJob() async throws(JobPollerError) -> Core.Job?
 }
 
 struct JobPoller: Sendable {
@@ -32,35 +32,36 @@ struct JobPoller: Sendable {
     }()
 
     /// POST /api/v1/worker/request → Job, or nil when no work is available.
-    func requestJob() async throws -> Core.Job? {
+    func requestJob() async throws(JobPollerError) -> Core.Job? {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/request")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body = WorkerRequestPayload(
+        let payload = WorkerRequestPayload(
             workerID: workerID,
             hostname: ProcessInfo.processInfo.hostName
         )
-        request.httpBody = try JSONEncoder().encode(body)
+        do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)
 
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do { (data, response) = try await Self.session.data(for: request) } catch { throw .transportError(error) }
 
         guard let http = response as? HTTPURLResponse else {
-            throw JobPollerError.unexpectedResponse
+            throw .unexpectedResponse
         }
 
         switch http.statusCode {
         case 200:
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(Core.Job.self, from: data)
+            do { return try decoder.decode(Core.Job.self, from: data) } catch { throw .transportError(error) }
         case 204:
             return nil
         default:
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw JobPollerError.httpError(http.statusCode, body)
+            throw .httpError(http.statusCode, body)
         }
     }
 }
@@ -77,6 +78,7 @@ private struct WorkerRequestPayload: Encodable {
 enum JobPollerError: Error, LocalizedError {
     case unexpectedResponse
     case httpError(Int, String)
+    case transportError(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -84,6 +86,8 @@ enum JobPollerError: Error, LocalizedError {
             return "Non-HTTP response from API server"
         case .httpError(let code, let body):
             return "API server returned HTTP \(code): \(body)"
+        case .transportError(let error):
+            return "Transport error: \(error.localizedDescription)"
         }
     }
 }

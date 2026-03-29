@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Chickadee",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v15)
     ],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.89.0"),

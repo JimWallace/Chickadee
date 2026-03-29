@@ -5,6 +5,7 @@
 // to the same protocol without changing any callers.
 
 import Foundation
+import Synchronization
 #if os(Linux)
 import Glibc
 #endif
@@ -27,21 +28,16 @@ struct LinuxProcessLaunchConfiguration {
 }
 #endif
 
-private final class CapturedPipeBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var data = Data()
+private final class CapturedPipeBuffer: Sendable {
+    private let storage = Mutex(Data())
 
     func append(_ chunk: Data) {
         guard !chunk.isEmpty else { return }
-        lock.lock()
-        data.append(chunk)
-        lock.unlock()
+        storage.withLock { $0.append(chunk) }
     }
 
     func snapshot() -> Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return data
+        storage.withLock { $0 }
     }
 }
 

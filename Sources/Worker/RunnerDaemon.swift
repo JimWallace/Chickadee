@@ -150,11 +150,10 @@ actor WorkerDaemon {
     }
 
     func run() async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingDiscardingTaskGroup { group in
             for _ in 0..<maxConcurrentJobs {
                 group.addTask { try await self.workerLoop() }
             }
-            try await group.waitForAll()
         }
     }
 
@@ -194,8 +193,10 @@ actor WorkerDaemon {
         let testSetupDir  = workDir.appendingPathComponent("testsetup", isDirectory: true)
         try FileManager.default.createDirectory(at: testSetupDir, withIntermediateDirectories: true)
 
-        try await download(url: job.submissionURL, to: submissionZip)
-        try await download(url: job.testSetupURL,  to: testSetupZip)
+        async let submissionDownload: Void = download(url: job.submissionURL, to: submissionZip)
+        async let testSetupDownload: Void  = download(url: job.testSetupURL,  to: testSetupZip)
+        try await submissionDownload
+        try await testSetupDownload
         try unzip(testSetupZip, to: testSetupDir)
 
         let manifest = job.manifest
