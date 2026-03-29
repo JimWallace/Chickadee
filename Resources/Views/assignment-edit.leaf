@@ -243,6 +243,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 (function () {
     'use strict';
 
+    var form = document.querySelector('form.form');
+
     // ── Header view/edit toggle ────────────────────────────────────────────────
     var headerView   = document.getElementById('assign-header-view');
     var headerEdit   = document.getElementById('assign-header-edit');
@@ -568,6 +570,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     body.addEventListener('input',  function () { syncConfig(); });
 
     filesInput.addEventListener('change', addUploadedFiles);
+    if (form) {
+        form.addEventListener('submit', function () {
+            syncConfig();
+        });
+    }
 
     var addTestBtn = document.getElementById('add-test-btn');
     if (addTestBtn) {
