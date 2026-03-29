@@ -180,7 +180,7 @@ final class WorkerClaimQueue: @unchecked Sendable {
     }
 }
 
-private struct WorkerClaimQueueKey: StorageKey {
+struct WorkerClaimQueueKey: StorageKey {
     typealias Value = WorkerClaimQueue
 }
 

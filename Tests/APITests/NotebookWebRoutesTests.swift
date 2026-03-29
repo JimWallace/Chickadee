@@ -477,10 +477,13 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         })
     }
 
-    func testNotebookPageSeedsEmptyWorkingCopyWhenSetupHasNoStarterNotebookYet() async throws {
+    func testNotebookPageReturns404WhenSetupHasNoStarterNotebook() async throws {
+        // A setup with no .ipynb file (no notebookPath, zip contains only non-notebook
+        // files) should return 404 rather than silently serving an empty notebook.
+        // This prevents students from opening a blank notebook when the instructor
+        // hasn't uploaded an assignment notebook yet.
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
-        let userID = try user.requireID()
         try await enroll(user)
 
         let setupID = "setup_nb_empty_seed"
@@ -499,19 +502,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let json = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
-            let cells = json?["cells"] as? [[String: Any]]
-            XCTAssertEqual(cells?.count, 0)
+            XCTAssertEqual(res.status, .notFound)
         })
-
-        let workingCopy = try String(
-            contentsOfFile: workingCopyPath(setupID: setupID, userID: userID),
-            encoding: .utf8
-        )
-        let workingCopyJSON = try JSONSerialization.jsonObject(with: Data(workingCopy.utf8)) as? [String: Any]
-        let workingCells = workingCopyJSON?["cells"] as? [[String: Any]]
-        XCTAssertEqual(workingCells?.count, 0)
     }
 
     func testNotebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
