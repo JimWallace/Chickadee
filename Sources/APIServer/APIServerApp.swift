@@ -78,6 +78,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     let localRunnerAutoStartEnabled = readLocalRunnerAutoStartFromDisk(
         filePath: localRunnerAutoStartFile
     ) ?? false
+    app.storage[WorkerClaimQueueKey.self]      = WorkerClaimQueue()
     app.storage[WorkerSecretStoreKey.self]    = WorkerSecretStore(initialOverride: startupWorkerSecret)
     app.storage[WorkerActivityStoreKey.self]  = WorkerActivityStore()
     app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
