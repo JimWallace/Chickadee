@@ -225,6 +225,10 @@ for _module_name in student_module_names_in_load_order():
                         null, 0);
                 }
 
+                outcome.scriptName = script;
+                outcome.displayName = (typeof entry.name === 'string' && entry.name.trim())
+                    ? entry.name.trim()
+                    : null;
                 outcomes.push(outcome);
                 if (outcome.status === 'pass') passedScripts.add(script);
             }
@@ -379,6 +383,7 @@ sys.stderr = sys.__stderr__
         let status      = 'pass';
         let shortResult = 'passed';
         let longResult  = null;
+        let parsedPayload = null;
 
         // Determine status: prefer the Python-side exit code (caught SystemExit),
         // fall back to JS-side pyErr if the wrapper itself threw.
@@ -399,8 +404,12 @@ sys.stderr = sys.__stderr__
         // Prefer the JSON result the script printed (same protocol as native runner).
         if (lastLine) {
             try {
-                const parsed = JSON.parse(lastLine);
-                shortResult = parsed.shortResult || (status === 'pass' ? 'passed' : status);
+                parsedPayload = JSON.parse(lastLine);
+                if (typeof parsedPayload.status === 'string' && parsedPayload.status.trim()) {
+                    status = parsedPayload.status.trim();
+                }
+                shortResult = structuredSummaryText(parsedPayload, status)
+                    || (status === 'pass' ? 'passed' : status);
             } catch (_) {
                 shortResult = lastLine;
             }
@@ -409,15 +418,14 @@ sys.stderr = sys.__stderr__
         }
 
         if (status !== 'pass') {
-            const parts      = [];
             const stdoutTrim = (stdout || '').trim();
             const stderrTrim = (stderr || '').trim();
-            if (stdoutTrim) parts.push(`stdout:\n${stdoutTrim}`);
-            if (stderrTrim) parts.push(`stderr:\n${stderrTrim}`);
-            if (pyErr && !String(pyErr.message || '').includes('SystemExit')) {
-                parts.push(`exception:\n${pyErr.message || pyErr}`);
-            }
-            if (parts.length) longResult = parts.join('\n\n');
+            longResult = detailedOutputFromParts({
+                parsedPayload,
+                stdout: stdoutTrim,
+                stderr: stderrTrim,
+                pyErr,
+            });
         } else if ((stderr || '').trim()) {
             // For passing tests, only include stderr if it has real content
             // (not just SystemExit tracebacks).
@@ -472,6 +480,88 @@ sys.stderr = sys.__stderr__
             runnerVersion:   'browser-wasm-runner/1.0',
             timestamp:       new Date().toISOString(),
         };
+    }
+
+    function structuredSummaryText(payload, status) {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+
+        if (status !== 'pass') {
+            for (const key of ['error', 'message', 'detail', 'reason']) {
+                const text = trimmedString(payload[key]);
+                if (text) return text;
+            }
+        }
+
+        const shortResult = trimmedString(payload.shortResult);
+        if (shortResult) {
+            const testLabel = trimmedString(payload.test);
+            return stripLeadingLabel(shortResult, testLabel) || shortResult;
+        }
+
+        return trimmedString(payload.status) || null;
+    }
+
+    function detailedOutputFromParts({ parsedPayload, stdout, stderr, pyErr }) {
+        const traceback = extractTracebackText(parsedPayload)
+            || extractTracebackText(stdout)
+            || extractTracebackText(stderr);
+        if (traceback) return traceback;
+
+        const exceptionText = pyErr && !String(pyErr.message || '').includes('SystemExit')
+            ? trimmedString(pyErr.message || String(pyErr))
+            : null;
+        return stderr || stdout || exceptionText || null;
+    }
+
+    function extractTracebackText(value) {
+        if (!value) return null;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            return trimmedString(value.traceback) || null;
+        }
+
+        const text = trimmedString(value);
+        if (!text) return null;
+
+        const structured = parseStructuredPayload(text);
+        if (structured) {
+            const traceback = extractTracebackText(structured);
+            if (traceback) return traceback;
+        }
+
+        const marker = text.indexOf('Traceback (most recent call last):');
+        return marker >= 0 ? text.slice(marker).trim() : null;
+    }
+
+    function parseStructuredPayload(text) {
+        const trimmed = trimmedString(text);
+        if (!trimmed) return null;
+
+        const candidates = [trimmed];
+        const stdoutMatch = trimmed.match(/(?:^|\n)stdout:\n([\s\S]*?)(?:\n\nstderr:\n|$)/);
+        if (stdoutMatch && stdoutMatch[1]) candidates.unshift(stdoutMatch[1].trim());
+        const stderrMatch = trimmed.match(/(?:^|\n)stderr:\n([\s\S]*)$/);
+        if (stderrMatch && stderrMatch[1]) candidates.push(stderrMatch[1].trim());
+
+        for (const candidate of candidates) {
+            try {
+                return JSON.parse(candidate);
+            } catch (_) {
+                // Try the next candidate shape.
+            }
+        }
+        return null;
+    }
+
+    function stripLeadingLabel(text, label) {
+        const trimmedText = trimmedString(text);
+        const trimmedLabel = trimmedString(label);
+        if (!trimmedText || !trimmedLabel) return null;
+        const prefix = `${trimmedLabel}: `;
+        return trimmedText.startsWith(prefix) ? trimmedText.slice(prefix.length).trim() : null;
+    }
+
+    function trimmedString(value) {
+        return typeof value === 'string' ? value.trim() : '';
     }
 
     // -------------------------------------------------------------------------
@@ -827,6 +917,10 @@ for _module_name in _tr.student_module_names_in_load_order():
             runPyScript,
             buildCollection,
             makeOutcome,
+            structuredSummaryText,
+            detailedOutputFromParts,
+            extractTracebackText,
+            parseStructuredPayload,
             removeRecursive,
             fetchBytes,
             fetchText,
