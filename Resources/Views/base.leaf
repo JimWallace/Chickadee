@@ -70,7 +70,9 @@
     document.addEventListener('submit', function (e) {
         var form = e.target;
         if (!form || form.enctype !== 'multipart/form-data') return;
+        if (e.defaultPrevented) return;
         e.preventDefault();
+        form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
         var meta = document.querySelector('meta[name="csrf-token"]');
         var csrfToken = meta ? meta.getAttribute('content') : '';
         var btn = form.querySelector('[type="submit"]');
@@ -84,7 +86,7 @@
         }).catch(function () {
             if (btn) btn.disabled = false;
         });
-    }, true);
+    });
 }());
 </script>
 </body>

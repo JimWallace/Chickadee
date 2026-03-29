@@ -517,6 +517,27 @@ final class WebRoutesTests: XCTestCase {
         })
     }
 
+    func testSubmissionPagePrefersStdoutTracebackOverUnhelpfulStderrSection() async throws {
+        let wrapped = #"""
+        stdout:
+        {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\nNotImplementedError: Implement calculate_bmi\n"}
+
+        stderr:
+        Browser runner reported a structured failure payload
+        """#
+        let formatted = formattedDetailedOutput(from: wrapped, status: .error)
+        XCTAssertEqual(
+            formatted,
+            """
+            Traceback (most recent call last):
+              File "test_q1_bmi.py", line 12, in <module>
+                result = fn(*args)
+                         ^^^^^^^^^
+            NotImplementedError: Implement calculate_bmi
+            """
+        )
+    }
+
     func testStudentCannotViewOtherStudentsSubmission() async throws {
         let cookie = try await loginAsStudent()
         // Create a submission owned by a different user
