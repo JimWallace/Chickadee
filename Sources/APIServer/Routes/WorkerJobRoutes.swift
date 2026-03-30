@@ -155,16 +155,16 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
 /// This complements the DB transaction: SQLite WAL serializes write
 /// transactions in file-based deployments; this queue does the same for
 /// in-process scenarios (single-node servers, test environments).
-/// NSLock guards the waiting list — @unchecked Sendable is safe here.
-final class WorkerClaimQueue: @unchecked Sendable {
-    private let lock = NSLock()
+///
+/// Implemented as a Swift actor — actor isolation replaces the previous
+/// NSLock + @unchecked Sendable approach, giving compile-time concurrency
+/// safety with no manual lock discipline.
+actor WorkerClaimQueue {
     private var waiting: [CheckedContinuation<Void, Never>] = []
     private var active = false
 
     func run<T>(_ work: () async throws -> T) async throws -> T {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            lock.lock()
-            defer { lock.unlock() }
             if active { waiting.append(c) } else { active = true; c.resume() }
         }
         defer { advance() }
@@ -172,11 +172,7 @@ final class WorkerClaimQueue: @unchecked Sendable {
     }
 
     private func advance() {
-        let next: CheckedContinuation<Void, Never>?
-        lock.lock()
-        if waiting.isEmpty { active = false; next = nil } else { next = waiting.removeFirst() }
-        lock.unlock()
-        next?.resume()
+        if waiting.isEmpty { active = false } else { waiting.removeFirst().resume() }
     }
 }
 

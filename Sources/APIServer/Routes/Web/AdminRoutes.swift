@@ -62,12 +62,12 @@ struct AdminRoutes: RouteCollection {
         let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
         let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
 
-        // Course management data.
-        let allCourses = try await APICourse.query(on: req.db)
-            .sort(\.$createdAt)
-            .all()
-        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
-        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
+        // Course management data — all three queries are independent so run in parallel.
+        async let coursesFetch      = APICourse.query(on: req.db).sort(\.$createdAt).all()
+        async let enrollmentsFetch  = enrollmentCountsByCourse(on: req.db)
+        async let assignmentsFetch  = assignmentCountsByCourse(on: req.db)
+        let (allCourses, enrollmentCounts, assignmentCounts) =
+            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
             guard let id = course.id else { return nil }
             return AdminCourseRow(
