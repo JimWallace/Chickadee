@@ -170,8 +170,14 @@ struct MarmosetImportRoutes: RouteCollection {
             // runner doesn't need it (the student provides their own file).
             // It is only stored in notebooks/{setupID}/ for JupyterLite to
             // serve to students, preserving the original Marmoset filename.
+            //
+            // When no starter-files zip is present (e.g. the instructor distributed
+            // the notebook via the course website rather than bundling it in Marmoset),
+            // we create a minimal blank notebook so students can always open the
+            // assignment. The instructor can replace it via the assignment editor.
 
             var notebookPath: String? = nil
+            let notebookDir = setupsDir + "notebooks/\(setupID)/"
             let starterZipPath = projectsDir.appendingPathComponent("\(n)-project-starter-files.zip").path
             if FileManager.default.fileExists(atPath: starterZipPath),
                let starterFilename = try? firstNotebookInZip(zipPath: starterZipPath),
@@ -180,11 +186,19 @@ struct MarmosetImportRoutes: RouteCollection {
                 let normalized = normalizeNotebookForJupyterLite(starterData)
                 let storedName = notebookFilenameForStorage(
                     uploadedName: starterFilename, fallback: "assignment.ipynb")
-                let notebookDir = setupsDir + "notebooks/\(setupID)/"
                 try FileManager.default.createDirectory(atPath: notebookDir,
                                                         withIntermediateDirectories: true)
                 let nbPath = notebookDir + storedName
                 try normalized.write(to: URL(fileURLWithPath: nbPath))
+                notebookPath = nbPath
+            } else {
+                // No starter-files zip — fall back to a minimal blank notebook so
+                // the assignment is openable. Instructor can upload the real starter
+                // via the assignment editor.
+                try FileManager.default.createDirectory(atPath: notebookDir,
+                                                        withIntermediateDirectories: true)
+                let nbPath = notebookDir + "assignment.ipynb"
+                try minimalEmptyNotebookData().write(to: URL(fileURLWithPath: nbPath))
                 notebookPath = nbPath
             }
 
