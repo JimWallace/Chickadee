@@ -1,23 +1,19 @@
-import XCTest
+import Testing
 @testable import chickadee_server
 
-final class SSOAllowlistParsingTests: XCTestCase {
+@Suite struct SSOAllowlistParsingTests {
 
-    func testNilInputReturnsEmptySet() {
-        let parsed = parseSSOIdentityAllowlist(nil)
-        XCTAssertTrue(parsed.isEmpty)
+    @Test func nilInputReturnsEmptySet() {
+        #expect(parseSSOIdentityAllowlist(nil).isEmpty)
     }
 
-    func testSeparatorsAndWhitespaceAndCaseAreNormalized() {
+    @Test func separatorsAndWhitespaceAndCaseAreNormalized() {
         let raw = " Alice ,BOB;\ncarol@example.edu ;  "
-        let parsed = parseSSOIdentityAllowlist(raw)
-        XCTAssertEqual(parsed, ["alice", "bob", "carol@example.edu"])
+        #expect(parseSSOIdentityAllowlist(raw) == ["alice", "bob", "carol@example.edu"])
     }
 
-    func testEmptyAndWhitespaceEntriesAreDropped() {
+    @Test func emptyAndWhitespaceEntriesAreDropped() {
         let raw = " ,  ; \n ;dave"
-        let parsed = parseSSOIdentityAllowlist(raw)
-        XCTAssertEqual(parsed, ["dave"])
+        #expect(parseSSOIdentityAllowlist(raw) == ["dave"])
     }
 }
-
