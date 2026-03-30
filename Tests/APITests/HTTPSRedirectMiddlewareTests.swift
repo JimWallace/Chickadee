@@ -3,12 +3,12 @@
 // Unit tests for HTTPSRedirectMiddleware — redirect logic, proxy header trust,
 // GET vs POST handling, and publicBaseURL override.
 
-import XCTest
+import Testing
 import XCTVapor
 @testable import chickadee_server
 import Foundation
 
-final class HTTPSRedirectMiddlewareTests: XCTestCase {
+@Suite struct HTTPSRedirectMiddlewareTests {
 
     // MARK: - Helpers
 
@@ -32,89 +32,89 @@ final class HTTPSRedirectMiddlewareTests: XCTestCase {
 
     // MARK: - Enforcement disabled
 
-    func testNoRedirectWhenEnforcementDisabled() async throws {
+    @Test func noRedirectWhenEnforcementDisabled() async throws {
         try await withApp(try await makeApp(enforceHTTPS: false)) { app in
             try await app.testable().test(.GET, "/test") { res async in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.body.string, "ok")
+                #expect(res.status == .ok)
+                #expect(res.body.string == "ok")
             }
         }
     }
 
     // MARK: - HTTPS pass-through
 
-    func testHTTPSRequestPassesThrough() async throws {
+    @Test func httpsRequestPassesThrough() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/test", beforeRequest: { req async in
                 req.headers.add(name: "X-Forwarded-Proto", value: "https")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
         }
     }
 
     // MARK: - GET redirect
 
-    func testGETRedirectsToHTTPS() async throws {
+    @Test func getRedirectsToHTTPS() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/test", beforeRequest: { req async in
                 req.headers.add(name: .host, value: "example.com")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .temporaryRedirect)
+                #expect(res.status == .temporaryRedirect)
                 let location = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(location.hasPrefix("https://"), "Expected https redirect, got: \(location)")
-                XCTAssertTrue(location.contains("example.com"), "Expected host in redirect, got: \(location)")
-                XCTAssertTrue(location.contains("/test"), "Expected path in redirect, got: \(location)")
+                #expect(location.hasPrefix("https://"), "Expected https redirect, got: \(location)")
+                #expect(location.contains("example.com"), "Expected host in redirect, got: \(location)")
+                #expect(location.contains("/test"), "Expected path in redirect, got: \(location)")
             })
         }
     }
 
     // MARK: - POST returns 426
 
-    func testPOSTReturns426() async throws {
+    @Test func postReturns426() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.POST, "/submit", beforeRequest: { req async in
                 req.headers.add(name: .host, value: "example.com")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .upgradeRequired)
+                #expect(res.status == .upgradeRequired)
             })
         }
     }
 
     // MARK: - X-Forwarded-Proto trust
 
-    func testForwardedProtoHTTPSPassesThrough() async throws {
+    @Test func forwardedProtoHTTPSPassesThrough() async throws {
         try await withApp(try await makeApp(trustForwardedProto: true)) { app in
             try await app.testable().test(.GET, "/test", beforeRequest: { req async in
                 req.headers.add(name: "X-Forwarded-Proto", value: "https")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
         }
     }
 
-    func testForwardedProtoHTTPRedirects() async throws {
+    @Test func forwardedProtoHTTPRedirects() async throws {
         try await withApp(try await makeApp(trustForwardedProto: true)) { app in
             try await app.testable().test(.GET, "/test", beforeRequest: { req async in
                 req.headers.add(name: "X-Forwarded-Proto", value: "http")
                 req.headers.add(name: .host, value: "example.com")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .temporaryRedirect)
+                #expect(res.status == .temporaryRedirect)
             })
         }
     }
 
     // MARK: - X-Forwarded-Host in redirect
 
-    func testRedirectUsesForwardedHost() async throws {
+    @Test func redirectUsesForwardedHost() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/test", beforeRequest: { req async in
                 req.headers.add(name: "X-Forwarded-Host", value: "public.example.com")
                 req.headers.add(name: .host, value: "internal.local")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .temporaryRedirect)
+                #expect(res.status == .temporaryRedirect)
                 let location = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(location.contains("public.example.com"),
+                #expect(location.contains("public.example.com"),
                     "Expected forwarded host in redirect, got: \(location)")
             })
         }
@@ -122,14 +122,14 @@ final class HTTPSRedirectMiddlewareTests: XCTestCase {
 
     // MARK: - publicBaseURL override
 
-    func testRedirectUsesPublicBaseURL() async throws {
+    @Test func redirectUsesPublicBaseURL() async throws {
         try await withApp(try await makeApp(publicBaseURL: "https://chickadee.example.edu")) { app in
             try await app.testable().test(.GET, "/test", beforeRequest: { req async in
                 req.headers.add(name: .host, value: "internal.local")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .temporaryRedirect)
+                #expect(res.status == .temporaryRedirect)
                 let location = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(location.hasPrefix("https://chickadee.example.edu/test"),
+                #expect(location.hasPrefix("https://chickadee.example.edu/test"),
                     "Expected publicBaseURL in redirect, got: \(location)")
             })
         }
@@ -137,25 +137,24 @@ final class HTTPSRedirectMiddlewareTests: XCTestCase {
 
     // MARK: - Fallback host
 
-    func testRedirectFallsBackToLocalhost() async throws {
+    @Test func redirectFallsBackToLocalhost() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/test", afterResponse: { res async in
-                XCTAssertEqual(res.status, .temporaryRedirect)
+                #expect(res.status == .temporaryRedirect)
                 let location = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(location.contains("localhost"),
-                    "Expected localhost fallback, got: \(location)")
+                #expect(location.contains("localhost"), "Expected localhost fallback, got: \(location)")
             })
         }
     }
 
     // MARK: - HEAD treated same as GET
 
-    func testHEADRedirectsLikeGET() async throws {
+    @Test func headRedirectsLikeGET() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.HEAD, "/test", beforeRequest: { req async in
                 req.headers.add(name: .host, value: "example.com")
             }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .temporaryRedirect)
+                #expect(res.status == .temporaryRedirect)
             })
         }
     }
