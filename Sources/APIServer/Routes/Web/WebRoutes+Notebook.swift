@@ -34,9 +34,9 @@ extension WebRoutes {
         }
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
 
-        let query = try? req.query.decode(NotebookQuery.self)
-        let fileKind = notebookFileKind(from: query?.file)
-        let queryTitle = (query?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = try req.query.decode(NotebookQuery.self)
+        let fileKind = notebookFileKind(from: query.file)
+        let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
@@ -46,7 +46,7 @@ extension WebRoutes {
             if !dbTitle.isEmpty { return dbTitle }
             return "Assignment"
         }()
-        let requestedSubmissionID = (query?.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestedSubmissionID = (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !requestedSubmissionID.isEmpty {
             let notebookData = try await notebookDataForHistorySelection(
                 req: req,
@@ -144,8 +144,8 @@ extension WebRoutes {
 
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
 
-        let query = try? req.query.decode(NotebookSourceQuery.self)
-        let fileKind = notebookFileKind(from: query?.file)
+        let query = try req.query.decode(NotebookSourceQuery.self)
+        let fileKind = notebookFileKind(from: query.file)
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()

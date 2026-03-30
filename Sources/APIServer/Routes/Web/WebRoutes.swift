@@ -205,6 +205,14 @@ struct WebRoutes: RouteCollection {
             } else {
                 status = "unpublished"
             }
+            let hasNotebook: Bool = {
+                // True when the setup has a flat notebook file on disk, or the zip
+                // contains at least one .ipynb entry.
+                if let path = setup.notebookPath, !path.isEmpty,
+                   FileManager.default.fileExists(atPath: path) { return true }
+                return listZipEntries(zipPath: setup.zipPath)
+                    .contains { $0.hasSuffix(".ipynb") }
+            }()
             return TestSetupRow(
                 id:         setupID,
                 title:      assignment?.title,
@@ -213,6 +221,7 @@ struct WebRoutes: RouteCollection {
                 dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },
                 status:     status,
                 isOpen:     assignment?.isOpen ?? false,
+                hasNotebook: hasNotebook,
                 submissionCount: submissionCount,
                 hasLatestSubmission: latestSubmission != nil,
                 latestSubmissionID: latestSubmission?.submissionID ?? "",
