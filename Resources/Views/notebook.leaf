@@ -38,7 +38,7 @@ Notebook
 </p>
 <div id="nb-results" class="nb-results" hidden></div>
 <div id="browser-runner-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-<script src="/notebook.js?v=0.4.18"></script>
-<script src="/browser-runner.js?v=0.4.18" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
+<script src="/notebook.js?v=0.4.19"></script>
+<script src="/browser-runner.js?v=0.4.19" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
 #endexport
 #endextend
