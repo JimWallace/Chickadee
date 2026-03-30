@@ -57,7 +57,13 @@ struct BrowserResultRoutes: RouteCollection {
         let subsDir        = req.application.submissionsDirectory
         let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
         let nbPath         = subsDir + "\(subID).ipynb"
-        let instructorData = (try? notebookData(for: setup)) ?? body.notebook
+        let instructorData: Data
+        do {
+            instructorData = try notebookData(for: setup)
+        } catch {
+            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            instructorData = body.notebook
+        }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
@@ -119,7 +125,13 @@ struct BrowserResultRoutes: RouteCollection {
         let nbPath  = subsDir + "\(subID).ipynb"
 
         // Always merge with canonical instructor notebook so hidden tests are present.
-        let instructorData = (try? notebookData(for: setup)) ?? body.notebook
+        let instructorData: Data
+        do {
+            instructorData = try notebookData(for: setup)
+        } catch {
+            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            instructorData = body.notebook
+        }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 

@@ -1019,18 +1019,21 @@ struct AssignmentRoutes: RouteCollection {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
-        // Preserve the grading mode already stored in the manifest — editing
-        // the suite files must not silently reset it back to "worker".
-        let existingGradingMode: String = {
+        // Preserve the grading mode and starterNotebook already stored in the
+        // manifest — editing the suite files must not silently reset them.
+        let existingManifestDict: [String: Any] = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let mode = dict["gradingMode"] as? String else { return "worker" }
-            return mode
+                  let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else { return [:] }
+            return dict
         }()
+        let existingGradingMode = existingManifestDict["gradingMode"] as? String ?? "worker"
+        let existingStarterNotebook = existingManifestDict["starterNotebook"] as? String ?? "assignment.ipynb"
         setup.manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            gradingMode: existingGradingMode
+            gradingMode: existingGradingMode,
+            starterNotebook: existingStarterNotebook
         )
         setup.notebookPath = notebookPath
         try await setup.save(on: req.db)
