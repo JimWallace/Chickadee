@@ -60,7 +60,7 @@ struct WorkerJobRoutes: RouteCollection {
                 (submission, setup, manifest) = wm
             } else if let val = pendingValidation {
                 guard let valSetup = try await APITestSetup.find(val.testSetupID, on: db) else {
-                    throw Abort(.internalServerError, reason: "TestSetup \(val.testSetupID) not found")
+                    throw WorkerJobError.testSetupNotFound(id: val.testSetupID)
                 }
                 let valManifestData = Data(valSetup.manifest.utf8)
                 let valManifest     = try JSONDecoder().decode(TestProperties.self, from: valManifestData)

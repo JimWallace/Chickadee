@@ -4,8 +4,9 @@
 // Wraps /usr/bin/zip and /usr/bin/unzip (consistent with existing codebase usage).
 //
 // All functions are free (not methods) to keep callsites clean.
-// Process execution is offloaded to a background DispatchQueue via
-// withCheckedThrowingContinuation so the Vapor event loop is not blocked.
+// Process execution uses withCheckedThrowingContinuation + terminationHandler;
+// no DispatchQueue bridging is needed because process setup is non-blocking
+// and Foundation calls terminationHandler from its own internal monitoring queue.
 
 import Foundation
 
@@ -104,36 +105,38 @@ func listZipContents(zipPath: String) throws -> [String] {
 // MARK: - Private helper
 
 /// Runs an executable asynchronously. Errors if exit status != 0.
+///
+/// Process setup (property assignment + `run()`) is cheap and non-blocking.
+/// The continuation is resumed by Foundation's `terminationHandler`, which is
+/// called from Foundation's internal process-monitoring queue — no
+/// DispatchQueue offloading is required.
 private func runZipProcess(executablePath: String,
                            arguments: [String],
                            workingDirectory: URL? = nil) async throws {
+    guard FileManager.default.fileExists(atPath: executablePath) else {
+        throw ZipArchiverError.executableNotFound(executablePath)
+    }
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                guard FileManager.default.fileExists(atPath: executablePath) else {
-                    continuation.resume(throwing: ZipArchiverError.executableNotFound(executablePath))
-                    return
-                }
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: executablePath)
-                proc.arguments     = arguments
-                if let dir = workingDirectory {
-                    proc.currentDirectoryURL = dir
-                }
-                proc.standardOutput = Pipe() // discard stdout
-                proc.standardError  = Pipe() // discard stderr
-                proc.terminationHandler = { process in
-                    if process.terminationStatus == 0 {
-                        continuation.resume()
-                    } else {
-                        continuation.resume(throwing: ZipArchiverError.processFailed(
-                            executablePath, process.terminationStatus))
-                    }
-                }
-                try proc.run()
-            } catch {
-                continuation.resume(throwing: error)
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: executablePath)
+        proc.arguments     = arguments
+        if let dir = workingDirectory {
+            proc.currentDirectoryURL = dir
+        }
+        proc.standardOutput = Pipe() // discard stdout
+        proc.standardError  = Pipe() // discard stderr
+        proc.terminationHandler = { process in
+            if process.terminationStatus == 0 {
+                continuation.resume()
+            } else {
+                continuation.resume(throwing: ZipArchiverError.processFailed(
+                    executablePath, process.terminationStatus))
             }
+        }
+        do {
+            try proc.run()
+        } catch {
+            continuation.resume(throwing: error)
         }
     }
 }

@@ -73,40 +73,43 @@ func executeScriptProcess(
         )
     }
 
-    var timedOut = false
-    let timeoutItem: DispatchWorkItem?
+    // Mutex so the timeout Task and the main path can safely share this flag.
+    let timedOut = Mutex(false)
+
+    // Spawn a timeout Task instead of DispatchQueue.asyncAfter so the timeout
+    // participates in Swift structured concurrency and supports cooperative
+    // cancellation. The main path still calls waitUntilExit() — acceptable in
+    // the worker daemon context where one thread per active job is expected.
+    let timeoutTask: Task<Void, Never>?
     if usesExternalTimeout {
-        timeoutItem = nil
+        timeoutTask = nil
     } else {
-        let workItem = DispatchWorkItem {
-            guard proc.isRunning else { return }
-            timedOut = true
+        timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(timeLimitSeconds) * 1_000_000_000)
+            guard !Task.isCancelled, proc.isRunning else { return }
+            timedOut.withLock { $0 = true }
             terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
         }
-        DispatchQueue.global().asyncAfter(
-            deadline: .now() + .seconds(timeLimitSeconds),
-            execute: workItem
-        )
-        timeoutItem = workItem
     }
 
     proc.waitUntilExit()
-    timeoutItem?.cancel()
+    timeoutTask?.cancel()
 
     if usesExternalTimeout && proc.terminationStatus == 124 {
-        timedOut = true
+        timedOut.withLock { $0 = true }
     }
 
+    let didTimeOut = timedOut.withLock { $0 }
     let elapsed = Int(Date().timeIntervalSince(start) * 1000)
     let stdoutData = finishPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
     let stderrData = finishPipeCapture(for: stderrPipe, buffer: stderrBuffer)
 
     return ScriptOutput(
-        exitCode: timedOut ? -1 : proc.terminationStatus,
+        exitCode: didTimeOut ? -1 : proc.terminationStatus,
         stdout: String(data: stdoutData, encoding: .utf8) ?? "",
         stderr: String(data: stderrData, encoding: .utf8) ?? "",
         executionTimeMs: elapsed,
-        timedOut: timedOut
+        timedOut: didTimeOut
     )
 }
 

@@ -157,7 +157,11 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
 
 /// Loads the notebook data for a test setup.
 /// Prefers the flat `.ipynb` file (Phase 8 editable path); falls back to zip extraction.
-func notebookData(for setup: APITestSetup) throws -> Data {
+///
+/// - Throws: `NotebookLookupError.notFound` when neither a flat file nor a zip
+///   entry is available. Callers can catch this specific type; Vapor's error
+///   middleware maps it to HTTP 404 automatically.
+func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
     if let path = setup.notebookPath,
        let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
        !data.isEmpty {
@@ -172,7 +176,7 @@ func notebookData(for setup: APITestSetup) throws -> Data {
         return normalizeNotebookForJupyterLite(data)
     }
 
-    throw Abort(.notFound, reason: "No assignment notebook in this test setup")
+    throw NotebookLookupError.notFound(setupID: setup.id ?? "unknown")
 }
 
 private func notebookCandidateEntryNames(for setup: APITestSetup, entries: [String]) -> [String] {
