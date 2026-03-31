@@ -350,24 +350,42 @@ actor WorkerSecretStore {
 struct WorkerActivitySnapshot: Sendable {
     let workerID: String
     let lastActive: Date
+    let hostname: String
 }
 
 actor WorkerActivityStore {
-    private var lastSeenByWorkerID: [String: Date] = [:]
+    private struct Entry: Sendable {
+        let lastSeen: Date
+        let hostname: String
+    }
+    private var entries: [String: Entry] = [:]
 
-    func markActive(workerID: String, at date: Date = Date()) {
+    /// Record activity for `workerID`. If `hostname` is empty the existing
+    /// hostname is preserved so that HMAC middleware keep-alive touches on
+    /// non-body routes do not clobber the value set by the job-request body.
+    func markActive(workerID: String, hostname: String, at date: Date = Date()) {
         guard !workerID.isEmpty else { return }
-        lastSeenByWorkerID[workerID] = date
+        let effectiveHostname = hostname.isEmpty ? (entries[workerID]?.hostname ?? "") : hostname
+        entries[workerID] = Entry(lastSeen: date, hostname: effectiveHostname)
+    }
+
+    /// Returns true when `workerID` has been seen within `ttlSeconds` AND the
+    /// stored hostname differs from `hostname`. Same hostname = restart of the
+    /// same runner process, which is not treated as a conflict.
+    func isConflict(workerID: String, hostname: String, ttlSeconds: TimeInterval, now: Date = Date()) -> Bool {
+        guard let entry = entries[workerID] else { return false }
+        let withinTTL = now.timeIntervalSince(entry.lastSeen) <= ttlSeconds
+        return withinTTL && !entry.hostname.isEmpty && entry.hostname != hostname
     }
 
     func snapshotsSortedByRecent() -> [WorkerActivitySnapshot] {
-        lastSeenByWorkerID
-            .map { WorkerActivitySnapshot(workerID: $0.key, lastActive: $0.value) }
+        entries
+            .map { WorkerActivitySnapshot(workerID: $0.key, lastActive: $0.value.lastSeen, hostname: $0.value.hostname) }
             .sorted { $0.lastActive > $1.lastActive }
     }
 
     func hasRecentActivity(within seconds: TimeInterval, now: Date = Date()) -> Bool {
-        lastSeenByWorkerID.values.contains { now.timeIntervalSince($0) <= seconds }
+        entries.values.contains { now.timeIntervalSince($0.lastSeen) <= seconds }
     }
 }
 

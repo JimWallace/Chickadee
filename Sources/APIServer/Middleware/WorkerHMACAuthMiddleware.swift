@@ -70,7 +70,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         }
 
         if let workerID, !workerID.isEmpty {
-            await request.application.workerActivityStore.markActive(workerID: workerID)
+            // Pass hostname: "" here — the middleware doesn't have access to the
+            // request body, so we preserve whatever hostname was set by the
+            // job-request body handler rather than clobbering it with empty string.
+            await request.application.workerActivityStore.markActive(workerID: workerID, hostname: "")
         }
 
         return try await next.respond(to: request)
