@@ -40,7 +40,8 @@ struct JobPoller: Sendable {
 
         let payload = WorkerRequestPayload(
             workerID: workerID,
-            hostname: ProcessInfo.processInfo.hostName
+            hostname: ProcessInfo.processInfo.hostName,
+            runnerVersion: ChickadeeVersion.current
         )
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)
@@ -79,6 +80,7 @@ extension JobPoller: JobPolling {}
 private struct WorkerRequestPayload: Encodable {
     let workerID: String
     let hostname: String
+    let runnerVersion: String
 }
 
 enum JobPollerError: Error, LocalizedError {
