@@ -131,6 +131,7 @@ struct WorkerJobRoutes: RouteCollection {
 struct WorkerRequestBody: Content {
     let workerID: String
     let hostname: String?
+    let runnerVersion: String?
 }
 
 private func resolvedWorkerBaseURL(req: Request) -> String {
