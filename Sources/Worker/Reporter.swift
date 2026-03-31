@@ -41,20 +41,41 @@ struct Reporter: Sendable {
         do { request.httpBody = try encoder.encode(collection) } catch { throw .transportError(error) }
         signer.sign(&request)
 
-        let (data, response): (Data, URLResponse)
-        do { (data, response) = try await Self.session.data(for: request) } catch { throw .transportError(error) }
-
-        guard let http = response as? HTTPURLResponse else {
-            throw .unexpectedResponse
+        // Retry up to 3 times with a 5-second pause between attempts so that a
+        // transient network blip or server restart doesn't silently discard grades.
+        var lastError: ReporterError = .unexpectedResponse
+        for attempt in 1...3 {
+            let result = await Self.attemptReport(request: request)
+            switch result {
+            case .success:
+                return
+            case .failure(let err):
+                lastError = err
+                if attempt < 3 {
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
         }
-        guard http.statusCode == 200 else {
-            let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw .httpError(http.statusCode, body)
-        }
+        throw lastError
     }
 }
 
 extension Reporter: Reporting {}
+
+private extension Reporter {
+    static func attemptReport(request: URLRequest) async -> Result<Void, ReporterError> {
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await Self.session.data(for: request) }
+        catch { return .failure(.transportError(error)) }
+        guard let http = response as? HTTPURLResponse else { return .failure(.unexpectedResponse) }
+        guard http.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? "<binary>"
+            return .failure(.httpError(http.statusCode, body))
+        }
+        return .success(())
+    }
+}
 
 enum ReporterError: Error, LocalizedError {
     case unexpectedResponse

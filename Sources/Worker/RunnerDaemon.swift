@@ -925,8 +925,11 @@ struct ExponentialBackoff {
     mutating func next() -> Duration {
         let doubled = min(current.components.seconds * 2, max.components.seconds)
         current = Duration.seconds(doubled)
-        let jittered = Double.random(in: 0...Double(doubled))
-        return Duration.seconds(jittered)
+        // Lower bound is the initial interval so next() never returns zero,
+        // which would defeat the purpose of backing off.
+        let lo = Double(initial.components.seconds)
+        let hi = Double(doubled)
+        return Duration.seconds(Double.random(in: lo...hi))
     }
 
     mutating func reset() {
