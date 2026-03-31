@@ -179,6 +179,14 @@ actor WorkerDaemon {
                 writeToStandardError("[\(workerID)] Fatal: \(message)\n")
                 writeToStandardError("[\(workerID)] Exiting. Use --worker-id to choose a unique identifier.\n")
                 throw JobPollerError.duplicateWorkerID(message)
+            } catch JobPollerError.transportError(let underlying) {
+                // Server is unreachable (connection refused, DNS failure, etc.).
+                // Apply the same exponential backoff used for the no-job poll and
+                // keep retrying so the runner survives server restarts automatically.
+                let delay = backoff.next()
+                let seconds = delay.components.seconds
+                writeToStandardError("[\(workerID)] Server unreachable: \(underlying.localizedDescription). Retrying in \(seconds)s…\n")
+                try await Task.sleep(for: delay)
             }
         }
     }
