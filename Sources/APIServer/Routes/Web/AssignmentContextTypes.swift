@@ -19,6 +19,7 @@ struct AssignmentRow: Encodable {
     let validationSubmissionID: String?
     let suiteCount:   Int
     let createdAt:    String
+    let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
 }
 
 /// A course section with its grouped assignment rows, used in instructor and student views.

@@ -95,13 +95,14 @@
                 <th>Status</th>
                 <th>Validation</th>
                 <th class="due-col">Due</th>
+                <th>Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody class="assignments-body" data-section-id="#(section.sectionID)">
         #if(section.rows.isEmpty):
         <tr class="section-empty-row">
-            <td colspan="5" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
+            <td colspan="6" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
                 Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
             </td>
         </tr>
@@ -171,6 +172,11 @@
                     #endif
                 </td>
                 <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td style="white-space:nowrap">
+                    #if(row.assignmentID):
+                    <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
+                    #else:—#endif
+                </td>
                 <td>
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
@@ -247,6 +253,7 @@
                 <th>Status</th>
                 <th>Validation</th>
                 <th class="due-col">Due</th>
+                <th>Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -316,6 +323,11 @@
                     #endif
                 </td>
                 <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td style="white-space:nowrap">
+                    #if(row.assignmentID):
+                    <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
+                    #else:—#endif
+                </td>
                 <td>
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
