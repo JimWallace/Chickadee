@@ -6,7 +6,7 @@
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
     <h1 style="margin:0">#(assignmentTitle)</h1>
     <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <input id="submissions-filter" class="form-input" type="search"
+        <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or ID…"
                style="width:220px" aria-label="Filter students">
         <a class="btn action-btn" href="/instructor">Back to Instructor</a>
