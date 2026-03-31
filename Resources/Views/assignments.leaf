@@ -417,7 +417,7 @@
         </form>
         #endif
         #endif
-        <input id="enrolled-filter" class="form-input" type="search"
+        <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or username…"
                style="width:220px;margin-left:auto" aria-label="Filter enrolled students">
     </div>
