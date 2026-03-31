@@ -59,6 +59,12 @@ struct JobPoller: Sendable {
             do { return try decoder.decode(Core.Job.self, from: data) } catch { throw .transportError(error) }
         case 204:
             return nil
+        case 409:
+            struct ServerError: Decodable { let error: String }
+            let msg = (try? JSONDecoder().decode(ServerError.self, from: data))?.error
+                   ?? String(data: data, encoding: .utf8)
+                   ?? "duplicate worker ID"
+            throw .duplicateWorkerID(msg)
         default:
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
             throw .httpError(http.statusCode, body)
@@ -79,6 +85,7 @@ enum JobPollerError: Error, LocalizedError {
     case unexpectedResponse
     case httpError(Int, String)
     case transportError(any Error)
+    case duplicateWorkerID(String)
 
     var errorDescription: String? {
         switch self {
@@ -88,6 +95,8 @@ enum JobPollerError: Error, LocalizedError {
             return "API server returned HTTP \(code): \(body)"
         case .transportError(let error):
             return "Transport error: \(error.localizedDescription)"
+        case .duplicateWorkerID(let message):
+            return "Duplicate worker ID: \(message)"
         }
     }
 }

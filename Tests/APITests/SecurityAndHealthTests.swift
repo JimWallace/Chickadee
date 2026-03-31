@@ -142,7 +142,7 @@ final class SecurityAndHealthTests: XCTestCase {
 
     func testHealthRouteReturnsOKWhenDatabaseIsReachable() async throws {
         try await withApp(try await makeHealthApp(withDatabase: true)) { app in
-            await app.workerActivityStore.markActive(workerID: "worker-1")
+            await app.workerActivityStore.markActive(workerID: "worker-1", hostname: "test-host")
 
             try await app.asyncTest(.GET, "/health") { res in
                 XCTAssertEqual(res.status, .ok)

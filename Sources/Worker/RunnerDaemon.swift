@@ -162,17 +162,23 @@ actor WorkerDaemon {
     private func workerLoop() async throws {
         var backoff = ExponentialBackoff(initial: .seconds(1), max: .seconds(30))
         while !Task.isCancelled {
-            if let job = try await poller.requestJob() {
-                backoff.reset()
-                do {
-                    try await process(job)
-                } catch {
-                    writeToStandardError("[\(workerID)] Error processing job \(job.submissionID): \(error)\n")
-                    try? await reportProcessingFailure(job: job, error: error)
+            do {
+                if let job = try await poller.requestJob() {
+                    backoff.reset()
+                    do {
+                        try await process(job)
+                    } catch {
+                        writeToStandardError("[\(workerID)] Error processing job \(job.submissionID): \(error)\n")
+                        try? await reportProcessingFailure(job: job, error: error)
+                    }
+                } else {
+                    let delay = backoff.next()
+                    try await Task.sleep(for: delay)
                 }
-            } else {
-                let delay = backoff.next()
-                try await Task.sleep(for: delay)
+            } catch JobPollerError.duplicateWorkerID(let message) {
+                writeToStandardError("[\(workerID)] Fatal: \(message)\n")
+                writeToStandardError("[\(workerID)] Exiting. Use --worker-id to choose a unique identifier.\n")
+                throw JobPollerError.duplicateWorkerID(message)
             }
         }
     }

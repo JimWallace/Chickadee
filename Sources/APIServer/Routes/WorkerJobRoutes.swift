@@ -13,8 +13,29 @@ struct WorkerJobRoutes: RouteCollection {
 
     @Sendable
     func requestJob(req: Request) async throws -> Response {
-        let body = try req.content.decode(WorkerRequestBody.self)
-        await req.application.workerActivityStore.markActive(workerID: body.workerID)
+        let body     = try req.content.decode(WorkerRequestBody.self)
+        let hostname = body.hostname ?? ""
+
+        // Reject a runner whose workerID is already claimed by a different host
+        // within the activity TTL (3× the runner's max backoff of 30 s = 90 s).
+        // Same hostname is treated as a restart of the same process, not a conflict.
+        let conflictTTL: TimeInterval = 90
+        if await req.application.workerActivityStore.isConflict(
+            workerID: body.workerID,
+            hostname: hostname,
+            ttlSeconds: conflictTTL
+        ) {
+            struct ConflictBody: Content { let error: String }
+            let msg = "workerID \"\(body.workerID)\" is already in use by an active runner. " +
+                      "Choose a different --worker-id or wait for the existing runner to time out."
+            return try Response(
+                status: .conflict,
+                headers: ["Content-Type": "application/json"],
+                body: .init(data: JSONEncoder().encode(ConflictBody(error: msg)))
+            )
+        }
+
+        await req.application.workerActivityStore.markActive(workerID: body.workerID, hostname: hostname)
 
         // Atomically find and claim the best pending job.
         // WorkerClaimQueue serializes concurrent calls at the application level;
