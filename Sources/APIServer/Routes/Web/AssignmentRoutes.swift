@@ -124,6 +124,19 @@ struct AssignmentRoutes: RouteCollection {
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
         )
 
+        // Batch-fetch unique submitter counts: [testSetupID: count of distinct userIDs]
+        let allSetupIDs = allSetups.compactMap { $0.id }
+        let studentSubmissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID ~~ allSetupIDs)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+        var submitterSets: [String: Set<UUID>] = [:]
+        for sub in studentSubmissions {
+            guard let uid = sub.userID else { continue }
+            submitterSets[sub.testSetupID, default: []].insert(uid)
+        }
+        let uniqueSubmittersBySetup: [String: Int] = submitterSets.mapValues { $0.count }
+
         let unsortedRows: [AssignmentRow] = allSetups.map { setup in
             let assignment = assignmentBySetup[setup.id ?? ""]
             let setupID    = setup.id ?? ""
@@ -157,7 +170,8 @@ struct AssignmentRoutes: RouteCollection {
                 validationStatus: validationStatus,
                 validationSubmissionID: validationSubmissionID,
                 suiteCount:   suiteCount,
-                createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—"
+                createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—",
+                submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil
             )
         }
 
