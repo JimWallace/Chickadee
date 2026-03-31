@@ -41,16 +41,21 @@ extension WebRoutes {
         let subsDir = req.application.submissionsDirectory
         let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
 
+        // Decode the uploaded bytes. Vapor's File type captures the original
+        // filename from the multipart Content-Disposition header automatically.
+        let fileData = Data(body.files.data.readableBytesView)
+        let uploadFilename = body.files.filename.isEmpty ? nil : body.files.filename
+
         // Detect whether the upload is a zip by checking PK magic bytes.
-        let isZip     = body.files.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
+        let isZip     = fileData.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
         let ext: String = {
             if isZip { return "zip" }
-            return inferredRawSubmissionExtension(data: body.files, uploadFilename: body.uploadFilename)
+            return inferredRawSubmissionExtension(data: fileData, uploadFilename: uploadFilename)
         }()
         let storedExt = isZip ? "zip" : ext
         let filePath  = subsDir + "\(subID).\(storedExt)"
-        try body.files.write(to: URL(fileURLWithPath: filePath))
-        let fallbackFilename = isZip ? nil : (body.uploadFilename ?? "submission.\(storedExt)")
+        try fileData.write(to: URL(fileURLWithPath: filePath))
+        let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
         // Attempt number is scoped to this student for this test setup.
         let priorCount = try await APISubmission.query(on: req.db)
@@ -385,9 +390,10 @@ extension WebRoutes {
 // MARK: - Submission helpers
 
 struct SubmitFormBody: Content {
-    var files: Data
-    /// Original filename from the browser's multipart upload (nil for older clients).
-    var uploadFilename: String?
+    /// The uploaded file. Vapor's File type automatically captures the original
+    /// filename from the multipart Content-Disposition header, so no separate
+    /// uploadFilename field is needed.
+    var files: File
 }
 
 /// Detects the dependency-skip message format and extracts the blocking test name.
