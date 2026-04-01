@@ -65,6 +65,7 @@ Check status:
 ```bash
 docker compose ps
 docker compose logs -f server
+docker compose logs -f runner
 ```
 
 ### 3. Verify
@@ -153,6 +154,34 @@ docker compose up -d --scale runner=4
 ```
 
 Each runner instance gets a unique worker ID derived from its container ID.
+
+### Observability and operations
+
+Backend-only observability is built in:
+
+- Structured server logs cover submission enqueue, runner polling/heartbeat,
+  assignment, result receipt, and job finalisation.
+- Structured runner logs cover startup, config, poll cycles, job acceptance,
+  per-test execution, result submission, errors, timeouts, and shutdown.
+- SQLite now stores `job_execution_metrics` and `runner_snapshots`.
+- Authenticated admins can query `GET /admin/metrics` for queue depth, in-flight
+  jobs, active runners, per-runner load, and recent timing/status summaries.
+
+Useful commands:
+
+```bash
+docker compose logs -f server | jq -R 'fromjson?'
+docker compose logs -f runner | jq -R 'fromjson?'
+curl -H "Cookie: <admin-session-cookie>" http://localhost:8080/admin/metrics | jq
+```
+
+Retention knobs:
+
+- `JOB_METRIC_RETENTION_DAYS` (default `30`)
+- `RUNNER_SNAPSHOT_RETENTION_DAYS` (default `14`)
+- `RUNNER_ACTIVE_WINDOW_SECONDS` (default `120`)
+- `METRICS_RECENT_WINDOW_HOURS` (default `24`)
+- `OBSERVABILITY_PRUNE_INTERVAL_HOURS` (default `24`)
 
 ### Data persistence
 
@@ -252,11 +281,36 @@ Check status:
 sudo systemctl status chickadee-server
 sudo systemctl status chickadee-runner
 sudo journalctl -u chickadee-server -f   # live logs
+sudo journalctl -u chickadee-runner -f
 ```
 
 ---
 
 ## 5. Configure nginx
+
+## Operational checks
+
+Quick checks once the services are up:
+
+```bash
+curl http://127.0.0.1:8080/health
+curl -H "Cookie: <admin-session-cookie>" http://127.0.0.1:8080/admin/metrics | jq
+```
+
+Questions this data now answers:
+
+- Add more runners:
+  Watch for persistent queue depth, increasing queue wait, and runners at or
+  near zero available capacity.
+- Jobs timing out more than usual:
+  Check recent `timeout` counts in `/admin/metrics`, then confirm with
+  `job_finalised` and runner `timeout` logs.
+- Which runner is overloaded:
+  Compare each runner's `activeJobs`, `availableCapacity`, and recent heartbeat
+  cadence.
+- Mostly test failures or infrastructure errors:
+  Use `job_execution_metrics.final_status` for the broad split, then inspect
+  `test_result_summary` and `local_execution_error` logs for detail.
 
 ```bash
 sudo cp /opt/chickadee/deploy/nginx.conf /etc/nginx/sites-available/chickadee

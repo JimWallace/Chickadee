@@ -87,7 +87,7 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             self.jobs = jobs
         }
 
-        func requestJob() async throws(JobPollerError) -> Job? {
+        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Job? {
             requestCount += 1
             if jobs.isEmpty {
                 return nil
@@ -106,6 +106,8 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
             collections.append(collection)
         }
+
+        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
 
         func snapshot() -> [TestOutcomeCollection] {
             collections
@@ -129,6 +131,8 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             }
             collections.append(collection)
         }
+
+        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
 
         func observedAttempts() -> Int {
             attempts
@@ -279,6 +283,7 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             poller: poller,
             reporter: reporter,
             runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-cancel",
             workerSecret: "secret",
             maxConcurrentJobs: 1
@@ -312,6 +317,7 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             poller: poller,
             reporter: reporter,
             runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-failure",
             workerSecret: "secret",
             maxConcurrentJobs: 1
@@ -376,6 +382,7 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             poller: poller,
             reporter: reporter,
             runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-report-fail",
             workerSecret: "secret",
             maxConcurrentJobs: 1
@@ -436,6 +443,7 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             poller: poller,
             reporter: reporter,
             runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-next-job",
             workerSecret: "secret",
             maxConcurrentJobs: 1

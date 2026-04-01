@@ -5,16 +5,17 @@ import Foundation
 
 struct WorkerJobRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        routes.grouped("api", "v1", "worker")
-            .post("request", use: requestJob)
+        let worker = routes.grouped("api", "v1", "worker")
+        worker.post("request", use: requestJob)
+        worker.post("heartbeat", use: heartbeat)
     }
 
     // MARK: - POST /api/v1/worker/request
 
     @Sendable
     func requestJob(req: Request) async throws -> Response {
-        let body     = try req.content.decode(WorkerRequestBody.self)
-        let hostname = body.hostname ?? ""
+        let body = try req.content.decode(WorkerActivityPayload.self)
+        let hostname = body.hostname
 
         // Reject a runner whose workerID is already claimed by a different host
         // within the activity TTL (3× the runner's max backoff of 30 s = 90 s).
@@ -38,9 +39,19 @@ struct WorkerJobRoutes: RouteCollection {
         await req.application.workerActivityStore.markActive(
             workerID: body.workerID,
             hostname: hostname,
-            runnerVersion: body.runnerVersion ?? "",
-            maxConcurrentJobs: body.maxConcurrentJobs ?? 0
+            runnerVersion: body.runnerVersion,
+            maxConcurrentJobs: body.maxConcurrentJobs,
+            activeJobs: body.activeJobs,
+            lastPollAt: Date()
         )
+        if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
+            await req.application.diagnostics.recordRunnerCheckIn(
+                snapshot: snapshot,
+                reason: .poll,
+                on: req.db,
+                logger: req.logger
+            )
+        }
 
         // Atomically find and claim the best pending job.
         // WorkerClaimQueue serializes concurrent calls at the application level;
@@ -109,6 +120,8 @@ struct WorkerJobRoutes: RouteCollection {
             return Response(status: .noContent)
         }
 
+        await req.application.workerActivityStore.incrementAssignedJobs(for: body.workerID)
+
         // Record diagnostics outside the transaction so req.application is safely accessible.
         await req.application.diagnostics.recordJobAssigned(
             submission: submission, on: req.db, logger: req.logger
@@ -136,13 +149,28 @@ struct WorkerJobRoutes: RouteCollection {
             body: .init(data: data)
         )
     }
-}
 
-struct WorkerRequestBody: Content {
-    let workerID: String
-    let hostname: String?
-    let runnerVersion: String?
-    let maxConcurrentJobs: Int?
+    @Sendable
+    func heartbeat(req: Request) async throws -> HTTPStatus {
+        let body = try req.content.decode(WorkerActivityPayload.self)
+        await req.application.workerActivityStore.markActive(
+            workerID: body.workerID,
+            hostname: body.hostname,
+            runnerVersion: body.runnerVersion,
+            maxConcurrentJobs: body.maxConcurrentJobs,
+            activeJobs: body.activeJobs,
+            lastHeartbeatAt: Date()
+        )
+        if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
+            await req.application.diagnostics.recordRunnerCheckIn(
+                snapshot: snapshot,
+                reason: .heartbeat,
+                on: req.db,
+                logger: req.logger
+            )
+        }
+        return .ok
+    }
 }
 
 private func resolvedWorkerBaseURL(req: Request) -> String {

@@ -34,20 +34,26 @@ Admin
     <table id="workers-table" class="results-table">
             <thead>
                 <tr>
-                    <th>Runner</th>
-                    <th>Version</th>
-                    <th class="time">Load</th>
-                    <th class="time">Jobs Processed</th>
-                    <th class="time">Avg Run</th>
-                    <th class="time">Avg Wait</th>
-                    <th class="time">Last Active</th>
+                    <th data-sort-key="runner" data-sort-type="text" tabindex="0" aria-sort="none">Runner</th>
+                    <th data-sort-key="version" data-sort-type="text" tabindex="0" aria-sort="none">Version</th>
+                    <th class="time" data-sort-key="load" data-sort-type="number" tabindex="0" aria-sort="none">Load</th>
+                    <th class="time" data-sort-key="jobs-processed" data-sort-type="number" tabindex="0" aria-sort="none">Jobs Processed</th>
+                    <th class="time" data-sort-key="avg-run" data-sort-type="duration" tabindex="0" aria-sort="none">Avg Run</th>
+                    <th class="time" data-sort-key="avg-wait" data-sort-type="duration" tabindex="0" aria-sort="none">Avg Wait</th>
+                    <th class="time" data-sort-key="last-active" data-sort-type="date" tabindex="0" aria-sort="none">Last Active</th>
                 </tr>
             </thead>
             <tbody id="workers-body">
             #for(worker in workers):
-                <tr>
+                <tr data-runner="#(worker.workerID)"
+                    data-version="#(worker.runnerVersion)"
+                    data-load="#(worker.assignedJobs)"
+                    data-jobs-processed="#(worker.jobsProcessed)"
+                    data-avg-run="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif"
+                    data-avg-wait="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif"
+                    data-last-active="#(worker.lastActive)">
                     <td>
-                        <code>#(worker.workerID)</code>
+                        <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
                         #if(worker.hostname != ""):
                             <br><span style="font-size:.8em;color:var(--muted)">#(worker.hostname)</span>
                         #endif
@@ -209,22 +215,26 @@ Admin
     </table>
 </section>
 <style>
+#workers-table th[data-sort-key],
 #users-table th[data-sort-key],
 #courses-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
 }
+#workers-table th[data-sort-key]::after,
 #users-table th[data-sort-key]::after,
 #courses-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
     font-size: .75rem;
 }
+#workers-table th[data-sort-key].sort-asc::after,
 #users-table th[data-sort-key].sort-asc::after,
 #courses-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
 }
+#workers-table th[data-sort-key].sort-desc::after,
 #users-table th[data-sort-key].sort-desc::after,
 #courses-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
@@ -283,7 +293,10 @@ Admin
         });
     }
 
+    var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
     function renderWorkers(workers) {
+        workers = sortWorkersArray(Array.isArray(workers) ? workers.slice() : []);
         if (!Array.isArray(workers) || workers.length === 0) {
             workersBody.innerHTML = '';
             return;
@@ -299,15 +312,24 @@ Admin
             var avgRun = escapeHtml(worker.avgExecutionFormatted || '');
             var avgWait = escapeHtml(worker.avgQueueWaitFormatted || '');
             var lastActive = escapeHtml(worker.lastActive || '');
+            var detailURL = '/admin/runners/' + encodeURIComponent(worker.workerID || '');
 
-            var idCell = '<code>' + id + '</code>'
+            var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
                 + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
             var loadCell = maxJobs > 0
                 ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
                 : String(assignedJobs);
             var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
 
-            return '<tr>'
+            return '<tr'
+                + ' data-runner="' + id + '"'
+                + ' data-version="' + version + '"'
+                + ' data-load="' + assignedJobs + '"'
+                + ' data-jobs-processed="' + jobsProcessed + '"'
+                + ' data-avg-run="' + (worker.avgExecutionMs == null ? -1 : worker.avgExecutionMs) + '"'
+                + ' data-avg-wait="' + (worker.avgQueueWaitMs == null ? -1 : worker.avgQueueWaitMs) + '"'
+                + ' data-last-active="' + lastActive + '"'
+                + '>'
                 + '<td>' + idCell + '</td>'
                 + '<td>' + (version || '—') + '</td>'
                 + '<td class="time"' + loadStyle + '>' + loadCell + '</td>'
@@ -318,6 +340,104 @@ Admin
                 + '</tr>';
         }).join('');
         applyRelativeTimes(workersBody);
+    }
+
+    var workersTable = document.getElementById('workers-table');
+    var workerHeaders = workersTable ? Array.from(workersTable.querySelectorAll('th[data-sort-key]')) : [];
+    var activeWorkerHeader = null;
+    var activeWorkerDirection = 'asc';
+
+    function clearWorkerSortIndicators() {
+        workerHeaders.forEach(function (header) {
+            header.classList.remove('sort-asc', 'sort-desc');
+            header.setAttribute('aria-sort', 'none');
+        });
+    }
+
+    function parseDurationValue(value) {
+        var n = Number(value);
+        return Number.isFinite(n) ? n : -1;
+    }
+
+    function readWorkerValue(row, header) {
+        var key = header.getAttribute('data-sort-key') || '';
+        var type = header.getAttribute('data-sort-type') || 'text';
+        var value = row.getAttribute('data-' + key);
+        if (type === 'number') return Number(value || 0);
+        if (type === 'duration') return parseDurationValue(value);
+        if (type === 'date') {
+            var date = new Date(value || '');
+            return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+        }
+        return (value || '').trim();
+    }
+
+    function sortWorkersArray(workers) {
+        if (!workerHeaders.length) return workers;
+        var sortHeader = activeWorkerHeader || workerHeaders[0];
+        var direction = activeWorkerDirection || 'asc';
+        var key = sortHeader.getAttribute('data-sort-key') || 'runner';
+        var type = sortHeader.getAttribute('data-sort-type') || 'text';
+
+        workers.sort(function (lhs, rhs) {
+            var lv;
+            var rv;
+            if (type === 'number') {
+                if (key === 'jobs-processed') {
+                    lv = Number(lhs.jobsProcessed || 0);
+                    rv = Number(rhs.jobsProcessed || 0);
+                } else {
+                    lv = Number(lhs.assignedJobs || 0);
+                    rv = Number(rhs.assignedJobs || 0);
+                }
+            } else if (type === 'duration') {
+                lv = key === 'avg-run' ? parseDurationValue(lhs.avgExecutionMs) : parseDurationValue(lhs.avgQueueWaitMs);
+                rv = key === 'avg-run' ? parseDurationValue(rhs.avgExecutionMs) : parseDurationValue(rhs.avgQueueWaitMs);
+            } else if (type === 'date') {
+                lv = new Date(lhs.lastActive || '').getTime() || 0;
+                rv = new Date(rhs.lastActive || '').getTime() || 0;
+            } else {
+                lv = key === 'version' ? String(lhs.runnerVersion || '') : String(lhs.workerID || '');
+                rv = key === 'version' ? String(rhs.runnerVersion || '') : String(rhs.workerID || '');
+            }
+
+            var result = 0;
+            if (type === 'text') {
+                result = collator.compare(String(lv), String(rv));
+            } else {
+                result = lv - rv;
+            }
+            if (result === 0) {
+                result = collator.compare(String(lhs.workerID || ''), String(rhs.workerID || ''));
+            }
+            return direction === 'asc' ? result : -result;
+        });
+        return workers;
+    }
+
+    function sortWorkersByHeader(header, direction) {
+        var rows = Array.from(workersBody.querySelectorAll('tr'));
+        rows.sort(function (lhs, rhs) {
+            var lv = readWorkerValue(lhs, header);
+            var rv = readWorkerValue(rhs, header);
+            var type = header.getAttribute('data-sort-type') || 'text';
+            var result = 0;
+            if (type === 'text') {
+                result = collator.compare(String(lv), String(rv));
+            } else {
+                result = lv - rv;
+            }
+            if (result === 0) {
+                result = collator.compare(lhs.getAttribute('data-runner') || '', rhs.getAttribute('data-runner') || '');
+            }
+            return direction === 'asc' ? result : -result;
+        });
+        rows.forEach(function (row) { workersBody.appendChild(row); });
+        clearWorkerSortIndicators();
+        header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+        activeWorkerHeader = header;
+        activeWorkerDirection = direction;
     }
 
     async function refreshWorkers() {
@@ -336,12 +456,27 @@ Admin
 
     applyRelativeTimes(document);
 
+    if (workersTable && workersBody && workerHeaders.length) {
+        workerHeaders.forEach(function (header) {
+            header.addEventListener('click', function () {
+                var nextDirection = (activeWorkerHeader === header && activeWorkerDirection === 'asc') ? 'desc' : 'asc';
+                sortWorkersByHeader(header, nextDirection);
+            });
+            header.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                var nextDirection = (activeWorkerHeader === header && activeWorkerDirection === 'asc') ? 'desc' : 'asc';
+                sortWorkersByHeader(header, nextDirection);
+            });
+        });
+        sortWorkersByHeader(workerHeaders[0], 'asc');
+    }
+
     var usersTable = document.getElementById('users-table');
     if (usersTable) {
         var usersBody = usersTable.querySelector('tbody');
         var userHeaders = Array.from(usersTable.querySelectorAll('th[data-sort-key]'));
         if (usersBody && userHeaders.length) {
-            var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
             var activeUserHeader = null;
             var activeUserDirection = 'asc';
 

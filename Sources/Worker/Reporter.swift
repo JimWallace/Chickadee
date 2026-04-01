@@ -10,6 +10,7 @@ import Core
 
 protocol Reporting: Sendable {
     func report(_ collection: TestOutcomeCollection) async throws(ReporterError)
+    func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError)
 }
 
 struct Reporter: Sendable {
@@ -41,11 +42,33 @@ struct Reporter: Sendable {
         do { request.httpBody = try encoder.encode(collection) } catch { throw .transportError(error) }
         signer.sign(&request)
 
+        try await sendWithRetry(request)
+    }
+
+    func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
+        let url = apiBaseURL.appendingPathComponent("api/v1/worker/heartbeat")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
+        signer.sign(&request)
+
+        let result = await Self.attemptReport(request: request, expectedStatus: 200)
+        switch result {
+        case .success:
+            return
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    private func sendWithRetry(_ request: URLRequest) async throws(ReporterError) {
         // Retry up to 3 times with a 5-second pause between attempts so that a
         // transient network blip or server restart doesn't silently discard grades.
         var lastError: ReporterError = .unexpectedResponse
         for attempt in 1...3 {
-            let result = await Self.attemptReport(request: request)
+            let result = await Self.attemptReport(request: request, expectedStatus: 200)
             switch result {
             case .success:
                 return
@@ -63,13 +86,13 @@ struct Reporter: Sendable {
 extension Reporter: Reporting {}
 
 private extension Reporter {
-    static func attemptReport(request: URLRequest) async -> Result<Void, ReporterError> {
+    static func attemptReport(request: URLRequest, expectedStatus: Int) async -> Result<Void, ReporterError> {
         let data: Data
         let response: URLResponse
         do { (data, response) = try await Self.session.data(for: request) }
         catch { return .failure(.transportError(error)) }
         guard let http = response as? HTTPURLResponse else { return .failure(.unexpectedResponse) }
-        guard http.statusCode == 200 else {
+        guard http.statusCode == expectedStatus else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
             return .failure(.httpError(http.statusCode, body))
         }

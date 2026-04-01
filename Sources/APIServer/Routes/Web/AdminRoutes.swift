@@ -19,6 +19,7 @@ struct AdminRoutes: RouteCollection {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
         admin.get("runners", use: runners)
+        admin.get("runners", ":runnerID", use: runnerDetail)
         admin.get("workers", use: workers)
         admin.post("users", ":userID", "role", use: changeRole)
         admin.post("runner-secret", use: updateWorkerSecret)
@@ -106,6 +107,86 @@ struct AdminRoutes: RouteCollection {
     @Sendable
     func workers(req: Request) async throws -> [AdminWorkerRow] {
         try await makeWorkerRows(req: req)
+    }
+
+    // MARK: - GET /admin/runners/:runnerID
+
+    @Sendable
+    func runnerDetail(req: Request) async throws -> View {
+        guard let runnerID = req.parameters.get("runnerID"), !runnerID.isEmpty else {
+            throw Abort(.notFound)
+        }
+
+        let workerRows = try await makeWorkerRows(req: req)
+        guard let worker = workerRows.first(where: { $0.workerID == runnerID }) else {
+            throw Abort(.notFound)
+        }
+
+        let snapshots = try await RunnerSnapshot.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$recordedAt, .descending)
+            .limit(50)
+            .all()
+
+        let recentJobs = try await JobExecutionMetric.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$completedAt, .descending)
+            .limit(50)
+            .all()
+
+        var statusCounts: [String: Int] = [:]
+        for job in recentJobs {
+            guard let status = job.finalStatus else { continue }
+            statusCounts[status, default: 0] += 1
+        }
+
+        let snapshotRows = snapshots.map {
+            AdminRunnerSnapshotRow(
+                recordedAt: iso8601String($0.recordedAt),
+                activeJobs: $0.activeJobs,
+                maxJobs: $0.maxJobs,
+                availableCapacity: $0.availableCapacity,
+                lastPollAt: $0.lastPollAt.map(iso8601String),
+                lastHeartbeatAt: $0.lastHeartbeatAt.map(iso8601String)
+            )
+        }
+
+        let jobRows = recentJobs.map {
+            AdminRunnerJobRow(
+                submissionID: $0.submissionID,
+                assignmentID: $0.assignmentID?.uuidString,
+                finalStatus: $0.finalStatus ?? "unknown",
+                queueWaitFormatted: $0.queueWaitMs.map(formatMs),
+                executionFormatted: $0.executionMs.map(formatMs),
+                totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
+                completedAt: $0.completedAt.map(iso8601String),
+                testsPassed: $0.testsPassed ?? 0,
+                testsFailed: $0.testsFailed ?? 0,
+                testsErrored: $0.testsErrored ?? 0,
+                testsTimedOut: $0.testsTimedOut ?? 0,
+                skippedCount: $0.skippedCount ?? 0
+            )
+        }
+
+        let summary = AdminRunnerSummary(
+            activeJobs: worker.assignedJobs,
+            maxJobs: worker.maxConcurrentJobs,
+            jobsProcessed: worker.jobsProcessed,
+            avgExecutionFormatted: worker.avgExecutionFormatted,
+            avgQueueWaitFormatted: worker.avgQueueWaitFormatted,
+            passedCount: statusCounts["passed", default: 0],
+            failedCount: statusCounts["failed", default: 0],
+            errorCount: statusCounts["error", default: 0],
+            timeoutCount: statusCounts["timeout", default: 0]
+        )
+
+        return try await req.view.render("admin-runner", AdminRunnerDetailContext(
+            currentUser: req.currentUserContext,
+            runner: worker,
+            summary: summary,
+            recentJobs: jobRows,
+            snapshots: snapshotRows
+        ))
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -763,10 +844,21 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
             avgQueueWaitFormatted: avgWait.map(formatMs)
         )
     }
+    .sorted { lhs, rhs in
+        let compare = lhs.workerID.localizedStandardCompare(rhs.workerID)
+        if compare == .orderedSame {
+            return lhs.hostname.localizedStandardCompare(rhs.hostname) == .orderedAscending
+        }
+        return compare == .orderedAscending
+    }
 }
 
 private func formatMs(_ ms: Int) -> String {
     ms >= 1000 ? "\(ms / 1000)s" : "\(ms)ms"
+}
+
+private func iso8601String(_ date: Date) -> String {
+    ISO8601DateFormatter().string(from: date)
 }
 
 private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
@@ -826,6 +918,42 @@ private struct AdminCourseRow: Encodable {
     let createdAt: String
 }
 
+private struct AdminRunnerSummary: Encodable {
+    let activeJobs: Int
+    let maxJobs: Int
+    let jobsProcessed: Int
+    let avgExecutionFormatted: String?
+    let avgQueueWaitFormatted: String?
+    let passedCount: Int
+    let failedCount: Int
+    let errorCount: Int
+    let timeoutCount: Int
+}
+
+private struct AdminRunnerJobRow: Encodable {
+    let submissionID: String
+    let assignmentID: String?
+    let finalStatus: String
+    let queueWaitFormatted: String?
+    let executionFormatted: String?
+    let totalProcessingFormatted: String?
+    let completedAt: String?
+    let testsPassed: Int
+    let testsFailed: Int
+    let testsErrored: Int
+    let testsTimedOut: Int
+    let skippedCount: Int
+}
+
+private struct AdminRunnerSnapshotRow: Encodable {
+    let recordedAt: String
+    let activeJobs: Int
+    let maxJobs: Int
+    let availableCapacity: Int
+    let lastPollAt: String?
+    let lastHeartbeatAt: String?
+}
+
 private struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let users: [AdminUserRow]
@@ -860,6 +988,14 @@ private struct AdminCourseDetailContext: Encodable {
     let isNew: Bool
     let error: String?
     var assignmentCount: Int { assignments.count }
+}
+
+private struct AdminRunnerDetailContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let runner: AdminWorkerRow
+    let summary: AdminRunnerSummary
+    let recentJobs: [AdminRunnerJobRow]
+    let snapshots: [AdminRunnerSnapshotRow]
 }
 
 private struct AdminCourseEnrolledUserRow: Encodable {

@@ -3,6 +3,32 @@ import Fluent
 import Vapor
 import Foundation
 
+enum JobFinalStatus: String, CaseIterable, Codable, Sendable {
+    case passed
+    case failed
+    case error
+    case timeout
+}
+
+enum RunnerCheckInReason: String, Sendable {
+    case poll
+    case heartbeat
+    case auth
+}
+
+enum ObservabilityEvent: String, Sendable {
+    case submissionAccepted = "submission_accepted"
+    case jobEnqueued = "job_enqueued"
+    case runnerPolled = "runner_polled"
+    case runnerHeartbeat = "runner_heartbeat"
+    case jobAssigned = "job_assigned"
+    case resultReceived = "result_received"
+    case jobFinalised = "job_finalised"
+    case assignmentResultSummary = "assignment_result_summary"
+    case testResultSummary = "test_result_summary"
+    case jobRecovery = "job_recovery"
+}
+
 struct RunnerAverages: Sendable {
     let avgExecutionMs: Int?
     let avgQueueWaitMs: Int?
@@ -11,17 +37,77 @@ struct RunnerAverages: Sendable {
 struct DiagnosticsConfiguration: Sendable {
     let enabled: Bool
     let verboseRequestTiming: Bool
+    let jobMetricRetentionDays: Int
+    let runnerSnapshotRetentionDays: Int
+    let activeRunnerWindowSeconds: TimeInterval
+    let recentMetricsWindowHours: Int
+    let pruneIntervalHours: Int
 
     static func fromEnvironment() -> Self {
         Self(
             enabled: environmentBool("ENABLE_DIAGNOSTICS_COLLECTION") ?? true,
-            verboseRequestTiming: environmentBool("VERBOSE_REQUEST_TIMING") ?? false
+            verboseRequestTiming: environmentBool("VERBOSE_REQUEST_TIMING") ?? false,
+            jobMetricRetentionDays: environmentInt("JOB_METRIC_RETENTION_DAYS") ?? 30,
+            runnerSnapshotRetentionDays: environmentInt("RUNNER_SNAPSHOT_RETENTION_DAYS") ?? 14,
+            activeRunnerWindowSeconds: TimeInterval(environmentInt("RUNNER_ACTIVE_WINDOW_SECONDS") ?? 120),
+            recentMetricsWindowHours: environmentInt("METRICS_RECENT_WINDOW_HOURS") ?? 24,
+            pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24
         )
+    }
+}
+
+struct InternalMetricsResponse: Content, Sendable {
+    let generatedAt: Date
+    let queueDepth: Int
+    let inFlightJobs: Int
+    let activeRunners: Int
+    let runnerLoads: [RunnerLoadResponse]
+    let recentWindowHours: Int
+    let jobStatusCounts: [StatusCountResponse]
+    let queueWait: DurationSummaryResponse
+    let execution: DurationSummaryResponse
+}
+
+struct RunnerLoadResponse: Content, Sendable {
+    let runnerID: String
+    let hostname: String
+    let activeJobs: Int
+    let maxJobs: Int
+    let availableCapacity: Int
+    let lastSeenAt: Date
+    let lastPollAt: Date?
+    let lastHeartbeatAt: Date?
+    let assignedJobsSinceStart: Int
+}
+
+struct StatusCountResponse: Content, Sendable {
+    let status: String
+    let count: Int
+}
+
+struct DurationSummaryResponse: Content, Sendable {
+    let averageMs: Int?
+    let p50Ms: Int?
+    let p95Ms: Int?
+}
+
+actor DiagnosticsMaintenanceStore {
+    private var lastPrunedAt: Date?
+
+    func shouldPrune(now: Date, intervalHours: Int) -> Bool {
+        guard intervalHours > 0 else { return false }
+        guard let lastPrunedAt else { return true }
+        return now.timeIntervalSince(lastPrunedAt) >= Double(intervalHours) * 3600
+    }
+
+    func markPruned(at date: Date) {
+        lastPrunedAt = date
     }
 }
 
 final class OperationalDiagnosticsService: @unchecked Sendable {
     let configuration: DiagnosticsConfiguration
+    private let maintenance = DiagnosticsMaintenanceStore()
 
     init(configuration: DiagnosticsConfiguration) {
         self.configuration = configuration
@@ -42,23 +128,85 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             )
             diagnostics.submittedAt = submission.submittedAt ?? diagnostics.submittedAt
             try await diagnostics.save(on: db)
+
+            let metric = try await findOrCreateJobExecutionMetric(
+                submission: submission,
+                context: context,
+                on: db
+            )
+            metric.enqueuedAt = submission.submittedAt ?? metric.enqueuedAt
+            try await metric.save(on: db)
+
+            let queueDepth = try await pendingQueueDepth(on: db)
             logger.info(
-                Logger.Message(stringLiteral: "job_submitted"),
-                metadata: jobMetadata(
-                    submissionID: submissionID,
-                    runnerID: nil,
-                    courseID: context.courseID,
-                    assignmentID: context.assignmentID,
-                    testSetupID: submission.testSetupID,
+                "observability",
+                metadata: logMetadata(
+                    event: .submissionAccepted,
+                    submission: submission,
+                    context: context,
+                    extra: ["status": .string("accepted")]
+                )
+            )
+            logger.info(
+                "observability",
+                metadata: logMetadata(
+                    event: .jobEnqueued,
+                    submission: submission,
+                    context: context,
                     extra: [
-                        "kind": .string(submission.kind),
-                        "submitted_at": diagnostics.submittedAt.map(iso8601Metadata) ?? .string(""),
+                        "status": .string("pending"),
+                        "queue_depth": .stringConvertible(queueDepth),
                     ]
                 )
             )
+            try await pruneIfNeeded(on: db, logger: logger)
         } catch {
             logger.warning("diagnostics_submission_create_failed", metadata: [
                 "submission_id": .string(submissionID),
+                "error": .string(String(describing: error)),
+            ])
+        }
+    }
+
+    func recordRunnerCheckIn(
+        snapshot: WorkerActivitySnapshot,
+        reason: RunnerCheckInReason,
+        on db: Database,
+        logger: Logger
+    ) async {
+        guard configuration.enabled else { return }
+        do {
+            let row = RunnerSnapshot(
+                runnerID: snapshot.workerID,
+                recordedAt: snapshot.lastActive,
+                activeJobs: snapshot.activeJobs,
+                maxJobs: snapshot.maxConcurrentJobs,
+                availableCapacity: max(0, snapshot.maxConcurrentJobs - snapshot.activeJobs),
+                hostname: snapshot.hostname.isEmpty ? nil : snapshot.hostname,
+                runnerVersion: snapshot.runnerVersion.isEmpty ? nil : snapshot.runnerVersion,
+                lastPollAt: snapshot.lastPollAt,
+                lastHeartbeatAt: snapshot.lastHeartbeatAt,
+                serverAssignedJobCountSinceStart: snapshot.serverAssignedJobCountSinceStart
+            )
+            try await row.save(on: db)
+
+            let event: ObservabilityEvent = reason == .poll ? .runnerPolled : .runnerHeartbeat
+            logger.info(
+                "observability",
+                metadata: runnerMetadata(
+                    event: event,
+                    snapshot: snapshot,
+                    extra: [
+                        "status": .string("ok"),
+                        "available_capacity": .stringConvertible(max(0, snapshot.maxConcurrentJobs - snapshot.activeJobs)),
+                    ]
+                )
+            )
+            try await pruneIfNeeded(on: db, logger: logger)
+        } catch {
+            logger.warning("diagnostics_runner_snapshot_failed", metadata: [
+                "runner_id": .string(snapshot.workerID),
+                "reason": .string(reason.rawValue),
                 "error": .string(String(describing: error)),
             ])
         }
@@ -80,16 +228,28 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.assignedAt = submission.assignedAt ?? diagnostics.assignedAt
             diagnostics.runnerID = submission.workerID ?? diagnostics.runnerID
             try await diagnostics.save(on: db)
+
+            let metric = try await findOrCreateJobExecutionMetric(
+                submission: submission,
+                context: context,
+                on: db
+            )
+            metric.assignedAt = submission.assignedAt ?? metric.assignedAt
+            metric.runnerID = submission.workerID ?? metric.runnerID
+            metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
+            try await metric.save(on: db)
+
+            let queueDepth = try await pendingQueueDepth(on: db)
             logger.info(
-                Logger.Message(stringLiteral: "job_assigned"),
-                metadata: jobMetadata(
-                    submissionID: submissionID,
-                    runnerID: diagnostics.runnerID,
-                    courseID: context.courseID,
-                    assignmentID: context.assignmentID,
-                    testSetupID: submission.testSetupID,
+                "observability",
+                metadata: logMetadata(
+                    event: .jobAssigned,
+                    submission: submission,
+                    context: context,
                     extra: [
-                        "assigned_at": diagnostics.assignedAt.map(iso8601Metadata) ?? .string(""),
+                        "status": .string("assigned"),
+                        "queue_wait_ms": metric.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
+                        "queue_depth": .stringConvertible(queueDepth),
                     ]
                 )
             )
@@ -122,17 +282,21 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 on: db
             )
 
+            let completedAt = workerDiagnostics?.finishedAt ?? collection.timestamp
+            let startedAt = workerDiagnostics?.startedAt ?? collection.jobStartedAt ?? diagnostics.startedAt ?? submission.assignedAt
+            let finalStatus = workerDiagnostics?.finalStatus ?? inferredFinalStatus(from: collection).rawValue
+
             diagnostics.submittedAt = submission.submittedAt ?? diagnostics.submittedAt
             diagnostics.assignedAt = submission.assignedAt ?? diagnostics.assignedAt
             diagnostics.runnerID = workerDiagnostics?.runnerID ?? submission.workerID ?? diagnostics.runnerID
-            diagnostics.startedAt = workerDiagnostics?.startedAt ?? diagnostics.startedAt
-            diagnostics.finishedAt = workerDiagnostics?.finishedAt ?? diagnostics.finishedAt
-            diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.startedAt)
+            diagnostics.startedAt = startedAt
+            diagnostics.finishedAt = completedAt
+            diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.assignedAt)
             diagnostics.executionMs = workerDiagnostics?.wallClockMs
-                ?? millisecondsBetween(diagnostics.startedAt, diagnostics.finishedAt)
-            diagnostics.turnaroundMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.finishedAt)
-            diagnostics.finalStatus = workerDiagnostics?.finalStatus ?? inferredFinalStatus(from: collection)
-            diagnostics.timedOut = workerDiagnostics?.timedOut ?? (collection.timeoutCount > 0)
+                ?? millisecondsBetween(startedAt, completedAt)
+            diagnostics.turnaroundMs = millisecondsBetween(diagnostics.submittedAt, completedAt)
+            diagnostics.finalStatus = finalStatus
+            diagnostics.timedOut = finalStatus == JobFinalStatus.timeout.rawValue
             diagnostics.exitCode = workerDiagnostics?.exitCode
             diagnostics.terminationReason = workerDiagnostics?.terminationReason
                 ?? inferredTerminationReason(from: collection)
@@ -143,38 +307,94 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.stderrBytes = workerDiagnostics?.stderrBytes
             try await diagnostics.save(on: db)
 
-            let event = diagnostics.timedOut == true
-                ? "job_timed_out"
-                : (diagnostics.finalStatus == "passed" ? "job_finished" : "job_failed")
-            // Break up the metadata dictionary to avoid Linux type-checker timeouts.
-            let queueWaitVal: Logger.MetadataValue = diagnostics.queueWaitMs.map { .stringConvertible($0) } ?? .string("")
-            let executionVal: Logger.MetadataValue = diagnostics.executionMs.map { .stringConvertible($0) } ?? .string("")
-            let turnaroundVal: Logger.MetadataValue = diagnostics.turnaroundMs.map { .stringConvertible($0) } ?? .string("")
-            let peakRSSVal: Logger.MetadataValue = diagnostics.peakRSSBytes.map { .stringConvertible($0) } ?? .string("")
-            let stdoutVal: Logger.MetadataValue = diagnostics.stdoutBytes.map { .stringConvertible($0) } ?? .string("")
-            let stderrVal: Logger.MetadataValue = diagnostics.stderrBytes.map { .stringConvertible($0) } ?? .string("")
-            let extraMeta: Logger.Metadata = [
-                "final_status": .string(diagnostics.finalStatus ?? ""),
-                "timed_out": .stringConvertible(diagnostics.timedOut ?? false),
-                "queue_wait_ms": queueWaitVal,
-                "execution_ms": executionVal,
-                "turnaround_ms": turnaroundVal,
-                "termination_reason": .string(diagnostics.terminationReason ?? ""),
-                "peak_rss_bytes": peakRSSVal,
-                "stdout_bytes": stdoutVal,
-                "stderr_bytes": stderrVal,
-            ]
+            let metric = try await findOrCreateJobExecutionMetric(
+                submission: submission,
+                context: context,
+                on: db
+            )
+            metric.runnerID = diagnostics.runnerID
+            metric.assignedAt = submission.assignedAt ?? metric.assignedAt
+            metric.startedAt = startedAt
+            metric.completedAt = completedAt
+            metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
+            metric.executionMs = workerDiagnostics?.wallClockMs ?? millisecondsBetween(startedAt, completedAt)
+            metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, completedAt)
+            metric.finalStatus = finalStatus
+            metric.testsPassed = collection.passCount
+            metric.testsFailed = collection.failCount
+            metric.testsErrored = collection.errorCount
+            metric.testsTimedOut = collection.timeoutCount
+            metric.skippedCount = skippedCount(in: collection.outcomes)
+            try await metric.save(on: db)
+
             logger.info(
-                Logger.Message(stringLiteral: event),
-                metadata: jobMetadata(
-                    submissionID: collection.submissionID,
-                    runnerID: diagnostics.runnerID,
-                    courseID: context.courseID,
-                    assignmentID: context.assignmentID,
-                    testSetupID: submission.testSetupID,
-                    extra: extraMeta
+                "observability",
+                metadata: logMetadata(
+                    event: .resultReceived,
+                    submission: submission,
+                    context: context,
+                    extra: [
+                        "status": .string("received"),
+                        "tests_passed": .stringConvertible(collection.passCount),
+                        "tests_failed": .stringConvertible(collection.failCount),
+                        "tests_errored": .stringConvertible(collection.errorCount),
+                        "tests_timed_out": .stringConvertible(collection.timeoutCount),
+                        "skipped_count": .stringConvertible(metric.skippedCount ?? 0),
+                    ]
                 )
             )
+            logger.info(
+                "observability",
+                metadata: logMetadata(
+                    event: .assignmentResultSummary,
+                    submission: submission,
+                    context: context,
+                    extra: [
+                        "final_status": .string(finalStatus),
+                        "queue_wait_ms": metric.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
+                        "execution_ms": metric.executionMs.map { .stringConvertible($0) } ?? .string(""),
+                        "total_processing_ms": metric.totalProcessingMs.map { .stringConvertible($0) } ?? .string(""),
+                        "tests_passed": .stringConvertible(collection.passCount),
+                        "tests_failed": .stringConvertible(collection.failCount),
+                        "tests_errored": .stringConvertible(collection.errorCount),
+                        "tests_timed_out": .stringConvertible(collection.timeoutCount),
+                        "skipped_count": .stringConvertible(metric.skippedCount ?? 0),
+                    ]
+                )
+            )
+
+            for outcome in collection.outcomes {
+                logger.info(
+                    "observability",
+                    metadata: logMetadata(
+                        event: .testResultSummary,
+                        submission: submission,
+                        context: context,
+                        extra: [
+                            "test_id": .string(normalizedTestID(for: outcome)),
+                            "status": .string(outcome.status.rawValue),
+                            "execution_ms": .stringConvertible(outcome.executionTimeMs),
+                            "error_message_summary": .string(compactSummary(outcome.shortResult)),
+                        ]
+                    )
+                )
+            }
+
+            logger.info(
+                "observability",
+                metadata: logMetadata(
+                    event: .jobFinalised,
+                    submission: submission,
+                    context: context,
+                    extra: [
+                        "final_status": .string(finalStatus),
+                        "queue_wait_ms": metric.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
+                        "execution_ms": metric.executionMs.map { .stringConvertible($0) } ?? .string(""),
+                        "total_processing_ms": metric.totalProcessingMs.map { .stringConvertible($0) } ?? .string(""),
+                    ]
+                )
+            )
+            try await pruneIfNeeded(on: db, logger: logger)
         } catch {
             logger.warning("diagnostics_job_finish_failed", metadata: [
                 "submission_id": .string(collection.submissionID),
@@ -183,31 +403,26 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
         }
     }
 
-    /// Convenience wrapper for the common case where the server receives a
-    /// `TestOutcomeCollection` from a runner and wants to record diagnostics
-    /// without constructing a full `WorkerExecutionDiagnostics` value.
-    /// Derives `wallClockMs` from `collection.executionTimeMs` and treats
-    /// `submission.assignedAt` as a proxy for job-start time.
     func recordWorkerResult(
         collection: TestOutcomeCollection,
         submission: APISubmission,
         on db: Database,
         logger: Logger
     ) async {
-        let finishedAt = Date()
+        let finishedAt = collection.timestamp
         let workerDiag = WorkerExecutionDiagnostics(
-            runnerID:          submission.workerID ?? "",
-            startedAt:         submission.assignedAt,
-            finishedAt:        finishedAt,
-            finalStatus:       inferredFinalStatus(from: collection),
-            timedOut:          collection.timeoutCount > 0,
-            exitCode:          nil,
+            runnerID: submission.workerID ?? "",
+            startedAt: collection.jobStartedAt ?? submission.assignedAt,
+            finishedAt: finishedAt,
+            finalStatus: inferredFinalStatus(from: collection).rawValue,
+            timedOut: collection.timeoutCount > 0,
+            exitCode: nil,
             terminationReason: inferredTerminationReason(from: collection),
-            peakRSSBytes:      nil,
-            wallClockMs:       collection.executionTimeMs,
+            peakRSSBytes: nil,
+            wallClockMs: collection.executionTimeMs,
             childProcessCount: nil,
-            stdoutBytes:       nil,
-            stderrBytes:       nil
+            stdoutBytes: nil,
+            stderrBytes: nil
         )
         await recordWorkerExecutionReport(
             collection: collection,
@@ -238,32 +453,44 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.runnerID = runnerID ?? diagnostics.runnerID
             diagnostics.startedAt = startedAt ?? diagnostics.startedAt
             diagnostics.finishedAt = finishedAt ?? diagnostics.finishedAt
-            diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.startedAt)
+            diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, submission.assignedAt)
             diagnostics.executionMs = millisecondsBetween(diagnostics.startedAt, diagnostics.finishedAt)
             diagnostics.turnaroundMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.finishedAt)
-            diagnostics.finalStatus = "failed"
+            diagnostics.finalStatus = terminationReason == "job_timeout"
+                ? JobFinalStatus.timeout.rawValue
+                : JobFinalStatus.error.rawValue
             diagnostics.timedOut = terminationReason == "job_timeout"
             diagnostics.terminationReason = terminationReason
             try await diagnostics.save(on: db)
 
-            // Break up the metadata dictionary to avoid Linux type-checker timeouts.
-            let failEventName: Logger.Message = terminationReason == "job_timeout" ? "job_timed_out" : "job_failed"
-            let failQueueWaitVal: Logger.MetadataValue = diagnostics.queueWaitMs.map { .stringConvertible($0) } ?? .string("")
-            let failExecutionVal: Logger.MetadataValue = diagnostics.executionMs.map { .stringConvertible($0) } ?? .string("")
-            let failExtraMeta: Logger.Metadata = [
-                "termination_reason": .string(terminationReason),
-                "queue_wait_ms": failQueueWaitVal,
-                "execution_ms": failExecutionVal,
-            ]
+            let metric = try await findOrCreateJobExecutionMetric(
+                submission: submission,
+                context: context,
+                on: db
+            )
+            metric.runnerID = runnerID ?? metric.runnerID
+            metric.startedAt = startedAt ?? metric.startedAt
+            metric.completedAt = finishedAt ?? metric.completedAt
+            metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, submission.assignedAt)
+            metric.executionMs = millisecondsBetween(metric.startedAt, metric.completedAt)
+            metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, metric.completedAt)
+            metric.finalStatus = terminationReason == "job_timeout"
+                ? JobFinalStatus.timeout.rawValue
+                : JobFinalStatus.error.rawValue
+            try await metric.save(on: db)
+
             logger.error(
-                failEventName,
-                metadata: jobMetadata(
-                    submissionID: submissionID,
-                    runnerID: diagnostics.runnerID,
-                    courseID: context.courseID,
-                    assignmentID: context.assignmentID,
-                    testSetupID: submission.testSetupID,
-                    extra: failExtraMeta
+                "observability",
+                metadata: logMetadata(
+                    event: .jobRecovery,
+                    submission: submission,
+                    context: context,
+                    extra: [
+                        "final_status": .string(metric.finalStatus ?? JobFinalStatus.error.rawValue),
+                        "error_type": .string(terminationReason),
+                        "queue_wait_ms": metric.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
+                        "execution_ms": metric.executionMs.map { .stringConvertible($0) } ?? .string(""),
+                    ]
                 )
             )
         } catch {
@@ -274,44 +501,102 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
         }
     }
 
-    // MARK: - Rolling average queries
-
-    /// Per-runner averages over the most recent `sampleSize` completed jobs.
-    /// Returns a map of runnerID → `(avgExecutionMs, avgQueueWaitMs)`, both
-    /// optionals (nil when no data is available for that metric).
     func rollingAverages(
         for runnerIDs: [String],
         sampleSize: Int = 50,
         on db: Database
     ) async throws -> [String: RunnerAverages] {
         guard !runnerIDs.isEmpty else { return [:] }
-        let recentDiags = try await APISubmissionDiagnostics.query(on: db)
+        let metrics = try await JobExecutionMetric.query(on: db)
             .filter(\.$runnerID ~~ runnerIDs)
-            .sort(\.$createdAt, .descending)
+            .sort(\.$completedAt, .descending)
             .limit(runnerIDs.count * sampleSize)
             .all()
 
         var execByRunner: [String: [Int]] = [:]
         var waitByRunner: [String: [Int]] = [:]
-        for d in recentDiags {
-            guard let rid = d.runnerID else { continue }
-            if let ms = d.executionMs, execByRunner[rid, default: []].count < sampleSize {
-                execByRunner[rid, default: []].append(ms)
+        for metric in metrics {
+            guard let runnerID = metric.runnerID else { continue }
+            if let executionMs = metric.executionMs, execByRunner[runnerID, default: []].count < sampleSize {
+                execByRunner[runnerID, default: []].append(executionMs)
             }
-            if let ms = d.queueWaitMs, waitByRunner[rid, default: []].count < sampleSize {
-                waitByRunner[rid, default: []].append(ms)
+            if let queueWaitMs = metric.queueWaitMs, waitByRunner[runnerID, default: []].count < sampleSize {
+                waitByRunner[runnerID, default: []].append(queueWaitMs)
             }
         }
 
         var result: [String: RunnerAverages] = [:]
-        for rid in runnerIDs {
-            let exec = execByRunner[rid] ?? []
-            let wait = waitByRunner[rid] ?? []
-            let avgExec = exec.isEmpty ? nil : exec.reduce(0, +) / exec.count
-            let avgWait = wait.isEmpty ? nil : wait.reduce(0, +) / wait.count
-            result[rid] = RunnerAverages(avgExecutionMs: avgExec, avgQueueWaitMs: avgWait)
+        for runnerID in runnerIDs {
+            let exec = execByRunner[runnerID] ?? []
+            let wait = waitByRunner[runnerID] ?? []
+            result[runnerID] = RunnerAverages(
+                avgExecutionMs: exec.isEmpty ? nil : exec.reduce(0, +) / exec.count,
+                avgQueueWaitMs: wait.isEmpty ? nil : wait.reduce(0, +) / wait.count
+            )
         }
         return result
+    }
+
+    func metricsSnapshot(req: Request) async throws -> InternalMetricsResponse {
+        let queueDepth = try await pendingQueueDepth(on: req.db)
+        let inFlightJobs = try await inFlightJobCount(on: req.db)
+        let now = Date()
+        let windowHours = max(1, configuration.recentMetricsWindowHours)
+        let windowStart = now.addingTimeInterval(Double(-windowHours) * 3600)
+
+        let activeSnapshots = await req.application.workerActivityStore.snapshotsSortedByRecent()
+            .filter { now.timeIntervalSince($0.lastActive) <= configuration.activeRunnerWindowSeconds }
+        let recentMetrics = try await JobExecutionMetric.query(on: req.db)
+            .filter(\.$completedAt >= windowStart)
+            .all()
+
+        var statusCounts: [String: Int] = [:]
+        var queueWaitValues: [Int] = []
+        var executionValues: [Int] = []
+        for metric in recentMetrics {
+            if let finalStatus = metric.finalStatus {
+                statusCounts[finalStatus, default: 0] += 1
+            }
+            if let queueWaitMs = metric.queueWaitMs {
+                queueWaitValues.append(queueWaitMs)
+            }
+            if let executionMs = metric.executionMs {
+                executionValues.append(executionMs)
+            }
+        }
+
+        let runnerLoads = activeSnapshots.map {
+            RunnerLoadResponse(
+                runnerID: $0.workerID,
+                hostname: $0.hostname,
+                activeJobs: $0.activeJobs,
+                maxJobs: $0.maxConcurrentJobs,
+                availableCapacity: max(0, $0.maxConcurrentJobs - $0.activeJobs),
+                lastSeenAt: $0.lastActive,
+                lastPollAt: $0.lastPollAt,
+                lastHeartbeatAt: $0.lastHeartbeatAt,
+                assignedJobsSinceStart: $0.serverAssignedJobCountSinceStart
+            )
+        }
+
+        return InternalMetricsResponse(
+            generatedAt: now,
+            queueDepth: queueDepth,
+            inFlightJobs: inFlightJobs,
+            activeRunners: activeSnapshots.count,
+            runnerLoads: runnerLoads,
+            recentWindowHours: windowHours,
+            jobStatusCounts: JobFinalStatus.allCases.map {
+                StatusCountResponse(status: $0.rawValue, count: statusCounts[$0.rawValue, default: 0])
+            },
+            queueWait: durationSummary(for: queueWaitValues),
+            execution: durationSummary(for: executionValues)
+        )
+    }
+
+    func pruneNow(on db: Database, logger: Logger) async {
+        guard configuration.enabled else { return }
+        await performPrune(on: db, logger: logger, now: Date())
     }
 
     func recordRequestMetric(
@@ -401,6 +686,33 @@ private extension OperationalDiagnosticsService {
         return created
     }
 
+    func findOrCreateJobExecutionMetric(
+        submission: APISubmission,
+        context: SubmissionDiagnosticsContext,
+        on db: Database
+    ) async throws -> JobExecutionMetric {
+        if let existing = try await JobExecutionMetric.query(on: db)
+            .filter(\.$submissionID == (submission.id ?? ""))
+            .first() {
+            return existing
+        }
+
+        let created = JobExecutionMetric(
+            submissionID: submission.id ?? "",
+            jobID: submission.id ?? "",
+            testSetupID: submission.testSetupID,
+            courseID: context.courseID,
+            assignmentID: context.assignmentID,
+            userID: submission.userID,
+            runnerID: submission.workerID,
+            kind: submission.kind,
+            attemptNumber: submission.attemptNumber,
+            enqueuedAt: submission.submittedAt
+        )
+        try await created.save(on: db)
+        return created
+    }
+
     func loadSubmissionContext(for submission: APISubmission, on db: Database) async throws -> SubmissionDiagnosticsContext {
         let courseID = try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
 
@@ -419,20 +731,156 @@ private extension OperationalDiagnosticsService {
 
         return SubmissionDiagnosticsContext(courseID: courseID, assignmentID: assignmentID)
     }
+
+    func pendingQueueDepth(on db: Database) async throws -> Int {
+        try await APISubmission.query(on: db)
+            .filter(\.$status == "pending")
+            .count()
+    }
+
+    func inFlightJobCount(on db: Database) async throws -> Int {
+        try await APISubmission.query(on: db)
+            .group(.or) { group in
+                group.filter(\.$status == "assigned")
+                group.filter(\.$status == "running")
+            }
+            .count()
+    }
+
+    func durationSummary(for values: [Int]) -> DurationSummaryResponse {
+        guard !values.isEmpty else {
+            return DurationSummaryResponse(averageMs: nil, p50Ms: nil, p95Ms: nil)
+        }
+        let sorted = values.sorted()
+        let average = sorted.reduce(0, +) / sorted.count
+        return DurationSummaryResponse(
+            averageMs: average,
+            p50Ms: percentile(sorted, percentile: 0.50),
+            p95Ms: percentile(sorted, percentile: 0.95)
+        )
+    }
+
+    func percentile(_ sortedValues: [Int], percentile: Double) -> Int? {
+        guard !sortedValues.isEmpty else { return nil }
+        let index = min(sortedValues.count - 1, max(0, Int(Double(sortedValues.count - 1) * percentile)))
+        return sortedValues[index]
+    }
+
+    func skippedCount(in outcomes: [TestOutcome]) -> Int {
+        outcomes.filter { $0.shortResult.localizedCaseInsensitiveContains("skipped:") }.count
+    }
+
+    func normalizedTestID(for outcome: TestOutcome) -> String {
+        let classPart = outcome.testClass?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if classPart.isEmpty { return outcome.testName }
+        return "\(classPart).\(outcome.testName)"
+    }
+
+    func compactSummary(_ text: String) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(collapsed.prefix(160))
+    }
+
+    func pruneIfNeeded(on db: Database, logger: Logger) async throws {
+        let now = Date()
+        guard await maintenance.shouldPrune(now: now, intervalHours: configuration.pruneIntervalHours) else {
+            return
+        }
+        await performPrune(on: db, logger: logger, now: now)
+    }
+
+    func performPrune(on db: Database, logger: Logger, now: Date) async {
+        do {
+            let jobCutoff = now.addingTimeInterval(Double(-configuration.jobMetricRetentionDays) * 86400)
+            let runnerCutoff = now.addingTimeInterval(Double(-configuration.runnerSnapshotRetentionDays) * 86400)
+
+            try await JobExecutionMetric.query(on: db)
+                .filter(\.$completedAt < jobCutoff)
+                .delete()
+            try await RunnerSnapshot.query(on: db)
+                .filter(\.$recordedAt < runnerCutoff)
+                .delete()
+            try await APIRequestMetric.query(on: db)
+                .filter(\.$finishedAt < jobCutoff)
+                .delete()
+            try await APISubmissionDiagnostics.query(on: db)
+                .filter(\.$finishedAt < jobCutoff)
+                .delete()
+
+            await maintenance.markPruned(at: now)
+            logger.info("observability_prune_complete", metadata: [
+                "job_metric_retention_days": .stringConvertible(configuration.jobMetricRetentionDays),
+                "runner_snapshot_retention_days": .stringConvertible(configuration.runnerSnapshotRetentionDays),
+            ])
+        } catch {
+            logger.warning("observability_prune_failed", metadata: [
+                "error": .string(String(describing: error)),
+            ])
+        }
+    }
+
+    func logMetadata(
+        event: ObservabilityEvent,
+        submission: APISubmission,
+        context: SubmissionDiagnosticsContext,
+        extra: Logger.Metadata = [:]
+    ) -> Logger.Metadata {
+        var metadata: Logger.Metadata = [
+            "timestamp": iso8601Metadata(Date()),
+            "event": .string(event.rawValue),
+            "submission_id": .string(submission.id ?? ""),
+            "job_id": .string(submission.id ?? ""),
+            "runner_id": .string(submission.workerID ?? ""),
+            "course_id": .string(context.courseID?.uuidString ?? ""),
+            "assignment_id": .string(context.assignmentID?.uuidString ?? ""),
+            "user_id": .string(submission.userID?.uuidString ?? ""),
+            "test_setup_id": .string(submission.testSetupID),
+            "attempt_number": submission.attemptNumber.map { .stringConvertible($0) } ?? .string(""),
+            "kind": .string(submission.kind),
+        ]
+        for (key, value) in extra {
+            metadata[key] = value
+        }
+        return metadata
+    }
+
+    func runnerMetadata(
+        event: ObservabilityEvent,
+        snapshot: WorkerActivitySnapshot,
+        extra: Logger.Metadata = [:]
+    ) -> Logger.Metadata {
+        var metadata: Logger.Metadata = [
+            "timestamp": iso8601Metadata(Date()),
+            "event": .string(event.rawValue),
+            "runner_id": .string(snapshot.workerID),
+            "hostname": .string(snapshot.hostname),
+            "runner_version": .string(snapshot.runnerVersion),
+            "runner_active_jobs": .stringConvertible(snapshot.activeJobs),
+            "max_jobs": .stringConvertible(snapshot.maxConcurrentJobs),
+            "last_poll_at": snapshot.lastPollAt.map(iso8601Metadata) ?? .string(""),
+            "last_heartbeat_at": snapshot.lastHeartbeatAt.map(iso8601Metadata) ?? .string(""),
+            "server_assigned_job_count_since_start": .stringConvertible(snapshot.serverAssignedJobCountSinceStart),
+        ]
+        for (key, value) in extra {
+            metadata[key] = value
+        }
+        return metadata
+    }
 }
 
-func inferredFinalStatus(from collection: TestOutcomeCollection) -> String {
-    if collection.buildStatus == .failed { return "failed" }
-    if collection.timeoutCount > 0 { return "timeout" }
-    if collection.errorCount > 0 { return "error" }
-    if collection.failCount > 0 { return "failed" }
-    return "passed"
+func inferredFinalStatus(from collection: TestOutcomeCollection) -> JobFinalStatus {
+    if collection.timeoutCount > 0 { return .timeout }
+    if collection.errorCount > 0 { return .error }
+    if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }
+    return .passed
 }
 
 func inferredTerminationReason(from collection: TestOutcomeCollection) -> String {
     if collection.timeoutCount > 0 { return "test_timeout" }
     if collection.errorCount > 0 { return "test_error" }
-    if collection.failCount > 0 { return "test_failure" }
+    if collection.failCount > 0 || collection.buildStatus == .failed { return "test_failure" }
     return "completed"
 }
 
@@ -446,25 +894,13 @@ private func iso8601Metadata(_ date: Date) -> Logger.MetadataValue {
     .string(ISO8601DateFormatter().string(from: date))
 }
 
-private func jobMetadata(
-    submissionID: String,
-    runnerID: String?,
-    courseID: UUID?,
-    assignmentID: UUID?,
-    testSetupID: String,
-    extra: Logger.Metadata = [:]
-) -> Logger.Metadata {
-    var metadata: Logger.Metadata = [
-        "submission_id": .string(submissionID),
-        "runner_id": .string(runnerID ?? ""),
-        "course_id": .string(courseID?.uuidString ?? ""),
-        "assignment_id": .string(assignmentID?.uuidString ?? ""),
-        "test_setup_id": .string(testSetupID),
-    ]
-    for (key, value) in extra {
-        metadata[key] = value
+private func environmentInt(_ key: String) -> Int? {
+    guard let raw = Environment.get(key)?
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+        let value = Int(raw) else {
+        return nil
     }
-    return metadata
+    return value
 }
 
 struct DiagnosticsConfigurationKey: StorageKey {
@@ -473,6 +909,14 @@ struct DiagnosticsConfigurationKey: StorageKey {
 
 struct OperationalDiagnosticsServiceKey: StorageKey {
     typealias Value = OperationalDiagnosticsService
+}
+
+struct ObservabilityLifecycleHandler: LifecycleHandler {
+    func didBoot(_ application: Application) throws {
+        Task {
+            await application.diagnostics.pruneNow(on: application.db, logger: application.logger)
+        }
+    }
 }
 
 extension Application {
