@@ -351,22 +351,41 @@ struct WorkerActivitySnapshot: Sendable {
     let workerID: String
     let lastActive: Date
     let hostname: String
+    let runnerVersion: String
+    let maxConcurrentJobs: Int
 }
 
 actor WorkerActivityStore {
     private struct Entry: Sendable {
         let lastSeen: Date
         let hostname: String
+        let runnerVersion: String
+        let maxConcurrentJobs: Int
     }
     private var entries: [String: Entry] = [:]
 
-    /// Record activity for `workerID`. If `hostname` is empty the existing
-    /// hostname is preserved so that HMAC middleware keep-alive touches on
-    /// non-body routes do not clobber the value set by the job-request body.
-    func markActive(workerID: String, hostname: String, at date: Date = Date()) {
+    /// Record activity for `workerID`. Empty/zero values for `hostname`,
+    /// `runnerVersion`, and `maxConcurrentJobs` are treated as "no update" —
+    /// the existing values are preserved so that HMAC middleware keep-alive
+    /// touches do not clobber fields set by the job-request body handler.
+    func markActive(
+        workerID: String,
+        hostname: String,
+        runnerVersion: String = "",
+        maxConcurrentJobs: Int = 0,
+        at date: Date = Date()
+    ) {
         guard !workerID.isEmpty else { return }
-        let effectiveHostname = hostname.isEmpty ? (entries[workerID]?.hostname ?? "") : hostname
-        entries[workerID] = Entry(lastSeen: date, hostname: effectiveHostname)
+        let prev = entries[workerID]
+        let effectiveHostname      = hostname.isEmpty         ? (prev?.hostname          ?? "") : hostname
+        let effectiveVersion       = runnerVersion.isEmpty    ? (prev?.runnerVersion     ?? "") : runnerVersion
+        let effectiveConcurrency   = maxConcurrentJobs == 0  ? (prev?.maxConcurrentJobs ?? 0)  : maxConcurrentJobs
+        entries[workerID] = Entry(
+            lastSeen: date,
+            hostname: effectiveHostname,
+            runnerVersion: effectiveVersion,
+            maxConcurrentJobs: effectiveConcurrency
+        )
     }
 
     /// Returns true when `workerID` has been seen within `ttlSeconds` AND the
@@ -380,7 +399,13 @@ actor WorkerActivityStore {
 
     func snapshotsSortedByRecent() -> [WorkerActivitySnapshot] {
         entries
-            .map { WorkerActivitySnapshot(workerID: $0.key, lastActive: $0.value.lastSeen, hostname: $0.value.hostname) }
+            .map { WorkerActivitySnapshot(
+                workerID: $0.key,
+                lastActive: $0.value.lastSeen,
+                hostname: $0.value.hostname,
+                runnerVersion: $0.value.runnerVersion,
+                maxConcurrentJobs: $0.value.maxConcurrentJobs
+            ) }
             .sorted { $0.lastActive > $1.lastActive }
     }
 

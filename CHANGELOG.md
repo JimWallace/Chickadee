@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.25] - 2026-03-31
+
+### Added
+
+- **Admin runner dashboard: version, load, and performance diagnostics**: the runner table now shows seven columns instead of five.
+  - **Runner** — worker ID and hostname (hostname shown in muted text below the ID).
+  - **Version** — Chickadee version the runner is running (`0.4.25`+); shows `—` for older runners.
+  - **Load** — current assigned jobs out of the runner's declared capacity (e.g. `2 / 4`); bold when busy. Shows bare count for pre-0.4.25 runners that don't advertise capacity.
+  - **Jobs Processed** — lifetime count (unchanged).
+  - **Avg Run** — rolling average execution time over the last 50 jobs (e.g. `14s`, `850ms`); shows `—` until data accumulates.
+  - **Avg Wait** — rolling average queue-wait time (submission → runner claim) over the last 50 jobs; shows `—` until data accumulates.
+  - **Last Active** — relative time (unchanged).
+  - The redundant "Status" column is removed; the Load column makes it obvious at a glance.
+- **Runner advertises concurrent-job capacity on every poll**: `POST /worker/request` now includes `maxConcurrentJobs` alongside the existing `runnerVersion`. The server stores both in `WorkerActivityStore` and surfaces them in the dashboard.
+- **`submission_diagnostics` table is now populated**: `OperationalDiagnosticsService` call sites wired in:
+  - `recordSubmissionCreated` — called when a student submits via the web form.
+  - `recordJobAssigned` — called inside the claim transaction when a runner picks up a job.
+  - `recordWorkerExecutionReport` — called when results are received; populates `execution_ms` (from `TestOutcomeCollection.executionTimeMs`) and `queue_wait_ms` (from `assignedAt − submittedAt`). The table was schema-complete but never written to before this release.
+
 ## [0.4.24] - 2026-03-31
 
 ### Fixed

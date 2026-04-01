@@ -51,7 +51,7 @@ struct WorkerCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
+        let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret, maxConcurrentJobs: maxJobs)
         let reporter = Reporter(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 

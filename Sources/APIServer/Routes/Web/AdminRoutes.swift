@@ -727,7 +727,6 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
 
     var assignedByWorkerID: [String: Int] = [:]
     var processedByWorkerID: [String: Int] = [:]
-
     for submission in submissions {
         guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
         if submission.status == "assigned" {
@@ -738,17 +737,54 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
         }
     }
 
+    // Fetch recent diagnostics for all active runners in a single query and
+    // compute rolling averages (last 50 jobs per runner) in Swift.
+    let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
+    var execMsByRunner:  [String: [Int]] = [:]
+    var waitMsByRunner:  [String: [Int]] = [:]
+    if !runnerIDs.isEmpty {
+        let recentDiags = try await APISubmissionDiagnostics.query(on: req.db)
+            .filter(\.$runnerID ~~ runnerIDs)
+            .sort(\.$createdAt, .descending)
+            .limit(runnerIDs.count * 50)
+            .all()
+        for d in recentDiags {
+            guard let rid = d.runnerID else { continue }
+            // Keep at most 50 samples per runner (query returns most-recent first)
+            if let ms = d.executionMs, execMsByRunner[rid, default: []].count < 50 {
+                execMsByRunner[rid, default: []].append(ms)
+            }
+            if let ms = d.queueWaitMs, waitMsByRunner[rid, default: []].count < 50 {
+                waitMsByRunner[rid, default: []].append(ms)
+            }
+        }
+    }
+
     return workers.map { snapshot in
-        let assigned = assignedByWorkerID[snapshot.workerID, default: 0]
+        let assigned  = assignedByWorkerID[snapshot.workerID,  default: 0]
         let processed = processedByWorkerID[snapshot.workerID, default: 0]
+        let execSamples = execMsByRunner[snapshot.workerID] ?? []
+        let waitSamples = waitMsByRunner[snapshot.workerID] ?? []
+        let avgExec = execSamples.isEmpty ? nil : execSamples.reduce(0, +) / execSamples.count
+        let avgWait = waitSamples.isEmpty ? nil : waitSamples.reduce(0, +) / waitSamples.count
         return AdminWorkerRow(
-            workerID: snapshot.workerID,
-            lastActive: iso.string(from: snapshot.lastActive),
-            status: assigned > 0 ? "busy" : "idle",
-            assignedJobs: assigned,
-            jobsProcessed: processed
+            workerID:              snapshot.workerID,
+            hostname:              snapshot.hostname,
+            runnerVersion:         snapshot.runnerVersion,
+            maxConcurrentJobs:     snapshot.maxConcurrentJobs,
+            lastActive:            iso.string(from: snapshot.lastActive),
+            assignedJobs:          assigned,
+            jobsProcessed:         processed,
+            avgExecutionMs:        avgExec,
+            avgQueueWaitMs:        avgWait,
+            avgExecutionFormatted: avgExec.map(formatMs),
+            avgQueueWaitFormatted: avgWait.map(formatMs)
         )
     }
+}
+
+private func formatMs(_ ms: Int) -> String {
+    ms >= 1000 ? "\(ms / 1000)s" : "\(ms)ms"
 }
 
 private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
@@ -783,10 +819,18 @@ private struct AdminUserRow: Encodable {
 
 struct AdminWorkerRow: Content {
     let workerID: String
+    let hostname: String
+    let runnerVersion: String
+    let maxConcurrentJobs: Int
     let lastActive: String
-    let status: String
     let assignedJobs: Int
     let jobsProcessed: Int
+    let avgExecutionMs: Int?
+    let avgQueueWaitMs: Int?
+    /// Human-readable form of `avgExecutionMs` (e.g. "14s", "850ms"), or nil.
+    let avgExecutionFormatted: String?
+    /// Human-readable form of `avgQueueWaitMs` (e.g. "3s", "200ms"), or nil.
+    let avgQueueWaitFormatted: String?
 }
 
 private struct AdminCourseRow: Encodable {

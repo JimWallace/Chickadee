@@ -16,12 +16,14 @@ protocol JobPolling: Sendable {
 struct JobPoller: Sendable {
     let apiBaseURL: URL
     let workerID: String
+    let maxConcurrentJobs: Int
     private let signer: WorkerRequestSigner
 
-    init(apiBaseURL: URL, workerID: String, workerSecret: String) {
-        self.apiBaseURL = apiBaseURL
-        self.workerID   = workerID
-        self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+    init(apiBaseURL: URL, workerID: String, workerSecret: String, maxConcurrentJobs: Int) {
+        self.apiBaseURL        = apiBaseURL
+        self.workerID          = workerID
+        self.maxConcurrentJobs = maxConcurrentJobs
+        self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
     }
 
     private static let session: URLSession = {
@@ -41,7 +43,8 @@ struct JobPoller: Sendable {
         let payload = WorkerRequestPayload(
             workerID: workerID,
             hostname: ProcessInfo.processInfo.hostName,
-            runnerVersion: ChickadeeVersion.current
+            runnerVersion: ChickadeeVersion.current,
+            maxConcurrentJobs: maxConcurrentJobs
         )
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)
@@ -81,6 +84,7 @@ private struct WorkerRequestPayload: Encodable {
     let workerID: String
     let hostname: String
     let runnerVersion: String
+    let maxConcurrentJobs: Int
 }
 
 enum JobPollerError: Error, LocalizedError {

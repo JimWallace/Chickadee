@@ -44,6 +44,31 @@ struct ResultRoutes: RouteCollection {
             submission.status = "complete"
             try await submission.save(on: req.db)
 
+            // Record execution diagnostics: execution time (from collection) and queue
+            // wait time (assignedAt − submittedAt). assignedAt is the best available
+            // proxy for "when the runner began work" without richer runner telemetry.
+            let finishedAt = Date()
+            let workerDiag = WorkerExecutionDiagnostics(
+                runnerID:          submission.workerID ?? "",
+                startedAt:         submission.assignedAt,
+                finishedAt:        finishedAt,
+                finalStatus:       inferredFinalStatus(from: collection),
+                timedOut:          collection.timeoutCount > 0,
+                exitCode:          nil,
+                terminationReason: inferredTerminationReason(from: collection),
+                peakRSSBytes:      nil,
+                wallClockMs:       collection.executionTimeMs,
+                childProcessCount: nil,
+                stdoutBytes:       nil,
+                stderrBytes:       nil
+            )
+            await req.application.diagnostics.recordWorkerExecutionReport(
+                collection: collection,
+                diagnostics: workerDiag,
+                on: req.db,
+                logger: req.logger
+            )
+
             // If this is a validation submission, update the assignment's validationStatus
             // so the instructor sees pass/fail without needing to poll.
             if submission.kind == APISubmission.Kind.validation {
