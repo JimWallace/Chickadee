@@ -24,7 +24,7 @@ Admin
                    type="text"
                    name="secret"
                    value="#(workerSecret)"
-                   autocomplete="off"
+                   autocomplete="new-password"
                    placeholder="Worker shared secret"
                    style="width:16rem">
             <button class="btn" type="submit">Save secret</button>
@@ -138,7 +138,8 @@ Admin
         <h2 style="margin:0">Users</h2>
         <input id="users-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name, username or role…"
-               style="width:280px" aria-label="Filter users">
+               style="width:280px" aria-label="Filter users"
+               readonly onfocus="this.removeAttribute('readonly')">
     </div>
     <table class="results-table" id="users-table">
         <thead>
