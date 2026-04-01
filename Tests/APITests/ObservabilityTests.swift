@@ -31,6 +31,8 @@ final class ObservabilityTests: XCTestCase {
         app.migrations.add(CreateRequestMetrics())
         app.migrations.add(CreateJobExecutionMetrics())
         app.migrations.add(CreateRunnerSnapshots())
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
 
         configureLeaf(app)
@@ -130,7 +132,13 @@ final class ObservabilityTests: XCTestCase {
             hostname: "host-a",
             runnerVersion: "runner/1.2.3",
             maxConcurrentJobs: 4,
-            activeJobs: 2
+            activeJobs: 2,
+            profile: RunnerCapabilityProfile(
+                platform: "linux",
+                architecture: "x86_64",
+                languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
+                capabilities: [RunnerCapability(name: "numpy")]
+            )
         )
         let body = try encodedBody(payload)
         let path = "/api/v1/worker/heartbeat"
@@ -156,6 +164,11 @@ final class ObservabilityTests: XCTestCase {
         XCTAssertEqual(snapshot?.maxJobs, 4)
         XCTAssertEqual(snapshot?.availableCapacity, 2)
         XCTAssertNotNil(snapshot?.lastHeartbeatAt)
+
+        let runnerProfile = try await RunnerProfile.query(on: app.db)
+            .filter(\.$runnerID == "runner-heartbeat")
+            .first()
+        XCTAssertEqual(runnerProfile?.platform, "linux")
     }
 
     func testAdminMetricsAuthorizationAndResponseShape() async throws {
@@ -215,6 +228,7 @@ final class ObservabilityTests: XCTestCase {
             XCTAssertNotNil(payload.queueWait.averageMs)
             XCTAssertEqual(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count, 1)
             XCTAssertFalse(payload.runnerLoads.isEmpty)
+            XCTAssertEqual(payload.compatibility.compatibleAssignmentAttempts, 0)
         })
     }
 

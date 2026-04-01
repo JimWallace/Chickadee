@@ -16,6 +16,7 @@ struct WorkerJobRoutes: RouteCollection {
     func requestJob(req: Request) async throws -> Response {
         let body = try req.content.decode(WorkerActivityPayload.self)
         let hostname = body.hostname
+        let seenAt = Date()
 
         // Reject a runner whose workerID is already claimed by a different host
         // within the activity TTL (3× the runner's max backoff of 30 s = 90 s).
@@ -42,8 +43,22 @@ struct WorkerJobRoutes: RouteCollection {
             runnerVersion: body.runnerVersion,
             maxConcurrentJobs: body.maxConcurrentJobs,
             activeJobs: body.activeJobs,
-            lastPollAt: Date()
+            lastPollAt: seenAt
         )
+        let profileUpsert = try await req.application.runnerProfiles.registerOrUpdate(
+            runnerID: body.workerID,
+            displayName: hostname,
+            profile: body.profile,
+            seenAt: seenAt,
+            on: req.db
+        )
+        if let profile = profileUpsert.profile, let event = profileUpsert.event {
+            req.application.diagnostics.recordRunnerProfileEvent(
+                profile: profile,
+                event: event,
+                logger: req.logger
+            )
+        }
         if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
             await req.application.diagnostics.recordRunnerCheckIn(
                 snapshot: snapshot,
@@ -57,28 +72,34 @@ struct WorkerJobRoutes: RouteCollection {
         // WorkerClaimQueue serializes concurrent calls at the application level;
         // the inner transaction provides the DB-level guarantee for multi-process
         // deployments where SQLite WAL serializes write transactions.
-        typealias ClaimedJob = (submission: APISubmission, setup: APITestSetup, manifest: TestProperties)
+        let compatibilityMatcher = CompatibilityMatcher()
+        let assignmentRequirements = req.application.assignmentRequirements
+        let runnerProfile = profileUpsert.profile?.capabilityProfile
+
+        typealias ClaimedJob = (
+            submission: APISubmission,
+            setup: APITestSetup,
+            manifest: TestProperties,
+            assignmentID: UUID?,
+            requirementSpec: AssignmentRequirementSpec?
+        )
         let claimed: ClaimedJob? = try await req.application.workerClaimQueue.run {
         try await req.db.transaction { db -> ClaimedJob? in
-            // Find the oldest pending student submission backed by a worker-mode test setup.
-            // Submissions for browser-mode test setups (gradingMode == .browser) are
-            // handled by the client-side WASM runner and must not be claimed here.
-            let studentCandidates = try await APISubmission.query(on: db)
+            let studentSubmissions = try await APISubmission.query(on: db)
                 .filter(\.$status == "pending")
                 .filter(\.$kind == APISubmission.Kind.student)
                 .sort(\.$submittedAt, .ascending)
                 .all()
 
-            var workerModeStudent: (APISubmission, APITestSetup, TestProperties)?
-            for candidate in studentCandidates {
+            var candidates: [(APISubmission, APITestSetup, TestProperties)] = []
+            for candidate in studentSubmissions {
                 guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
                 let data = Data(setup.manifest.utf8)
                 guard
                     let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
                     manifest.gradingMode == .worker
                 else { continue }
-                workerModeStudent = (candidate, setup, manifest)
-                break
+                candidates.append((candidate, setup, manifest))
             }
 
             // Validation submissions are always worker-mode (instructors validate via worker).
@@ -86,37 +107,90 @@ struct WorkerJobRoutes: RouteCollection {
                 .filter(\.$status == "pending")
                 .filter(\.$kind == APISubmission.Kind.validation)
                 .sort(\.$submittedAt, .ascending)
-                .first()
+                .all()
 
-            // Prefer student submissions, fall back to validation.
-            let submission: APISubmission
-            let setup: APITestSetup
-            let manifest: TestProperties
-
-            if let wm = workerModeStudent {
-                (submission, setup, manifest) = wm
-            } else if let val = pendingValidation {
-                guard let valSetup = try await APITestSetup.find(val.testSetupID, on: db) else {
-                    throw WorkerJobError.testSetupNotFound(id: val.testSetupID)
+            for validation in pendingValidation {
+                guard let valSetup = try await APITestSetup.find(validation.testSetupID, on: db) else {
+                    throw WorkerJobError.testSetupNotFound(id: validation.testSetupID)
                 }
                 let valManifestData = Data(valSetup.manifest.utf8)
                 let valManifest     = try JSONDecoder().decode(TestProperties.self, from: valManifestData)
-                (submission, setup, manifest) = (val, valSetup, valManifest)
-            } else {
-                return nil
+                candidates.append((validation, valSetup, valManifest))
             }
 
-            // Claim inside the transaction — atomic with the select above.
-            submission.status     = "assigned"
-            submission.workerID   = body.workerID
-            submission.assignedAt = Date()
-            try await submission.save(on: db)
+            var blockedCandidate: (
+                submission: APISubmission,
+                assignmentID: UUID?,
+                requirements: AssignmentRequirementSpec?,
+                result: CompatibilityResult
+            )?
 
-            return (submission, setup, manifest)
+            for (submission, setup, manifest) in candidates {
+                let loadedRequirements = try await assignmentRequirements.loadRequirement(for: submission, on: db)
+                let requirementSpec = loadedRequirements.requirement?.requirementSpec
+
+                req.application.diagnostics.recordAssignmentRequirementsLoaded(
+                    submission: submission,
+                    assignmentID: loadedRequirements.assignmentID,
+                    requirements: requirementSpec,
+                    logger: req.logger
+                )
+
+                let compatibilityResult = compatibilityMatcher.evaluate(
+                    runnerProfile: runnerProfile,
+                    requirements: requirementSpec
+                )
+                await req.application.diagnostics.recordCompatibilityDecision(
+                    submission: submission,
+                    assignmentID: loadedRequirements.assignmentID,
+                    runnerID: body.workerID,
+                    requirements: requirementSpec,
+                    result: compatibilityResult,
+                    logger: req.logger
+                )
+
+                guard compatibilityResult.isCompatible else {
+                    if blockedCandidate == nil {
+                        blockedCandidate = (
+                            submission: submission,
+                            assignmentID: loadedRequirements.assignmentID,
+                            requirements: requirementSpec,
+                            result: compatibilityResult
+                        )
+                    }
+                    continue
+                }
+
+                // Claim inside the transaction — atomic with the select above.
+                submission.status = "assigned"
+                submission.workerID = body.workerID
+                submission.assignedAt = Date()
+                try await submission.save(on: db)
+
+                return (
+                    submission: submission,
+                    setup: setup,
+                    manifest: manifest,
+                    assignmentID: loadedRequirements.assignmentID,
+                    requirementSpec: requirementSpec
+                )
+            }
+
+            if let blockedCandidate {
+                await req.application.diagnostics.recordNoCompatibleRunnerAvailable(
+                    submission: blockedCandidate.submission,
+                    assignmentID: blockedCandidate.assignmentID,
+                    runnerID: body.workerID,
+                    requirements: blockedCandidate.requirements,
+                    result: blockedCandidate.result,
+                    logger: req.logger
+                )
+            }
+            return nil
         } // end transaction
         } // end workerClaimQueue.run
 
-        guard let (submission, setup, manifest) = claimed else {
+        guard let (submission, setup, manifest, assignmentID, requirementSpec) = claimed else {
             return Response(status: .noContent)
         }
 
@@ -125,6 +199,13 @@ struct WorkerJobRoutes: RouteCollection {
         // Record diagnostics outside the transaction so req.application is safely accessible.
         await req.application.diagnostics.recordJobAssigned(
             submission: submission, on: req.db, logger: req.logger
+        )
+        req.application.diagnostics.recordCompatibleJobAssignment(
+            submission: submission,
+            assignmentID: assignmentID,
+            runnerID: body.workerID,
+            requirements: requirementSpec,
+            logger: req.logger
         )
 
         let base = resolvedWorkerBaseURL(req: req)
@@ -153,14 +234,29 @@ struct WorkerJobRoutes: RouteCollection {
     @Sendable
     func heartbeat(req: Request) async throws -> HTTPStatus {
         let body = try req.content.decode(WorkerActivityPayload.self)
+        let seenAt = Date()
         await req.application.workerActivityStore.markActive(
             workerID: body.workerID,
             hostname: body.hostname,
             runnerVersion: body.runnerVersion,
             maxConcurrentJobs: body.maxConcurrentJobs,
             activeJobs: body.activeJobs,
-            lastHeartbeatAt: Date()
+            lastHeartbeatAt: seenAt
         )
+        let profileUpsert = try await req.application.runnerProfiles.registerOrUpdate(
+            runnerID: body.workerID,
+            displayName: body.hostname,
+            profile: body.profile,
+            seenAt: seenAt,
+            on: req.db
+        )
+        if let profile = profileUpsert.profile, let event = profileUpsert.event {
+            req.application.diagnostics.recordRunnerProfileEvent(
+                profile: profile,
+                event: event,
+                logger: req.logger
+            )
+        }
         if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
             await req.application.diagnostics.recordRunnerCheckIn(
                 snapshot: snapshot,

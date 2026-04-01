@@ -167,6 +167,8 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.migrations.add(CreateRequestMetrics())
     app.migrations.add(CreateJobExecutionMetrics())
     app.migrations.add(CreateRunnerSnapshots())
+    app.migrations.add(CreateRunnerProfiles())
+    app.migrations.add(CreateAssignmentRequirements())
 
     try app.autoMigrate().wait()
     app.lifecycle.use(ObservabilityLifecycleHandler())

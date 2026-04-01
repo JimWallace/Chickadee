@@ -17,12 +17,20 @@ struct JobPoller: Sendable {
     let apiBaseURL: URL
     let workerID: String
     let maxConcurrentJobs: Int
+    let profile: RunnerCapabilityProfile?
     private let signer: WorkerRequestSigner
 
-    init(apiBaseURL: URL, workerID: String, workerSecret: String, maxConcurrentJobs: Int) {
+    init(
+        apiBaseURL: URL,
+        workerID: String,
+        workerSecret: String,
+        maxConcurrentJobs: Int,
+        profile: RunnerCapabilityProfile? = nil
+    ) {
         self.apiBaseURL        = apiBaseURL
         self.workerID          = workerID
         self.maxConcurrentJobs = maxConcurrentJobs
+        self.profile           = profile
         self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
     }
 
@@ -45,7 +53,8 @@ struct JobPoller: Sendable {
             hostname: ProcessInfo.processInfo.hostName,
             runnerVersion: ChickadeeVersion.current,
             maxConcurrentJobs: maxConcurrentJobs,
-            activeJobs: activeJobs
+            activeJobs: activeJobs,
+            profile: profile
         )
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)

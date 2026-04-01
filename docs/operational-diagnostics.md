@@ -98,6 +98,13 @@ Server-side structured log events include:
 - `job_enqueued`
 - `runner_polled`
 - `runner_heartbeat`
+- `runner_profile_registered`
+- `runner_profile_updated`
+- `assignment_requirements_loaded`
+- `compatibility_check_passed`
+- `compatibility_check_failed`
+- `no_compatible_runner_available`
+- `job_assigned_to_compatible_runner`
 - `job_assigned`
 - `result_received`
 - `job_finalised`
@@ -163,6 +170,10 @@ The response is JSON and includes:
 - per-runner active job and capacity values
 - recent job counts grouped by final status
 - average, p50, and p95 queue wait and execution times for the recent window
+- compatibility counters since server start:
+  - `compatibleAssignmentAttempts`
+  - `incompatibleAssignmentAttempts`
+  - `jobsBlockedNoCompatibleRunner`
 
 This route is protected by the existing admin session auth. It is not exposed as
 a public dashboard route.

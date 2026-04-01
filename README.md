@@ -92,6 +92,9 @@ The admin dashboard also supports a **local runner autostart** toggle that spawn
 For backend observability details, retention settings, and the protected
 `/admin/metrics` JSON endpoint, see **[docs/operational-diagnostics.md](docs/operational-diagnostics.md)**.
 
+For backend runner capability matching and assignment requirement rollout
+guidance, see **[docs/runner-capability-profiles.md](docs/runner-capability-profiles.md)**.
+
 ---
 
 ## JupyterLite
