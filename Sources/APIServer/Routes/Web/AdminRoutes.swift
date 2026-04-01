@@ -737,36 +737,18 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
         }
     }
 
-    // Fetch recent diagnostics for all active runners in a single query and
-    // compute rolling averages (last 50 jobs per runner) in Swift.
+    // Fetch rolling averages (last 50 jobs per runner) via the diagnostics service.
     let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
-    var execMsByRunner:  [String: [Int]] = [:]
-    var waitMsByRunner:  [String: [Int]] = [:]
-    if !runnerIDs.isEmpty {
-        let recentDiags = try await APISubmissionDiagnostics.query(on: req.db)
-            .filter(\.$runnerID ~~ runnerIDs)
-            .sort(\.$createdAt, .descending)
-            .limit(runnerIDs.count * 50)
-            .all()
-        for d in recentDiags {
-            guard let rid = d.runnerID else { continue }
-            // Keep at most 50 samples per runner (query returns most-recent first)
-            if let ms = d.executionMs, execMsByRunner[rid, default: []].count < 50 {
-                execMsByRunner[rid, default: []].append(ms)
-            }
-            if let ms = d.queueWaitMs, waitMsByRunner[rid, default: []].count < 50 {
-                waitMsByRunner[rid, default: []].append(ms)
-            }
-        }
-    }
+    let averages = (try? await req.application.diagnostics.rollingAverages(
+        for: runnerIDs, sampleSize: 50, on: req.db
+    )) ?? [:]
 
     return workers.map { snapshot in
         let assigned  = assignedByWorkerID[snapshot.workerID,  default: 0]
         let processed = processedByWorkerID[snapshot.workerID, default: 0]
-        let execSamples = execMsByRunner[snapshot.workerID] ?? []
-        let waitSamples = waitMsByRunner[snapshot.workerID] ?? []
-        let avgExec = execSamples.isEmpty ? nil : execSamples.reduce(0, +) / execSamples.count
-        let avgWait = waitSamples.isEmpty ? nil : waitSamples.reduce(0, +) / waitSamples.count
+        let avg = averages[snapshot.workerID]
+        let avgExec = avg?.avgExecutionMs
+        let avgWait = avg?.avgQueueWaitMs
         return AdminWorkerRow(
             workerID:              snapshot.workerID,
             hostname:              snapshot.hostname,

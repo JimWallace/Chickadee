@@ -3,6 +3,11 @@ import Fluent
 import Vapor
 import Foundation
 
+struct RunnerAverages: Sendable {
+    let avgExecutionMs: Int?
+    let avgQueueWaitMs: Int?
+}
+
 struct DiagnosticsConfiguration: Sendable {
     let enabled: Bool
     let verboseRequestTiming: Bool
@@ -254,6 +259,46 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 "error": .string(String(describing: error)),
             ])
         }
+    }
+
+    // MARK: - Rolling average queries
+
+    /// Per-runner averages over the most recent `sampleSize` completed jobs.
+    /// Returns a map of runnerID → `(avgExecutionMs, avgQueueWaitMs)`, both
+    /// optionals (nil when no data is available for that metric).
+    func rollingAverages(
+        for runnerIDs: [String],
+        sampleSize: Int = 50,
+        on db: Database
+    ) async throws -> [String: RunnerAverages] {
+        guard !runnerIDs.isEmpty else { return [:] }
+        let recentDiags = try await APISubmissionDiagnostics.query(on: db)
+            .filter(\.$runnerID ~~ runnerIDs)
+            .sort(\.$createdAt, .descending)
+            .limit(runnerIDs.count * sampleSize)
+            .all()
+
+        var execByRunner: [String: [Int]] = [:]
+        var waitByRunner: [String: [Int]] = [:]
+        for d in recentDiags {
+            guard let rid = d.runnerID else { continue }
+            if let ms = d.executionMs, execByRunner[rid, default: []].count < sampleSize {
+                execByRunner[rid, default: []].append(ms)
+            }
+            if let ms = d.queueWaitMs, waitByRunner[rid, default: []].count < sampleSize {
+                waitByRunner[rid, default: []].append(ms)
+            }
+        }
+
+        var result: [String: RunnerAverages] = [:]
+        for rid in runnerIDs {
+            let exec = execByRunner[rid] ?? []
+            let wait = waitByRunner[rid] ?? []
+            let avgExec = exec.isEmpty ? nil : exec.reduce(0, +) / exec.count
+            let avgWait = wait.isEmpty ? nil : wait.reduce(0, +) / wait.count
+            result[rid] = RunnerAverages(avgExecutionMs: avgExec, avgQueueWaitMs: avgWait)
+        }
+        return result
     }
 
     func recordRequestMetric(
