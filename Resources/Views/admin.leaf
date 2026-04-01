@@ -291,15 +291,29 @@ Admin
 
         workersBody.innerHTML = workers.map(function (worker) {
             var id = escapeHtml(worker.workerID || '');
-            var status = escapeHtml(worker.status || '');
-            var assignedJobs = escapeHtml(worker.assignedJobs == null ? '' : worker.assignedJobs);
-            var jobsProcessed = escapeHtml(worker.jobsProcessed == null ? '' : worker.jobsProcessed);
+            var hostname = escapeHtml(worker.hostname || '');
+            var version = escapeHtml(worker.runnerVersion || '');
+            var assignedJobs = worker.assignedJobs == null ? 0 : worker.assignedJobs;
+            var maxJobs = worker.maxConcurrentJobs == null ? 0 : worker.maxConcurrentJobs;
+            var jobsProcessed = worker.jobsProcessed == null ? 0 : worker.jobsProcessed;
+            var avgRun = escapeHtml(worker.avgExecutionFormatted || '');
+            var avgWait = escapeHtml(worker.avgQueueWaitFormatted || '');
             var lastActive = escapeHtml(worker.lastActive || '');
+
+            var idCell = '<code>' + id + '</code>'
+                + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
+            var loadCell = maxJobs > 0
+                ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
+                : String(assignedJobs);
+            var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
+
             return '<tr>'
-                + '<td><code>' + id + '</code></td>'
-                + '<td>' + status + '</td>'
-                + '<td class="time">' + assignedJobs + '</td>'
+                + '<td>' + idCell + '</td>'
+                + '<td>' + (version || '—') + '</td>'
+                + '<td class="time"' + loadStyle + '>' + loadCell + '</td>'
                 + '<td class="time">' + jobsProcessed + '</td>'
+                + '<td class="time">' + (avgRun || '—') + '</td>'
+                + '<td class="time">' + (avgWait || '—') + '</td>'
                 + '<td class="time js-relative-time" data-iso="' + lastActive + '">' + lastActive + '</td>'
                 + '</tr>';
         }).join('');
