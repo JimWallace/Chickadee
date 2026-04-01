@@ -146,6 +146,24 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             let event = diagnostics.timedOut == true
                 ? "job_timed_out"
                 : (diagnostics.finalStatus == "passed" ? "job_finished" : "job_failed")
+            // Break up the metadata dictionary to avoid Linux type-checker timeouts.
+            let queueWaitVal: Logger.MetadataValue = diagnostics.queueWaitMs.map { .stringConvertible($0) } ?? .string("")
+            let executionVal: Logger.MetadataValue = diagnostics.executionMs.map { .stringConvertible($0) } ?? .string("")
+            let turnaroundVal: Logger.MetadataValue = diagnostics.turnaroundMs.map { .stringConvertible($0) } ?? .string("")
+            let peakRSSVal: Logger.MetadataValue = diagnostics.peakRSSBytes.map { .stringConvertible($0) } ?? .string("")
+            let stdoutVal: Logger.MetadataValue = diagnostics.stdoutBytes.map { .stringConvertible($0) } ?? .string("")
+            let stderrVal: Logger.MetadataValue = diagnostics.stderrBytes.map { .stringConvertible($0) } ?? .string("")
+            let extraMeta: Logger.Metadata = [
+                "final_status": .string(diagnostics.finalStatus ?? ""),
+                "timed_out": .stringConvertible(diagnostics.timedOut ?? false),
+                "queue_wait_ms": queueWaitVal,
+                "execution_ms": executionVal,
+                "turnaround_ms": turnaroundVal,
+                "termination_reason": .string(diagnostics.terminationReason ?? ""),
+                "peak_rss_bytes": peakRSSVal,
+                "stdout_bytes": stdoutVal,
+                "stderr_bytes": stderrVal,
+            ]
             logger.info(
                 Logger.Message(stringLiteral: event),
                 metadata: jobMetadata(
@@ -154,17 +172,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                     courseID: context.courseID,
                     assignmentID: context.assignmentID,
                     testSetupID: submission.testSetupID,
-                    extra: [
-                        "final_status": .string(diagnostics.finalStatus ?? ""),
-                        "timed_out": .stringConvertible(diagnostics.timedOut ?? false),
-                        "queue_wait_ms": diagnostics.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
-                        "execution_ms": diagnostics.executionMs.map { .stringConvertible($0) } ?? .string(""),
-                        "turnaround_ms": diagnostics.turnaroundMs.map { .stringConvertible($0) } ?? .string(""),
-                        "termination_reason": .string(diagnostics.terminationReason ?? ""),
-                        "peak_rss_bytes": diagnostics.peakRSSBytes.map { .stringConvertible($0) } ?? .string(""),
-                        "stdout_bytes": diagnostics.stdoutBytes.map { .stringConvertible($0) } ?? .string(""),
-                        "stderr_bytes": diagnostics.stderrBytes.map { .stringConvertible($0) } ?? .string(""),
-                    ]
+                    extra: extraMeta
                 )
             )
         } catch {
@@ -238,19 +246,24 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.terminationReason = terminationReason
             try await diagnostics.save(on: db)
 
+            // Break up the metadata dictionary to avoid Linux type-checker timeouts.
+            let failEventName: Logger.Message = terminationReason == "job_timeout" ? "job_timed_out" : "job_failed"
+            let failQueueWaitVal: Logger.MetadataValue = diagnostics.queueWaitMs.map { .stringConvertible($0) } ?? .string("")
+            let failExecutionVal: Logger.MetadataValue = diagnostics.executionMs.map { .stringConvertible($0) } ?? .string("")
+            let failExtraMeta: Logger.Metadata = [
+                "termination_reason": .string(terminationReason),
+                "queue_wait_ms": failQueueWaitVal,
+                "execution_ms": failExecutionVal,
+            ]
             logger.error(
-                terminationReason == "job_timeout" ? "job_timed_out" : "job_failed",
+                failEventName,
                 metadata: jobMetadata(
                     submissionID: submissionID,
                     runnerID: diagnostics.runnerID,
                     courseID: context.courseID,
                     assignmentID: context.assignmentID,
                     testSetupID: submission.testSetupID,
-                    extra: [
-                        "termination_reason": .string(terminationReason),
-                        "queue_wait_ms": diagnostics.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
-                        "execution_ms": diagnostics.executionMs.map { .stringConvertible($0) } ?? .string(""),
-                    ]
+                    extra: failExtraMeta
                 )
             )
         } catch {
