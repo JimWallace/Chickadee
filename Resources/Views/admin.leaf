@@ -35,19 +35,34 @@ Admin
             <thead>
                 <tr>
                     <th>Runner</th>
-                    <th>Status</th>
-                    <th class="time">Assigned Jobs</th>
+                    <th>Version</th>
+                    <th class="time">Load</th>
                     <th class="time">Jobs Processed</th>
+                    <th class="time">Avg Run</th>
+                    <th class="time">Avg Wait</th>
                     <th class="time">Last Active</th>
                 </tr>
             </thead>
             <tbody id="workers-body">
             #for(worker in workers):
                 <tr>
-                    <td><code>#(worker.workerID)</code></td>
-                    <td>#(worker.status)</td>
-                    <td class="time">#(worker.assignedJobs)</td>
+                    <td>
+                        <code>#(worker.workerID)</code>
+                        #if(worker.hostname != ""):
+                            <br><span style="font-size:.8em;color:var(--muted)">#(worker.hostname)</span>
+                        #endif
+                    </td>
+                    <td>#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
+                    <td class="time" #if(worker.assignedJobs > 0):style="font-weight:600"#endif>
+                        #if(worker.maxConcurrentJobs > 0):
+                            #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
+                        #else:
+                            #(worker.assignedJobs)
+                        #endif
+                    </td>
                     <td class="time">#(worker.jobsProcessed)</td>
+                    <td class="time">#if(worker.avgExecutionFormatted):#(worker.avgExecutionFormatted)#else:—#endif</td>
+                    <td class="time">#if(worker.avgQueueWaitFormatted):#(worker.avgQueueWaitFormatted)#else:—#endif</td>
                     <td class="time js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</td>
                 </tr>
             #endfor

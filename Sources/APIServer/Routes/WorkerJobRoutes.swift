@@ -35,7 +35,12 @@ struct WorkerJobRoutes: RouteCollection {
             )
         }
 
-        await req.application.workerActivityStore.markActive(workerID: body.workerID, hostname: hostname)
+        await req.application.workerActivityStore.markActive(
+            workerID: body.workerID,
+            hostname: hostname,
+            runnerVersion: body.runnerVersion ?? "",
+            maxConcurrentJobs: body.maxConcurrentJobs ?? 0
+        )
 
         // Atomically find and claim the best pending job.
         // WorkerClaimQueue serializes concurrent calls at the application level;
@@ -96,6 +101,10 @@ struct WorkerJobRoutes: RouteCollection {
             submission.assignedAt = Date()
             try await submission.save(on: db)
 
+            await req.application.diagnostics.recordJobAssigned(
+                submission: submission, on: db, logger: req.logger
+            )
+
             return (submission, setup, manifest)
         } // end transaction
         } // end workerClaimQueue.run
@@ -132,6 +141,7 @@ struct WorkerRequestBody: Content {
     let workerID: String
     let hostname: String?
     let runnerVersion: String?
+    let maxConcurrentJobs: Int?
 }
 
 private func resolvedWorkerBaseURL(req: Request) -> String {
