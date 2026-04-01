@@ -17,11 +17,21 @@ struct Reporter: Sendable {
     let apiBaseURL: URL
     let workerID: String
     private let signer: WorkerRequestSigner
+    private let heartbeatRetryPolicy: RunnerRetryPolicy
+    private let resultUploadRetryPolicy: RunnerRetryPolicy
 
-    init(apiBaseURL: URL, workerID: String, workerSecret: String) {
+    init(
+        apiBaseURL: URL,
+        workerID: String,
+        workerSecret: String,
+        heartbeatRetryPolicy: RunnerRetryPolicy = .heartbeat(),
+        resultUploadRetryPolicy: RunnerRetryPolicy = .resultUpload()
+    ) {
         self.apiBaseURL = apiBaseURL
         self.workerID   = workerID
         self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+        self.heartbeatRetryPolicy = heartbeatRetryPolicy
+        self.resultUploadRetryPolicy = resultUploadRetryPolicy
     }
 
     private static let session: URLSession = {
@@ -42,7 +52,11 @@ struct Reporter: Sendable {
         do { request.httpBody = try encoder.encode(collection) } catch { throw .transportError(error) }
         signer.sign(&request)
 
-        try await sendWithRetry(request)
+        try await sendWithRetry(
+            request,
+            stage: .resultUpload,
+            policy: resultUploadRetryPolicy
+        )
     }
 
     func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
@@ -54,32 +68,61 @@ struct Reporter: Sendable {
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)
 
-        let result = await Self.attemptReport(request: request, expectedStatus: 200)
-        switch result {
-        case .success:
-            return
-        case .failure(let error):
-            throw error
-        }
+        try await sendWithRetry(
+            request,
+            stage: .heartbeat,
+            policy: heartbeatRetryPolicy
+        )
     }
 
-    private func sendWithRetry(_ request: URLRequest) async throws(ReporterError) {
-        // Retry up to 3 times with a 5-second pause between attempts so that a
-        // transient network blip or server restart doesn't silently discard grades.
-        var lastError: ReporterError = .unexpectedResponse
-        for attempt in 1...3 {
+    private func sendWithRetry(
+        _ request: URLRequest,
+        stage: RunnerRetryStage,
+        policy: RunnerRetryPolicy
+    ) async throws(ReporterError) {
+        do {
+            try await withRunnerRetry(
+            stage: stage,
+            policy: policy,
+            shouldRetry: { error in
+                guard let reporterError = error as? ReporterError else {
+                    return .terminal(String(describing: error))
+                }
+                switch reporterError {
+                case .transportError(let underlying):
+                    return .retryable(underlying.localizedDescription)
+                case .httpError(let statusCode, let body):
+                    return classifyHTTPRetry(statusCode: statusCode, body: body)
+                case .unexpectedResponse:
+                    return .terminal("unexpected response")
+                }
+            },
+            onRetry: { context in
+                let event = context.stage == .heartbeat ? "heartbeat_retry_scheduled" : "network_retry_scheduled"
+                writeStructuredRunnerLog(event: event, fields: [
+                    "runner_id": self.workerID,
+                    "failure_stage": context.stage.rawValue,
+                    "attempt": context.attempt,
+                    "max_attempts": context.maxAttempts,
+                    "retry_in_seconds": context.retryInSeconds ?? 0,
+                    "retryable": context.retryable,
+                    "error_message_summary": context.message,
+                ])
+            }
+        ) {
             let result = await Self.attemptReport(request: request, expectedStatus: 200)
             switch result {
             case .success:
-                return
-            case .failure(let err):
-                lastError = err
-                if attempt < 3 {
-                    try? await Task.sleep(for: .seconds(5))
-                }
+                return ()
+            case .failure(let error):
+                throw error
             }
         }
-        throw lastError
+        } catch let reporterError as ReporterError {
+            throw reporterError
+        } catch {
+            throw .transportError(error)
+        }
     }
 }
 

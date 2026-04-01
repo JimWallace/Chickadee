@@ -116,6 +116,10 @@ Runner-side structured log events include:
 
 - `runner_startup`
 - `runner_configuration`
+- `server_connection_lost`
+- `server_connection_restored`
+- `heartbeat_retry_scheduled`
+- `network_retry_scheduled`
 - `poll_cycle_start`
 - `poll_cycle_end`
 - `job_accepted`
@@ -152,6 +156,11 @@ Keys are kept consistent across events where possible:
 - `available_capacity`
 - `error_type`
 - `error_message_summary`
+- `failure_stage`
+- `retryable`
+- `attempt`
+- `max_attempts`
+- `retry_in_seconds`
 
 Sensitive material is intentionally excluded: no shared secrets, no submission
 contents, and no raw notebook payloads.
@@ -198,9 +207,29 @@ Environment flags:
   - default: `24`
 - `OBSERVABILITY_PRUNE_INTERVAL_HOURS`
   - default: `24`
+- `RUNNER_NETWORK_RETRY_ENABLED`
+  - default: enabled
+- `RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS`
+  - default: `6`
+- `RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS`
+  - default: `8`
+- `RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS`
+  - default: `4`
+- `RUNNER_RETRY_BASE_DELAY_MS`
+  - default: `1000`
+- `RUNNER_RETRY_MAX_DELAY_MS`
+  - default: `30000`
 
 Pruning runs opportunistically on server startup and then whenever the service
 next needs to prune after the configured interval.
+
+Runner retry behavior is intentionally stage-specific:
+
+- polling keeps retrying indefinitely through short server restarts
+- heartbeats retry within a bounded window and then resume on the next interval
+- submission and test-setup downloads retry before the active job is failed
+- result uploads retry longer than heartbeats so transient API restarts are less
+  likely to lose a completed grade
 
 ## Deployment Examples
 
@@ -218,6 +247,16 @@ sudo journalctl -u chickadee-server -f
 sudo journalctl -u chickadee-runner -f
 curl -H "Cookie: $(cat admin-cookie.txt)" http://127.0.0.1:8080/admin/metrics | jq
 ```
+
+Connection recovery signals:
+
+- `event == "server_connection_lost"` marks the first observed runner-side
+  outage for a given interruption
+- `event == "network_retry_scheduled"` and `event == "heartbeat_retry_scheduled"`
+  show bounded retry decisions, including `failure_stage`, `attempt`, and
+  `retry_in_seconds`
+- `event == "server_connection_restored"` marks the first successful runner
+  request after the outage clears
 
 ## Answering Common Ops Questions
 

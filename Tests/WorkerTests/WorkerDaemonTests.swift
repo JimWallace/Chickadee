@@ -7,6 +7,19 @@ import Glibc
 #endif
 
 final class WorkerDaemonTests: XCTestCase {
+    private let fastRetryPolicy = RunnerRetryPolicy(
+        enabled: true,
+        maxAttempts: 2,
+        baseDelayMs: 10,
+        maxDelayMs: 20
+    )
+
+    private let generousRetryPolicy = RunnerRetryPolicy(
+        enabled: true,
+        maxAttempts: 5,
+        baseDelayMs: 10,
+        maxDelayMs: 20
+    )
 
     private final class StaticFileServer {
         let process: Process
@@ -102,15 +115,22 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
 
     private actor MockReporter: Reporting {
         private var collections: [TestOutcomeCollection] = []
+        private var heartbeatCount = 0
 
         func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
             collections.append(collection)
         }
 
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
+        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
+            heartbeatCount += 1
+        }
 
         func snapshot() -> [TestOutcomeCollection] {
             collections
+        }
+
+        func observedHeartbeatCount() -> Int {
+            heartbeatCount
         }
     }
 
@@ -118,9 +138,16 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         private var failuresRemaining: Int
         private var attempts = 0
         private var collections: [TestOutcomeCollection] = []
+        private var heartbeatFailuresRemaining = 0
+        private var heartbeatAttempts = 0
 
         init(failuresRemaining: Int) {
             self.failuresRemaining = failuresRemaining
+        }
+
+        init(failuresRemaining: Int, heartbeatFailuresRemaining: Int) {
+            self.failuresRemaining = failuresRemaining
+            self.heartbeatFailuresRemaining = heartbeatFailuresRemaining
         }
 
         func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
@@ -132,7 +159,13 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             collections.append(collection)
         }
 
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
+        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
+            heartbeatAttempts += 1
+            if heartbeatFailuresRemaining > 0 {
+                heartbeatFailuresRemaining -= 1
+                throw ReporterError.transportError(URLError(.cannotConnectToHost))
+            }
+        }
 
         func observedAttempts() -> Int {
             attempts
@@ -140,6 +173,91 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
 
         func snapshot() -> [TestOutcomeCollection] {
             collections
+        }
+
+        func observedHeartbeatAttempts() -> Int {
+            heartbeatAttempts
+        }
+    }
+
+    private final class FlakyHTTPServer {
+        let process: Process
+        let port: Int
+        private let stdout: Pipe
+
+        init(failuresBeforeSuccess: Int, responseBody: String = "payload") throws {
+            process = Process()
+            stdout = Pipe()
+            process.standardOutput = stdout
+            process.standardError = FileHandle.nullDevice
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [
+                "python3",
+                "-c",
+                #"""
+import http.server
+import socketserver
+import sys
+
+remaining = int(sys.argv[1])
+body = sys.argv[2].encode("utf-8")
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        global remaining
+        if remaining > 0:
+            remaining -= 1
+            self.send_response(503)
+            self.end_headers()
+            self.wfile.write(b"unavailable")
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass
+
+with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+    print(httpd.server_address[1], flush=True)
+    httpd.serve_forever()
+"""#,
+                String(failuresBeforeSuccess),
+                responseBody
+            ]
+
+            try process.run()
+
+            let data = stdout.fileHandleForReading.availableData
+            guard
+                let line = String(data: data, encoding: .utf8)?
+                    .split(separator: "\n")
+                    .first,
+                let port = Int(line)
+            else {
+                process.terminate()
+                throw XCTSkip("python3 is unavailable for local flaky HTTP serving")
+            }
+
+            self.port = port
+        }
+
+        func stop() {
+            guard process.isRunning else { return }
+            process.terminate()
+            for _ in 0..<20 where process.isRunning {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if process.isRunning {
+#if os(Linux)
+                _ = Glibc.kill(process.processIdentifier, SIGKILL)
+#else
+                _ = Darwin.kill(process.processIdentifier, SIGKILL)
+#endif
+            }
+            process.waitUntilExit()
+            stdout.fileHandleForReading.closeFile()
         }
     }
 
@@ -322,7 +440,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             workerID: "worker-failure",
             workerSecret: "secret",
             maxConcurrentJobs: 1,
-            runnerProfile: nil
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy
         )
 
         let task = Task {
@@ -388,7 +507,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             workerID: "worker-report-fail",
             workerSecret: "secret",
             maxConcurrentJobs: 1,
-            runnerProfile: nil
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy
         )
 
         let task = Task {
@@ -450,7 +570,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             workerID: "worker-next-job",
             workerSecret: "secret",
             maxConcurrentJobs: 1,
-            runnerProfile: nil
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy
         )
 
         let task = Task {
@@ -480,5 +601,69 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         XCTAssertEqual(reports[1].totalTests, 1)
         XCTAssertEqual(reports[1].passCount, 1)
         XCTAssertEqual(runnerInvocations, 1)
+    }
+
+    func testWorkerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
+        let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
+        let reporter = FlakyReporter(failuresRemaining: 0, heartbeatFailuresRemaining: 2)
+        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-heartbeat-retry",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
+        )
+
+        let heartbeatTask = Task {
+            try? await daemon.sendHeartbeat()
+        }
+
+        let runTask = Task {
+            try await daemon.run()
+        }
+
+        let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+            await poller.observedRequestCount() > 1
+        }
+        XCTAssertTrue(didKeepPolling, "Runner should continue polling while heartbeat retries fail")
+
+        _ = await heartbeatTask.result
+        runTask.cancel()
+        _ = await runTask.result
+    }
+
+    func testDownloadRetriesThroughShortServerInterruption() async throws {
+        let flakyServer = try FlakyHTTPServer(failuresBeforeSuccess: 2, responseBody: "PK\0\0")
+        defer { flakyServer.stop() }
+
+        let poller = MockPoller(jobs: [])
+        let reporter = MockReporter()
+        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-download-retry",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: generousRetryPolicy
+        )
+
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("download-retry-\(UUID().uuidString).zip")
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        try await daemon.download(
+            url: URL(string: "http://127.0.0.1:\(flakyServer.port)/artifact.zip")!,
+            to: destination
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
     }
 }

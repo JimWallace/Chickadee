@@ -568,4 +568,26 @@ final class WorkerTests: XCTestCase {
         let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         XCTAssertTrue(content.contains("x = 99"), "String-form source must be extracted")
     }
+
+    func testClassifyHTTPRetryTreatsGatewayErrorsAsRetryable() {
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 503, body: "unavailable"),
+            .retryable("HTTP 503: unavailable")
+        )
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 502, body: "bad gateway"),
+            .retryable("HTTP 502: bad gateway")
+        )
+    }
+
+    func testClassifyHTTPRetryTreatsAuthAndConflictAsTerminal() {
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 401, body: "unauthorized"),
+            .terminal("HTTP 401: unauthorized")
+        )
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 409, body: "duplicate"),
+            .terminal("HTTP 409: duplicate")
+        )
+    }
 }
