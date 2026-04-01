@@ -101,10 +101,6 @@ struct WorkerJobRoutes: RouteCollection {
             submission.assignedAt = Date()
             try await submission.save(on: db)
 
-            await req.application.diagnostics.recordJobAssigned(
-                submission: submission, on: db, logger: req.logger
-            )
-
             return (submission, setup, manifest)
         } // end transaction
         } // end workerClaimQueue.run
@@ -112,6 +108,11 @@ struct WorkerJobRoutes: RouteCollection {
         guard let (submission, setup, manifest) = claimed else {
             return Response(status: .noContent)
         }
+
+        // Record diagnostics outside the transaction so req.application is safely accessible.
+        await req.application.diagnostics.recordJobAssigned(
+            submission: submission, on: req.db, logger: req.logger
+        )
 
         let base = resolvedWorkerBaseURL(req: req)
 

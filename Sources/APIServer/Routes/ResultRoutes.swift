@@ -44,27 +44,10 @@ struct ResultRoutes: RouteCollection {
             submission.status = "complete"
             try await submission.save(on: req.db)
 
-            // Record execution diagnostics: execution time (from collection) and queue
-            // wait time (assignedAt − submittedAt). assignedAt is the best available
-            // proxy for "when the runner began work" without richer runner telemetry.
-            let finishedAt = Date()
-            let workerDiag = WorkerExecutionDiagnostics(
-                runnerID:          submission.workerID ?? "",
-                startedAt:         submission.assignedAt,
-                finishedAt:        finishedAt,
-                finalStatus:       inferredFinalStatus(from: collection),
-                timedOut:          collection.timeoutCount > 0,
-                exitCode:          nil,
-                terminationReason: inferredTerminationReason(from: collection),
-                peakRSSBytes:      nil,
-                wallClockMs:       collection.executionTimeMs,
-                childProcessCount: nil,
-                stdoutBytes:       nil,
-                stderrBytes:       nil
-            )
-            await req.application.diagnostics.recordWorkerExecutionReport(
+            // Record execution diagnostics (execution time + queue wait).
+            await req.application.diagnostics.recordWorkerResult(
                 collection: collection,
-                diagnostics: workerDiag,
+                submission: submission,
                 on: req.db,
                 logger: req.logger
             )
