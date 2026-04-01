@@ -199,6 +199,33 @@ final class ObservabilityTests: XCTestCase {
         recentMetric.skippedCount = 0
         try await recentMetric.save(on: app.db)
 
+        let snapshot = RunnerSnapshot(
+            runnerID: "runner-metrics",
+            recordedAt: Date().addingTimeInterval(-300),
+            activeJobs: 1,
+            maxJobs: 3,
+            availableCapacity: 2,
+            hostname: "host-metrics",
+            runnerVersion: "runner/2.0",
+            lastPollAt: Date().addingTimeInterval(-300),
+            lastHeartbeatAt: Date().addingTimeInterval(-300),
+            serverAssignedJobCountSinceStart: 4
+        )
+        try await snapshot.save(on: app.db)
+
+        let requestMetric = APIRequestMetric(
+            method: "GET",
+            path: "/api/v1/health",
+            requestKind: "api",
+            statusCode: 200,
+            startedAt: Date().addingTimeInterval(-240),
+            finishedAt: Date().addingTimeInterval(-239),
+            durationMs: 150,
+            submissionID: nil,
+            workerID: nil
+        )
+        try await requestMetric.save(on: app.db)
+
         await app.workerActivityStore.markActive(
             workerID: "runner-metrics",
             hostname: "host-metrics",
@@ -229,6 +256,18 @@ final class ObservabilityTests: XCTestCase {
             XCTAssertEqual(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count, 1)
             XCTAssertFalse(payload.runnerLoads.isEmpty)
             XCTAssertEqual(payload.compatibility.compatibleAssignmentAttempts, 0)
+        })
+
+        try await app.asyncTest(.GET, "/admin/metrics/timeseries?hours=24&bucketMinutes=15", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { response in
+            XCTAssertEqual(response.status, .ok)
+            let payload = try response.content.decode(InternalMetricsTimeSeriesResponse.self)
+            XCTAssertEqual(payload.windowHours, 24)
+            XCTAssertEqual(payload.bucketMinutes, 15)
+            XCTAssertFalse(payload.buckets.isEmpty)
+            XCTAssertTrue(payload.buckets.contains(where: { $0.completedJobs == 1 }))
+            XCTAssertTrue(payload.buckets.contains(where: { ($0.requestCount > 0) || ($0.avgRunnerUtilizationPercent != nil) }))
         })
     }
 
