@@ -76,6 +76,23 @@ final class WorkerRoutesTests: XCTestCase {
         workerHMACHeaders(method: method, path: path, body: body, workerSecret: workerSecret)
     }
 
+    private func workerRequestBody(
+        workerID: String,
+        hostname: String? = nil,
+        runnerVersion: String = "runner-tests/1.0",
+        maxConcurrentJobs: Int = 1,
+        activeJobs: Int = 0
+    ) throws -> ByteBuffer {
+        let payload = WorkerActivityPayload(
+            workerID: workerID,
+            hostname: hostname ?? "\(workerID).local",
+            runnerVersion: runnerVersion,
+            maxConcurrentJobs: maxConcurrentJobs,
+            activeJobs: activeJobs
+        )
+        return ByteBuffer(data: try JSONEncoder().encode(payload))
+    }
+
     private func makeDummyZip(named filename: String, in dir: URL) throws -> String {
         let data = Data("PK\0\0".utf8) // minimal fake zip content
         let path = dir.appendingPathComponent(filename).path
@@ -111,7 +128,7 @@ final class WorkerRoutesTests: XCTestCase {
     func testRequestJob_missingSecret_returns401() async throws {
         try await app.asyncTest(.POST, "/api/v1/worker/request", beforeRequest: { req in
             req.headers.contentType = .json
-            req.body = .init(string: #"{"workerID":"w1"}"#)
+            req.body = try self.workerRequestBody(workerID: "w1")
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .unauthorized)
         })
@@ -120,7 +137,7 @@ final class WorkerRoutesTests: XCTestCase {
     func testRequestJob_wrongSecret_returns401() async throws {
         // Sending a bad/absent signature should still yield 401
         let path = "/api/v1/worker/request"
-        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        let body = try workerRequestBody(workerID: "w1")
         var badHeaders = workerHMACHeaders(method: .POST, path: path, body: body,
                                            workerSecret: "wrong-secret")
         badHeaders.contentType = .json
@@ -148,7 +165,7 @@ final class WorkerRoutesTests: XCTestCase {
 
     func testRequestJob_noPendingJobs_returns204() async throws {
         let path = "/api/v1/worker/request"
-        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        let body = try workerRequestBody(workerID: "w1")
         try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
@@ -162,7 +179,7 @@ final class WorkerRoutesTests: XCTestCase {
         let sub   = try await makeSubmission(id: "wsub_01", setupID: setup.id!)
 
         let path = "/api/v1/worker/request"
-        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        let body = try workerRequestBody(workerID: "w1")
         try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
@@ -186,7 +203,7 @@ final class WorkerRoutesTests: XCTestCase {
         _ = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
 
         let path = "/api/v1/worker/request"
-        let body = ByteBuffer(string: #"{"workerID":"w1"}"#)
+        let body = try workerRequestBody(workerID: "w1")
         try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
@@ -202,7 +219,7 @@ final class WorkerRoutesTests: XCTestCase {
                                               kind: APISubmission.Kind.validation)
 
         let path = "/api/v1/worker/request"
-        let body = ByteBuffer(string: #"{"workerID":"w2"}"#)
+        let body = try workerRequestBody(workerID: "w2")
         try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
@@ -222,7 +239,7 @@ final class WorkerRoutesTests: XCTestCase {
                                      kind: APISubmission.Kind.validation)
 
         let path = "/api/v1/worker/request"
-        let body = ByteBuffer(string: #"{"workerID":"w3"}"#)
+        let body = try workerRequestBody(workerID: "w3")
         try await app.asyncTest(.POST, path, beforeRequest: { req in
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
@@ -249,7 +266,7 @@ final class WorkerRoutesTests: XCTestCase {
             for workerID in ["w1", "w2"] {
                 // Compute per-worker values outside the task so the closure
                 // captures only Sendable types and avoids capturing `self`.
-                let body    = ByteBuffer(string: "{\"workerID\":\"\(workerID)\"}")
+                let body = try self.workerRequestBody(workerID: workerID)
                 let headers = workerHMACHeaders(method: .POST, path: path,
                                                 body: body, workerSecret: secret)
                 group.addTask {

@@ -7,8 +7,28 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 import ArgumentParser
 import Core
 
+private enum RunnerJobStatus: String {
+    case passed
+    case failed
+    case error
+    case timeout
+}
+
 private func writeToStandardError(_ message: String) {
     FileHandle.standardError.write(Data(message.utf8))
+}
+
+private func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
+    var payload = fields
+    payload["timestamp"] = ISO8601DateFormatter().string(from: Date())
+    payload["event"] = event
+    guard JSONSerialization.isValidJSONObject(payload),
+          let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
+        writeToStandardError("{\"event\":\"\(event)\",\"timestamp\":\"\(ISO8601DateFormatter().string(from: Date()))\"}\n")
+        return
+    }
+    FileHandle.standardError.write(data)
+    FileHandle.standardError.write(Data("\n".utf8))
 }
 
 // MARK: - Entry point
@@ -59,13 +79,23 @@ struct WorkerCommand: AsyncParsableCommand {
             poller:            poller,
             reporter:          reporter,
             runner:            runner,
+            apiBaseURL:        baseURL,
             workerID:          workerID,
             workerSecret:      effectiveWorkerSecret,
             maxConcurrentJobs: maxJobs
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
-        writeToStandardError("Runner \(workerID) starting — polling \(apiBaseURL) (max \(maxJobs) concurrent jobs, \(sandboxLabel))\n")
+        writeStructuredRunnerLog(event: "runner_startup", fields: [
+            "runner_id": workerID,
+            "status": "starting",
+        ])
+        writeStructuredRunnerLog(event: "runner_configuration", fields: [
+            "runner_id": workerID,
+            "api_base_url": apiBaseURL,
+            "max_jobs": maxJobs,
+            "sandbox_mode": sandboxLabel,
+        ])
         try await daemon.run()
     }
 }
@@ -129,14 +159,17 @@ actor WorkerDaemon {
     private let poller:   any JobPolling
     private let reporter: any Reporting
     private let runner:   any ScriptRunner
+    private let apiBaseURL: URL
     private let workerID: String
-    private let signer:   WorkerRequestSigner
+    private let signer: WorkerRequestSigner
     private let maxConcurrentJobs: Int
+    private var activeJobs = 0
 
     init(
         poller:   any JobPolling,
         reporter: any Reporting,
         runner:   any ScriptRunner,
+        apiBaseURL: URL,
         workerID: String,
         workerSecret: String,
         maxConcurrentJobs: Int
@@ -144,40 +177,74 @@ actor WorkerDaemon {
         self.poller            = poller
         self.reporter          = reporter
         self.runner            = runner
+        self.apiBaseURL        = apiBaseURL
         self.workerID          = workerID
         self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.maxConcurrentJobs = maxConcurrentJobs
     }
 
     func run() async throws {
+        defer {
+            writeStructuredRunnerLog(event: "runner_shutdown", fields: [
+                "runner_id": workerID,
+                "status": "stopped",
+            ])
+        }
         try await withThrowingDiscardingTaskGroup { group in
-            for _ in 0..<maxConcurrentJobs {
-                group.addTask { try await self.workerLoop() }
+            for slot in 0..<maxConcurrentJobs {
+                group.addTask { try await self.workerLoop(slot: slot) }
             }
         }
     }
 
     // MARK: - Per-worker loop
 
-    private func workerLoop() async throws {
+    private func workerLoop(slot: Int) async throws {
         var backoff = ExponentialBackoff(initial: .seconds(1), max: .seconds(30))
         while !Task.isCancelled {
             do {
-                if let job = try await poller.requestJob() {
+                let currentActiveJobs = activeJobs
+                writeStructuredRunnerLog(event: "poll_cycle_start", fields: [
+                    "runner_id": workerID,
+                    "slot": slot,
+                    "runner_active_jobs": currentActiveJobs,
+                    "max_jobs": maxConcurrentJobs,
+                    "api_base_url": apiBaseURL.absoluteString,
+                ])
+                if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {
                     backoff.reset()
+                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "job_assigned",
+                        "submission_id": job.submissionID,
+                    ])
                     do {
                         try await process(job)
                     } catch {
-                        writeToStandardError("[\(workerID)] Error processing job \(job.submissionID): \(error)\n")
+                        writeStructuredRunnerLog(event: "local_execution_error", fields: [
+                            "runner_id": workerID,
+                            "submission_id": job.submissionID,
+                            "error_type": String(describing: type(of: error)),
+                            "error_message_summary": String(describing: error),
+                        ])
                         try? await reportProcessingFailure(job: job, error: error)
                     }
                 } else {
+                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "no_job",
+                    ])
                     let delay = backoff.next()
                     try await Task.sleep(for: delay)
                 }
             } catch JobPollerError.duplicateWorkerID(let message) {
-                writeToStandardError("[\(workerID)] Fatal: \(message)\n")
-                writeToStandardError("[\(workerID)] Exiting. Use --worker-id to choose a unique identifier.\n")
+                writeStructuredRunnerLog(event: "local_execution_error", fields: [
+                    "runner_id": workerID,
+                    "error_type": "duplicate_worker_id",
+                    "error_message_summary": message,
+                ])
                 throw JobPollerError.duplicateWorkerID(message)
             } catch JobPollerError.transportError(let underlying) {
                 // Server is unreachable (connection refused, DNS failure, etc.).
@@ -185,7 +252,13 @@ actor WorkerDaemon {
                 // keep retrying so the runner survives server restarts automatically.
                 let delay = backoff.next()
                 let seconds = delay.components.seconds
-                writeToStandardError("[\(workerID)] Server unreachable: \(underlying.localizedDescription). Retrying in \(seconds)s…\n")
+                writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
+                    "runner_id": workerID,
+                    "slot": slot,
+                    "status": "transport_error",
+                    "error_message_summary": underlying.localizedDescription,
+                    "retry_in_seconds": seconds,
+                ])
                 try await Task.sleep(for: delay)
             }
         }
@@ -194,7 +267,31 @@ actor WorkerDaemon {
     // MARK: - Job processing
 
     private func process(_ job: Job) async throws {
-        writeToStandardError("[\(workerID)] Processing submission \(job.submissionID)\n")
+        activeJobs += 1
+        let jobStartedAt = Date()
+        defer { activeJobs = max(0, activeJobs - 1) }
+
+        writeStructuredRunnerLog(event: "job_accepted", fields: [
+            "runner_id": workerID,
+            "submission_id": job.submissionID,
+            "job_id": job.submissionID,
+            "test_setup_id": job.testSetupID,
+            "attempt_number": job.attemptNumber,
+            "runner_active_jobs": activeJobs,
+            "max_jobs": maxConcurrentJobs,
+        ])
+        try? await sendHeartbeat()
+
+        let heartbeatTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                try? await self.sendHeartbeat()
+            }
+        }
+        defer {
+            heartbeatTask.cancel()
+            Task { try? await self.sendHeartbeat() }
+        }
 
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
@@ -286,10 +383,21 @@ actor WorkerDaemon {
 
             let scriptURL = testSetupDir.appendingPathComponent(entry.script)
             guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-                writeToStandardError("[\(workerID)] Warning: script not found: \(entry.script)\n")
+                writeStructuredRunnerLog(event: "local_execution_error", fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "test_id": entry.script,
+                    "error_type": "missing_script",
+                    "error_message_summary": entry.script,
+                ])
                 continue
             }
 
+            writeStructuredRunnerLog(event: "test_execution_start", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "test_id": entry.script,
+            ])
             let output = await runner.run(
                 script:           scriptURL,
                 workDir:          testSetupDir,
@@ -299,15 +407,35 @@ actor WorkerDaemon {
             let isFirstAttempt = job.attemptNumber == 1
             let outcome = interpretOutput(output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
             outcomes.append(outcome)
+            writeStructuredRunnerLog(event: output.timedOut ? "timeout" : "test_execution_end", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "test_id": normalizedTestID(for: outcome),
+                "status": outcome.status.rawValue,
+                "execution_ms": outcome.executionTimeMs,
+            ])
             if outcome.status == .pass {
                 passedScripts.insert(entry.script)
             }
         }
 
-        let collection = makeCollection(outcomes: outcomes, job: job)
-        try await reporter.report(collection)
-
-        writeToStandardError("[\(workerID)] Reported result for \(job.submissionID) — \(collection.buildStatus.rawValue)\n")
+        let collection = makeCollection(outcomes: outcomes, job: job, startedAt: jobStartedAt)
+        do {
+            try await reporter.report(collection)
+            writeStructuredRunnerLog(event: "result_submission_succeeded", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "status": inferredCollectionStatus(collection).rawValue,
+            ])
+        } catch {
+            writeStructuredRunnerLog(event: "result_submission_failed", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "error_type": String(describing: type(of: error)),
+                "error_message_summary": String(describing: error),
+            ])
+            throw error
+        }
     }
 
     // MARK: - Script output interpretation
@@ -382,7 +510,7 @@ actor WorkerDaemon {
 
     // MARK: - Collection assembly
 
-    private func makeCollection(outcomes: [TestOutcome], job: Job) -> TestOutcomeCollection {
+    private func makeCollection(outcomes: [TestOutcome], job: Job, startedAt: Date) -> TestOutcomeCollection {
         let passCount    = outcomes.filter { $0.status == .pass    }.count
         let failCount    = outcomes.filter { $0.status == .fail    }.count
         let errorCount   = outcomes.filter { $0.status == .error   }.count
@@ -408,6 +536,7 @@ actor WorkerDaemon {
             executionTimeMs: totalMs,
             totalPoints:     totalPoints,
             earnedPoints:    earnedPoints,
+            jobStartedAt:    startedAt,
             runnerVersion:   "shell-runner/1.0",
             timestamp:       Date()
         )
@@ -470,10 +599,34 @@ actor WorkerDaemon {
             errorCount:      1,
             timeoutCount:    0,
             executionTimeMs: 0,
+            jobStartedAt:    Date(),
             runnerVersion:   "shell-runner/1.0",
             timestamp:       Date()
         )
         try await reporter.report(collection)
+    }
+
+    private func sendHeartbeat() async throws {
+        let payload = WorkerActivityPayload(
+            workerID: workerID,
+            hostname: ProcessInfo.processInfo.hostName,
+            runnerVersion: ChickadeeVersion.current,
+            maxConcurrentJobs: maxConcurrentJobs,
+            activeJobs: activeJobs
+        )
+        try await reporter.heartbeat(payload)
+    }
+
+    private func normalizedTestID(for outcome: TestOutcome) -> String {
+        let classPart = outcome.testClass?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return classPart.isEmpty ? outcome.testName : "\(classPart).\(outcome.testName)"
+    }
+
+    private func inferredCollectionStatus(_ collection: TestOutcomeCollection) -> RunnerJobStatus {
+        if collection.timeoutCount > 0 { return .timeout }
+        if collection.errorCount > 0 { return .error }
+        if collection.buildStatus == .failed || collection.failCount > 0 { return .failed }
+        return .passed
     }
 
     private func writeRRuntimeHelper(in directory: URL) throws {

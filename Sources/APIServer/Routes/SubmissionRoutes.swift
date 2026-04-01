@@ -51,6 +51,11 @@ struct SubmissionRoutes: RouteCollection {
             kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
+        await req.application.diagnostics.recordSubmissionCreated(
+            submission: submission,
+            on: req.db,
+            logger: req.logger
+        )
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return SubmissionCreatedResponse(submissionID: subID)
@@ -99,6 +104,11 @@ struct SubmissionRoutes: RouteCollection {
             kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
+        await req.application.diagnostics.recordSubmissionCreated(
+            submission: submission,
+            on: req.db,
+            logger: req.logger
+        )
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return SubmissionCreatedResponse(submissionID: subID)

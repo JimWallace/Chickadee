@@ -163,8 +163,13 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.migrations.add(AddCourseSections())
     app.migrations.add(AddCourseOpenEnrollment())
     app.migrations.add(AddCourseEnrollmentMode())
+    app.migrations.add(CreateSubmissionDiagnostics())
+    app.migrations.add(CreateRequestMetrics())
+    app.migrations.add(CreateJobExecutionMetrics())
+    app.migrations.add(CreateRunnerSnapshots())
 
     try app.autoMigrate().wait()
+    app.lifecycle.use(ObservabilityLifecycleHandler())
 
     if authMode != .local {
         if !nonSSOModesEnabled {
@@ -353,6 +358,10 @@ struct WorkerActivitySnapshot: Sendable {
     let hostname: String
     let runnerVersion: String
     let maxConcurrentJobs: Int
+    let activeJobs: Int
+    let lastPollAt: Date?
+    let lastHeartbeatAt: Date?
+    let serverAssignedJobCountSinceStart: Int
 }
 
 actor WorkerActivityStore {
@@ -361,6 +370,10 @@ actor WorkerActivityStore {
         let hostname: String
         let runnerVersion: String
         let maxConcurrentJobs: Int
+        let activeJobs: Int
+        let lastPollAt: Date?
+        let lastHeartbeatAt: Date?
+        let serverAssignedJobCountSinceStart: Int
     }
     private var entries: [String: Entry] = [:]
 
@@ -373,18 +386,55 @@ actor WorkerActivityStore {
         hostname: String,
         runnerVersion: String = "",
         maxConcurrentJobs: Int = 0,
+        activeJobs: Int? = nil,
+        lastPollAt: Date? = nil,
+        lastHeartbeatAt: Date? = nil,
         at date: Date = Date()
     ) {
         guard !workerID.isEmpty else { return }
         let prev = entries[workerID]
-        let effectiveHostname      = hostname.isEmpty         ? (prev?.hostname          ?? "") : hostname
-        let effectiveVersion       = runnerVersion.isEmpty    ? (prev?.runnerVersion     ?? "") : runnerVersion
-        let effectiveConcurrency   = maxConcurrentJobs == 0  ? (prev?.maxConcurrentJobs ?? 0)  : maxConcurrentJobs
+        let effectiveHostname = hostname.isEmpty ? (prev?.hostname ?? "") : hostname
+        let effectiveVersion = runnerVersion.isEmpty ? (prev?.runnerVersion ?? "") : runnerVersion
+        let effectiveConcurrency = maxConcurrentJobs == 0 ? (prev?.maxConcurrentJobs ?? 0) : maxConcurrentJobs
+        let effectiveActiveJobs = max(0, activeJobs ?? (prev?.activeJobs ?? 0))
         entries[workerID] = Entry(
             lastSeen: date,
             hostname: effectiveHostname,
             runnerVersion: effectiveVersion,
-            maxConcurrentJobs: effectiveConcurrency
+            maxConcurrentJobs: effectiveConcurrency,
+            activeJobs: effectiveActiveJobs,
+            lastPollAt: lastPollAt ?? prev?.lastPollAt,
+            lastHeartbeatAt: lastHeartbeatAt ?? prev?.lastHeartbeatAt,
+            serverAssignedJobCountSinceStart: prev?.serverAssignedJobCountSinceStart ?? 0
+        )
+    }
+
+    func incrementAssignedJobs(for workerID: String) {
+        guard let entry = entries[workerID] else { return }
+        entries[workerID] = Entry(
+            lastSeen: entry.lastSeen,
+            hostname: entry.hostname,
+            runnerVersion: entry.runnerVersion,
+            maxConcurrentJobs: entry.maxConcurrentJobs,
+            activeJobs: entry.activeJobs,
+            lastPollAt: entry.lastPollAt,
+            lastHeartbeatAt: entry.lastHeartbeatAt,
+            serverAssignedJobCountSinceStart: entry.serverAssignedJobCountSinceStart + 1
+        )
+    }
+
+    func snapshot(for workerID: String) -> WorkerActivitySnapshot? {
+        guard let entry = entries[workerID] else { return nil }
+        return WorkerActivitySnapshot(
+            workerID: workerID,
+            lastActive: entry.lastSeen,
+            hostname: entry.hostname,
+            runnerVersion: entry.runnerVersion,
+            maxConcurrentJobs: entry.maxConcurrentJobs,
+            activeJobs: entry.activeJobs,
+            lastPollAt: entry.lastPollAt,
+            lastHeartbeatAt: entry.lastHeartbeatAt,
+            serverAssignedJobCountSinceStart: entry.serverAssignedJobCountSinceStart
         )
     }
 
@@ -404,7 +454,11 @@ actor WorkerActivityStore {
                 lastActive: $0.value.lastSeen,
                 hostname: $0.value.hostname,
                 runnerVersion: $0.value.runnerVersion,
-                maxConcurrentJobs: $0.value.maxConcurrentJobs
+                maxConcurrentJobs: $0.value.maxConcurrentJobs,
+                activeJobs: $0.value.activeJobs,
+                lastPollAt: $0.value.lastPollAt,
+                lastHeartbeatAt: $0.value.lastHeartbeatAt,
+                serverAssignedJobCountSinceStart: $0.value.serverAssignedJobCountSinceStart
             ) }
             .sorted { $0.lastActive > $1.lastActive }
     }

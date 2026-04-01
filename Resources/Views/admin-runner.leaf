@@ -1,0 +1,161 @@
+#extend("base"):
+#export("title"):
+Runner #(runner.workerID)
+#endexport
+#export("content"):
+<section class="admin-section">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div>
+            <p style="margin:.1rem 0 .5rem"><a href="/admin">← Back to Admin</a></p>
+            <h2 style="margin:0"><code>#(runner.workerID)</code></h2>
+            <p style="margin:.4rem 0 0;color:var(--muted)">
+                #if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif
+                ·
+                #if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif
+            </p>
+        </div>
+        <div style="min-width:220px">
+            <div><strong>Last active:</strong> <span class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></div>
+            <div><strong>Capacity:</strong> #(summary.activeJobs) / #(summary.maxJobs)</div>
+            <div><strong>Jobs processed:</strong> #(summary.jobsProcessed)</div>
+            <div><strong>Avg run:</strong> #if(summary.avgExecutionFormatted):#(summary.avgExecutionFormatted)#else:—#endif</div>
+            <div><strong>Avg wait:</strong> #if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:1.25rem">
+        <div class="admin-stat"><strong>Passed</strong><span>#(summary.passedCount)</span></div>
+        <div class="admin-stat"><strong>Failed</strong><span>#(summary.failedCount)</span></div>
+        <div class="admin-stat"><strong>Errored</strong><span>#(summary.errorCount)</span></div>
+        <div class="admin-stat"><strong>Timed Out</strong><span>#(summary.timeoutCount)</span></div>
+    </div>
+</section>
+
+<section class="admin-section">
+    <h3 style="margin-top:0">Recent Jobs</h3>
+    #if(recentJobs.isEmpty):
+    <p class="empty">No recorded jobs for this runner yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Submission</th>
+                <th>Status</th>
+                <th class="time">Queue Wait</th>
+                <th class="time">Execution</th>
+                <th class="time">Total</th>
+                <th class="time">Tests</th>
+                <th class="time">Completed</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(job in recentJobs):
+            <tr>
+                <td><code>#(job.submissionID)</code></td>
+                <td>#(job.finalStatus)</td>
+                <td class="time">#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
+                <td class="time">#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
+                <td class="time">#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
+                <td class="time">#(job.testsPassed) / #(job.testsFailed) / #(job.testsErrored) / #(job.testsTimedOut)</td>
+                <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)"#endif>
+                    #if(job.completedAt):#(job.completedAt)#else:—#endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+<section class="admin-section">
+    <h3 style="margin-top:0">Recent Snapshots</h3>
+    #if(snapshots.isEmpty):
+    <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th class="time">Recorded</th>
+                <th class="time">Active Jobs</th>
+                <th class="time">Max Jobs</th>
+                <th class="time">Available</th>
+                <th class="time">Last Poll</th>
+                <th class="time">Last Heartbeat</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(snapshot in snapshots):
+            <tr>
+                <td class="time js-relative-time" data-iso="#(snapshot.recordedAt)">#(snapshot.recordedAt)</td>
+                <td class="time">#(snapshot.activeJobs)</td>
+                <td class="time">#(snapshot.maxJobs)</td>
+                <td class="time">#(snapshot.availableCapacity)</td>
+                <td class="time js-relative-time" #if(snapshot.lastPollAt):data-iso="#(snapshot.lastPollAt)"#endif>
+                    #if(snapshot.lastPollAt):#(snapshot.lastPollAt)#else:—#endif
+                </td>
+                <td class="time js-relative-time" #if(snapshot.lastHeartbeatAt):data-iso="#(snapshot.lastHeartbeatAt)"#endif>
+                    #if(snapshot.lastHeartbeatAt):#(snapshot.lastHeartbeatAt)#else:—#endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+
+<style>
+.admin-stat {
+    border: 1px solid var(--gray-200);
+    border-radius: .65rem;
+    padding: .8rem .9rem;
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    background: var(--gray-50);
+}
+.admin-stat strong {
+    color: var(--muted);
+    font-size: .9rem;
+}
+.admin-stat span {
+    font-weight: 700;
+}
+</style>
+<script>
+(function () {
+    'use strict';
+
+    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+    function formatRelative(isoString) {
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) return isoString;
+        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
+        var abs = Math.abs(seconds);
+        if (abs < 60) return relativeFormatter.format(seconds, 'second');
+        var minutes = Math.round(seconds / 60);
+        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
+        var hours = Math.round(minutes / 60);
+        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
+        var days = Math.round(hours / 24);
+        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
+        var weeks = Math.round(days / 7);
+        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
+        var months = Math.round(days / 30);
+        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
+        var years = Math.round(days / 365);
+        return relativeFormatter.format(years, 'year');
+    }
+
+    document.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
+        var iso = el.getAttribute('data-iso');
+        if (!iso) return;
+        var date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return;
+        el.textContent = formatRelative(iso);
+        el.title = date.toLocaleString();
+    });
+})();
+</script>
+#endexport
+#endextend

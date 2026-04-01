@@ -10,7 +10,7 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 import Core
 
 protocol JobPolling: Sendable {
-    func requestJob() async throws(JobPollerError) -> Core.Job?
+    func requestJob(activeJobs: Int) async throws(JobPollerError) -> Core.Job?
 }
 
 struct JobPoller: Sendable {
@@ -34,17 +34,18 @@ struct JobPoller: Sendable {
     }()
 
     /// POST /api/v1/worker/request → Job, or nil when no work is available.
-    func requestJob() async throws(JobPollerError) -> Core.Job? {
+    func requestJob(activeJobs: Int) async throws(JobPollerError) -> Core.Job? {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/request")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let payload = WorkerRequestPayload(
+        let payload = WorkerActivityPayload(
             workerID: workerID,
             hostname: ProcessInfo.processInfo.hostName,
             runnerVersion: ChickadeeVersion.current,
-            maxConcurrentJobs: maxConcurrentJobs
+            maxConcurrentJobs: maxConcurrentJobs,
+            activeJobs: activeJobs
         )
         do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
         signer.sign(&request)
@@ -77,15 +78,6 @@ struct JobPoller: Sendable {
 }
 
 extension JobPoller: JobPolling {}
-
-// MARK: - Helpers
-
-private struct WorkerRequestPayload: Encodable {
-    let workerID: String
-    let hostname: String
-    let runnerVersion: String
-    let maxConcurrentJobs: Int
-}
 
 enum JobPollerError: Error, LocalizedError {
     case unexpectedResponse
