@@ -155,6 +155,11 @@ docker compose up -d --scale runner=4
 
 Each runner instance gets a unique worker ID derived from its container ID.
 
+During an upgrade or server restart, existing runner containers should reconnect
+on their own. If the API stays unavailable longer than the bounded retry window
+for downloads or result uploads, the active job can still fail cleanly and will
+be visible in the structured runner logs.
+
 ### Observability and operations
 
 Backend-only observability is built in:
@@ -194,6 +199,24 @@ Runner capability matching is also available:
 Capability discovery knob:
 
 - `RUNNER_CAPABILITY_DISCOVERY_ENABLED` (default enabled)
+
+Runner interruption resilience knobs:
+
+- `RUNNER_NETWORK_RETRY_ENABLED` (default enabled)
+- `RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS` (default `6`)
+- `RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS` (default `8`)
+- `RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS` (default `4`)
+- `RUNNER_RETRY_BASE_DELAY_MS` (default `1000`)
+- `RUNNER_RETRY_MAX_DELAY_MS` (default `30000`)
+
+Short outage behavior:
+
+- poll requests keep retrying until the server is back
+- heartbeats retry within a bounded window, then resume on the next interval
+- submission downloads, test-setup downloads, and result uploads retry with
+  exponential backoff before failing the active job
+- runner logs emit `server_connection_lost`, `network_retry_scheduled`,
+  `heartbeat_retry_scheduled`, and `server_connection_restored`
 
 See `docs/runner-capability-profiles.md` for rollout notes and troubleshooting.
 

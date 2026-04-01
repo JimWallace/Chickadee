@@ -182,6 +182,8 @@ actor WorkerDaemon {
     private let signer: WorkerRequestSigner
     private let maxConcurrentJobs: Int
     private let runnerProfile: RunnerCapabilityProfile?
+    private let downloadRetryPolicy: RunnerRetryPolicy
+    private var serverConnectionLost = false
     private var activeJobs = 0
 
     init(
@@ -192,7 +194,8 @@ actor WorkerDaemon {
         workerID: String,
         workerSecret: String,
         maxConcurrentJobs: Int,
-        runnerProfile: RunnerCapabilityProfile? = nil
+        runnerProfile: RunnerCapabilityProfile? = nil,
+        downloadRetryPolicy: RunnerRetryPolicy = .download()
     ) {
         self.poller            = poller
         self.reporter          = reporter
@@ -202,6 +205,7 @@ actor WorkerDaemon {
         self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.maxConcurrentJobs = maxConcurrentJobs
         self.runnerProfile     = runnerProfile
+        self.downloadRetryPolicy = downloadRetryPolicy
     }
 
     func run() async throws {
@@ -233,6 +237,7 @@ actor WorkerDaemon {
                     "api_base_url": apiBaseURL.absoluteString,
                 ])
                 if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {
+                    recordConnectionRestoredIfNeeded(stage: .poll)
                     backoff.reset()
                     writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
                         "runner_id": workerID,
@@ -273,10 +278,17 @@ actor WorkerDaemon {
                 // keep retrying so the runner survives server restarts automatically.
                 let delay = backoff.next()
                 let seconds = delay.components.seconds
+                recordConnectionLostIfNeeded(
+                    stage: .poll,
+                    message: underlying.localizedDescription,
+                    retryInSeconds: Int(seconds)
+                )
                 writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
                     "runner_id": workerID,
                     "slot": slot,
                     "status": "transport_error",
+                    "failure_stage": RunnerRetryStage.poll.rawValue,
+                    "retryable": true,
                     "error_message_summary": underlying.localizedDescription,
                     "retry_in_seconds": seconds,
                 ])
@@ -565,19 +577,66 @@ actor WorkerDaemon {
 
     // MARK: - Subprocess helpers
 
-    private func download(url: URL, to destination: URL) async throws {
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 5
-        signer.sign(&request)
-        let (tmpURL, response) = try await Self.downloadSession.download(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw WorkerDaemonError.downloadFailed(url)
+    func download(url: URL, to destination: URL) async throws {
+        let stage: RunnerRetryStage =
+            destination.lastPathComponent == "submission.zip" ? .downloadSubmission : .downloadTestSetup
+
+        try await withRunnerRetry(
+            stage: stage,
+            policy: downloadRetryPolicy,
+            shouldRetry: { error in
+                if let urlError = error as? URLError {
+                    return .retryable(urlError.localizedDescription)
+                }
+                if let workerError = error as? WorkerDaemonError {
+                    switch workerError {
+                    case .httpDownloadFailure(let statusCode, let body):
+                        return classifyHTTPRetry(statusCode: statusCode, body: body)
+                    case .downloadFailed(let failedURL):
+                        return .terminal("Failed to download \(failedURL.absoluteString)")
+                    case .unzipFailed, .makeFailed:
+                        return .terminal(String(describing: workerError))
+                    }
+                }
+                return .terminal(String(describing: error))
+            },
+            onRetry: { context in
+                await self.recordConnectionLostIfNeeded(
+                    stage: context.stage,
+                    message: context.message,
+                    retryInSeconds: context.retryInSeconds
+                )
+                writeStructuredRunnerLog(event: "network_retry_scheduled", fields: [
+                    "runner_id": self.workerID,
+                    "failure_stage": context.stage.rawValue,
+                    "attempt": context.attempt,
+                    "max_attempts": context.maxAttempts,
+                    "retry_in_seconds": context.retryInSeconds ?? 0,
+                    "retryable": context.retryable,
+                    "error_message_summary": context.message,
+                ])
+            }
+        ) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 5
+            self.signer.sign(&request)
+            let (tmpURL, response) = try await Self.downloadSession.download(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw WorkerDaemonError.downloadFailed(url)
+            }
+            guard http.statusCode == 200 else {
+                throw WorkerDaemonError.httpDownloadFailure(
+                    statusCode: http.statusCode,
+                    body: "<download body unavailable>"
+                )
+            }
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: tmpURL, to: destination)
+            await self.recordConnectionRestoredIfNeeded(stage: stage)
         }
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: tmpURL, to: destination)
     }
 
     private func unzip(_ zipFile: URL, to directory: URL) throws {
@@ -627,7 +686,7 @@ actor WorkerDaemon {
         try await reporter.report(collection)
     }
 
-    private func sendHeartbeat() async throws {
+    func sendHeartbeat() async throws {
         let payload = WorkerActivityPayload(
             workerID: workerID,
             hostname: ProcessInfo.processInfo.hostName,
@@ -636,7 +695,52 @@ actor WorkerDaemon {
             activeJobs: activeJobs,
             profile: runnerProfile
         )
-        try await reporter.heartbeat(payload)
+        do {
+            try await reporter.heartbeat(payload)
+            recordConnectionRestoredIfNeeded(stage: .heartbeat)
+        } catch {
+            recordConnectionLostIfNeeded(
+                stage: .heartbeat,
+                message: String(describing: error),
+                retryInSeconds: nil
+            )
+            throw error
+        }
+    }
+
+    private func recordConnectionLostIfNeeded(
+        stage: RunnerRetryStage,
+        message: String,
+        retryInSeconds: Int?
+    ) {
+        if !serverConnectionLost {
+            serverConnectionLost = true
+            writeStructuredRunnerLog(event: "server_connection_lost", fields: [
+                "runner_id": workerID,
+                "failure_stage": stage.rawValue,
+                "retryable": true,
+                "retry_in_seconds": retryInSeconds ?? 0,
+                "error_message_summary": message,
+            ])
+        } else if stage == .heartbeat, let retryInSeconds {
+            writeStructuredRunnerLog(event: "heartbeat_retry_scheduled", fields: [
+                "runner_id": workerID,
+                "failure_stage": stage.rawValue,
+                "retryable": true,
+                "retry_in_seconds": retryInSeconds,
+                "error_message_summary": message,
+            ])
+        }
+    }
+
+    private func recordConnectionRestoredIfNeeded(stage: RunnerRetryStage) {
+        guard serverConnectionLost else { return }
+        serverConnectionLost = false
+        writeStructuredRunnerLog(event: "server_connection_restored", fields: [
+            "runner_id": workerID,
+            "failure_stage": stage.rawValue,
+            "status": "ok",
+        ])
     }
 
     private func normalizedTestID(for outcome: TestOutcome) -> String {
@@ -1116,12 +1220,15 @@ struct ExponentialBackoff {
 
 enum WorkerDaemonError: Error, LocalizedError {
     case downloadFailed(URL)
+    case httpDownloadFailure(statusCode: Int, body: String)
     case unzipFailed(URL)
     case makeFailed(String?)
 
     var errorDescription: String? {
         switch self {
         case .downloadFailed(let url):  return "Failed to download \(url)"
+        case .httpDownloadFailure(let statusCode, let body):
+            return "HTTP \(statusCode) while downloading artifacts: \(body)"
         case .unzipFailed(let url):     return "Failed to unzip \(url.lastPathComponent)"
         case .makeFailed(let target):   return "make \(target ?? "") failed"
         }
