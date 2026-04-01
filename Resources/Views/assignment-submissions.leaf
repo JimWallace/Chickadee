@@ -8,7 +8,8 @@
     <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
         <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or ID…"
-               style="width:220px" aria-label="Filter students">
+               style="width:220px" aria-label="Filter students"
+               readonly onfocus="this.removeAttribute('readonly')">
         <a class="btn action-btn" href="/instructor">Back to Instructor</a>
     </div>
 </div>

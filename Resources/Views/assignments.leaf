@@ -419,7 +419,8 @@
         #endif
         <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or username…"
-               style="width:220px;margin-left:auto" aria-label="Filter enrolled students">
+               style="width:220px;margin-left:auto" aria-label="Filter enrolled students"
+               readonly onfocus="this.removeAttribute('readonly')">
     </div>
     #if(hasEnrolledStudents):
     <table class="results-table" id="enrolled-students-table">
