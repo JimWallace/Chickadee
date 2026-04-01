@@ -854,7 +854,27 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
 }
 
 private func formatMs(_ ms: Int) -> String {
-    ms >= 1000 ? "\(ms / 1000)s" : "\(ms)ms"
+    if ms < 1000 {
+        return "\(ms)ms"
+    }
+
+    let totalSeconds = ms / 1000
+    if totalSeconds < 60 {
+        return "\(totalSeconds)s"
+    }
+
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
+    let seconds = totalSeconds % 60
+
+    if hours > 0 {
+        if seconds == 0 {
+            return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
+        }
+        return "\(hours)h \(minutes)m"
+    }
+
+    return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s"
 }
 
 private func iso8601String(_ date: Date) -> String {

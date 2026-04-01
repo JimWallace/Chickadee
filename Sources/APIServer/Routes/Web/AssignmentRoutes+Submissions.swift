@@ -196,9 +196,7 @@ extension AssignmentRoutes {
             }
         }
 
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
+        let fmt = waterlooDateTimeFormatter()
 
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             guard let studentID = student.id else { return nil }
@@ -216,7 +214,9 @@ extension AssignmentRoutes {
                 }
                 return best >= 0 ? "\(best)%" : "—"
             }()
-            let inferredName = inferNameFromStudentID(student.username)
+            let inferredName = splitHumanName(student.displayName)
+                ?? splitHumanName(student.preferredName)
+                ?? inferNameFromStudentID(student.username)
             return AssignmentStudentRow(
                 studentID: student.username,
                 surname: inferredName.surname,
@@ -286,9 +286,7 @@ extension AssignmentRoutes {
             }
         }
 
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
+        let fmt = waterlooDateTimeFormatter()
 
         let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
             let subID = submission.id ?? ""

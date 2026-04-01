@@ -41,8 +41,31 @@ Edit `.env`:
 | Variable | What to set |
 |---|---|
 | `RUNNER_SHARED_SECRET` | Optional. Leave unset to use Chickadee's auto-generated three-word `.worker-secret`, or set a fixed secret explicitly (for example `openssl rand -base64 32`). |
+| `DATABASE_BACKEND` | Optional. Leave unset or set to `sqlite` to keep the current default backend. Set to `postgres` to use PostgreSQL. |
+| `SQLITE_PATH` | Optional. Path to the SQLite file. Defaults to `/data/chickadee.sqlite` in the containerized deployment. |
+| `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` / `DATABASE_PASSWORD` | Required only when `DATABASE_BACKEND=postgres`. |
 | `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
 | `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
+
+### Database backend selection
+
+SQLite remains the default backend for existing deployments. If you do nothing,
+Chickadee will continue to use the single-file SQLite database at
+`/data/chickadee.sqlite`.
+
+To opt into PostgreSQL, set:
+
+```env
+DATABASE_BACKEND=postgres
+DATABASE_HOST=db
+DATABASE_PORT=5432
+DATABASE_NAME=chickadee
+DATABASE_USER=chickadee
+DATABASE_PASSWORD=change-me
+```
+
+If `DATABASE_BACKEND=postgres` is selected and any required setting is missing,
+the server now fails fast at startup with a clear configuration error.
 
 ### 2. Pull and start
 
@@ -59,6 +82,28 @@ By default, the Compose runner reads `/data/.worker-secret` from the shared
 named volume, so the server's auto-generated three-word secret works without
 copying it into `.env`. If you set `RUNNER_SHARED_SECRET`, that explicit value
 still overrides the generated file.
+
+### Optional PostgreSQL service example
+
+The default deployment path stays on SQLite. If you want to prepare a Postgres
+deployment without changing the default path, add a service like this to your
+Compose file and set the database env vars above on the `server` service:
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chickadee
+      POSTGRES_USER: chickadee
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - chickadee-postgres:/var/lib/postgresql/data
+```
+
+This PR only makes backend selection configurable. It does not migrate any
+existing SQLite data into PostgreSQL for you.
 
 Check status:
 
@@ -111,7 +156,8 @@ docker compose up -d
 
 ### 5. Updating
 
-Use the deploy script from the repo root — it backs up the database, pulls the
+Use the deploy script from the repo root — it backs up the SQLite database when
+present, pulls the
 new image, restarts services, and confirms the health check passes:
 
 ```bash
@@ -223,8 +269,11 @@ See `docs/runner-capability-profiles.md` for rollout notes and troubleshooting.
 ### Data persistence
 
 All persistent data lives in the `chickadee-data` named volume:
-- `chickadee.sqlite` — the database
+- `chickadee.sqlite` — the default SQLite database
 - `submissions/`, `testsetups/`, `results/` — uploaded files
+
+If you switch to PostgreSQL, the server data volume still stores uploaded files
+and secrets, but the database itself lives in the Postgres data volume instead.
 
 ```bash
 # Back up the data volume

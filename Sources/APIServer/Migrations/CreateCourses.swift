@@ -15,10 +15,13 @@ struct CreateCourses: AsyncMigration {
         // Partial unique index: only one active course per code.
         // Archived courses are allowed to share a code (e.g. after term rollover import).
         if let sql = database as? SQLDatabase {
+            let activePredicate = sql.dialect.name == "postgresql"
+                ? "is_archived = FALSE"
+                : "is_archived = 0"
             try await sql.raw("""
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_code_active
                 ON courses(code)
-                WHERE is_archived = 0
+                WHERE \(unsafeRaw: activePredicate)
                 """).run()
         }
     }

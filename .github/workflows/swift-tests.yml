@@ -33,6 +33,41 @@ jobs:
       - name: Run APITests
         run: swift test --filter APITests
 
+  api-tests-postgres:
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chickadee_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chickadee_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_BACKEND: postgres
+      TEST_DATABASE_HOST: postgres
+      TEST_DATABASE_PORT: "5432"
+      TEST_DATABASE_NAME: chickadee_test
+      TEST_DATABASE_USER: postgres
+      TEST_DATABASE_PASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system test dependencies
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
+
+      - name: Run APITests against PostgreSQL
+        run: swift test --filter APITests
+
   browser-runner-tests:
     runs-on: ubuntu-latest
 

@@ -101,6 +101,46 @@ func parseDueDate(_ raw: String?) -> Date? {
     return fmt.date(from: raw)
 }
 
+func waterlooDateTimeFormatter() -> DateFormatter {
+    let fmt = DateFormatter()
+    fmt.locale = Locale(identifier: "en_CA")
+    fmt.timeZone = TimeZone(identifier: "America/Toronto")
+    fmt.dateStyle = .medium
+    fmt.timeStyle = .short
+    return fmt
+}
+
+func splitHumanName(_ raw: String?) -> (surname: String, givenNames: String)? {
+    guard let raw else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if trimmed.contains(",") {
+        let parts = trimmed.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+        let surname = String(parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let givenNames = parts.count > 1
+            ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
+        return (
+            surname.isEmpty ? "—" : surname,
+            givenNames.isEmpty ? "—" : givenNames
+        )
+    }
+
+    let parts = trimmed.split(whereSeparator: \.isWhitespace)
+    guard !parts.isEmpty else { return nil }
+    if parts.count == 1 {
+        return ("—", String(parts[0]))
+    }
+
+    let surname = String(parts.last ?? "")
+    let givenNames = parts.dropLast().joined(separator: " ")
+    return (
+        surname.isEmpty ? "—" : surname,
+        givenNames.isEmpty ? "—" : givenNames
+    )
+}
+
 func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> APIAssignment? {
     try await APIAssignment.query(on: db)
         .filter(\.$publicID == publicID)
@@ -783,17 +823,7 @@ func inferNameFromStudentID(_ studentID: String) -> (surname: String, givenNames
     let raw = studentID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !raw.isEmpty else { return ("—", "—") }
 
-    if raw.contains(",") {
-        let parts = raw.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
-        let surname = String(parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let given = parts.count > 1
-            ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-            : ""
-        return (
-            surname.isEmpty ? "—" : surname,
-            given.isEmpty ? "—" : given
-        )
-    }
+    if let parsed = splitHumanName(raw), raw.contains(",") { return parsed }
     return ("—", "—")
 }
 
