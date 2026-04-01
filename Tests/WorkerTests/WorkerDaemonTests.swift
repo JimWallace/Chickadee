@@ -286,7 +286,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-cancel",
             workerSecret: "secret",
-            maxConcurrentJobs: 1
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
         )
 
         let task = Task {
@@ -320,7 +321,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-failure",
             workerSecret: "secret",
-            maxConcurrentJobs: 1
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
         )
 
         let task = Task {
@@ -385,7 +387,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-report-fail",
             workerSecret: "secret",
-            maxConcurrentJobs: 1
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
         )
 
         let task = Task {
@@ -446,7 +449,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             apiBaseURL: URL(string: "http://localhost:8080")!,
             workerID: "worker-next-job",
             workerSecret: "secret",
-            maxConcurrentJobs: 1
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
         )
 
         let task = Task {

@@ -183,6 +183,20 @@ Retention knobs:
 - `METRICS_RECENT_WINDOW_HOURS` (default `24`)
 - `OBSERVABILITY_PRUNE_INTERVAL_HOURS` (default `24`)
 
+Runner capability matching is also available:
+
+- runners advertise platform, architecture, language versions, and named
+  capabilities on poll and heartbeat
+- assignments can declare optional backend-only requirement rows in
+  `assignment_requirements`
+- the server only assigns jobs to compatible runners
+
+Capability discovery knob:
+
+- `RUNNER_CAPABILITY_DISCOVERY_ENABLED` (default enabled)
+
+See `docs/runner-capability-profiles.md` for rollout notes and troubleshooting.
+
 ### Data persistence
 
 All persistent data lives in the `chickadee-data` named volume:

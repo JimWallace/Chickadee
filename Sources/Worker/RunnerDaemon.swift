@@ -18,7 +18,7 @@ private func writeToStandardError(_ message: String) {
     FileHandle.standardError.write(Data(message.utf8))
 }
 
-private func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
+func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
     var payload = fields
     payload["timestamp"] = ISO8601DateFormatter().string(from: Date())
     payload["event"] = event
@@ -63,6 +63,8 @@ struct WorkerCommand: AsyncParsableCommand {
         }
 
         let env = ProcessInfo.processInfo.environment
+        let capabilityDiscoveryEnabled = runnerEnvironmentBool("RUNNER_CAPABILITY_DISCOVERY_ENABLED", default: true)
+        let runnerProfile = RunnerProfileDetector(discoveryEnabled: capabilityDiscoveryEnabled).detect()
         guard let effectiveWorkerSecret = resolveWorkerSharedSecret(
             cliWorkerSecret: workerSecret,
             environment: env
@@ -71,7 +73,13 @@ struct WorkerCommand: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
-        let poller   = JobPoller(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret, maxConcurrentJobs: maxJobs)
+        let poller   = JobPoller(
+            apiBaseURL: baseURL,
+            workerID: workerID,
+            workerSecret: effectiveWorkerSecret,
+            maxConcurrentJobs: maxJobs,
+            profile: runnerProfile
+        )
         let reporter = Reporter(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
@@ -82,7 +90,8 @@ struct WorkerCommand: AsyncParsableCommand {
             apiBaseURL:        baseURL,
             workerID:          workerID,
             workerSecret:      effectiveWorkerSecret,
-            maxConcurrentJobs: maxJobs
+            maxConcurrentJobs: maxJobs,
+            runnerProfile:     runnerProfile
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
@@ -96,6 +105,15 @@ struct WorkerCommand: AsyncParsableCommand {
             "max_jobs": maxJobs,
             "sandbox_mode": sandboxLabel,
         ])
+        if let runnerProfile {
+            writeStructuredRunnerLog(event: "runner_profile_detected", fields: [
+                "runner_id": workerID,
+                "platform": runnerProfile.platform,
+                "architecture": runnerProfile.architecture,
+                "languages": runnerProfile.languageVersions.map { "\($0.language)=\($0.version)" },
+                "capabilities": runnerProfile.capabilities.map(\.name),
+            ])
+        }
         try await daemon.run()
     }
 }
@@ -163,6 +181,7 @@ actor WorkerDaemon {
     private let workerID: String
     private let signer: WorkerRequestSigner
     private let maxConcurrentJobs: Int
+    private let runnerProfile: RunnerCapabilityProfile?
     private var activeJobs = 0
 
     init(
@@ -172,7 +191,8 @@ actor WorkerDaemon {
         apiBaseURL: URL,
         workerID: String,
         workerSecret: String,
-        maxConcurrentJobs: Int
+        maxConcurrentJobs: Int,
+        runnerProfile: RunnerCapabilityProfile? = nil
     ) {
         self.poller            = poller
         self.reporter          = reporter
@@ -181,6 +201,7 @@ actor WorkerDaemon {
         self.workerID          = workerID
         self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.maxConcurrentJobs = maxConcurrentJobs
+        self.runnerProfile     = runnerProfile
     }
 
     func run() async throws {
@@ -612,7 +633,8 @@ actor WorkerDaemon {
             hostname: ProcessInfo.processInfo.hostName,
             runnerVersion: ChickadeeVersion.current,
             maxConcurrentJobs: maxConcurrentJobs,
-            activeJobs: activeJobs
+            activeJobs: activeJobs,
+            profile: runnerProfile
         )
         try await reporter.heartbeat(payload)
     }

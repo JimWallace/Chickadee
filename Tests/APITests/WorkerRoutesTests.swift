@@ -55,6 +55,12 @@ final class WorkerRoutesTests: XCTestCase {
         app.migrations.add(AddCourseSections())
         app.migrations.add(AddCourseOpenEnrollment())
         app.migrations.add(AddCourseEnrollmentMode())
+        app.migrations.add(CreateSubmissionDiagnostics())
+        app.migrations.add(CreateRequestMetrics())
+        app.migrations.add(CreateJobExecutionMetrics())
+        app.migrations.add(CreateRunnerSnapshots())
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
         configureLeaf(app)
         try routes(app)
@@ -81,14 +87,16 @@ final class WorkerRoutesTests: XCTestCase {
         hostname: String? = nil,
         runnerVersion: String = "runner-tests/1.0",
         maxConcurrentJobs: Int = 1,
-        activeJobs: Int = 0
+        activeJobs: Int = 0,
+        profile: RunnerCapabilityProfile? = nil
     ) throws -> ByteBuffer {
         let payload = WorkerActivityPayload(
             workerID: workerID,
             hostname: hostname ?? "\(workerID).local",
             runnerVersion: runnerVersion,
             maxConcurrentJobs: maxConcurrentJobs,
-            activeJobs: activeJobs
+            activeJobs: activeJobs,
+            profile: profile
         )
         return ByteBuffer(data: try JSONEncoder().encode(payload))
     }
@@ -121,6 +129,23 @@ final class WorkerRoutesTests: XCTestCase {
                                 filename: "submission.zip", userID: nil, kind: kind)
         try await sub.save(on: app.db)
         return sub
+    }
+
+    private func makeAssignment(setupID: String, title: String = "Assignment") async throws -> APIAssignment {
+        guard let courseID = try await APITestSetup.find(setupID, on: app.db)?.courseID else {
+            throw XCTSkip("setup missing course")
+        }
+        let assignment = APIAssignment(testSetupID: setupID, title: title, isOpen: true, courseID: courseID)
+        try await assignment.save(on: app.db)
+        return assignment
+    }
+
+    private func addRequirement(
+        assignmentID: UUID,
+        spec: AssignmentRequirementSpec
+    ) async throws {
+        let requirement = AssignmentRequirement(assignmentID: assignmentID, specification: spec)
+        try await requirement.save(on: app.db)
     }
 
     // MARK: - Auth tests

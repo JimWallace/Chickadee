@@ -21,6 +21,13 @@ enum ObservabilityEvent: String, Sendable {
     case jobEnqueued = "job_enqueued"
     case runnerPolled = "runner_polled"
     case runnerHeartbeat = "runner_heartbeat"
+    case runnerProfileRegistered = "runner_profile_registered"
+    case runnerProfileUpdated = "runner_profile_updated"
+    case assignmentRequirementsLoaded = "assignment_requirements_loaded"
+    case compatibilityCheckPassed = "compatibility_check_passed"
+    case compatibilityCheckFailed = "compatibility_check_failed"
+    case noCompatibleRunnerAvailable = "no_compatible_runner_available"
+    case jobAssignedToCompatibleRunner = "job_assigned_to_compatible_runner"
     case jobAssigned = "job_assigned"
     case resultReceived = "result_received"
     case jobFinalised = "job_finalised"
@@ -66,6 +73,7 @@ struct InternalMetricsResponse: Content, Sendable {
     let jobStatusCounts: [StatusCountResponse]
     let queueWait: DurationSummaryResponse
     let execution: DurationSummaryResponse
+    let compatibility: CompatibilityCountersResponse
 }
 
 struct RunnerLoadResponse: Content, Sendable {
@@ -91,6 +99,12 @@ struct DurationSummaryResponse: Content, Sendable {
     let p95Ms: Int?
 }
 
+struct CompatibilityCountersResponse: Content, Sendable {
+    let compatibleAssignmentAttempts: Int
+    let incompatibleAssignmentAttempts: Int
+    let jobsBlockedNoCompatibleRunner: Int
+}
+
 actor DiagnosticsMaintenanceStore {
     private var lastPrunedAt: Date?
 
@@ -105,9 +119,36 @@ actor DiagnosticsMaintenanceStore {
     }
 }
 
+actor CompatibilityCounterStore {
+    private var compatibleAssignmentAttempts = 0
+    private var incompatibleAssignmentAttempts = 0
+    private var jobsBlockedNoCompatibleRunner = 0
+
+    func incrementCompatibleAssignmentAttempts() {
+        compatibleAssignmentAttempts += 1
+    }
+
+    func incrementIncompatibleAssignmentAttempts() {
+        incompatibleAssignmentAttempts += 1
+    }
+
+    func incrementJobsBlockedNoCompatibleRunner() {
+        jobsBlockedNoCompatibleRunner += 1
+    }
+
+    func snapshot() -> CompatibilityCountersResponse {
+        CompatibilityCountersResponse(
+            compatibleAssignmentAttempts: compatibleAssignmentAttempts,
+            incompatibleAssignmentAttempts: incompatibleAssignmentAttempts,
+            jobsBlockedNoCompatibleRunner: jobsBlockedNoCompatibleRunner
+        )
+    }
+}
+
 final class OperationalDiagnosticsService: @unchecked Sendable {
     let configuration: DiagnosticsConfiguration
     private let maintenance = DiagnosticsMaintenanceStore()
+    private let compatibilityCounters = CompatibilityCounterStore()
 
     init(configuration: DiagnosticsConfiguration) {
         self.configuration = configuration
@@ -210,6 +251,131 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 "error": .string(String(describing: error)),
             ])
         }
+    }
+
+    func recordRunnerProfileEvent(
+        profile: RunnerProfile,
+        event: RunnerProfileRegistrationEvent,
+        logger: Logger
+    ) {
+        let capabilityProfile = profile.capabilityProfile
+        logger.info(
+            "observability",
+            metadata: [
+                "timestamp": iso8601Metadata(Date()),
+                "event": .string(
+                    event == .registered
+                        ? ObservabilityEvent.runnerProfileRegistered.rawValue
+                        : ObservabilityEvent.runnerProfileUpdated.rawValue
+                ),
+                "runner_id": .string(profile.runnerID),
+                "platform": .string(capabilityProfile.platform),
+                "architecture": .string(capabilityProfile.architecture),
+                "languages": .string(capabilityProfile.languageVersions.map {
+                    "\($0.language)=\($0.version)"
+                }.joined(separator: ",")),
+                "capabilities_count": .stringConvertible(capabilityProfile.capabilities.count),
+                "status": .string(event.rawValue),
+            ]
+        )
+    }
+
+    func recordAssignmentRequirementsLoaded(
+        submission: APISubmission,
+        assignmentID: UUID?,
+        requirements: AssignmentRequirementSpec?,
+        logger: Logger
+    ) {
+        logger.info(
+            "observability",
+            metadata: compatibilityMetadata(
+                event: .assignmentRequirementsLoaded,
+                submission: submission,
+                assignmentID: assignmentID,
+                runnerID: submission.workerID,
+                requirements: requirements,
+                extra: [
+                    "status": .string("loaded"),
+                ]
+            )
+        )
+    }
+
+    func recordCompatibilityDecision(
+        submission: APISubmission,
+        assignmentID: UUID?,
+        runnerID: String,
+        requirements: AssignmentRequirementSpec?,
+        result: CompatibilityResult,
+        logger: Logger
+    ) async {
+        if result.isCompatible {
+            await compatibilityCounters.incrementCompatibleAssignmentAttempts()
+        } else {
+            await compatibilityCounters.incrementIncompatibleAssignmentAttempts()
+        }
+
+        logger.info(
+            "observability",
+            metadata: compatibilityMetadata(
+                event: result.isCompatible ? .compatibilityCheckPassed : .compatibilityCheckFailed,
+                submission: submission,
+                assignmentID: assignmentID,
+                runnerID: runnerID,
+                requirements: requirements,
+                extra: [
+                    "status": .string(result.isCompatible ? "compatible" : "incompatible"),
+                    "compatibility_reasons": .string(result.reasons.joined(separator: "; ")),
+                ]
+            )
+        )
+    }
+
+    func recordNoCompatibleRunnerAvailable(
+        submission: APISubmission,
+        assignmentID: UUID?,
+        runnerID: String,
+        requirements: AssignmentRequirementSpec?,
+        result: CompatibilityResult,
+        logger: Logger
+    ) async {
+        await compatibilityCounters.incrementJobsBlockedNoCompatibleRunner()
+        logger.warning(
+            "observability",
+            metadata: compatibilityMetadata(
+                event: .noCompatibleRunnerAvailable,
+                submission: submission,
+                assignmentID: assignmentID,
+                runnerID: runnerID,
+                requirements: requirements,
+                extra: [
+                    "status": .string("blocked"),
+                    "compatibility_reasons": .string(result.reasons.joined(separator: "; ")),
+                ]
+            )
+        )
+    }
+
+    func recordCompatibleJobAssignment(
+        submission: APISubmission,
+        assignmentID: UUID?,
+        runnerID: String,
+        requirements: AssignmentRequirementSpec?,
+        logger: Logger
+    ) {
+        logger.info(
+            "observability",
+            metadata: compatibilityMetadata(
+                event: .jobAssignedToCompatibleRunner,
+                submission: submission,
+                assignmentID: assignmentID,
+                runnerID: runnerID,
+                requirements: requirements,
+                extra: [
+                    "status": .string("assigned"),
+                ]
+            )
+        )
     }
 
     func recordJobAssigned(
@@ -538,6 +704,10 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
     }
 
     func metricsSnapshot(req: Request) async throws -> InternalMetricsResponse {
+        try await req.application.runnerProfiles.refreshActiveFlags(
+            activeWindowSeconds: configuration.activeRunnerWindowSeconds,
+            on: req.db
+        )
         let queueDepth = try await pendingQueueDepth(on: req.db)
         let inFlightJobs = try await inFlightJobCount(on: req.db)
         let now = Date()
@@ -579,6 +749,8 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             )
         }
 
+        let compatibilitySnapshot = await compatibilityCounters.snapshot()
+
         return InternalMetricsResponse(
             generatedAt: now,
             queueDepth: queueDepth,
@@ -590,7 +762,8 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 StatusCountResponse(status: $0.rawValue, count: statusCounts[$0.rawValue, default: 0])
             },
             queueWait: durationSummary(for: queueWaitValues),
-            execution: durationSummary(for: executionValues)
+            execution: durationSummary(for: executionValues),
+            compatibility: compatibilitySnapshot
         )
     }
 
@@ -867,6 +1040,53 @@ private extension OperationalDiagnosticsService {
             metadata[key] = value
         }
         return metadata
+    }
+
+    func compatibilityMetadata(
+        event: ObservabilityEvent,
+        submission: APISubmission,
+        assignmentID: UUID?,
+        runnerID: String?,
+        requirements: AssignmentRequirementSpec?,
+        extra: Logger.Metadata = [:]
+    ) -> Logger.Metadata {
+        var metadata: Logger.Metadata = [
+            "timestamp": iso8601Metadata(Date()),
+            "event": .string(event.rawValue),
+            "submission_id": .string(submission.id ?? ""),
+            "job_id": .string(submission.id ?? ""),
+            "assignment_id": .string(assignmentID?.uuidString ?? ""),
+            "runner_id": .string(runnerID ?? submission.workerID ?? ""),
+            "requirement_summary": .string(requirementSummary(requirements)),
+        ]
+        for (key, value) in extra {
+            metadata[key] = value
+        }
+        return metadata
+    }
+
+    func requirementSummary(_ requirements: AssignmentRequirementSpec?) -> String {
+        guard let requirements else { return "none" }
+        var parts: [String] = []
+        if let platform = requirements.requiredPlatform, !platform.isEmpty {
+            parts.append("platform=\(platform)")
+        }
+        if let architecture = requirements.requiredArchitecture, !architecture.isEmpty {
+            parts.append("architecture=\(architecture)")
+        }
+        if !requirements.requiredLanguages.isEmpty {
+            parts.append(
+                "languages=" + requirements.requiredLanguages.map {
+                    let min = $0.minimumVersion.map { ">=" + $0 } ?? ""
+                    let exact = $0.exactVersion.map { "==" + $0 } ?? ""
+                    return $0.language + min + exact
+                }.joined(separator: ",")
+            )
+        }
+        if !requirements.requiredCapabilities.isEmpty {
+            parts.append("capabilities=" + requirements.requiredCapabilities.map(\.name).joined(separator: ","))
+        }
+        return parts.isEmpty ? "none" : parts.joined(separator: " ")
     }
 }
 
