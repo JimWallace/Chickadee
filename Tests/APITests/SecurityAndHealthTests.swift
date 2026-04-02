@@ -1,7 +1,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Vapor
 import Foundation
 
@@ -62,7 +62,7 @@ final class SecurityAndHealthTests: XCTestCase {
     private func makeHealthApp(withDatabase: Bool) async throws -> Application {
         let app = try await Application.make(.testing)
         if withDatabase {
-            app.databases.use(.sqlite(.memory), as: .sqlite)
+            try await configureTestDatabase(app)
         }
         try app.register(collection: HealthRoutes())
         return app

@@ -2,6 +2,7 @@ import XCTest
 import XCTVapor
 import Crypto
 @testable import chickadee_server
+import Fluent
 
 final class WorkerHMACAuthMiddlewareTests: XCTestCase {
     private let sharedSecret = "test-shared-secret"

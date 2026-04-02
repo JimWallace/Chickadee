@@ -2,8 +2,6 @@
 
 import Vapor
 import Fluent
-import FluentSQLiteDriver
-import SQLKit
 import Leaf
 import CSRF
 import Core
@@ -141,34 +139,11 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
 
     // MARK: - Database
 
-    let sqliteConfig = SQLiteConfiguration(
-        storage: .file(path: workDir + "chickadee.sqlite"),
-        enableForeignKeys: true
+    let databaseSettings = try DatabaseSettings.fromEnvironment(
+        defaultSQLitePath: workDir + "chickadee.sqlite"
     )
-    app.databases.use(.sqlite(sqliteConfig), as: .sqlite)
-
-    // WAL improves mixed read/write behavior on the single-file SQLite store.
-    if let sql = app.db as? SQLDatabase {
-        _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
-    }
-
-    app.migrations.add(CreateUsers())
-    app.migrations.add(CreateCourses())
-    app.migrations.add(CreateCourseEnrollments())
-    app.migrations.add(CreateTestSetups())
-    app.migrations.add(CreateSubmissions())
-    app.migrations.add(CreateResults())
-    app.migrations.add(CreateAssignments())
-    app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
-    app.migrations.add(CreateSubmissionDiagnostics())
-    app.migrations.add(CreateRequestMetrics())
-    app.migrations.add(CreateJobExecutionMetrics())
-    app.migrations.add(CreateRunnerSnapshots())
-    app.migrations.add(CreateRunnerProfiles())
-    app.migrations.add(CreateAssignmentRequirements())
+    try configureDatabase(app, settings: databaseSettings)
+    registerMigrations(on: app)
 
     try app.autoMigrate().wait()
     app.lifecycle.use(ObservabilityLifecycleHandler())

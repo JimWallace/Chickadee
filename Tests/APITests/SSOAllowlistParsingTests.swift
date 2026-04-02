@@ -1,5 +1,6 @@
 import Testing
 @testable import chickadee_server
+import Fluent
 
 @Suite struct SSOAllowlistParsingTests {
 

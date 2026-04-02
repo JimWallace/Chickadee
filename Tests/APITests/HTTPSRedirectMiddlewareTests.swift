@@ -6,6 +6,7 @@
 import Testing
 import XCTVapor
 @testable import chickadee_server
+import Fluent
 import Foundation
 
 @Suite struct HTTPSRedirectMiddlewareTests {

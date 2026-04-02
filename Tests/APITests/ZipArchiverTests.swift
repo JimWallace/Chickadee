@@ -5,6 +5,7 @@
 
 import Testing
 @testable import chickadee_server
+import Fluent
 import Foundation
 
 // final class so deinit can remove the per-test temp directory.

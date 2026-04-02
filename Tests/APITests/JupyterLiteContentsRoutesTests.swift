@@ -1,6 +1,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
+import Fluent
 import Vapor
 import Foundation
 

@@ -17,8 +17,12 @@ struct AddCourseEnrollmentMode: AsyncMigration {
             .update()
 
         // Data migration: courses that were closed get the 'closed' mode.
-        try await (database as! SQLDatabase)
-            .raw("UPDATE courses SET enrollment_mode = 'closed' WHERE open_enrollment = 0")
+        let sql = database as! SQLDatabase
+        let closedPredicate = sql.dialect.name == "postgresql"
+            ? "open_enrollment = FALSE"
+            : "open_enrollment = 0"
+        try await sql
+            .raw("UPDATE courses SET enrollment_mode = 'closed' WHERE \(unsafeRaw: closedPredicate)")
             .run()
 
         try await database.schema("courses")
@@ -31,8 +35,13 @@ struct AddCourseEnrollmentMode: AsyncMigration {
             .field("open_enrollment", .bool, .required, .custom("DEFAULT TRUE"))
             .update()
 
-        try await (database as! SQLDatabase)
-            .raw("UPDATE courses SET open_enrollment = CASE WHEN enrollment_mode = 'closed' THEN 0 ELSE 1 END")
+        let sql = database as! SQLDatabase
+        let falseLiteral = sql.dialect.name == "postgresql" ? "FALSE" : "0"
+        let trueLiteral = sql.dialect.name == "postgresql" ? "TRUE" : "1"
+        try await sql
+            .raw(
+                "UPDATE courses SET open_enrollment = CASE WHEN enrollment_mode = 'closed' THEN \(unsafeRaw: falseLiteral) ELSE \(unsafeRaw: trueLiteral) END"
+            )
             .run()
 
         try await database.schema("courses")

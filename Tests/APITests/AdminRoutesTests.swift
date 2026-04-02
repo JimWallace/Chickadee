@@ -1,7 +1,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 import Core
 
@@ -30,19 +30,7 @@ final class AdminRoutesTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate()
+        try await configureTestDatabase(app, options: .observability)
 
         configureLeaf(app)
         try routes(app)
@@ -363,5 +351,58 @@ final class AdminRoutesTests: XCTestCase {
             .filter(\.$course.$id == courseID)
             .count()
         XCTAssertEqual(enrollmentCountAfterUnenroll, 0)
+    }
+
+    func testAdminRunnersUsesScaledAvgWaitUnits() async throws {
+        let cookie = try await loginAsAdmin()
+        let course = try await makeCourse(code: "WAIT101", name: "Wait Course")
+        let courseID = try course.requireID()
+        let setup = try await makeSetup(id: "setup_wait_admin", courseID: courseID)
+        let student = try await makeUser(username: "wait_student", role: "student")
+        let studentID = try student.requireID()
+        let submission = try await makeSubmission(
+            id: "sub_wait_admin",
+            setupID: try setup.requireID(),
+            userID: studentID
+        )
+        submission.workerID = "runner-wait"
+        try await submission.update(on: app.db)
+
+        let metric = JobExecutionMetric(
+            submissionID: try submission.requireID(),
+            jobID: try submission.requireID(),
+            testSetupID: try setup.requireID(),
+            courseID: courseID,
+            assignmentID: nil,
+            userID: studentID,
+            runnerID: "runner-wait",
+            kind: APISubmission.Kind.student,
+            attemptNumber: 1,
+            enqueuedAt: Date().addingTimeInterval(-120)
+        )
+        metric.completedAt = Date().addingTimeInterval(-10)
+        metric.queueWaitMs = 65_000
+        metric.executionMs = 4_000
+        metric.totalProcessingMs = 69_000
+        metric.finalStatus = "passed"
+        try await metric.save(on: app.db)
+
+        await app.workerActivityStore.markActive(
+            workerID: "runner-wait",
+            hostname: "runner-host",
+            runnerVersion: "runner/1.0",
+            maxConcurrentJobs: 2,
+            activeJobs: 0,
+            lastHeartbeatAt: Date()
+        )
+
+        try await app.asyncTest(.GET, "/admin/runners", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let json = try JSONSerialization.jsonObject(with: Data(buffer: res.body)) as? [[String: Any]]
+            let row = try XCTUnwrap(json?.first(where: { ($0["workerID"] as? String) == "runner-wait" }))
+            XCTAssertEqual(row["avgQueueWaitFormatted"] as? String, "1m 5s")
+        })
     }
 }

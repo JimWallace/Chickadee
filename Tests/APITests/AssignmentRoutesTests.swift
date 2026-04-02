@@ -12,7 +12,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 import Core
 
@@ -39,19 +39,7 @@ final class AssignmentRoutesTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate()
+        try await configureTestDatabase(app)
 
         configureLeaf(app)
         try routes(app)
@@ -103,9 +91,19 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     @discardableResult
-    private func insertStudent(username: String = "student_retest") async throws -> APIUser {
+    private func insertStudent(
+        username: String = "student_retest",
+        displayName: String? = nil,
+        preferredName: String? = nil
+    ) async throws -> APIUser {
         let hash = try Bcrypt.hash("testpassword")
-        let student = APIUser(username: username, passwordHash: hash, role: "student")
+        let student = APIUser(
+            username: username,
+            passwordHash: hash,
+            role: "student",
+            preferredName: preferredName,
+            displayName: displayName
+        )
         try await student.save(on: app.db)
         return student
     }
@@ -730,6 +728,61 @@ final class AssignmentRoutesTests: XCTestCase {
             try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
+    func testAssignmentSubmissionsUsesDisplayNameAndWaterlooTime() async throws {
+        let cookie = try await loginAsInstructor()
+        try await insertSetup(id: "setup_submissions_display_name")
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_submissions_display_name",
+            title: "Submission Summary",
+            isOpen: true
+        )
+        let student = try await insertStudent(
+            username: "jwallace",
+            displayName: "Jim Wallace"
+        )
+
+        let submission = APISubmission(
+            id: "sub_display_name",
+            testSetupID: "setup_submissions_display_name",
+            zipPath: tmpDir + "submissions/sub_display_name.zip",
+            attemptNumber: 1,
+            status: "complete",
+            filename: "submission.ipynb",
+            userID: student.id,
+            kind: APISubmission.Kind.student
+        )
+        try await submission.save(on: app.db)
+
+        let persistedSubmission = try await APISubmission.find("sub_display_name", on: app.db)
+        let submittedAt = try XCTUnwrap(persistedSubmission?.submittedAt)
+
+        let expectedDate = {
+            let fmt = waterlooDateTimeFormatter()
+            fmt.timeStyle = .none
+            return fmt.string(from: submittedAt)
+        }()
+        let expectedClock = {
+            let fmt = waterlooDateTimeFormatter()
+            fmt.dateStyle = .none
+            return fmt.string(from: submittedAt)
+                .replacingOccurrences(of: "\u{202F}", with: " ")
+                .replacingOccurrences(of: "\u{00A0}", with: " ")
+        }()
+
+        try await app.asyncTest(.GET, "/instructor/\(assignment.publicID)/submissions", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = res.body.string
+                .replacingOccurrences(of: "\u{202F}", with: " ")
+                .replacingOccurrences(of: "\u{00A0}", with: " ")
+            XCTAssertTrue(body.contains(">Wallace<"))
+            XCTAssertTrue(body.contains(">Jim<"))
+            XCTAssertTrue(body.contains(expectedDate))
+            XCTAssertTrue(body.contains(expectedClock), "Expected clock '\(expectedClock)' in body: \(body)")
         })
     }
 }
