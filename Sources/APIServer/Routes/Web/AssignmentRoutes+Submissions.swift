@@ -147,6 +147,103 @@ extension AssignmentRoutes {
     // MARK: - GET /instructor/:assignmentID/submissions
 
     @Sendable
+    func courseStudentSubmissionsPage(req: Request) async throws -> View {
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard
+            let activeCourse = courseState.active,
+            let activeCourseUUID = courseState.activeCourseUUID,
+            let studentIDRaw = req.parameters.get("studentID"),
+            let studentID = UUID(uuidString: studentIDRaw)
+        else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+
+        let isEnrolled = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == activeCourseUUID)
+            .filter(\.$userID == studentID)
+            .count() > 0
+        guard
+            isEnrolled,
+            let student = try await APIUser.find(studentID, on: req.db),
+            student.role == "student"
+        else {
+            throw Abort(.notFound)
+        }
+
+        let setups = try await APITestSetup.query(on: req.db)
+            .filter(\.$courseID == activeCourseUUID)
+            .all()
+        let setupIDs = Set(setups.compactMap(\.id))
+        let assignments = setupIDs.isEmpty
+            ? []
+            : try await APIAssignment.query(on: req.db)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .all()
+        let assignmentBySetupID = Dictionary(
+            assignments.map { ($0.testSetupID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let submissions = setupIDs.isEmpty
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$userID == studentID)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .sort(\.$submittedAt, .descending)
+                .all()
+        let submissionIDs = submissions.compactMap(\.id)
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissionIDs,
+            on: req.db
+        )
+
+        let fmt = waterlooDateTimeFormatter()
+        let rows = submissions.map { submission -> CourseStudentSubmissionRow in
+            let submissionID = submission.id ?? ""
+            let assignment = assignmentBySetupID[submission.testSetupID]
+            let gradeText: String
+            if let result = preferredResultBySubmissionID[submissionID],
+               let pct = gradePercentFromCollectionJSON(result.collectionJSON) {
+                gradeText = "\(pct)%"
+            } else {
+                gradeText = "—"
+            }
+            let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
+            let nameExt = (submission.filename ?? "").lowercased()
+            let canOpenInNotebook = pathExt == "ipynb" || nameExt.hasSuffix(".ipynb")
+            let openInNotebookURL = canOpenInNotebook
+                ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(submissionID)"
+                : nil
+            return CourseStudentSubmissionRow(
+                assignmentTitle: assignment?.title ?? "Unpublished setup",
+                assignmentSubmissionsURL: assignment.map { "/instructor/\($0.publicID)/submissions" },
+                submissionID: submissionID,
+                attemptNumber: submission.attemptNumber ?? 1,
+                status: submission.status,
+                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
+                gradeText: gradeText,
+                submissionFilename: submission.filename,
+                canOpenInNotebook: canOpenInNotebook,
+                openInNotebookURL: openInNotebookURL
+            )
+        }
+
+        return try await req.view.render(
+            "course-student-submissions",
+            CourseStudentSubmissionsContext(
+                currentUser: req.currentUserContext,
+                studentName: student.displayName ?? student.username,
+                studentUsername: student.username,
+                courseName: "\(activeCourse.code) — \(activeCourse.name)",
+                backURL: "/instructor",
+                rows: rows
+            )
+        )
+    }
+
+    @Sendable
     func assignmentSubmissionsPage(req: Request) async throws -> View {
         let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
         guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
@@ -175,26 +272,10 @@ extension AssignmentRoutes {
         }
 
         let submissionIDs = submissions.compactMap(\.id)
-        let results = submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .sort(\.$receivedAt, .descending)
-                .all()
-        var preferredResultBySubmissionID: [String: APIResult] = [:]
-        for result in results {
-            let key = result.submissionID
-            if let existing = preferredResultBySubmissionID[key] {
-                let existingSource = existing.source ?? "worker"
-                let candidateSource = result.source ?? "worker"
-                if existingSource == "worker" { continue }
-                if candidateSource == "worker" {
-                    preferredResultBySubmissionID[key] = result
-                }
-            } else {
-                preferredResultBySubmissionID[key] = result
-            }
-        }
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissionIDs,
+            on: req.db
+        )
 
         let fmt = waterlooDateTimeFormatter()
 
@@ -264,27 +345,10 @@ extension AssignmentRoutes {
             .sort(\.$submittedAt, .descending)
             .all()
         let submissionIDs = submissions.compactMap(\.id)
-        let results = submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .sort(\.$receivedAt, .descending)
-                .all()
-
-        var preferredResultBySubmissionID: [String: APIResult] = [:]
-        for result in results {
-            let key = result.submissionID
-            if let existing = preferredResultBySubmissionID[key] {
-                let existingSource = existing.source ?? "worker"
-                let candidateSource = result.source ?? "worker"
-                if existingSource == "worker" { continue }
-                if candidateSource == "worker" {
-                    preferredResultBySubmissionID[key] = result
-                }
-            } else {
-                preferredResultBySubmissionID[key] = result
-            }
-        }
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissionIDs,
+            on: req.db
+        )
 
         let fmt = waterlooDateTimeFormatter()
 
@@ -359,5 +423,35 @@ extension AssignmentRoutes {
             fallbackPath: fallbackPath
         )
         return req.redirect(to: redirectPath)
+    }
+}
+
+private extension AssignmentRoutes {
+    func preferredResultsBySubmissionID(
+        for submissionIDs: [String],
+        on db: Database
+    ) async throws -> [String: APIResult] {
+        let results = submissionIDs.isEmpty
+            ? []
+            : try await APIResult.query(on: db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .sort(\.$receivedAt, .descending)
+                .all()
+
+        var preferredResultBySubmissionID: [String: APIResult] = [:]
+        for result in results {
+            let key = result.submissionID
+            if let existing = preferredResultBySubmissionID[key] {
+                let existingSource = existing.source ?? "worker"
+                let candidateSource = result.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if candidateSource == "worker" {
+                    preferredResultBySubmissionID[key] = result
+                }
+            } else {
+                preferredResultBySubmissionID[key] = result
+            }
+        }
+        return preferredResultBySubmissionID
     }
 }

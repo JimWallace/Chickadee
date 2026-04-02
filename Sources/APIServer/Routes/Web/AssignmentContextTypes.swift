@@ -49,6 +49,7 @@ struct EnrolledStudentRow: Encodable {
     let username: String
     let displayName: String
     let role: String        // "student" | "instructor" | "admin"
+    let submissionsURL: String
 }
 
 struct AssignmentSubmissionsContext: Encodable {
@@ -184,4 +185,26 @@ struct AssignmentSubmissionHistoryRow: Encodable {
     let status: String
     let submittedAt: String
     let gradeText: String
+}
+
+struct CourseStudentSubmissionsContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let studentName: String
+    let studentUsername: String
+    let courseName: String
+    let backURL: String
+    let rows: [CourseStudentSubmissionRow]
+}
+
+struct CourseStudentSubmissionRow: Encodable {
+    let assignmentTitle: String
+    let assignmentSubmissionsURL: String?
+    let submissionID: String
+    let attemptNumber: Int
+    let status: String
+    let submittedAt: String
+    let gradeText: String
+    let submissionFilename: String?
+    let canOpenInNotebook: Bool
+    let openInNotebookURL: String?
 }
