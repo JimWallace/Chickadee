@@ -269,7 +269,7 @@ final class ObservabilityTests: XCTestCase {
         }, afterResponse: { response in
             XCTAssertEqual(response.status, .ok)
             let payload = try response.content.decode(InternalMetricsResponse.self)
-            XCTAssertEqual(payload.queueDepth, 1)
+            XCTAssertEqual(payload.maxQueueDepth, 1)
         })
     }
 
