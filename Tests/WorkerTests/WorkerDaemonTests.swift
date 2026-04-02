@@ -763,30 +763,35 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
     }
 
     func testWorkerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
-        let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
-        let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
-        let daemon = WorkerDaemon(
-            poller: poller,
-            reporter: reporter,
-            runner: runner,
-            apiBaseURL: URL(string: "http://localhost:8080")!,
-            workerID: "worker-duplicate-id-retry",
-            workerSecret: "secret",
-            maxConcurrentJobs: 1,
-            runnerProfile: nil
-        )
+        try await withEnvironment([
+            "RUNNER_RETRY_BASE_DELAY_MS": "10",
+            "RUNNER_RETRY_MAX_DELAY_MS": "20",
+        ]) {
+            let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
+            let reporter = MockReporter()
+            let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+            let daemon = WorkerDaemon(
+                poller: poller,
+                reporter: reporter,
+                runner: runner,
+                apiBaseURL: URL(string: "http://localhost:8080")!,
+                workerID: "worker-duplicate-id-retry",
+                workerSecret: "secret",
+                maxConcurrentJobs: 1,
+                runnerProfile: nil
+            )
 
-        let task = Task {
-            try await daemon.run()
+            let task = Task {
+                try await daemon.run()
+            }
+
+            let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+                await poller.observedRequestCount() >= 3
+            }
+            XCTAssertTrue(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
+
+            task.cancel()
+            _ = await task.result
         }
-
-        let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
-            await poller.observedRequestCount() >= 3
-        }
-        XCTAssertTrue(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
-
-        task.cancel()
-        _ = await task.result
     }
 }
