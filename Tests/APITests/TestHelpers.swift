@@ -12,6 +12,7 @@ import LeafKit
 import Fluent
 import FluentPostgresDriver
 import Foundation
+import SQLKit
 
 struct TestDatabaseOptions: Sendable {
     let includeObservability: Bool
@@ -37,7 +38,12 @@ func configureTestDatabase(
     _ app: Application,
     options: TestDatabaseOptions = .default
 ) async throws {
-    try configureDatabase(app, settings: try testDatabaseSettingsFromEnvironment())
+    let settings = try testDatabaseSettingsFromEnvironment()
+    try configureDatabase(app, settings: settings)
+
+    if settings.backend == .postgres {
+        try await resetPostgresTestSchema(app)
+    }
 
     registerBaseTestMigrations(on: app)
     if options.includeObservability {
@@ -48,6 +54,13 @@ func configureTestDatabase(
     }
 
     try await app.autoMigrate()
+}
+
+private func resetPostgresTestSchema(_ app: Application) async throws {
+    guard let sql = app.db as? SQLDatabase else { return }
+
+    try await sql.raw("DROP SCHEMA IF EXISTS public CASCADE").run()
+    try await sql.raw("CREATE SCHEMA public").run()
 }
 
 func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
