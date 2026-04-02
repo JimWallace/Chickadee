@@ -6,23 +6,23 @@ Admin
 <section class="admin-section admin-diagnostics">
     <div class="diagnostics-cards" id="diagnostics-cards">
         <article class="diagnostic-card">
-            <div class="diagnostic-label">24h max queue depth</div>
+            <div class="diagnostic-label">24h Max Queue</div>
             <div class="diagnostic-value" id="diag-queue-depth">—</div>
         </article>
         <article class="diagnostic-card">
-            <div class="diagnostic-label">24h peak util</div>
+            <div class="diagnostic-label">24h Peak Util</div>
             <div class="diagnostic-value" id="diag-peak-util">—</div>
         </article>
         <article class="diagnostic-card">
-            <div class="diagnostic-label">Active runners</div>
-            <div class="diagnostic-value" id="diag-active-runners">—</div>
+            <div class="diagnostic-label">24h Max Load</div>
+            <div class="diagnostic-value" id="diag-max-load">—</div>
         </article>
         <article class="diagnostic-card">
-            <div class="diagnostic-label">p95 queue wait</div>
+            <div class="diagnostic-label">P95 Wait Time</div>
             <div class="diagnostic-value" id="diag-queue-p95">—</div>
         </article>
         <article class="diagnostic-card">
-            <div class="diagnostic-label">p95 execution</div>
+            <div class="diagnostic-label">P95 Execution Time</div>
             <div class="diagnostic-value" id="diag-exec-p95">—</div>
         </article>
     </div>
@@ -73,6 +73,7 @@ Admin
                 <tr data-runner="#(worker.workerID)"
                     data-version="#(worker.runnerVersion)"
                     data-load="#(worker.assignedJobs)"
+                    data-max-jobs="#(worker.maxConcurrentJobs)"
                     data-jobs-processed="#(worker.jobsProcessed)"
                     data-avg-run="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif"
                     data-avg-wait="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif"
@@ -250,12 +251,12 @@ Admin
 }
 .diagnostic-card {
     padding: .75rem .9rem;
-    border: 1px solid var(--border, rgba(0,0,0,.08));
-    border-radius: 10px;
-    background: var(--panel, #fff);
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
 }
 .diagnostic-label {
-    color: var(--muted);
+    color: var(--gray-600);
     font-size: .82rem;
 }
 .diagnostic-value {
@@ -263,6 +264,7 @@ Admin
     font-size: 1.2rem;
     font-weight: 600;
     line-height: 1.2;
+    color: var(--gray-900);
 }
 #workers-table th[data-sort-key],
 #users-table th[data-sort-key],
@@ -345,10 +347,12 @@ Admin
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     var diagQueueDepth = document.getElementById('diag-queue-depth');
     var diagPeakUtil = document.getElementById('diag-peak-util');
-    var diagActiveRunners = document.getElementById('diag-active-runners');
+    var diagMaxLoad = document.getElementById('diag-max-load');
     var diagQueueP95 = document.getElementById('diag-queue-p95');
     var diagExecP95 = document.getElementById('diag-exec-p95');
     var totalRunnerCount = workersBody.querySelectorAll('tr').length;
+    var totalRunnerCapacity = 0;
+    var totalAssignedJobs = 0;
     var latestDiagnostics = null;
 
     function formatDuration(ms) {
@@ -364,15 +368,29 @@ Admin
         if (el) el.textContent = value;
     }
 
-    function renderActiveRunnerSummary() {
-        if (!diagActiveRunners) return;
-        if (!latestDiagnostics || latestDiagnostics.activeRunners == null) {
-            setText(diagActiveRunners, '—');
+    function recomputeLoadSummaryFromTable() {
+        totalRunnerCount = 0;
+        totalRunnerCapacity = 0;
+        totalAssignedJobs = 0;
+
+        Array.from(workersBody.querySelectorAll('tr')).forEach(function (row) {
+            totalRunnerCount += 1;
+            totalAssignedJobs += Number(row.getAttribute('data-load') || 0);
+            totalRunnerCapacity += Number(row.getAttribute('data-max-jobs') || 0);
+        });
+    }
+
+    function renderMaxLoadSummary() {
+        if (!diagMaxLoad) return;
+        if (latestDiagnostics && latestDiagnostics.maxLoadActiveJobs != null && latestDiagnostics.maxLoadCapacity != null) {
+            setText(diagMaxLoad, String(latestDiagnostics.maxLoadActiveJobs) + '/' + String(latestDiagnostics.maxLoadCapacity));
             return;
         }
-        var active = latestDiagnostics.activeRunners;
-        var total = totalRunnerCount;
-        setText(diagActiveRunners, total > 0 ? String(active) + '/' + String(total) : String(active));
+        if (totalRunnerCapacity > 0) {
+            setText(diagMaxLoad, String(totalAssignedJobs) + '/' + String(totalRunnerCapacity));
+            return;
+        }
+        setText(diagMaxLoad, '—');
     }
 
     function updateDiagnosticsCards(metrics) {
@@ -380,7 +398,7 @@ Admin
         latestDiagnostics = metrics;
         setText(diagQueueDepth, String(metrics.maxQueueDepth == null ? '—' : metrics.maxQueueDepth));
         setText(diagPeakUtil, metrics.peakUtilizationPercent == null ? '—' : String(metrics.peakUtilizationPercent) + '%');
-        renderActiveRunnerSummary();
+        renderMaxLoadSummary();
         setText(diagQueueP95, formatDuration(metrics.queueWait && metrics.queueWait.p95Ms));
         setText(diagExecP95, formatDuration(metrics.execution && metrics.execution.p95Ms));
     }
@@ -388,9 +406,15 @@ Admin
     function renderWorkers(workers) {
         workers = sortWorkersArray(Array.isArray(workers) ? workers.slice() : []);
         totalRunnerCount = workers.length;
+        totalRunnerCapacity = workers.reduce(function (sum, worker) {
+            return sum + Number(worker.maxConcurrentJobs || 0);
+        }, 0);
+        totalAssignedJobs = workers.reduce(function (sum, worker) {
+            return sum + Number(worker.assignedJobs || 0);
+        }, 0);
         if (!Array.isArray(workers) || workers.length === 0) {
             workersBody.innerHTML = '';
-            renderActiveRunnerSummary();
+            renderMaxLoadSummary();
             return;
         }
 
@@ -417,6 +441,7 @@ Admin
                 + ' data-runner="' + id + '"'
                 + ' data-version="' + version + '"'
                 + ' data-load="' + assignedJobs + '"'
+                + ' data-max-jobs="' + maxJobs + '"'
                 + ' data-jobs-processed="' + jobsProcessed + '"'
                 + ' data-avg-run="' + (worker.avgExecutionMs == null ? -1 : worker.avgExecutionMs) + '"'
                 + ' data-avg-wait="' + (worker.avgQueueWaitMs == null ? -1 : worker.avgQueueWaitMs) + '"'
@@ -432,7 +457,7 @@ Admin
                 + '</tr>';
         }).join('');
         applyRelativeTimes(workersBody);
-        renderActiveRunnerSummary();
+        renderMaxLoadSummary();
     }
 
     var workersTable = document.getElementById('workers-table');
@@ -562,6 +587,7 @@ Admin
     }
 
     applyRelativeTimes(document);
+    recomputeLoadSummaryFromTable();
     refreshDiagnostics();
 
     if (workersTable && workersBody && workerHeaders.length) {
