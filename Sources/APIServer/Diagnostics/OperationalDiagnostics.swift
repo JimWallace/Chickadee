@@ -67,6 +67,8 @@ struct InternalMetricsResponse: Content, Sendable {
     let generatedAt: Date
     let maxQueueDepth: Int
     let peakUtilizationPercent: Int?
+    let maxLoadActiveJobs: Int?
+    let maxLoadCapacity: Int?
     let activeRunners: Int
     let runnerLoads: [RunnerLoadResponse]
     let recentWindowHours: Int
@@ -766,6 +768,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             .filter(\.$completedAt >= windowStart)
             .all()
         let maxQueueDepth = try await maxQueueDepthSince(windowStart: windowStart, now: now, on: req.db)
+        let peakLoadSnapshot = peakLoad(from: runnerSnapshots)
 
         var statusCounts: [String: Int] = [:]
         var queueWaitValues: [Int] = []
@@ -802,6 +805,8 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             generatedAt: now,
             maxQueueDepth: maxQueueDepth,
             peakUtilizationPercent: peakUtilizationPercent(from: runnerSnapshots),
+            maxLoadActiveJobs: peakLoadSnapshot?.activeJobs,
+            maxLoadCapacity: peakLoadSnapshot?.maxJobs,
             activeRunners: activeSnapshots.count,
             runnerLoads: runnerLoads,
             recentWindowHours: windowHours,
@@ -1178,6 +1183,13 @@ private extension OperationalDiagnosticsService {
     }
 
     func peakUtilizationPercent(from snapshots: [RunnerSnapshot]) -> Int? {
+        peakLoad(from: snapshots).map { snapshot in
+            guard snapshot.maxJobs > 0 else { return nil }
+            return Int((Double(snapshot.activeJobs) / Double(snapshot.maxJobs) * 100).rounded())
+        } ?? nil
+    }
+
+    func peakLoad(from snapshots: [RunnerSnapshot]) -> (activeJobs: Int, maxJobs: Int)? {
         var latestByBucketAndRunner: [Int: [String: (activeJobs: Int, maxJobs: Int)]] = [:]
 
         for snapshot in snapshots {
@@ -1192,8 +1204,15 @@ private extension OperationalDiagnosticsService {
             let totalActiveJobs = runnerStates.values.reduce(0) { $0 + $1.activeJobs }
             let totalMaxJobs = runnerStates.values.reduce(0) { $0 + $1.maxJobs }
             guard totalMaxJobs > 0 else { return nil }
-            return Int((Double(totalActiveJobs) / Double(totalMaxJobs) * 100).rounded())
-        }.max()
+            return (activeJobs: totalActiveJobs, maxJobs: totalMaxJobs)
+        }.max { lhs, rhs in
+            let lhsRatio = Double(lhs.activeJobs) / Double(lhs.maxJobs)
+            let rhsRatio = Double(rhs.activeJobs) / Double(rhs.maxJobs)
+            if lhsRatio == rhsRatio {
+                return lhs.activeJobs < rhs.activeJobs
+            }
+            return lhsRatio < rhsRatio
+        }
     }
 
     func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
