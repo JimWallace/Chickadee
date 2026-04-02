@@ -1079,9 +1079,28 @@ private extension OperationalDiagnosticsService {
     }
 
     func pendingQueueDepth(on db: Database) async throws -> Int {
-        try await APISubmission.query(on: db)
+        let pendingValidation = try await APISubmission.query(on: db)
             .filter(\.$status == "pending")
+            .filter(\.$kind == APISubmission.Kind.validation)
             .count()
+
+        let pendingStudents = try await APISubmission.query(on: db)
+            .filter(\.$status == "pending")
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+
+        var pendingWorkerStudents = 0
+        for submission in pendingStudents {
+            guard let setup = try await APITestSetup.find(submission.testSetupID, on: db) else { continue }
+            let data = Data(setup.manifest.utf8)
+            guard
+                let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
+                manifest.gradingMode == .worker
+            else { continue }
+            pendingWorkerStudents += 1
+        }
+
+        return pendingValidation + pendingWorkerStudents
     }
 
     func bucketIndex(
