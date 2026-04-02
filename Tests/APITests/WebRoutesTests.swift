@@ -157,7 +157,8 @@ final class WebRoutesTests: XCTestCase {
 
     private func makeCollection(
         submissionID: String,
-        outcomes: [TestOutcome] = []
+        outcomes: [TestOutcome] = [],
+        warnings: [String] = []
     ) -> TestOutcomeCollection {
         TestOutcomeCollection(
             submissionID: submissionID,
@@ -172,6 +173,7 @@ final class WebRoutesTests: XCTestCase {
             errorCount: outcomes.filter { $0.status == .error }.count,
             timeoutCount: outcomes.filter { $0.status == .timeout }.count,
             executionTimeMs: 100,
+            warnings: warnings,
             runnerVersion: "shell-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
@@ -181,9 +183,10 @@ final class WebRoutesTests: XCTestCase {
     private func insertResult(
         submissionID: String,
         outcomes: [TestOutcome] = [],
+        warnings: [String] = [],
         source: String = "worker"
     ) async throws -> APIResult {
-        let collection = makeCollection(submissionID: submissionID, outcomes: outcomes)
+        let collection = makeCollection(submissionID: submissionID, outcomes: outcomes, warnings: warnings)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let json = try String(data: encoder.encode(collection), encoding: .utf8)!
@@ -195,6 +198,34 @@ final class WebRoutesTests: XCTestCase {
         )
         try await result.save(on: app.db)
         return result
+    }
+
+    func testSubmissionPageRendersWarnings() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enrollUser(user)
+        _ = try await insertSetup(id: "setup_warn_html")
+        _ = try await insertAssignment(testSetupID: "setup_warn_html", title: "Warnings", isOpen: true)
+        try await insertSubmission(
+            id: "sub_warn_html",
+            testSetupID: "setup_warn_html",
+            userID: try user.requireID(),
+            filename: "submission.py"
+        )
+        try await insertResult(
+            submissionID: "sub_warn_html",
+            outcomes: [makeOutcome(name: "test_alpha", status: .pass)],
+            warnings: ["Notebook submission.py was normalized before grading."]
+        )
+
+        try await app.asyncTest(.GET, "/submissions/sub_warn_html", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = String(buffer: res.body)
+            XCTAssertTrue(html.contains("Warnings"))
+            XCTAssertTrue(html.contains("normalized before grading"))
+        })
     }
 
     // MARK: - GET / (index page)

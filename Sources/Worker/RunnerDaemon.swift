@@ -335,7 +335,9 @@ actor WorkerDaemon {
         let submissionZip = workDir.appendingPathComponent("submission.zip")
         let testSetupZip  = workDir.appendingPathComponent("testsetup.zip")
         let testSetupDir  = workDir.appendingPathComponent("testsetup", isDirectory: true)
+        let submissionDir = workDir.appendingPathComponent("submission", isDirectory: true)
         try FileManager.default.createDirectory(at: testSetupDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: submissionDir, withIntermediateDirectories: true)
 
         async let submissionDownload: Void = download(url: job.submissionURL, to: submissionZip)
         async let testSetupDownload: Void  = download(url: job.testSetupURL,  to: testSetupZip)
@@ -345,15 +347,16 @@ actor WorkerDaemon {
 
         let manifest = job.manifest
 
-        // Copy or unzip the submission depending on whether it is a raw file or a zip.
+        // Stage the submission independently from the grading workspace so the
+        // worker can normalize it without mutating the raw artifact.
         if let filename = job.submissionFilename {
-            let dest = testSetupDir.appendingPathComponent(filename)
+            let dest = submissionDir.appendingPathComponent(filename)
             if FileManager.default.fileExists(atPath: dest.path) {
                 try FileManager.default.removeItem(at: dest)
             }
             try FileManager.default.copyItem(at: submissionZip, to: dest)
         } else {
-            try unzip(submissionZip, to: testSetupDir)
+            try unzip(submissionZip, to: submissionDir)
         }
 
         // Remove the starter notebook template from the test directory so
@@ -370,17 +373,37 @@ actor WorkerDaemon {
             }
         }
 
+        let normalizationWarnings: [String]
+        let preferredStudentModule: String?
+        if shouldNormalizePythonSubmission(
+            manifest: manifest,
+            submissionFilename: job.submissionFilename,
+            submissionDirectory: submissionDir
+        ) {
+            let normalizer = SubmissionNormalizer()
+            let normalization = try normalizer.normalizePythonSubmission(
+                manifest: manifest,
+                submissionDirectory: submissionDir,
+                workspaceDirectory: testSetupDir,
+                submissionFilename: job.submissionFilename
+            )
+            normalizationWarnings = normalization.warnings
+            preferredStudentModule = normalization.preferredStudentModule
+        } else {
+            try mergeDirectoryContents(from: submissionDir, into: testSetupDir)
+            try extractNotebooksToCode(in: testSetupDir)
+            normalizationWarnings = []
+            preferredStudentModule = legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename)
+        }
+
         // Optional make step.
         if let makefile = manifest.makefile {
             try runMake(in: testSetupDir, target: makefile.target)
         }
 
-        // Extract code cells from any .ipynb notebooks into .py / .R files.
-        try extractNotebooksToCode(in: testSetupDir)
-
         // Install shared Python test runtime helpers for every run.
         try writePythonRuntimeHelpers(in: testSetupDir)
-        try writeStudentModuleHint(in: testSetupDir, submissionFilename: job.submissionFilename)
+        try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
 
         // Install shared R test runtime helpers for every run.
         try writeRRuntimeHelper(in: testSetupDir)
@@ -452,7 +475,12 @@ actor WorkerDaemon {
             }
         }
 
-        let collection = makeCollection(outcomes: outcomes, job: job, startedAt: jobStartedAt)
+        let collection = makeCollection(
+            outcomes: outcomes,
+            warnings: normalizationWarnings,
+            job: job,
+            startedAt: jobStartedAt
+        )
         do {
             try await reporter.report(collection)
             writeStructuredRunnerLog(event: "result_submission_succeeded", fields: [
@@ -543,7 +571,12 @@ actor WorkerDaemon {
 
     // MARK: - Collection assembly
 
-    private func makeCollection(outcomes: [TestOutcome], job: Job, startedAt: Date) -> TestOutcomeCollection {
+    private func makeCollection(
+        outcomes: [TestOutcome],
+        warnings: [String],
+        job: Job,
+        startedAt: Date
+    ) -> TestOutcomeCollection {
         let passCount    = outcomes.filter { $0.status == .pass    }.count
         let failCount    = outcomes.filter { $0.status == .fail    }.count
         let errorCount   = outcomes.filter { $0.status == .error   }.count
@@ -569,6 +602,7 @@ actor WorkerDaemon {
             executionTimeMs: totalMs,
             totalPoints:     totalPoints,
             earnedPoints:    earnedPoints,
+            warnings:        warnings,
             jobStartedAt:    startedAt,
             runnerVersion:   "shell-runner/1.0",
             timestamp:       Date()
@@ -679,6 +713,7 @@ actor WorkerDaemon {
             errorCount:      1,
             timeoutCount:    0,
             executionTimeMs: 0,
+            warnings:        [],
             jobStartedAt:    Date(),
             runnerVersion:   "shell-runner/1.0",
             timestamp:       Date()
@@ -770,28 +805,94 @@ actor WorkerDaemon {
         try sitecustomizePy.write(to: sitecustomizeURL, atomically: true, encoding: .utf8)
     }
 
-    private func writeStudentModuleHint(in directory: URL, submissionFilename: String?) throws {
+    private func writeStudentModuleHint(in directory: URL, preferredFilename: String?) throws {
         let hintURL = directory.appendingPathComponent(".chickadee_student_module")
         if FileManager.default.fileExists(atPath: hintURL.path) {
             try FileManager.default.removeItem(at: hintURL)
         }
 
-        guard let submissionFilename, !submissionFilename.isEmpty else { return }
-        let submittedName = URL(fileURLWithPath: submissionFilename).lastPathComponent
-        guard !submittedName.isEmpty else { return }
-
-        let ext = URL(fileURLWithPath: submittedName).pathExtension.lowercased()
-        let preferredModuleFile: String
-        if ext == "py" {
-            preferredModuleFile = submittedName
-        } else if ext == "ipynb" {
-            preferredModuleFile = (submittedName as NSString).deletingPathExtension + ".py"
-        } else {
-            return
-        }
-        guard !preferredModuleFile.isEmpty else { return }
-        try preferredModuleFile.write(to: hintURL, atomically: true, encoding: .utf8)
+        guard let preferredFilename, !preferredFilename.isEmpty else { return }
+        try preferredFilename.write(to: hintURL, atomically: true, encoding: .utf8)
     }
+}
+
+private func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory: URL) throws {
+    guard let enumerator = FileManager.default.enumerator(
+        at: sourceDirectory,
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: [.skipsHiddenFiles]
+    ) else {
+        return
+    }
+
+    for case let sourceURL as URL in enumerator {
+        let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else { continue }
+        let relativePath = sourceURL.path.replacingOccurrences(of: sourceDirectory.path + "/", with: "")
+        let destinationURL = destinationDirectory.appendingPathComponent(relativePath)
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+    }
+}
+
+private func legacyPreferredStudentModuleFilename(submissionFilename: String?) -> String? {
+    guard let submissionFilename, !submissionFilename.isEmpty else { return nil }
+    let submittedName = URL(fileURLWithPath: submissionFilename).lastPathComponent
+    guard !submittedName.isEmpty else { return nil }
+
+    let ext = URL(fileURLWithPath: submittedName).pathExtension.lowercased()
+    if ext == "py" {
+        return submittedName
+    }
+    if ext == "ipynb" {
+        return (submittedName as NSString).deletingPathExtension + ".py"
+    }
+    return nil
+}
+
+private func shouldNormalizePythonSubmission(
+    manifest: TestProperties,
+    submissionFilename: String?,
+    submissionDirectory: URL
+) -> Bool {
+    let requiredPythonFiles = manifest.requiredFiles.filter {
+        URL(fileURLWithPath: $0).pathExtension.lowercased() == "py"
+    }
+    if !requiredPythonFiles.isEmpty { return true }
+
+    if let submissionFilename {
+        let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()
+        if ["py", "ipynb", "json"].contains(ext) {
+            return true
+        }
+    }
+
+    if manifest.testSuites.contains(where: { URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py" }) {
+        return true
+    }
+
+    guard let enumerator = FileManager.default.enumerator(
+        at: submissionDirectory,
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: [.skipsHiddenFiles]
+    ) else {
+        return false
+    }
+    for case let fileURL as URL in enumerator {
+        let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
+        guard values?.isRegularFile == true else { continue }
+        let ext = fileURL.pathExtension.lowercased()
+        if ["py", "ipynb", "json"].contains(ext) {
+            return true
+        }
+    }
+    return false
 }
 
 // MARK: - Script result JSON (optional last-line protocol)

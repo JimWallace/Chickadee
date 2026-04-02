@@ -121,7 +121,8 @@ final class SubmissionQueryRoutesTests: XCTestCase {
 
     private func makeCollection(
         submissionID: String,
-        outcomes: [TestOutcome] = []
+        outcomes: [TestOutcome] = [],
+        warnings: [String] = []
     ) -> TestOutcomeCollection {
         TestOutcomeCollection(
             submissionID: submissionID,
@@ -136,6 +137,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             errorCount: outcomes.filter { $0.status == .error }.count,
             timeoutCount: outcomes.filter { $0.status == .timeout }.count,
             executionTimeMs: 100,
+            warnings: warnings,
             runnerVersion: "shell-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
@@ -318,9 +320,29 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             XCTAssertEqual(body.submissionID, "sub_res1")
             XCTAssertEqual(body.buildStatus, .passed)
             XCTAssertEqual(body.outcomes.count, 1)
+            XCTAssertEqual(body.warnings, [])
             XCTAssertEqual(body.outcomes[0].testName, "test_alpha")
             XCTAssertEqual(body.passCount, 1)
             XCTAssertEqual(body.failCount, 0)
+        })
+    }
+
+    func testGetResultsReturnsWarnings() async throws {
+        let cookie = try await loginAsAdmin()
+        try await insertSubmission(id: "sub_res_warn")
+        let collection = makeCollection(
+            submissionID: "sub_res_warn",
+            outcomes: [makeOutcome(name: "test_alpha", tier: .pub, status: .pass)],
+            warnings: ["Notebook submission.py was normalized before grading."]
+        )
+        try await insertResult(submissionID: "sub_res_warn", collection: collection)
+
+        try await app.asyncTest(.GET, "/api/v1/submissions/sub_res_warn/results", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = try self.decodeCollection(from: res.body)
+            XCTAssertEqual(body.warnings, ["Notebook submission.py was normalized before grading."])
         })
     }
 

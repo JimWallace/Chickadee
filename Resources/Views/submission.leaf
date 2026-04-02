@@ -34,6 +34,17 @@ Submission #(submissionID)
 
 #else:
 
+#if(hasWarnings):
+<div class="warning-box">
+    <h2>Warnings</h2>
+    <ul class="warning-list">
+    #for(warning in warnings):
+        <li>#(warning)</li>
+    #endfor
+    </ul>
+</div>
+#endif
+
 #if(buildFailed):
 <div class="error-box">
     <h2>Build failed</h2>
@@ -133,6 +144,21 @@ Submission #(submissionID)
     word-break: break-word;
     overflow-x: auto;
     line-height: 1.45;
+}
+.warning-box {
+    margin-bottom: 1rem;
+    padding: .85rem 1rem;
+    border-radius: .5rem;
+    background: #fff8e1;
+    border: 1px solid #f1c96b;
+}
+.warning-box h2 {
+    margin: 0 0 .5rem 0;
+    font-size: 1rem;
+}
+.warning-list {
+    margin: 0;
+    padding-left: 1.25rem;
 }
 </style>
 #endexport
