@@ -78,16 +78,15 @@ services:
   # ----------------------------------------------------------------
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
-    entrypoint: ["/app/chickadee-runner"]
+    entrypoint: ["/bin/sh", "-lc"]
     volumes:
       - chickadee-data:/data:ro
     command:
-      - --api-base-url
-      - http://server:8080
-      - --worker-id
-      - runner-01
-      - --max-jobs
-      - "4"
+      - >
+        exec /app/chickadee-runner
+        --api-base-url http://server:8080
+        --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
+        --max-jobs "${RUNNER_MAX_JOBS:-4}"
       # Note: --sandbox is intentionally omitted here.
       # Docker already provides container-level process isolation.
       # To enable OS-level sandboxing (Linux unshare namespaces),

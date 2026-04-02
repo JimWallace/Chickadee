@@ -81,10 +81,10 @@ func classifyHTTPRetry(statusCode: Int, body: String) -> RetryDisposition {
     switch statusCode {
     case 401, 403:
         return .terminal("HTTP \(statusCode): \(body)")
+    case 408, 425, 429, 500, 502, 503, 504:
+        return .retryable("HTTP \(statusCode): \(body)")
     case 409:
         return .terminal("HTTP 409: \(body)")
-    case 502, 503, 504:
-        return .retryable("HTTP \(statusCode): \(body)")
     default:
         return .terminal("HTTP \(statusCode): \(body)")
     }

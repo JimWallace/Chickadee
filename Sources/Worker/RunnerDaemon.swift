@@ -266,12 +266,23 @@ actor WorkerDaemon {
                     try await Task.sleep(for: delay)
                 }
             } catch JobPollerError.duplicateWorkerID(let message) {
-                writeStructuredRunnerLog(event: "local_execution_error", fields: [
+                let delay = backoff.next()
+                let seconds = delay.components.seconds
+                recordConnectionLostIfNeeded(
+                    stage: .poll,
+                    message: message,
+                    retryInSeconds: Int(seconds)
+                )
+                writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
                     "runner_id": workerID,
-                    "error_type": "duplicate_worker_id",
+                    "slot": slot,
+                    "status": "duplicate_worker_id",
+                    "failure_stage": RunnerRetryStage.poll.rawValue,
+                    "retryable": true,
                     "error_message_summary": message,
+                    "retry_in_seconds": seconds,
                 ])
-                throw JobPollerError.duplicateWorkerID(message)
+                try await Task.sleep(for: delay)
             } catch JobPollerError.transportError(let underlying) {
                 // Server is unreachable (connection refused, DNS failure, etc.).
                 // Apply the same exponential backoff used for the no-job poll and
@@ -290,6 +301,58 @@ actor WorkerDaemon {
                     "failure_stage": RunnerRetryStage.poll.rawValue,
                     "retryable": true,
                     "error_message_summary": underlying.localizedDescription,
+                    "retry_in_seconds": seconds,
+                ])
+                try await Task.sleep(for: delay)
+            } catch JobPollerError.httpError(let statusCode, let body) {
+                let disposition = classifyHTTPRetry(statusCode: statusCode, body: body)
+                switch disposition {
+                case .retryable(let message):
+                    let delay = backoff.next()
+                    let seconds = delay.components.seconds
+                    recordConnectionLostIfNeeded(
+                        stage: .poll,
+                        message: message,
+                        retryInSeconds: Int(seconds)
+                    )
+                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "http_error",
+                        "failure_stage": RunnerRetryStage.poll.rawValue,
+                        "retryable": true,
+                        "http_status": statusCode,
+                        "error_message_summary": message,
+                        "retry_in_seconds": seconds,
+                    ])
+                    try await Task.sleep(for: delay)
+                case .terminal(let message):
+                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "http_error",
+                        "failure_stage": RunnerRetryStage.poll.rawValue,
+                        "retryable": false,
+                        "http_status": statusCode,
+                        "error_message_summary": message,
+                    ])
+                    throw JobPollerError.httpError(statusCode, body)
+                }
+            } catch JobPollerError.unexpectedResponse {
+                let delay = backoff.next()
+                let seconds = delay.components.seconds
+                recordConnectionLostIfNeeded(
+                    stage: .poll,
+                    message: "unexpected response from API server",
+                    retryInSeconds: Int(seconds)
+                )
+                writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
+                    "runner_id": workerID,
+                    "slot": slot,
+                    "status": "unexpected_response",
+                    "failure_stage": RunnerRetryStage.poll.rawValue,
+                    "retryable": true,
+                    "error_message_summary": "unexpected response from API server",
                     "retry_in_seconds": seconds,
                 ])
                 try await Task.sleep(for: delay)

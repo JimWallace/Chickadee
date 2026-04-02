@@ -199,6 +199,10 @@ https://github.com/JimWallace/Chickadee/pkgs/container/chickadee
 docker compose up -d --scale runner=4
 ```
 
+Scaled Docker runners should each have a unique worker ID. The bundled Compose
+file defaults to `runner-${HOSTNAME}` so replicas do not conflict with each
+other. For non-Docker deployments, assign a distinct `--worker-id` per runner.
+
 Each runner instance gets a unique worker ID derived from its container ID.
 
 During an upgrade or server restart, existing runner containers should reconnect

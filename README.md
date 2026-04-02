@@ -52,6 +52,10 @@ docker compose up -d --scale runner=4
 docker compose up -d --build
 ```
 
+Each scaled Docker runner now derives a unique default worker ID from its
+container hostname. If you run runners outside Docker, make sure each one still
+uses a distinct `--worker-id`.
+
 For HTTPS, nginx, and production configuration see **[deploy/README.md](deploy/README.md)**.
 
 ### VM / systemd

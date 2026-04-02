@@ -113,6 +113,40 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         }
     }
 
+    private actor FlakyPoller: JobPolling {
+        enum FailureMode {
+            case http500
+            case duplicateWorkerID
+        }
+
+        private var failuresRemaining: Int
+        private let failureMode: FailureMode
+        private(set) var requestCount = 0
+
+        init(failuresRemaining: Int, failureMode: FailureMode) {
+            self.failuresRemaining = failuresRemaining
+            self.failureMode = failureMode
+        }
+
+        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Job? {
+            requestCount += 1
+            if failuresRemaining > 0 {
+                failuresRemaining -= 1
+                switch failureMode {
+                case .http500:
+                    throw .httpError(500, "temporary server failure")
+                case .duplicateWorkerID:
+                    throw .duplicateWorkerID("workerID already in use")
+                }
+            }
+            return nil
+        }
+
+        func observedRequestCount() -> Int {
+            requestCount
+        }
+    }
+
     private actor MockReporter: Reporting {
         private var collections: [TestOutcomeCollection] = []
         private var heartbeatCount = 0
@@ -665,5 +699,61 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         )
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testWorkerDaemonRetriesPollingAfterTransientHTTP500() async throws {
+        let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
+        let reporter = MockReporter()
+        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-http500-retry",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
+        )
+
+        let task = Task {
+            try await daemon.run()
+        }
+
+        let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+            await poller.observedRequestCount() >= 3
+        }
+        XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
+
+        task.cancel()
+        _ = await task.result
+    }
+
+    func testWorkerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
+        let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
+        let reporter = MockReporter()
+        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-duplicate-id-retry",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil
+        )
+
+        let task = Task {
+            try await daemon.run()
+        }
+
+        let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+            await poller.observedRequestCount() >= 3
+        }
+        XCTAssertTrue(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
+
+        task.cancel()
+        _ = await task.result
     }
 }
