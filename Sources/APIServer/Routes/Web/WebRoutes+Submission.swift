@@ -205,6 +205,7 @@ extension WebRoutes {
 
         var buildFailed     = false
         var compilerOutput: String? = nil
+        var warnings:       [String] = []
         var outcomes:       [OutcomeRow] = []
         var passCount       = 0
         var totalTests      = 0
@@ -297,6 +298,7 @@ extension WebRoutes {
                 let visible     = collection.filtering(tiers: allowedTiers)
                 buildFailed     = collection.buildStatus == .failed
                 compilerOutput  = collection.compilerOutput
+                warnings        = collection.warnings
                 passCount       = visible.passCount
                 totalTests      = visible.totalTests
                 executionTimeMs = collection.executionTimeMs
@@ -372,6 +374,8 @@ extension WebRoutes {
             resultSource:      resultSource,
             buildFailed:       buildFailed,
             compilerOutput:    compilerOutput,
+            hasWarnings:       !warnings.isEmpty,
+            warnings:          warnings,
             outcomes:          outcomes,
             passCount:         passCount,
             totalTests:        totalTests,

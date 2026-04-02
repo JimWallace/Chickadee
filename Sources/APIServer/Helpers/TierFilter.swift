@@ -33,6 +33,8 @@ extension TestOutcomeCollection {
             executionTimeMs: executionTimeMs,
             totalPoints:     filtered.reduce(0) { $0 + $1.points },
             earnedPoints:    filtered.filter { $0.status == .pass }.reduce(0) { $0 + $1.points },
+            warnings:        warnings,
+            jobStartedAt:    jobStartedAt,
             runnerVersion:   runnerVersion,
             timestamp:       timestamp
         )

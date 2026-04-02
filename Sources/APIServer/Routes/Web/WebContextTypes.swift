@@ -142,6 +142,8 @@ struct SubmissionContext: Encodable {
     let resultSource: String
     let buildFailed: Bool
     let compilerOutput: String?
+    let hasWarnings: Bool
+    let warnings: [String]
     let outcomes: [OutcomeRow]
     let passCount: Int
     let totalTests: Int

@@ -304,9 +304,9 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         )
     }
 
-    private func notebookJSON(markdown: String) -> String {
+    private func notebookJSON(code: String) -> String {
         """
-        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":[\(markdown.debugDescription)]}]}
+        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","metadata":{},"source":[\(code.debugDescription)]}]}
         """
     }
 
@@ -360,7 +360,7 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         submissionID: String
     ) throws -> Job {
         let submissionPath = root.appendingPathComponent("\(submissionID).ipynb")
-        try Data(notebookJSON(markdown: submissionID).utf8).write(to: submissionPath)
+        try Data(notebookJSON(code: "print(\(submissionID.debugDescription))\n").utf8).write(to: submissionPath)
 
         let setupZipPath = root.appendingPathComponent("\(submissionID)-setup.zip").path
         try makeZip(at: setupZipPath, files: [

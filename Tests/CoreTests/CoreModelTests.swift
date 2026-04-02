@@ -217,6 +217,7 @@ struct CoreModelTests {
             errorCount: 0,
             timeoutCount: 0,
             executionTimeMs: 100,
+            warnings: ["Notebook renamed to .py was normalized before grading."],
             runnerVersion: "shell-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 0)
         )
@@ -228,6 +229,7 @@ struct CoreModelTests {
         #expect(decoded.outcomes.count == 1)
         #expect(decoded.outcomes[0].testName == "test_foo")
         #expect(decoded.outcomes[0].isFirstPassSuccess)
+        #expect(decoded.warnings == ["Notebook renamed to .py was normalized before grading."])
     }
 
     @Test func failedCollectionHasNoOutcomes() throws {
