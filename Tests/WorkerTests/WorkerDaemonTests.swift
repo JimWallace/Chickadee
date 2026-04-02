@@ -427,6 +427,34 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         return await condition()
     }
 
+    private func withEnvironment(
+        _ values: [String: String],
+        perform: () async throws -> Void
+    ) async throws {
+        let originals = Dictionary(uniqueKeysWithValues: values.keys.map { key in
+            (key, ProcessInfo.processInfo.environment[key])
+        })
+
+        for (key, value) in values {
+            setEnvironmentValue(value, forKey: key)
+        }
+        defer {
+            for (key, original) in originals {
+                setEnvironmentValue(original, forKey: key)
+            }
+        }
+
+        try await perform()
+    }
+
+    private func setEnvironmentValue(_ value: String?, forKey key: String) {
+        if let value {
+            setenv(key, value, 1)
+        } else {
+            unsetenv(key)
+        }
+    }
+
     func testWorkerDaemonCanBeCancelledWhilePollingForNoWork() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = MockReporter()
@@ -702,31 +730,36 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
     }
 
     func testWorkerDaemonRetriesPollingAfterTransientHTTP500() async throws {
-        let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
-        let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
-        let daemon = WorkerDaemon(
-            poller: poller,
-            reporter: reporter,
-            runner: runner,
-            apiBaseURL: URL(string: "http://localhost:8080")!,
-            workerID: "worker-http500-retry",
-            workerSecret: "secret",
-            maxConcurrentJobs: 1,
-            runnerProfile: nil
-        )
+        try await withEnvironment([
+            "RUNNER_RETRY_BASE_DELAY_MS": "10",
+            "RUNNER_RETRY_MAX_DELAY_MS": "20",
+        ]) {
+            let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
+            let reporter = MockReporter()
+            let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+            let daemon = WorkerDaemon(
+                poller: poller,
+                reporter: reporter,
+                runner: runner,
+                apiBaseURL: URL(string: "http://localhost:8080")!,
+                workerID: "worker-http500-retry",
+                workerSecret: "secret",
+                maxConcurrentJobs: 1,
+                runnerProfile: nil
+            )
 
-        let task = Task {
-            try await daemon.run()
+            let task = Task {
+                try await daemon.run()
+            }
+
+            let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+                await poller.observedRequestCount() >= 3
+            }
+            XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
+
+            task.cancel()
+            _ = await task.result
         }
-
-        let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
-            await poller.observedRequestCount() >= 3
-        }
-        XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
-
-        task.cancel()
-        _ = await task.result
     }
 
     func testWorkerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {

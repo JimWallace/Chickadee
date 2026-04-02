@@ -39,46 +39,38 @@ Admin
     </div>
     <div class="diagnostics-grid">
         <article class="diagnostic-panel">
-            <div class="diagnostic-panel-header">
-                <h3>Runner load</h3>
-                <span class="diagnostic-legend">
-                    <span><i class="legend-swatch avg"></i>avg util</span>
-                    <span><i class="legend-swatch max"></i>peak util</span>
-                </span>
-            </div>
-            <div class="diagnostic-chart" id="diag-runner-load-chart"></div>
+            <h3>Completed jobs</h3>
+            <dl class="diagnostic-list">
+                <div><dt>Passed</dt><dd id="diag-status-passed">—</dd></div>
+                <div><dt>Failed</dt><dd id="diag-status-failed">—</dd></div>
+                <div><dt>Errored</dt><dd id="diag-status-error">—</dd></div>
+                <div><dt>Timed out</dt><dd id="diag-status-timeout">—</dd></div>
+            </dl>
         </article>
         <article class="diagnostic-panel">
-            <div class="diagnostic-panel-header">
-                <h3>Completed jobs</h3>
-                <span class="diagnostic-legend">
-                    <span><i class="legend-swatch passed"></i>pass</span>
-                    <span><i class="legend-swatch failed"></i>fail</span>
-                    <span><i class="legend-swatch error"></i>error</span>
-                    <span><i class="legend-swatch timeout"></i>timeout</span>
-                </span>
-            </div>
-            <div class="diagnostic-chart" id="diag-job-status-chart"></div>
+            <h3>Job latency</h3>
+            <dl class="diagnostic-list">
+                <div><dt>Average queue wait</dt><dd id="diag-queue-avg">—</dd></div>
+                <div><dt>Median queue wait</dt><dd id="diag-queue-p50">—</dd></div>
+                <div><dt>Average execution</dt><dd id="diag-exec-avg">—</dd></div>
+                <div><dt>Median execution</dt><dd id="diag-exec-p50">—</dd></div>
+            </dl>
         </article>
         <article class="diagnostic-panel">
-            <div class="diagnostic-panel-header">
-                <h3>Server activity</h3>
-                <span class="diagnostic-legend">
-                    <span><i class="legend-swatch request"></i>requests</span>
-                    <span><i class="legend-swatch latency"></i>p95 latency</span>
-                </span>
-            </div>
-            <div class="diagnostic-chart" id="diag-request-chart"></div>
+            <h3>Runner compatibility</h3>
+            <dl class="diagnostic-list">
+                <div><dt>Compatible matches</dt><dd id="diag-compat-ok">—</dd></div>
+                <div><dt>Rejected matches</dt><dd id="diag-compat-no">—</dd></div>
+                <div><dt>Blocked jobs</dt><dd id="diag-compat-blocked-detail">—</dd></div>
+            </dl>
         </article>
         <article class="diagnostic-panel">
-            <div class="diagnostic-panel-header">
-                <h3>Job latency</h3>
-                <span class="diagnostic-legend">
-                    <span><i class="legend-swatch wait"></i>queue p95</span>
-                    <span><i class="legend-swatch exec"></i>run p95</span>
-                </span>
-            </div>
-            <div class="diagnostic-chart" id="diag-job-latency-chart"></div>
+            <h3>Runner capacity</h3>
+            <dl class="diagnostic-list">
+                <div><dt>Total active jobs</dt><dd id="diag-runner-active-jobs">—</dd></div>
+                <div><dt>Total open slots</dt><dd id="diag-runner-open-slots">—</dd></div>
+                <div><dt>Jobs assigned since start</dt><dd id="diag-runner-assigned-total">—</dd></div>
+            </dl>
         </article>
     </div>
 </section>
@@ -340,63 +332,37 @@ Admin
 .diagnostic-panel {
     padding: .9rem 1rem 1rem;
 }
-.diagnostic-panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-    margin-bottom: .6rem;
-}
-.diagnostic-panel-header h3 {
+.diagnostic-panel h3 {
     margin: 0;
     font-size: 1rem;
+    margin-bottom: .7rem;
 }
-.diagnostic-legend {
+.diagnostic-list {
+    margin: 0;
+    display: grid;
+    gap: .55rem;
+}
+.diagnostic-list div {
     display: flex;
-    flex-wrap: wrap;
-    gap: .6rem;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .75rem;
+    padding-top: .15rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+.diagnostic-list div:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+.diagnostic-list dt {
+    margin: 0;
     color: var(--muted);
-    font-size: .78rem;
+    font-size: .88rem;
 }
-.diagnostic-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-}
-.legend-swatch {
-    width: .7rem;
-    height: .7rem;
-    display: inline-block;
-    border-radius: 999px;
-}
-.legend-swatch.avg { background: var(--blue); }
-.legend-swatch.max { background: var(--gray-700); }
-.legend-swatch.passed { background: var(--green); }
-.legend-swatch.failed { background: var(--amber); }
-.legend-swatch.error { background: var(--red); }
-.legend-swatch.timeout { background: var(--purple); }
-.legend-swatch.request { background: var(--health-teal-light); }
-.legend-swatch.latency { background: var(--blue); }
-.legend-swatch.wait { background: var(--health-teal); }
-.legend-swatch.exec { background: var(--amber); }
-.diagnostic-chart {
-    min-height: 2.75rem;
-}
-.diagnostic-chart svg {
-    width: 100%;
-    height: 2.75rem;
-    display: block;
-}
-.diagnostic-empty {
-    color: var(--muted);
-    font-size: .8rem;
-    min-height: 2.75rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px dashed var(--border);
-    border-radius: 999px;
-    background: var(--surface-muted);
+.diagnostic-list dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
 }
 #workers-table th[data-sort-key],
 #users-table th[data-sort-key],
@@ -421,12 +387,6 @@ Admin
 #users-table th[data-sort-key].sort-desc::after,
 #courses-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
-}
-@media (max-width: 700px) {
-    .diagnostic-panel-header {
-        align-items: start;
-        flex-direction: column;
-    }
 }
 </style>
 <script>
@@ -490,10 +450,20 @@ Admin
     var diagQueueP95 = document.getElementById('diag-queue-p95');
     var diagExecP95 = document.getElementById('diag-exec-p95');
     var diagCompatBlocked = document.getElementById('diag-compat-blocked');
-    var diagRunnerLoadChart = document.getElementById('diag-runner-load-chart');
-    var diagJobStatusChart = document.getElementById('diag-job-status-chart');
-    var diagRequestChart = document.getElementById('diag-request-chart');
-    var diagJobLatencyChart = document.getElementById('diag-job-latency-chart');
+    var diagStatusPassed = document.getElementById('diag-status-passed');
+    var diagStatusFailed = document.getElementById('diag-status-failed');
+    var diagStatusError = document.getElementById('diag-status-error');
+    var diagStatusTimeout = document.getElementById('diag-status-timeout');
+    var diagQueueAvg = document.getElementById('diag-queue-avg');
+    var diagQueueP50 = document.getElementById('diag-queue-p50');
+    var diagExecAvg = document.getElementById('diag-exec-avg');
+    var diagExecP50 = document.getElementById('diag-exec-p50');
+    var diagCompatOk = document.getElementById('diag-compat-ok');
+    var diagCompatNo = document.getElementById('diag-compat-no');
+    var diagCompatBlockedDetail = document.getElementById('diag-compat-blocked-detail');
+    var diagRunnerActiveJobs = document.getElementById('diag-runner-active-jobs');
+    var diagRunnerOpenSlots = document.getElementById('diag-runner-open-slots');
+    var diagRunnerAssignedTotal = document.getElementById('diag-runner-assigned-total');
 
     function formatDuration(ms) {
         if (ms == null || ms < 0) return '—';
@@ -508,6 +478,21 @@ Admin
         if (el) el.textContent = value;
     }
 
+    function statusCount(metrics, status) {
+        if (!metrics || !Array.isArray(metrics.jobStatusCounts)) return 0;
+        var entry = metrics.jobStatusCounts.find(function (item) {
+            return item && item.status === status;
+        });
+        return entry && entry.count != null ? entry.count : 0;
+    }
+
+    function runnerTotal(metrics, selector) {
+        if (!metrics || !Array.isArray(metrics.runnerLoads)) return 0;
+        return metrics.runnerLoads.reduce(function (total, runner) {
+            return total + (selector(runner) || 0);
+        }, 0);
+    }
+
     function updateDiagnosticsCards(metrics) {
         if (!metrics) return;
         setText(diagQueueDepth, String(metrics.queueDepth == null ? '—' : metrics.queueDepth));
@@ -520,170 +505,37 @@ Admin
                 ? metrics.compatibility.jobsBlockedNoCompatibleRunner
                 : '—'
         ));
+        setText(diagStatusPassed, String(statusCount(metrics, 'passed')));
+        setText(diagStatusFailed, String(statusCount(metrics, 'failed')));
+        setText(diagStatusError, String(statusCount(metrics, 'error')));
+        setText(diagStatusTimeout, String(statusCount(metrics, 'timeout')));
+        setText(diagQueueAvg, formatDuration(metrics.queueWait && metrics.queueWait.averageMs));
+        setText(diagQueueP50, formatDuration(metrics.queueWait && metrics.queueWait.p50Ms));
+        setText(diagExecAvg, formatDuration(metrics.execution && metrics.execution.averageMs));
+        setText(diagExecP50, formatDuration(metrics.execution && metrics.execution.p50Ms));
+        setText(diagCompatOk, String(
+            metrics.compatibility && metrics.compatibility.compatibleAssignmentAttempts != null
+                ? metrics.compatibility.compatibleAssignmentAttempts
+                : '—'
+        ));
+        setText(diagCompatNo, String(
+            metrics.compatibility && metrics.compatibility.incompatibleAssignmentAttempts != null
+                ? metrics.compatibility.incompatibleAssignmentAttempts
+                : '—'
+        ));
+        setText(diagCompatBlockedDetail, String(
+            metrics.compatibility && metrics.compatibility.jobsBlockedNoCompatibleRunner != null
+                ? metrics.compatibility.jobsBlockedNoCompatibleRunner
+                : '—'
+        ));
+        setText(diagRunnerActiveJobs, String(runnerTotal(metrics, function (runner) { return runner.activeJobs; })));
+        setText(diagRunnerOpenSlots, String(runnerTotal(metrics, function (runner) { return runner.availableCapacity; })));
+        setText(diagRunnerAssignedTotal, String(runnerTotal(metrics, function (runner) { return runner.assignedJobsSinceStart; })));
         if (diagnosticsStamp) {
             diagnosticsStamp.textContent = metrics.generatedAt
                 ? 'Updated ' + formatRelative(metrics.generatedAt)
                 : 'Live';
         }
-    }
-
-    function setEmptyChart(el, message) {
-        if (!el) return;
-        el.innerHTML = '<div class="diagnostic-empty">' + escapeHtml(message) + '</div>';
-    }
-
-    function linePath(values, min, max, width, height) {
-        var points = [];
-        var denominator = Math.max(1, max - min);
-        var count = Math.max(1, values.length - 1);
-        values.forEach(function (value, index) {
-            var x = (index / count) * width;
-            var y = height - (((value == null ? min : value) - min) / denominator) * height;
-            points.push((index === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2));
-        });
-        return points.join(' ');
-    }
-
-    function renderDualLineChart(el, buckets, options) {
-        if (!el) return;
-        if (!Array.isArray(buckets) || buckets.length === 0) {
-            setEmptyChart(el, 'No recent data yet.');
-            return;
-        }
-        var width = 640;
-        var height = 44;
-        var padX = 4;
-        var padY = 4;
-        var chartWidth = width - padX * 2;
-        var chartHeight = height - padY * 2;
-        var primaryValues = buckets.map(options.primary);
-        var secondaryValues = buckets.map(options.secondary);
-        var combined = primaryValues.concat(secondaryValues).filter(function (value) {
-            return value != null && Number.isFinite(value);
-        });
-        if (combined.length === 0) {
-            setEmptyChart(el, 'No recent data yet.');
-            return;
-        }
-        var min = options.min != null ? options.min : Math.min.apply(null, combined);
-        var max = options.max != null ? options.max : Math.max.apply(null, combined);
-        if (min === max) max = min + 1;
-        var primaryPath = linePath(primaryValues, min, max, chartWidth, chartHeight);
-        var secondaryPath = linePath(secondaryValues, min, max, chartWidth, chartHeight);
-        el.innerHTML = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">'
-            + '<rect x="' + padX + '" y="' + padY + '" width="' + chartWidth + '" height="' + chartHeight + '" rx="999" fill="var(--surface-muted)" stroke="var(--border)" stroke-width="1"></rect>'
-            + '<path d="' + primaryPath + '" transform="translate(' + padX + ' ' + padY + ')" fill="none" stroke="' + options.primaryColor + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>'
-            + '<path d="' + secondaryPath + '" transform="translate(' + padX + ' ' + padY + ')" fill="none" stroke="' + options.secondaryColor + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="' + (options.secondaryDash || '0') + '"></path>'
-            + '</svg>';
-    }
-
-    function renderStackedStatusChart(el, buckets) {
-        if (!el) return;
-        if (!Array.isArray(buckets) || buckets.length === 0) {
-            setEmptyChart(el, 'No recent completed jobs yet.');
-            return;
-        }
-        var width = 640;
-        var height = 44;
-        var padX = 4;
-        var padY = 4;
-        var chartWidth = width - padX * 2;
-        var chartHeight = height - padY * 2;
-        var maxTotal = Math.max.apply(null, buckets.map(function (bucket) {
-            return bucket.completedJobs || 0;
-        }).concat([0]));
-        if (maxTotal === 0) {
-            setEmptyChart(el, 'No recent completed jobs yet.');
-            return;
-        }
-        var barWidth = Math.max(6, chartWidth / Math.max(1, buckets.length) - 2);
-        var parts = [];
-        buckets.forEach(function (bucket, index) {
-            var x = padX + index * (chartWidth / Math.max(1, buckets.length));
-            var y = padY + chartHeight;
-            [
-                { key: 'passedCount', color: 'var(--green)' },
-                { key: 'failedCount', color: 'var(--amber)' },
-                { key: 'errorCount', color: 'var(--red)' },
-                { key: 'timeoutCount', color: 'var(--purple)' }
-            ].forEach(function (part) {
-                var value = bucket[part.key] || 0;
-                if (!value) return;
-                var barHeight = (value / maxTotal) * chartHeight;
-                y -= barHeight;
-                parts.push('<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + barWidth.toFixed(2) + '" height="' + barHeight.toFixed(2) + '" rx="1.5" fill="' + part.color + '"></rect>');
-            });
-        });
-        el.innerHTML = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">'
-            + '<rect x="' + padX + '" y="' + padY + '" width="' + chartWidth + '" height="' + chartHeight + '" rx="999" fill="var(--surface-muted)" stroke="var(--border)" stroke-width="1"></rect>'
-            + parts.join('')
-            + '</svg>';
-    }
-
-    function renderRequestChart(el, buckets) {
-        if (!el) return;
-        if (!Array.isArray(buckets) || buckets.length === 0) {
-            setEmptyChart(el, 'No recent request data yet.');
-            return;
-        }
-        var width = 640;
-        var height = 44;
-        var padX = 4;
-        var padY = 4;
-        var chartWidth = width - padX * 2;
-        var chartHeight = height - padY * 2;
-        var maxRequests = Math.max.apply(null, buckets.map(function (bucket) { return bucket.requestCount || 0; }).concat([0]));
-        var latencyValues = buckets.map(function (bucket) { return bucket.requestP95Ms; }).filter(function (value) {
-            return value != null && Number.isFinite(value);
-        });
-        if (maxRequests === 0 && latencyValues.length === 0) {
-            setEmptyChart(el, 'No recent request data yet.');
-            return;
-        }
-        var bars = [];
-        var barWidth = Math.max(6, chartWidth / Math.max(1, buckets.length) - 2);
-        buckets.forEach(function (bucket, index) {
-            var x = padX + index * (chartWidth / Math.max(1, buckets.length));
-            var barHeight = maxRequests > 0 ? ((bucket.requestCount || 0) / maxRequests) * chartHeight : 0;
-            bars.push('<rect x="' + x.toFixed(2) + '" y="' + (padY + chartHeight - barHeight).toFixed(2) + '" width="' + barWidth.toFixed(2) + '" height="' + barHeight.toFixed(2) + '" rx="1.5" fill="var(--health-teal-light)"></rect>');
-        });
-        var latencyPath = '';
-        if (latencyValues.length > 0) {
-            latencyPath = '<path d="' + linePath(
-                buckets.map(function (bucket) { return bucket.requestP95Ms; }),
-                0,
-                Math.max.apply(null, latencyValues.concat([1])),
-                chartWidth,
-                chartHeight
-            ) + '" transform="translate(' + padX + ' ' + padY + ')" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path>';
-        }
-        el.innerHTML = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">'
-            + '<rect x="' + padX + '" y="' + padY + '" width="' + chartWidth + '" height="' + chartHeight + '" rx="999" fill="var(--surface-muted)" stroke="var(--border)" stroke-width="1"></rect>'
-            + bars.join('')
-            + latencyPath
-            + '</svg>';
-    }
-
-    function renderDiagnosticsCharts(series) {
-        var buckets = series && Array.isArray(series.buckets) ? series.buckets : [];
-        renderDualLineChart(diagRunnerLoadChart, buckets, {
-            primary: function (bucket) { return bucket.avgRunnerUtilizationPercent; },
-            secondary: function (bucket) { return bucket.maxRunnerUtilizationPercent; },
-            primaryColor: 'var(--blue)',
-            secondaryColor: 'var(--gray-700)',
-            secondaryDash: '6 4',
-            min: 0,
-            max: 100
-        });
-        renderStackedStatusChart(diagJobStatusChart, buckets);
-        renderRequestChart(diagRequestChart, buckets);
-        renderDualLineChart(diagJobLatencyChart, buckets, {
-            primary: function (bucket) { return bucket.queueWaitP95Ms; },
-            secondary: function (bucket) { return bucket.executionP95Ms; },
-            primaryColor: 'var(--health-teal)',
-            secondaryColor: 'var(--amber)',
-            min: 0
-        });
     }
 
     function renderWorkers(workers) {
@@ -847,21 +699,13 @@ Admin
 
     async function refreshDiagnostics() {
         try {
-            var responses = await Promise.all([
-                fetch('/admin/metrics', {
-                    headers: { 'Accept': 'application/json' },
-                    cache: 'no-store'
-                }),
-                fetch('/admin/metrics/timeseries?hours=24&bucketMinutes=15', {
-                    headers: { 'Accept': 'application/json' },
-                    cache: 'no-store'
-                })
-            ]);
-            if (!responses[0].ok || !responses[1].ok) return;
-            var metrics = await responses[0].json();
-            var series = await responses[1].json();
+            var response = await fetch('/admin/metrics', {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+            if (!response.ok) return;
+            var metrics = await response.json();
             updateDiagnosticsCards(metrics);
-            renderDiagnosticsCharts(series);
         } catch (_) {
             if (diagnosticsStamp) diagnosticsStamp.textContent = 'Diagnostics unavailable';
         }

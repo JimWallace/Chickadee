@@ -253,8 +253,31 @@ final class ObservabilityTests: XCTestCase {
         })
     }
 
-    private func makeSubmission(submissionID: String) async throws -> (APITestSetup, APISubmission) {
-        let setup = try await makeSetup(id: "setup_\(submissionID)")
+    func testQueueDepthCountsOnlyWorkerClaimablePendingJobs() async throws {
+        _ = try await makeSubmission(submissionID: "sub_worker_pending", gradingMode: "worker")
+        _ = try await makeSubmission(submissionID: "sub_browser_pending", gradingMode: "browser")
+
+        let cookie = try await loginUser(
+            username: "admin-queue-depth",
+            password: "password123",
+            role: "admin",
+            on: app
+        )
+
+        try await app.asyncTest(.GET, "/admin/metrics", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { response in
+            XCTAssertEqual(response.status, .ok)
+            let payload = try response.content.decode(InternalMetricsResponse.self)
+            XCTAssertEqual(payload.queueDepth, 1)
+        })
+    }
+
+    private func makeSubmission(
+        submissionID: String,
+        gradingMode: String = "worker"
+    ) async throws -> (APITestSetup, APISubmission) {
+        let setup = try await makeSetup(id: "setup_\(submissionID)", gradingMode: gradingMode)
         let submission = APISubmission(
             id: submissionID,
             testSetupID: try setup.requireID(),
@@ -267,12 +290,15 @@ final class ObservabilityTests: XCTestCase {
         return (setup, submission)
     }
 
-    private func makeSetup(id: String = "setup_metrics") async throws -> APITestSetup {
+    private func makeSetup(
+        id: String = "setup_metrics",
+        gradingMode: String = "worker"
+    ) async throws -> APITestSetup {
         let course = APICourse(code: "OBS_\(id)", name: "Observability", enrollmentMode: .closed)
         try await course.save(on: app.db)
         let setup = APITestSetup(
             id: id,
-            manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
+            manifest: #"{"schemaVersion":1,"gradingMode":"\#(gradingMode)","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
             zipPath: "/tmp/\(id).zip",
             courseID: try course.requireID()
         )
