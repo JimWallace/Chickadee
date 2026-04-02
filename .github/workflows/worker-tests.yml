@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install worker test dependencies
+        run: apt-get update -qq && apt-get install -y --no-install-recommends file
+
       - name: Run stable worker test targets
         run: |
           swift test --filter ScriptInvocationTests
@@ -33,6 +36,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install worker test dependencies
+        run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run core runner behavior tests
         run: |
@@ -58,6 +64,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install worker test dependencies
+        run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run timeout and sandbox-focused worker tests
         run: |
