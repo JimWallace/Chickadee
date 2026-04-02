@@ -4,21 +4,14 @@ Admin
 #endexport
 #export("content"):
 <section class="admin-section admin-diagnostics">
-    <div style="display:flex;align-items:end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-        <div>
-            <h2 style="margin:0">Diagnostics</h2>
-            <p style="margin:.35rem 0 0;color:var(--muted)">Live server and runner activity for the last 24 hours.</p>
-        </div>
-        <div class="diagnostics-stamp" id="diagnostics-stamp">Loading…</div>
-    </div>
     <div class="diagnostics-cards" id="diagnostics-cards">
         <article class="diagnostic-card">
-            <div class="diagnostic-label">Queue depth</div>
+            <div class="diagnostic-label">24h max queue depth</div>
             <div class="diagnostic-value" id="diag-queue-depth">—</div>
         </article>
         <article class="diagnostic-card">
-            <div class="diagnostic-label">In flight</div>
-            <div class="diagnostic-value" id="diag-in-flight">—</div>
+            <div class="diagnostic-label">24h peak util</div>
+            <div class="diagnostic-value" id="diag-peak-util">—</div>
         </article>
         <article class="diagnostic-card">
             <div class="diagnostic-label">Active runners</div>
@@ -31,46 +24,6 @@ Admin
         <article class="diagnostic-card">
             <div class="diagnostic-label">p95 execution</div>
             <div class="diagnostic-value" id="diag-exec-p95">—</div>
-        </article>
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">No-compatible-runner blocks</div>
-            <div class="diagnostic-value" id="diag-compat-blocked">—</div>
-        </article>
-    </div>
-    <div class="diagnostics-grid">
-        <article class="diagnostic-panel">
-            <h3>Completed jobs</h3>
-            <dl class="diagnostic-list">
-                <div><dt>Passed</dt><dd id="diag-status-passed">—</dd></div>
-                <div><dt>Failed</dt><dd id="diag-status-failed">—</dd></div>
-                <div><dt>Errored</dt><dd id="diag-status-error">—</dd></div>
-                <div><dt>Timed out</dt><dd id="diag-status-timeout">—</dd></div>
-            </dl>
-        </article>
-        <article class="diagnostic-panel">
-            <h3>Job latency</h3>
-            <dl class="diagnostic-list">
-                <div><dt>Average queue wait</dt><dd id="diag-queue-avg">—</dd></div>
-                <div><dt>Median queue wait</dt><dd id="diag-queue-p50">—</dd></div>
-                <div><dt>Average execution</dt><dd id="diag-exec-avg">—</dd></div>
-                <div><dt>Median execution</dt><dd id="diag-exec-p50">—</dd></div>
-            </dl>
-        </article>
-        <article class="diagnostic-panel">
-            <h3>Runner compatibility</h3>
-            <dl class="diagnostic-list">
-                <div><dt>Compatible matches</dt><dd id="diag-compat-ok">—</dd></div>
-                <div><dt>Rejected matches</dt><dd id="diag-compat-no">—</dd></div>
-                <div><dt>Blocked jobs</dt><dd id="diag-compat-blocked-detail">—</dd></div>
-            </dl>
-        </article>
-        <article class="diagnostic-panel">
-            <h3>Runner capacity</h3>
-            <dl class="diagnostic-list">
-                <div><dt>Total active jobs</dt><dd id="diag-runner-active-jobs">—</dd></div>
-                <div><dt>Total open slots</dt><dd id="diag-runner-open-slots">—</dd></div>
-                <div><dt>Jobs assigned since start</dt><dd id="diag-runner-assigned-total">—</dd></div>
-            </dl>
         </article>
     </div>
 </section>
@@ -288,81 +241,28 @@ Admin
 </section>
 <style>
 .admin-diagnostics {
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--accent, #2b6cb0) 12%, transparent), transparent 35%),
-        linear-gradient(180deg, color-mix(in srgb, var(--panel, #fff) 94%, #eef6ff), var(--panel, #fff));
-}
-.diagnostics-stamp {
-    color: var(--muted);
-    font-size: .9rem;
+    padding-bottom: 1rem;
 }
 .diagnostics-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: .75rem;
-    margin-bottom: 1rem;
-}
-.diagnostic-card,
-.diagnostic-panel {
-    border: 1px solid var(--border, rgba(0,0,0,.08));
-    border-radius: 14px;
-    background: color-mix(in srgb, white 92%, #f5f9ff);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
 }
 .diagnostic-card {
-    padding: .9rem 1rem;
+    padding: .75rem .9rem;
+    border: 1px solid var(--border, rgba(0,0,0,.08));
+    border-radius: 10px;
+    background: var(--panel, #fff);
 }
 .diagnostic-label {
     color: var(--muted);
     font-size: .82rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
 }
 .diagnostic-value {
-    margin-top: .35rem;
-    font-size: 1.55rem;
-    font-weight: 700;
-    line-height: 1.1;
-}
-.diagnostics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: .85rem;
-}
-.diagnostic-panel {
-    padding: .9rem 1rem 1rem;
-}
-.diagnostic-panel h3 {
-    margin: 0;
-    font-size: 1rem;
-    margin-bottom: .7rem;
-}
-.diagnostic-list {
-    margin: 0;
-    display: grid;
-    gap: .55rem;
-}
-.diagnostic-list div {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: .75rem;
-    padding-top: .15rem;
-    border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-}
-.diagnostic-list div:first-child {
-    border-top: none;
-    padding-top: 0;
-}
-.diagnostic-list dt {
-    margin: 0;
-    color: var(--muted);
-    font-size: .88rem;
-}
-.diagnostic-list dd {
-    margin: 0;
+    margin-top: .2rem;
+    font-size: 1.2rem;
     font-weight: 600;
-    text-align: right;
+    line-height: 1.2;
 }
 #workers-table th[data-sort-key],
 #users-table th[data-sort-key],
@@ -443,27 +343,13 @@ Admin
     }
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-    var diagnosticsStamp = document.getElementById('diagnostics-stamp');
     var diagQueueDepth = document.getElementById('diag-queue-depth');
-    var diagInFlight = document.getElementById('diag-in-flight');
+    var diagPeakUtil = document.getElementById('diag-peak-util');
     var diagActiveRunners = document.getElementById('diag-active-runners');
     var diagQueueP95 = document.getElementById('diag-queue-p95');
     var diagExecP95 = document.getElementById('diag-exec-p95');
-    var diagCompatBlocked = document.getElementById('diag-compat-blocked');
-    var diagStatusPassed = document.getElementById('diag-status-passed');
-    var diagStatusFailed = document.getElementById('diag-status-failed');
-    var diagStatusError = document.getElementById('diag-status-error');
-    var diagStatusTimeout = document.getElementById('diag-status-timeout');
-    var diagQueueAvg = document.getElementById('diag-queue-avg');
-    var diagQueueP50 = document.getElementById('diag-queue-p50');
-    var diagExecAvg = document.getElementById('diag-exec-avg');
-    var diagExecP50 = document.getElementById('diag-exec-p50');
-    var diagCompatOk = document.getElementById('diag-compat-ok');
-    var diagCompatNo = document.getElementById('diag-compat-no');
-    var diagCompatBlockedDetail = document.getElementById('diag-compat-blocked-detail');
-    var diagRunnerActiveJobs = document.getElementById('diag-runner-active-jobs');
-    var diagRunnerOpenSlots = document.getElementById('diag-runner-open-slots');
-    var diagRunnerAssignedTotal = document.getElementById('diag-runner-assigned-total');
+    var totalRunnerCount = workersBody.querySelectorAll('tr').length;
+    var latestDiagnostics = null;
 
     function formatDuration(ms) {
         if (ms == null || ms < 0) return '—';
@@ -478,70 +364,33 @@ Admin
         if (el) el.textContent = value;
     }
 
-    function statusCount(metrics, status) {
-        if (!metrics || !Array.isArray(metrics.jobStatusCounts)) return 0;
-        var entry = metrics.jobStatusCounts.find(function (item) {
-            return item && item.status === status;
-        });
-        return entry && entry.count != null ? entry.count : 0;
-    }
-
-    function runnerTotal(metrics, selector) {
-        if (!metrics || !Array.isArray(metrics.runnerLoads)) return 0;
-        return metrics.runnerLoads.reduce(function (total, runner) {
-            return total + (selector(runner) || 0);
-        }, 0);
+    function renderActiveRunnerSummary() {
+        if (!diagActiveRunners) return;
+        if (!latestDiagnostics || latestDiagnostics.activeRunners == null) {
+            setText(diagActiveRunners, '—');
+            return;
+        }
+        var active = latestDiagnostics.activeRunners;
+        var total = totalRunnerCount;
+        setText(diagActiveRunners, total > 0 ? String(active) + '/' + String(total) : String(active));
     }
 
     function updateDiagnosticsCards(metrics) {
         if (!metrics) return;
-        setText(diagQueueDepth, String(metrics.queueDepth == null ? '—' : metrics.queueDepth));
-        setText(diagInFlight, String(metrics.inFlightJobs == null ? '—' : metrics.inFlightJobs));
-        setText(diagActiveRunners, String(metrics.activeRunners == null ? '—' : metrics.activeRunners));
+        latestDiagnostics = metrics;
+        setText(diagQueueDepth, String(metrics.maxQueueDepth == null ? '—' : metrics.maxQueueDepth));
+        setText(diagPeakUtil, metrics.peakUtilizationPercent == null ? '—' : String(metrics.peakUtilizationPercent) + '%');
+        renderActiveRunnerSummary();
         setText(diagQueueP95, formatDuration(metrics.queueWait && metrics.queueWait.p95Ms));
         setText(diagExecP95, formatDuration(metrics.execution && metrics.execution.p95Ms));
-        setText(diagCompatBlocked, String(
-            metrics.compatibility && metrics.compatibility.jobsBlockedNoCompatibleRunner != null
-                ? metrics.compatibility.jobsBlockedNoCompatibleRunner
-                : '—'
-        ));
-        setText(diagStatusPassed, String(statusCount(metrics, 'passed')));
-        setText(diagStatusFailed, String(statusCount(metrics, 'failed')));
-        setText(diagStatusError, String(statusCount(metrics, 'error')));
-        setText(diagStatusTimeout, String(statusCount(metrics, 'timeout')));
-        setText(diagQueueAvg, formatDuration(metrics.queueWait && metrics.queueWait.averageMs));
-        setText(diagQueueP50, formatDuration(metrics.queueWait && metrics.queueWait.p50Ms));
-        setText(diagExecAvg, formatDuration(metrics.execution && metrics.execution.averageMs));
-        setText(diagExecP50, formatDuration(metrics.execution && metrics.execution.p50Ms));
-        setText(diagCompatOk, String(
-            metrics.compatibility && metrics.compatibility.compatibleAssignmentAttempts != null
-                ? metrics.compatibility.compatibleAssignmentAttempts
-                : '—'
-        ));
-        setText(diagCompatNo, String(
-            metrics.compatibility && metrics.compatibility.incompatibleAssignmentAttempts != null
-                ? metrics.compatibility.incompatibleAssignmentAttempts
-                : '—'
-        ));
-        setText(diagCompatBlockedDetail, String(
-            metrics.compatibility && metrics.compatibility.jobsBlockedNoCompatibleRunner != null
-                ? metrics.compatibility.jobsBlockedNoCompatibleRunner
-                : '—'
-        ));
-        setText(diagRunnerActiveJobs, String(runnerTotal(metrics, function (runner) { return runner.activeJobs; })));
-        setText(diagRunnerOpenSlots, String(runnerTotal(metrics, function (runner) { return runner.availableCapacity; })));
-        setText(diagRunnerAssignedTotal, String(runnerTotal(metrics, function (runner) { return runner.assignedJobsSinceStart; })));
-        if (diagnosticsStamp) {
-            diagnosticsStamp.textContent = metrics.generatedAt
-                ? 'Updated ' + formatRelative(metrics.generatedAt)
-                : 'Live';
-        }
     }
 
     function renderWorkers(workers) {
         workers = sortWorkersArray(Array.isArray(workers) ? workers.slice() : []);
+        totalRunnerCount = workers.length;
         if (!Array.isArray(workers) || workers.length === 0) {
             workersBody.innerHTML = '';
+            renderActiveRunnerSummary();
             return;
         }
 
@@ -583,6 +432,7 @@ Admin
                 + '</tr>';
         }).join('');
         applyRelativeTimes(workersBody);
+        renderActiveRunnerSummary();
     }
 
     var workersTable = document.getElementById('workers-table');
@@ -707,7 +557,7 @@ Admin
             var metrics = await response.json();
             updateDiagnosticsCards(metrics);
         } catch (_) {
-            if (diagnosticsStamp) diagnosticsStamp.textContent = 'Diagnostics unavailable';
+            // Keep current diagnostics values on transient polling errors.
         }
     }
 

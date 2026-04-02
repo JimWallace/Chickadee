@@ -65,8 +65,8 @@ struct DiagnosticsConfiguration: Sendable {
 
 struct InternalMetricsResponse: Content, Sendable {
     let generatedAt: Date
-    let queueDepth: Int
-    let inFlightJobs: Int
+    let maxQueueDepth: Int
+    let peakUtilizationPercent: Int?
     let activeRunners: Int
     let runnerLoads: [RunnerLoadResponse]
     let recentWindowHours: Int
@@ -752,17 +752,20 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             activeWindowSeconds: configuration.activeRunnerWindowSeconds,
             on: req.db
         )
-        let queueDepth = try await pendingQueueDepth(on: req.db)
-        let inFlightJobs = try await inFlightJobCount(on: req.db)
         let now = Date()
         let windowHours = max(1, configuration.recentMetricsWindowHours)
         let windowStart = now.addingTimeInterval(Double(-windowHours) * 3600)
 
+        let runnerSnapshots = try await RunnerSnapshot.query(on: req.db)
+            .filter(\.$recordedAt >= windowStart)
+            .sort(\.$recordedAt, .ascending)
+            .all()
         let activeSnapshots = await req.application.workerActivityStore.snapshotsSortedByRecent()
             .filter { now.timeIntervalSince($0.lastActive) <= configuration.activeRunnerWindowSeconds }
         let recentMetrics = try await JobExecutionMetric.query(on: req.db)
             .filter(\.$completedAt >= windowStart)
             .all()
+        let maxQueueDepth = try await maxQueueDepthSince(windowStart: windowStart, now: now, on: req.db)
 
         var statusCounts: [String: Int] = [:]
         var queueWaitValues: [Int] = []
@@ -797,8 +800,8 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
 
         return InternalMetricsResponse(
             generatedAt: now,
-            queueDepth: queueDepth,
-            inFlightJobs: inFlightJobs,
+            maxQueueDepth: maxQueueDepth,
+            peakUtilizationPercent: peakUtilizationPercent(from: runnerSnapshots),
             activeRunners: activeSnapshots.count,
             runnerLoads: runnerLoads,
             recentWindowHours: windowHours,
@@ -1089,18 +1092,124 @@ private extension OperationalDiagnosticsService {
             .filter(\.$kind == APISubmission.Kind.student)
             .all()
 
-        var pendingWorkerStudents = 0
-        for submission in pendingStudents {
-            guard let setup = try await APITestSetup.find(submission.testSetupID, on: db) else { continue }
+        let workerModeSetupIDs = try await workerModeTestSetupIDs(
+            for: pendingStudents.map(\.testSetupID),
+            on: db
+        )
+        let pendingWorkerStudents = pendingStudents.reduce(into: 0) { count, submission in
+            if workerModeSetupIDs.contains(submission.testSetupID) {
+                count += 1
+            }
+        }
+
+        return pendingValidation + pendingWorkerStudents
+    }
+
+    func maxQueueDepthSince(windowStart: Date, now: Date, on db: Database) async throws -> Int {
+        var relevantSubmissions: [String: APISubmission] = [:]
+
+        for submission in try await APISubmission.query(on: db)
+            .filter(\.$submittedAt >= windowStart)
+            .all() {
+            if let id = submission.id {
+                relevantSubmissions[id] = submission
+            }
+        }
+
+        for submission in try await APISubmission.query(on: db)
+            .filter(\.$assignedAt >= windowStart)
+            .all() {
+            if let id = submission.id {
+                relevantSubmissions[id] = submission
+            }
+        }
+
+        for submission in try await APISubmission.query(on: db)
+            .filter(\.$status == "pending")
+            .all() {
+            if let id = submission.id {
+                relevantSubmissions[id] = submission
+            }
+        }
+
+        let workerModeSetupIDs = try await workerModeTestSetupIDs(
+            for: relevantSubmissions.values
+                .filter { $0.kind == APISubmission.Kind.student }
+                .map(\.testSetupID),
+            on: db
+        )
+
+        var queueDepth = 0
+        var maxQueueDepth = 0
+        var events: [(date: Date, delta: Int)] = []
+
+        for submission in relevantSubmissions.values {
+            let isWorkerEligible =
+                submission.kind == APISubmission.Kind.validation
+                || (submission.kind == APISubmission.Kind.student && workerModeSetupIDs.contains(submission.testSetupID))
+            guard isWorkerEligible, let submittedAt = submission.submittedAt else { continue }
+
+            let assignedAt = submission.assignedAt
+            if submittedAt < windowStart && (assignedAt == nil || assignedAt! > windowStart) {
+                queueDepth += 1
+            }
+            if submittedAt >= windowStart && submittedAt <= now {
+                events.append((submittedAt, 1))
+            }
+            if let assignedAt, assignedAt > windowStart && assignedAt <= now {
+                events.append((assignedAt, -1))
+            }
+        }
+
+        maxQueueDepth = queueDepth
+        events.sort {
+            if $0.date == $1.date {
+                return $0.delta > $1.delta
+            }
+            return $0.date < $1.date
+        }
+
+        for event in events {
+            queueDepth = max(0, queueDepth + event.delta)
+            maxQueueDepth = max(maxQueueDepth, queueDepth)
+        }
+
+        return maxQueueDepth
+    }
+
+    func peakUtilizationPercent(from snapshots: [RunnerSnapshot]) -> Int? {
+        var latestByBucketAndRunner: [Int: [String: (activeJobs: Int, maxJobs: Int)]] = [:]
+
+        for snapshot in snapshots {
+            let bucket = Int(snapshot.recordedAt.timeIntervalSince1970 / 60)
+            latestByBucketAndRunner[bucket, default: [:]][snapshot.runnerID] = (
+                activeJobs: max(0, snapshot.activeJobs),
+                maxJobs: max(0, snapshot.maxJobs)
+            )
+        }
+
+        return latestByBucketAndRunner.values.compactMap { runnerStates in
+            let totalActiveJobs = runnerStates.values.reduce(0) { $0 + $1.activeJobs }
+            let totalMaxJobs = runnerStates.values.reduce(0) { $0 + $1.maxJobs }
+            guard totalMaxJobs > 0 else { return nil }
+            return Int((Double(totalActiveJobs) / Double(totalMaxJobs) * 100).rounded())
+        }.max()
+    }
+
+    func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
+        var result: Set<String> = []
+
+        for testSetupID in Set(testSetupIDs) {
+            guard let setup = try await APITestSetup.find(testSetupID, on: db) else { continue }
             let data = Data(setup.manifest.utf8)
             guard
                 let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
                 manifest.gradingMode == .worker
             else { continue }
-            pendingWorkerStudents += 1
+            result.insert(testSetupID)
         }
 
-        return pendingValidation + pendingWorkerStudents
+        return result
     }
 
     func bucketIndex(
