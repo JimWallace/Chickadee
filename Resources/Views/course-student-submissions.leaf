@@ -1,0 +1,58 @@
+#extend("base"):
+#export("title"):
+#(studentName) — Submissions
+#endexport
+#export("content"):
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+    <div>
+        <h1 style="margin:0">#(studentName)</h1>
+        <p style="margin:.35rem 0 0;color:var(--gray-700)">
+            <strong>#(studentUsername)</strong> in #(courseName)
+        </p>
+    </div>
+    <a class="btn action-btn" href="#(backURL)">Back to Instructor Dashboard</a>
+</div>
+
+#if(rows.isEmpty):
+<p class="empty">No submissions yet for this student in the active course.</p>
+#else:
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Assignment</th>
+            <th>Attempt</th>
+            <th>Submitted</th>
+            <th>Status</th>
+            <th>Grade</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(row in rows):
+        <tr>
+            <td>
+                <strong>#(row.assignmentTitle)</strong>
+                #if(row.assignmentSubmissionsURL):
+                <div style="margin-top:.2rem">
+                    <a href="#(row.assignmentSubmissionsURL)" style="font-size:.82rem">Assignment summary</a>
+                </div>
+                #endif
+            </td>
+            <td>#(row.attemptNumber)</td>
+            <td>#(row.submittedAt)</td>
+            <td><span class="tier">#(row.status)</span></td>
+            <td><strong>#(row.gradeText)</strong></td>
+            <td style="white-space:nowrap">
+                <a class="btn action-btn" href="/submissions/#(row.submissionID)">View results</a>
+                <a class="btn action-btn" href="/api/v1/submissions/#(row.submissionID)/download">Download</a>
+                #if(row.canOpenInNotebook):
+                <a class="btn action-btn" href="#(row.openInNotebookURL)">Open</a>
+                #endif
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+#endexport
+#endextend

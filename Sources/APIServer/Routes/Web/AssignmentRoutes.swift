@@ -35,6 +35,7 @@ struct AssignmentRoutes: RouteCollection {
         let r = routes.grouped("instructor")
         r.get(use: list)
         r.get("grades.csv", use: exportGradesCSV)
+        r.get("students", ":studentID", "submissions", use: courseStudentSubmissionsPage)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
@@ -264,7 +265,8 @@ struct AssignmentRoutes: RouteCollection {
                         id: id.uuidString,
                         username: u.username,
                         displayName: u.displayName ?? u.username,
-                        role: u.role
+                        role: u.role,
+                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions"
                     )
                 }
             }

@@ -433,9 +433,9 @@
         </thead>
         <tbody>
         #for(student in enrolledStudents):
-            <tr>
-                <td>#(student.displayName)</td>
-                <td><code>#(student.username)</code></td>
+            <tr class="student-row-link" data-href="#(student.submissionsURL)">
+                <td><a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a></td>
+                <td><a href="#(student.submissionsURL)"><code>#(student.username)</code></a></td>
                 <td>#(student.role)</td>
             </tr>
         #endfor
@@ -454,6 +454,17 @@
     font-weight: 700;
     cursor: grab;
     user-select: none;
+}
+.student-row-link {
+    cursor: pointer;
+}
+.student-row-link td a {
+    color: inherit;
+    text-decoration: none;
+}
+.student-row-link:hover td a strong,
+.student-row-link:hover td a code {
+    text-decoration: underline;
 }
 tr.assignment-draggable.dragging {
     opacity: .55;
@@ -805,6 +816,14 @@ tr.assignment-draggable td {
     if (enrolledTable) {
         var sortCol = -1;
         var sortAsc = true;
+        enrolledTable.querySelectorAll('tbody tr.student-row-link').forEach(function (row) {
+            row.addEventListener('click', function (event) {
+                var target = event.target;
+                if (target instanceof Element && target.closest('a')) return;
+                var href = row.getAttribute('data-href');
+                if (href) window.location.href = href;
+            });
+        });
         enrolledTable.querySelectorAll('th.sortable').forEach(function (th) {
             th.addEventListener('click', function () {
                 var col = parseInt(th.getAttribute('data-col'), 10);
