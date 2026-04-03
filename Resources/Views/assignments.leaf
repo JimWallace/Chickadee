@@ -203,7 +203,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -213,7 +213,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -223,7 +223,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -354,7 +354,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
                         </form>
@@ -363,7 +363,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
                         </form>
@@ -372,7 +372,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
                         </form>

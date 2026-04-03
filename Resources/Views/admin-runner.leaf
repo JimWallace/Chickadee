@@ -51,7 +51,7 @@ Runner #(runner.workerID)
         <tbody>
         #for(job in recentJobs):
             <tr>
-                <td><code>#(job.submissionID)</code></td>
+                <td><a href="/submissions/#(job.submissionID)"><code>#(job.submissionID)</code></a></td>
                 <td>#(job.finalStatus)</td>
                 <td class="time">#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
                 <td class="time">#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
