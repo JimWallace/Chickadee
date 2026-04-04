@@ -7,14 +7,14 @@ let package = Package(
         .macOS(.v15)
     ],
     dependencies: [
-        .package(url: "https://github.com/vapor/vapor.git", from: "4.89.0"),
-        .package(url: "https://github.com/vapor/fluent.git", from: "4.9.0"),
-        .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.9.2"),
-        .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.6.0"),
-        .package(url: "https://github.com/vapor/leaf.git", from: "4.3.0"),
-        .package(url: "https://github.com/vapor/jwt.git", from: "5.0.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.0.0"),
+        .package(url: "https://github.com/vapor/vapor.git", from: "4.121.3"),
+        .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
+        .package(url: "https://github.com/vapor/fluent-postgres-driver.git", from: "2.12.0"),
+        .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
+        .package(url: "https://github.com/vapor/leaf.git", from: "4.5.1"),
+        .package(url: "https://github.com/vapor/jwt.git", from: "5.1.2"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.7.1"),
+        .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.1.1"),
     ],
     targets: [
         // MARK: - Core library
