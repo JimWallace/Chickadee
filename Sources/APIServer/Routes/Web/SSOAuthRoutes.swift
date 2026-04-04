@@ -160,24 +160,25 @@ struct SSOAuthRoutes: RouteCollection {
     /// Updates mutable profile fields on every login.
     private func upsertUser(claims: OIDCIDTokenClaims, on req: Request) async throws -> APIUser {
         let subject = claims.sub.value
-        let username = claims.winaccountname?.nilIfBlank() ?? subject
+        let claimConfig = req.application.oidcConfig?.claimConfig ?? OIDCClaimConfig()
+
+        // Username: use the configured claim, fall back to sub.
+        let username = claims.value(for: claimConfig.usernameClaim)?.nilIfBlank() ?? subject
 
         let preferredName = claims.preferredName?.nilIfBlank()
 
-        // Prefer full name from 'name' claim; fall back to given + family
+        // Prefer full name from 'name' claim; fall back to given + family.
         let displayName: String? = {
             if let n = claims.name?.nilIfBlank() { return n }
             let parts = [claims.givenName, claims.familyName].compactMap { $0?.nilIfBlank() }
             return parts.isEmpty ? nil : parts.joined(separator: " ")
         }()
 
-        // Prefer explicit user_id claim, then provider username, then stable subject.
-        let userIdentifier =
-            claims.userID?.nilIfBlank()
-            ?? claims.winaccountname?.nilIfBlank()
-            ?? subject
-        let studentID = claims.studentID?.nilIfBlank()
-        let email = claims.email?.nilIfBlank()
+        // userIdentifier: use configured username claim, then sub.
+        let userIdentifier = claims.value(for: claimConfig.usernameClaim)?.nilIfBlank() ?? subject
+
+        let studentID = claims.extraClaims["student_id"]?.nilIfBlank()
+        let email = claims.value(for: claimConfig.emailClaim)?.nilIfBlank()
         let mappedRole = mappedSSORole(
             username: username,
             userIdentifier: userIdentifier,

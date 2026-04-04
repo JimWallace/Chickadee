@@ -1,16 +1,17 @@
 // APIServer/Auth/OIDCConfiguration.swift
 //
-// OIDC discovery + runtime configuration for UWaterloo DUO OIDC.
+// OIDC discovery + runtime configuration.
 // Loaded once at startup (from main()) and stored in app.oidcConfig.
 //
 // Environment variables:
-//   OIDC_AUTH_SERVER   — optional; auth server base URL used for discovery
-//   OIDC_CLIENT_ID     — required when AUTH_MODE is 'sso' or 'dual'
-//   OIDC_CLIENT_SECRET — required when AUTH_MODE is 'sso' or 'dual'
-//   OIDC_CALLBACK      — optional; callback path (default: /auth/sso/callback)
-//
-// Discovery URL pattern (DUO OIDC at UWaterloo):
-//   https://sso-4ccc589b.sso.duosecurity.com/oidc/{CLIENT_ID}/.well-known/openid-configuration
+//   OIDC_AUTH_SERVER      — auth server base URL used for discovery
+//   OIDC_CLIENT_ID        — required when AUTH_MODE is 'sso' or 'dual'
+//   OIDC_CLIENT_SECRET    — required when AUTH_MODE is 'sso' or 'dual'
+//   OIDC_CALLBACK         — callback path (default: /auth/sso/callback)
+//   OIDC_USERNAME_CLAIM   — JWT claim used as the Chickadee username
+//                           (default: "preferred_username")
+//   OIDC_EMAIL_CLAIM      — JWT claim used as the email address
+//                           (default: "email")
 
 import Vapor
 import JWT
@@ -52,6 +53,40 @@ struct OIDCTokenResponse: Codable, Sendable {
 
 // MARK: - Runtime Configuration
 
+// MARK: - Claim configuration
+
+/// Which JWT claim names to use for user identity fields.
+/// Configured via env vars; defaults match standard OIDC claims.
+struct OIDCClaimConfig: Sendable {
+    /// JWT claim used as the Chickadee username. Default: `preferred_username`.
+    /// UWaterloo DUO: set to `winaccountname`.
+    let usernameClaim: String
+
+    /// JWT claim used as the email address. Default: `email`.
+    let emailClaim: String
+
+    init(
+        usernameClaim: String = "preferred_username",
+        emailClaim: String = "email"
+    ) {
+        self.usernameClaim = usernameClaim
+        self.emailClaim    = emailClaim
+    }
+
+    static func load() -> OIDCClaimConfig {
+        let username = Environment.get("OIDC_USERNAME_CLAIM")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = Environment.get("OIDC_EMAIL_CLAIM")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return OIDCClaimConfig(
+            usernameClaim: username?.isEmpty == false ? username! : "preferred_username",
+            emailClaim:    email?.isEmpty    == false ? email!    : "email"
+        )
+    }
+}
+
+// MARK: - Runtime Configuration
+
 /// Resolved OIDC configuration, stored in app.oidcConfig after startup.
 struct OIDCConfiguration: Sendable {
     let clientID: String
@@ -59,6 +94,7 @@ struct OIDCConfiguration: Sendable {
     /// The absolute redirect URI registered with the IdP.
     let redirectURI: String
     let discovery: OIDCDiscovery
+    let claimConfig: OIDCClaimConfig
 
     // MARK: Startup loader
 
@@ -134,13 +170,18 @@ struct OIDCConfiguration: Sendable {
         let jwksJSON = jwksBuffer.readString(length: jwksBuffer.readableBytes) ?? ""
         try await app.jwt.keys.add(jwksJSON: jwksJSON)
 
-        app.logger.info("OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI)")
+        let claimConfig = OIDCClaimConfig.load()
+        app.logger.info(
+            "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI), " +
+            "usernameClaim=\(claimConfig.usernameClaim), emailClaim=\(claimConfig.emailClaim)"
+        )
 
         return OIDCConfiguration(
             clientID: clientID,
             clientSecret: clientSecret,
             redirectURI: redirectURI,
-            discovery: discovery
+            discovery: discovery,
+            claimConfig: claimConfig
         )
     }
 }
