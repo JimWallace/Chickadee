@@ -148,6 +148,12 @@ struct SSOAuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=sso_failed")
         }
 
+        // Persist tokens in the session for use at logout time.
+        // - access token: revoked via revocation_endpoint on logout
+        // - id token:     passed as id_token_hint to end_session_endpoint
+        req.session.data["oidc_access_token"] = tokenResponse.accessToken
+        req.session.data["oidc_id_token"]     = tokenResponse.idToken
+
         // Establish session — identical to local login
         req.auth.login(user)
         req.session.authenticate(user)

@@ -25,12 +25,18 @@ struct OIDCDiscovery: Codable, Sendable {
     let authorizationEndpoint: String
     let tokenEndpoint: String
     let jwksURI: String
+    /// RFC 7009 token revocation endpoint (optional — not all providers publish this).
+    let revocationEndpoint: String?
+    /// OIDC RP-Initiated Logout end-session endpoint (optional).
+    let endSessionEndpoint: String?
 
     enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
         case tokenEndpoint         = "token_endpoint"
         case jwksURI               = "jwks_uri"
+        case revocationEndpoint    = "revocation_endpoint"
+        case endSessionEndpoint    = "end_session_endpoint"
     }
 }
 
@@ -42,12 +48,14 @@ struct OIDCTokenResponse: Codable, Sendable {
     let idToken: String
     let tokenType: String
     let expiresIn: Int?
+    let refreshToken: String?
 
     enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case idToken     = "id_token"
-        case tokenType   = "token_type"
-        case expiresIn   = "expires_in"
+        case accessToken  = "access_token"
+        case idToken      = "id_token"
+        case tokenType    = "token_type"
+        case expiresIn    = "expires_in"
+        case refreshToken = "refresh_token"
     }
 }
 
