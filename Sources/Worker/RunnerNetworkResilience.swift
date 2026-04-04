@@ -140,3 +140,39 @@ func runnerEnvironmentInt(_ key: String, default defaultValue: Int) -> Int {
     }
     return value
 }
+
+struct ExponentialBackoff {
+    private let initial: Duration
+    private let max: Duration
+    private var current: Duration
+
+    init(initial: Duration, max: Duration) {
+        self.initial = initial
+        self.max     = max
+        self.current = initial
+    }
+
+    mutating func next() -> Duration {
+        let doubled = min(current.secondsValue * 2, max.secondsValue)
+        current = Duration.milliseconds(Int64((doubled * 1000).rounded()))
+        // Lower bound is the initial interval so next() never returns zero,
+        // which would defeat the purpose of backing off.
+        let lo = initial.secondsValue
+        let hi = Swift.max(lo, doubled)
+        return Duration.milliseconds(Int64((Double.random(in: lo...hi) * 1000).rounded()))
+    }
+
+    mutating func reset() {
+        current = initial
+    }
+
+    fileprivate static func secondsValue(of duration: Duration) -> Double {
+        Double(duration.components.seconds) + (Double(duration.components.attoseconds) / 1_000_000_000_000_000_000)
+    }
+}
+
+private extension Duration {
+    var secondsValue: Double {
+        ExponentialBackoff.secondsValue(of: self)
+    }
+}
