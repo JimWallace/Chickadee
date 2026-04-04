@@ -386,6 +386,9 @@ handling / IdP token revocation on logout.
 
 ## Reference Material
 
-- `docs/architecture.md` — full architecture document with diagrams
+- `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
+- `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
+- `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
+- `docs/ci-followups.md` — CI reshaping notes from v0.4.6; WorkerTests gate status
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history
