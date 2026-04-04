@@ -8,24 +8,40 @@ on:
 jobs:
   core-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
       image: swift:6.3-jammy
       options: --privileged
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
 
       - name: Run CoreTests
         run: swift test --parallel --filter CoreTests
 
   api-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
       image: swift:6.3-jammy
       options: --privileged
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
 
       - name: Install system test dependencies
         run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
@@ -35,6 +51,7 @@ jobs:
 
   api-tests-postgres:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
       image: swift:6.3-jammy
       options: --privileged
@@ -62,6 +79,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+
       - name: Install system test dependencies
         run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
 
@@ -70,6 +94,7 @@ jobs:
 
   browser-runner-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v6
@@ -83,31 +108,43 @@ jobs:
 
   worker-tests-stable:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container:
       image: swift:6.3-jammy
       options: --privileged
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
 
       - name: Install worker test dependencies
         run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run stable worker test targets
-        run: |
-          swift test --filter ScriptInvocationTests
-          swift test --filter WorkerRequestSignerTests
-          swift test --filter WorkerDaemonTests
-          swift test --filter RunnerWorkDirTests
+        run: swift test --filter 'ScriptInvocationTests|WorkerRequestSignerTests|WorkerDaemonTests|RunnerWorkDirTests'
 
   worker-tests-runner-core:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container:
       image: swift:6.3-jammy
       options: --privileged
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
 
       - name: Install worker test dependencies
         run: apt-get update -qq && apt-get install -y --no-install-recommends file
@@ -129,6 +166,7 @@ jobs:
 
   worker-tests-timeouts:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container:
       image: swift:6.3-jammy
       options: --privileged
@@ -136,18 +174,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+
       - name: Install worker test dependencies
         run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run timeout and sandbox-focused worker tests
-        run: |
-          swift test --filter 'WorkerTests.WorkerTests/testScriptTimesOut'
-          swift test --filter 'WorkerTests.WorkerTests/testScriptTimeoutReapsBackgroundChildProcess'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerExitZero'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerExitOne'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerCapturesStdout'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerCapturesStderr'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerTimesOut'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerTimeoutReapsBackgroundChildProcess'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerWorkDir'
-          swift test --filter 'WorkerTests.WorkerTests/testSandboxedRunnerBlocksNetworkAccess'
+        run: swift test --filter 'testScriptTimesOut|testScriptTimeoutReaps|testSandboxedRunner'
