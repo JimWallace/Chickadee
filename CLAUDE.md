@@ -26,9 +26,11 @@ Three Swift targets share a clean dependency boundary:
   depend on this.
 
 Test suites are **shell scripts** bundled by the instructor inside the test
-setup zip. The runner executes them generically — no language-specific code
-paths exist in Swift. Adding a new language means writing a new shell script;
-no Swift changes are required.
+setup zip. The runner executes them generically. Adding a new language means
+writing a new shell script; no Swift changes are required for the *grading*
+path. The runner does include Python/notebook-specific submission normalization
+(`SubmissionNormalizer`, `NotebookExtractor`) that pre-processes uploads before
+handing them to the shell scripts.
 
 ---
 
@@ -37,7 +39,10 @@ no Swift changes are required.
 **Shell scripts, not language runners.** Each test suite is a `.sh` file at the
 root of the instructor's test setup zip. The runner runs them with `/bin/sh`
 and maps the exit code to a result status. No per-language runners, no runner
-JSON protocol.
+JSON protocol. The runner does contain a Python/notebook normalization layer
+(`SubmissionNormalizer`) that pre-processes uploaded files into a grading
+workspace before the shell scripts run. This is a submission-format concern,
+not a grading concern — the shell scripts themselves remain language-agnostic.
 
 **Instructor bundles the helper library.** Any helper library (Swift, Python,
 etc.) is included in the test setup zip by the instructor. The runner does not
@@ -286,7 +291,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.1**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.36**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -335,6 +340,32 @@ Post-8 work also complete:
 - v0.4.0 test dependency trees (`dependsOn` in manifest, tree UI, runner pre-check)
 - v0.4.0 Docker Compose deployment (`Dockerfile`, `docker-compose.yml`, entrypoint,
   nginx config, updated `deploy/README.md`)
+- v0.4.1 zip-slip guard, security headers, CSRF integration test infrastructure
+- v0.4.2 browser-runner enrollment gate, submission error message hardening
+- v0.4.5 test coverage expansion (334 tests total); `WebRoutes.swift` split into
+  `WebContextTypes`, `WebRoutes+Notebook`, `WebRoutes+Submission`
+- v0.4.7–0.4.11 notebook/assignment edit round-trip fixes; multipart save hardening;
+  Linux worker timeout hardening; browser/WASM runner CI coverage
+- v0.4.12–0.4.16 submission result display polish (test names, traceback extraction,
+  JSON blob cleanup); notebook cache busting; assignment editor display-name persistence
+- v0.4.17–0.4.18 concurrent worker claim race fixed (`WorkerClaimQueue` eager init);
+  Marmoset import missing-notebook and `starterNotebook` overwrite bugs fixed
+- v0.4.19 `WorkerClaimQueue` converted to Swift actor; admin dashboard queries parallelized
+- v0.4.20 `ScriptRunner` timeout converted to structured `Task`; `ZipArchiver` drops
+  `DispatchQueue` bridge; domain-specific error types (`NotebookLookupError`, `WorkerJobError`)
+- v0.4.22 `ExponentialBackoff` zero-delay fix; `Reporter.report()` retry logic added
+- v0.4.23 runner advertises its version on every poll (`runnerVersion` field)
+- v0.4.24 Safari autofill bypass for admin credential inputs
+- v0.4.25 admin runner dashboard: version, load, avg run/wait columns; runner advertises
+  `maxConcurrentJobs`; `submission_diagnostics` table now populated
+- v0.4.26 admin runner table JS poll fixed (columns were reverting after 5-second refresh)
+- v0.4.30 runner-side Python submission normalization (MIME detection, notebook extraction,
+  submission warnings surfaced in results)
+- v0.4.32 unique Docker runner IDs; compact sparkline charts; reconnect hardening;
+  HTTP retry classification improved (408, 425, 429, 500 now retryable)
+- v0.4.33 poll-loop retry backoff now honors `RUNNER_RETRY_*` env settings
+- v0.4.34 instructor student submission drilldown; course-scoped student submissions page
+- v0.4.36 submission IDs on runner detail page are clickable; UI consistency pass
 
 **Next work:** Gamification (attempt tracking, leaderboards), multi-provider SSO
 (generalize `OIDCIDTokenClaims` claim names beyond UWaterloo DUO), refresh token
