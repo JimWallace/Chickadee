@@ -215,7 +215,7 @@ def require_function(name: str):
     errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
 """
 
-private let sitecustomizePy = """
+let sitecustomizePy = """
 import builtins
 import test_runtime as _tr
 

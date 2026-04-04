@@ -384,7 +384,7 @@ private func iso8601String(_ date: Date) -> String {
     ISO8601DateFormatter().string(from: date)
 }
 
-private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
     let enrollments = try await APICourseEnrollment.query(on: db).all()
     var counts: [UUID: Int] = [:]
     for e in enrollments {
@@ -393,7 +393,7 @@ private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: In
     return counts
 }
 
-private func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
     let assignments = try await APIAssignment.query(on: db).all()
     var counts: [UUID: Int] = [:]
     for a in assignments {
