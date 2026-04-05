@@ -50,8 +50,11 @@ struct NotebookExtractor {
 
             let trimmedSource = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedSource.isEmpty else { continue }
+
+            let cellSource = sanitizeCellForModule(trimmedSource)
+            guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
             codeCellCount += 1
-            parts.append("# --- cell \(index + 1) ---\n\(trimmedSource)")
+            parts.append("# --- cell \(index + 1) ---\n\(cellSource)")
         }
 
         guard !parts.isEmpty else {
@@ -62,6 +65,97 @@ struct NotebookExtractor {
             source: "# Generated from \(filename)\n\n" + parts.joined(separator: "\n\n") + "\n",
             codeCellCount: codeCellCount
         )
+    }
+
+    // Sanitizes a single notebook code cell for use as a module-level Python
+    // source block:
+    //
+    //   • IPython magic commands (lines beginning with %) and shell pass-through
+    //     commands (lines beginning with !) are stripped — they are never valid
+    //     Python outside a Jupyter kernel.
+    //
+    //   • Top-level statements are classified as either *definition* lines
+    //     (def, async def, class, import, from, decorator @, or comment #) or
+    //     *usage* lines (everything else: calls, assignments, print statements,
+    //     assertions, etc.).  Each top-level statement and its indented body
+    //     travel together.
+    //
+    //   • Definition code is emitted at module level so functions and classes
+    //     remain importable by the test runner.
+    //
+    //   • Usage code is wrapped in `if __name__ == "__main__":` so it does not
+    //     execute — and cannot raise NameError, crash, or produce side-effects —
+    //     when the generated file is imported as a module.
+    //
+    // Example input cell:
+    //
+    //   def mailingLabel(record):
+    //       ...
+    //
+    //   print(mailingLabel(patient0))   # student test call
+    //
+    // Output:
+    //
+    //   def mailingLabel(record):
+    //       ...
+    //
+    //   if __name__ == "__main__":
+    //       print(mailingLabel(patient0))
+    //
+    func sanitizeCellForModule(_ source: String) -> String {
+        // Strip magic/shell lines first.
+        let lines = source.components(separatedBy: "\n").filter { line in
+            let s = line.trimmingCharacters(in: .whitespaces)
+            return !s.hasPrefix("%") && !s.hasPrefix("!")
+        }
+
+        // Walk line-by-line, routing each line to the definition or usage bucket.
+        // A top-level (non-indented, non-empty) line sets the current block kind;
+        // subsequent indented lines (the block body) inherit that kind.
+        var defLines:   [String] = []
+        var usageLines: [String] = []
+        var inUsage = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let isTopLevel = !line.isEmpty && !(line.first?.isWhitespace ?? true)
+
+            if isTopLevel && !trimmed.isEmpty {
+                inUsage = !(trimmed.hasPrefix("def ")      ||
+                            trimmed.hasPrefix("async def ") ||
+                            trimmed.hasPrefix("class ")    ||
+                            trimmed.hasPrefix("import ")   ||
+                            trimmed.hasPrefix("from ")     ||
+                            trimmed.hasPrefix("@")         ||
+                            trimmed.hasPrefix("#"))
+            }
+
+            if inUsage {
+                usageLines.append(line)
+            } else {
+                defLines.append(line)
+            }
+        }
+
+        var parts: [String] = []
+
+        let defBlock = defLines.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !defBlock.isEmpty {
+            parts.append(defBlock)
+        }
+
+        let usageBlock = usageLines.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !usageBlock.isEmpty {
+            let indented = usageBlock
+                .components(separatedBy: "\n")
+                .map { "    " + $0 }
+                .joined(separator: "\n")
+            parts.append("if __name__ == \"__main__\":\n\(indented)")
+        }
+
+        return parts.joined(separator: "\n\n")
     }
 }
 
@@ -111,6 +205,7 @@ func extractNotebooksToCode(in directory: URL) throws {
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
         var output = "# Generated from \(item.lastPathComponent)\n\n"
+        let extractor = NotebookExtractor()
         for cell in cells {
             guard cell["cell_type"] as? String == "code" else { continue }
             let raw: String
@@ -120,11 +215,17 @@ func extractNotebooksToCode(in directory: URL) throws {
                 raw = str
             } else { continue }
 
-            // Mirror Python's rstrip(): strip trailing whitespace/newlines.
             var src = raw
             while src.last?.isWhitespace == true { src.removeLast() }
             guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            output += src + "\n\n"
+
+            if language == "python" {
+                let cellSource = extractor.sanitizeCellForModule(src)
+                guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                output += cellSource + "\n\n"
+            } else {
+                output += src + "\n\n"
+            }
         }
 
         try output.write(to: outURL, atomically: true, encoding: .utf8)
