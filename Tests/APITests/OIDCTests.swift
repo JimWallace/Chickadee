@@ -253,13 +253,11 @@ final class OIDCTests: XCTestCase {
             aud: .init(value: ["client-id"]),
             exp: .init(value: Date().addingTimeInterval(300)),
             iat: .init(value: Date()),
-            winaccountname: "jdoe",
             name: "Jane Doe",
             preferredName: "Jane",
             givenName: "Jane",
             familyName: "Doe",
-            userID: "jdoe",
-            studentID: "12345678",
+            preferredUsername: "jdoe",
             email: "jdoe@example.com"
         )
 
@@ -272,15 +270,7 @@ final class OIDCTests: XCTestCase {
             iss: .init(value: "https://issuer.example"),
             aud: .init(value: ["client-id"]),
             exp: .init(value: Date().addingTimeInterval(-300)),
-            iat: .init(value: Date().addingTimeInterval(-600)),
-            winaccountname: nil,
-            name: nil,
-            preferredName: nil,
-            givenName: nil,
-            familyName: nil,
-            userID: nil,
-            studentID: nil,
-            email: nil
+            iat: .init(value: Date().addingTimeInterval(-600))
         )
 
         await XCTAssertThrowsErrorAsync(try await claims.verify(using: NoOpJWTAlgorithm()))
