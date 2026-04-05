@@ -180,8 +180,7 @@ struct OIDCConfiguration: Sendable {
 
         let claimConfig = OIDCClaimConfig.load()
         app.logger.info(
-            "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI), " +
-            "usernameClaim=\(claimConfig.usernameClaim), emailClaim=\(claimConfig.emailClaim)"
+            "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI), usernameClaim=\(claimConfig.usernameClaim), emailClaim=\(claimConfig.emailClaim)"
         )
 
         return OIDCConfiguration(
