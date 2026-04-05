@@ -127,13 +127,11 @@ final class SSOAuthFlowTests: XCTestCase {
             aud: .init(value: audience),
             exp: .init(value: Date().addingTimeInterval(300)),
             iat: .init(value: Date()),
-            winaccountname: username,
             name: name,
             preferredName: "Jane",
             givenName: "Jane",
             familyName: "Doe",
-            userID: "uwaterloo-\(subject)",
-            studentID: "12345678",
+            preferredUsername: username,
             email: email
         )
 

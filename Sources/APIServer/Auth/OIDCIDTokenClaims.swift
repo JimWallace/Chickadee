@@ -130,6 +130,38 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
     }
 }
 
+// MARK: - Memberwise init (for constructing tokens in tests and signing)
+
+extension OIDCIDTokenClaims {
+    init(
+        sub: SubjectClaim,
+        iss: IssuerClaim,
+        aud: AudienceClaim,
+        exp: ExpirationClaim,
+        iat: IssuedAtClaim,
+        name: String? = nil,
+        preferredName: String? = nil,
+        givenName: String? = nil,
+        familyName: String? = nil,
+        preferredUsername: String? = nil,
+        email: String? = nil,
+        extraClaims: [String: String] = [:]
+    ) {
+        self.sub               = sub
+        self.iss               = iss
+        self.aud               = aud
+        self.exp               = exp
+        self.iat               = iat
+        self.name              = name
+        self.preferredName     = preferredName
+        self.givenName         = givenName
+        self.familyName        = familyName
+        self.preferredUsername = preferredUsername
+        self.email             = email
+        self.extraClaims       = extraClaims
+    }
+}
+
 // MARK: - Dynamic string coding key
 
 private struct RawStringKey: CodingKey {
