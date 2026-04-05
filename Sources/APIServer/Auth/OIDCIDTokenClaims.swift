@@ -74,7 +74,7 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
     // MARK: Custom Codable
 
     // Known keys decoded into typed fields. Everything else goes into extraClaims.
-    private enum KnownKey: String, CodingKey {
+    private enum KnownKey: String, CodingKey, CaseIterable {
         case sub, iss, aud, exp, iat
         case name
         case preferredName     = "preferred_name"
@@ -129,10 +129,6 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         }
     }
 }
-
-// MARK: - KnownKey allCases helper
-
-extension OIDCIDTokenClaims.KnownKey: CaseIterable {}
 
 // MARK: - Dynamic string coding key
 
