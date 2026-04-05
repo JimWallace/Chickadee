@@ -580,6 +580,7 @@ actor WorkerDaemon {
             switch output.exitCode {
             case 0:  status = .pass
             case 1:  status = .fail
+            case 3:  status = .fail  // chickadee.py (Marmoset) uses exit 3 for "failed"
             default: status = .error
             }
         }

@@ -26,7 +26,12 @@ if _student_module is not None:
         if callable(_value) and not hasattr(builtins, _name):
             setattr(builtins, _name, _value)
 
-runpy.run_path(sys.argv[1], run_name="__main__")
+# Shift sys.argv so sys.argv[0] is the script path, matching the behaviour of
+# a direct `python3 script.py` invocation.  Test frameworks that inspect
+# sys.argv[0] to locate the test file (e.g. the Marmoset-era chickadee.py
+# helper) break when sys.argv[0] is left as '-c'.
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
 """
 
 private func pythonInvocation(for script: URL) -> ScriptInvocation {
