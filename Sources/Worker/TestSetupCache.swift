@@ -52,7 +52,7 @@ actor TestSetupCache {
     ///               same in-flight task.
     func acquire(
         testSetupID: String,
-        populate: @Sendable () async throws -> URL
+        populate: @escaping @Sendable () async throws -> URL
     ) async throws -> URL {
 
         let preparedDir = entryPreparedDir(for: testSetupID)
