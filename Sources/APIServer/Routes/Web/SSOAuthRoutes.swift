@@ -198,6 +198,7 @@ struct SSOAuthRoutes: RouteCollection {
             .filter(\.$externalSubject == subject)
             .first()
         {
+            existing.username = username
             existing.preferredName = preferredName ?? existing.preferredName
             existing.userIdentifier = userIdentifier
             existing.studentID     = studentID ?? existing.studentID
