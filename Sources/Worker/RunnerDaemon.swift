@@ -56,6 +56,9 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Runner shared secret for API auth (or RUNNER_SHARED_SECRET env var)")
     var workerSecret: String?
 
+    @Option(name: .long, help: "Directory used for the runner test-setup cache (default: /tmp/chickadee-runner-cache; env: RUNNER_TEST_SETUP_CACHE_DIR)")
+    var testSetupCacheDir: String?
+
     mutating func run() async throws {
         guard let baseURL = URL(string: apiBaseURL) else {
             writeToStandardError("Error: invalid --api-base-url '\(apiBaseURL)'\n")
@@ -83,6 +86,11 @@ struct WorkerCommand: AsyncParsableCommand {
         let reporter = Reporter(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
+        let cacheDirPath = testSetupCacheDir
+            ?? env["RUNNER_TEST_SETUP_CACHE_DIR"]
+            ?? TestSetupCache.defaultCacheRoot.path
+        let testSetupCache = TestSetupCache(cacheRoot: URL(fileURLWithPath: cacheDirPath))
+
         let daemon = WorkerDaemon(
             poller:            poller,
             reporter:          reporter,
@@ -91,7 +99,8 @@ struct WorkerCommand: AsyncParsableCommand {
             workerID:          workerID,
             workerSecret:      effectiveWorkerSecret,
             maxConcurrentJobs: maxJobs,
-            runnerProfile:     runnerProfile
+            runnerProfile:     runnerProfile,
+            testSetupCache:    testSetupCache
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
@@ -104,6 +113,7 @@ struct WorkerCommand: AsyncParsableCommand {
             "api_base_url": apiBaseURL,
             "max_jobs": maxJobs,
             "sandbox_mode": sandboxLabel,
+            "test_setup_cache_dir": cacheDirPath,
         ])
         if let runnerProfile {
             writeStructuredRunnerLog(event: "runner_profile_detected", fields: [
@@ -183,6 +193,7 @@ actor WorkerDaemon {
     private let maxConcurrentJobs: Int
     private let runnerProfile: RunnerCapabilityProfile?
     private let downloadRetryPolicy: RunnerRetryPolicy
+    private let testSetupCache: TestSetupCache
     private var serverConnectionLost = false
     private var activeJobs = 0
 
@@ -195,7 +206,8 @@ actor WorkerDaemon {
         workerSecret: String,
         maxConcurrentJobs: Int,
         runnerProfile: RunnerCapabilityProfile? = nil,
-        downloadRetryPolicy: RunnerRetryPolicy = .download()
+        downloadRetryPolicy: RunnerRetryPolicy = .download(),
+        testSetupCache: TestSetupCache = TestSetupCache()
     ) {
         self.poller            = poller
         self.reporter          = reporter
@@ -206,6 +218,7 @@ actor WorkerDaemon {
         self.maxConcurrentJobs = maxConcurrentJobs
         self.runnerProfile     = runnerProfile
         self.downloadRetryPolicy = downloadRetryPolicy
+        self.testSetupCache    = testSetupCache
     }
 
     func run() async throws {
@@ -397,19 +410,27 @@ actor WorkerDaemon {
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workDir) }
 
-        // Download and unzip both zips.
+        // Download submission and acquire the prepared test setup concurrently.
+        // The test setup is served from the LRU cache: on a hit the cached
+        // directory is copied into a fresh scratch location; on a miss it is
+        // downloaded, unzipped, committed to cache, then copied.
         let submissionZip = workDir.appendingPathComponent("submission.zip")
-        let testSetupZip  = workDir.appendingPathComponent("testsetup.zip")
-        let testSetupDir  = workDir.appendingPathComponent("testsetup", isDirectory: true)
         let submissionDir = workDir.appendingPathComponent("submission", isDirectory: true)
-        try FileManager.default.createDirectory(at: testSetupDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: submissionDir, withIntermediateDirectories: true)
 
         async let submissionDownload: Void = download(url: job.submissionURL, to: submissionZip)
-        async let testSetupDownload: Void  = download(url: job.testSetupURL,  to: testSetupZip)
+
+        let testSetupDir = try await testSetupCache.acquire(testSetupID: job.testSetupID) {
+            let stagingZip = workDir.appendingPathComponent("testsetup.zip")
+            let stagingDir = workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
+            try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+            try await self.download(url: job.testSetupURL, to: stagingZip)
+            try self.unzip(stagingZip, to: stagingDir)
+            return stagingDir
+        }
+        defer { try? FileManager.default.removeItem(at: testSetupDir) }
+
         try await submissionDownload
-        try await testSetupDownload
-        try unzip(testSetupZip, to: testSetupDir)
 
         let manifest = job.manifest
 
@@ -740,7 +761,7 @@ actor WorkerDaemon {
         }
     }
 
-    private func unzip(_ zipFile: URL, to directory: URL) throws {
+    nonisolated func unzip(_ zipFile: URL, to directory: URL) throws {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         proc.arguments     = ["-q", "-o", zipFile.path, "-d", directory.path]
