@@ -82,11 +82,17 @@ final class OIDCTests: XCTestCase {
                     throw Abort(.internalServerError, reason: "mock OIDC provider did not bind a port")
                 }
                 let issuerBase = "http://127.0.0.1:\(port)"
+                let issuer = issuerBase + "/issuer"
+                let authorizationEndpoint = issuerBase + "/authorize"
+                let tokenEndpoint = issuerBase + "/token"
+                let jwksURI = issuerBase + "/keys"
                 let discovery = OIDCDiscovery(
-                    issuer: issuerBase + "/issuer",
-                    authorizationEndpoint: issuerBase + "/authorize",
-                    tokenEndpoint: issuerBase + "/token",
-                    jwksURI: issuerBase + "/keys"
+                    issuer: issuer,
+                    authorizationEndpoint: authorizationEndpoint,
+                    tokenEndpoint: tokenEndpoint,
+                    jwksURI: jwksURI,
+                    revocationEndpoint: nil,
+                    endSessionEndpoint: nil
                 )
                 let response = try Response(
                     status: discoveryStatus,

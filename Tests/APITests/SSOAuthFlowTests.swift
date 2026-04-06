@@ -190,8 +190,11 @@ final class SSOAuthFlowTests: XCTestCase {
             issuer:                "https://duo-test.example.com/oidc/test-client-id",
             authorizationEndpoint: "https://duo-test.example.com/oidc/test-client-id/authorize",
             tokenEndpoint:         "https://duo-test.example.com/oidc/test-client-id/token",
-            jwksURI:               "https://duo-test.example.com/oidc/test-client-id/keys"
-        )
+            jwksURI:               "https://duo-test.example.com/oidc/test-client-id/keys",
+            revocationEndpoint:    nil,
+            endSessionEndpoint:    nil
+        ),
+        claimConfig: OIDCClaimConfig()
     )
 
     // MARK: - ssoStart: redirect to IdP
@@ -288,8 +291,11 @@ final class SSOAuthFlowTests: XCTestCase {
                 issuer: "http://127.0.0.1/issuer",
                 authorizationEndpoint: "http://127.0.0.1:\(provider.port)/authorize",
                 tokenEndpoint: "http://127.0.0.1:\(provider.port)/token",
-                jwksURI: "http://127.0.0.1:\(provider.port)/keys"
-            )
+                jwksURI: "http://127.0.0.1:\(provider.port)/keys",
+                revocationEndpoint: nil,
+                endSessionEndpoint: nil
+            ),
+            claimConfig: OIDCClaimConfig()
         )
 
         try await withApp(provider.app) { _ in
@@ -344,8 +350,11 @@ final class SSOAuthFlowTests: XCTestCase {
                 issuer: "http://127.0.0.1/issuer",
                 authorizationEndpoint: "http://127.0.0.1:\(provider.port)/authorize",
                 tokenEndpoint: "http://127.0.0.1:\(provider.port)/token",
-                jwksURI: "http://127.0.0.1:\(provider.port)/keys"
-            )
+                jwksURI: "http://127.0.0.1:\(provider.port)/keys",
+                revocationEndpoint: nil,
+                endSessionEndpoint: nil
+            ),
+            claimConfig: OIDCClaimConfig()
         )
 
         try await withApp(provider.app) { _ in
