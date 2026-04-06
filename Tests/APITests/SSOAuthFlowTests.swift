@@ -525,6 +525,73 @@ final class SSOAuthFlowTests: XCTestCase {
         }
     }
 
+    func testSSOCallbackCreatesNewUserWithCustomUsernameClaim() async throws {
+        let subject = "subject-brand-new-user"
+        let idToken = try await signedToken(
+            issuer: "http://127.0.0.1/issuer",
+            audience: ["test-client-id"],
+            subject: subject,
+            username: nil,          // no preferred_username in token
+            name: "Jane Doe",
+            email: "jane@example.com",
+            extraClaims: ["winaccountname": "janedoe"]
+        )
+        let provider = try await makeMockOIDCProvider(mode: .succeedImmediately(idToken: idToken))
+
+        let config = OIDCConfiguration(
+            clientID: "test-client-id",
+            clientSecret: "test-client-secret",
+            redirectURI: "http://localhost:8080/auth/sso/callback",
+            discovery: OIDCDiscovery(
+                issuer: "http://127.0.0.1/issuer",
+                authorizationEndpoint: "http://127.0.0.1:\(provider.port)/authorize",
+                tokenEndpoint: "http://127.0.0.1:\(provider.port)/token",
+                jwksURI: "http://127.0.0.1:\(provider.port)/keys",
+                revocationEndpoint: nil,
+                endSessionEndpoint: nil
+            ),
+            claimConfig: OIDCClaimConfig(usernameClaim: "winaccountname")
+        )
+
+        try await withApp(provider.app) { _ in
+            try await withApp(try await makeApp(oidcConfig: config)) { app in
+                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+
+                // Confirm no pre-existing record — this is a first-ever login
+                let existingCount = try await APIUser.query(on: app.db)
+                    .filter(\.$externalSubject == subject)
+                    .count()
+                XCTAssertEqual(existingCount, 0)
+
+                let start = try await startSSOSession(on: app)
+
+                try await app.asyncTest(
+                    .GET,
+                    "/auth/sso/callback?code=code123&state=\(start.state)",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: start.cookie)
+                    },
+                    afterResponse: { res in
+                        XCTAssertEqual(res.status, .seeOther)
+                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                    }
+                )
+
+                let fetchedUser = try await APIUser.query(on: app.db)
+                    .filter(\.$externalSubject == subject)
+                    .first()
+                let user = try XCTUnwrap(fetchedUser)
+                XCTAssertEqual(
+                    user.username, "janedoe",
+                    "New SSO user must get username from winaccountname claim, not the sub hash"
+                )
+                XCTAssertEqual(user.userIdentifier, "janedoe")
+                XCTAssertEqual(user.email, "jane@example.com")
+                XCTAssertEqual(user.authProvider, "duo-oidc")
+            }
+        }
+    }
+
     func testSSOCallbackClearsSessionStateAfterFailedAttempt() async throws {
         try await withApp(try await makeApp()) { app in
             let start = try await startSSOSession(on: app)
