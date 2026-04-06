@@ -2,6 +2,7 @@ import Vapor
 import Fluent
 import Core
 import Foundation
+import FluentSQLiteDriver
 
 struct WorkerJobRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -84,6 +85,7 @@ struct WorkerJobRoutes: RouteCollection {
             requirementSpec: AssignmentRequirementSpec?
         )
         let claimed: ClaimedJob? = try await req.application.workerClaimQueue.run {
+        try await retrySQLiteBusyClaim {
         try await req.db.transaction { db -> ClaimedJob? in
             let studentSubmissions = try await APISubmission.query(on: db)
                 .filter(\.$status == "pending")
@@ -188,6 +190,7 @@ struct WorkerJobRoutes: RouteCollection {
             }
             return nil
         } // end transaction
+        } // end retrySQLiteBusyClaim
         } // end workerClaimQueue.run
 
         guard let (submission, setup, manifest, assignmentID, requirementSpec) = claimed else {
@@ -331,6 +334,40 @@ actor WorkerClaimQueue {
     private func advance() {
         if waiting.isEmpty { active = false } else { waiting.removeFirst().resume() }
     }
+}
+
+private func retrySQLiteBusyClaim<T>(
+    maxAttempts: Int = 3,
+    retryDelayNanoseconds: UInt64 = 20_000_000,
+    work: @escaping () async throws -> T
+) async throws -> T {
+    precondition(maxAttempts > 0, "maxAttempts must be positive")
+
+    var attempt = 1
+    while true {
+        do {
+            return try await work()
+        } catch {
+            guard attempt < maxAttempts, isSQLiteBusyError(error) else {
+                throw error
+            }
+            attempt += 1
+            try await Task.sleep(nanoseconds: retryDelayNanoseconds)
+        }
+    }
+}
+
+private func isSQLiteBusyError(_ error: Error) -> Bool {
+    if let sqliteError = error as? SQLiteError {
+        switch sqliteError.reason {
+        case .busy, .busyInRecovery, .busyInSnapshot, .busyTimeout:
+            return true
+        default:
+            break
+        }
+    }
+
+    return error.localizedDescription.localizedCaseInsensitiveContains("database is locked")
 }
 
 struct WorkerClaimQueueKey: StorageKey {
