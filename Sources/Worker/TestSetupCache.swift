@@ -104,9 +104,9 @@ actor TestSetupCache {
             return try copyToScratch(source: populated, label: testSetupID)
         } catch {
             inProgress.removeValue(forKey: testSetupID)
-            cleanup(testSetupID: testSetupID, cacheRoot: cacheRoot)
+            cleanupPartialEntry(testSetupID: testSetupID)
             writeStructuredRunnerLog(event: "test_setup_cache_populate_failed", fields: [
-                "test_setup_id":       testSetupID,
+                "test_setup_id":         testSetupID,
                 "error_message_summary": String(describing: error),
             ])
             throw error
@@ -187,7 +187,7 @@ actor TestSetupCache {
     }
 
     /// Remove any partial cache artefacts left by a failed population.
-    private func cleanup(testSetupID: String, cacheRoot: URL) {
+    private func cleanupPartialEntry(testSetupID: String) {
         let entryRoot = cacheRoot.appendingPathComponent(testSetupID)
         let tmpRoot   = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
         try? FileManager.default.removeItem(at: entryRoot)

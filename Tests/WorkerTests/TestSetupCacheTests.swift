@@ -4,65 +4,77 @@ import XCTest
 @testable import chickadee_runner
 import Foundation
 
+// MARK: - Free helpers (not methods — must not capture `self` in @Sendable closures)
+
+/// Creates a temporary directory with a sentinel file, simulating a freshly
+/// unzipped test setup.  Free function so it is callable from @Sendable closures.
+private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("staging-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try name.write(
+        to: dir.appendingPathComponent(name),
+        atomically: true,
+        encoding: .utf8
+    )
+    return dir
+}
+
+// MARK: - TestSetupCacheTests
+
 final class TestSetupCacheTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Creates a temporary cache root and returns a TestSetupCache backed by it.
     private func makeCache(maxEntries: Int = 16) -> (TestSetupCache, URL) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-cache-test-\(UUID().uuidString)", isDirectory: true)
-        let cache = TestSetupCache(cacheRoot: root, maxEntries: maxEntries)
-        return (cache, root)
-    }
-
-    /// Creates a temporary directory with a sentinel file inside it, simulating
-    /// a freshly unzipped test setup.
-    private func makeStaging(name: String = "test_script.sh") throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("staging-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let sentinel = dir.appendingPathComponent(name)
-        try name.write(to: sentinel, atomically: true, encoding: .utf8)
-        return dir
+        return (TestSetupCache(cacheRoot: root, maxEntries: maxEntries), root)
     }
 
     // MARK: - Cache miss populates once
 
     func testCacheMissPopulatesDirectory() async throws {
         let (cache, _) = makeCache()
-        var populateCalled = 0
+        let populateCalled = Counter()
 
         let result = try await cache.acquire(testSetupID: "setup-1") {
-            populateCalled += 1
-            return try self.makeStaging()
+            populateCalled.increment()
+            return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: result) }
 
-        XCTAssertEqual(populateCalled, 1)
+        XCTAssertEqual(populateCalled.value, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: result.appendingPathComponent("test_script.sh").path))
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: result.appendingPathComponent("test_script.sh").path
+            )
+        )
     }
 
     // MARK: - Repeated acquire hits cache (populate called only once)
 
     func testRepeatedAcquireHitsCache() async throws {
         let (cache, _) = makeCache()
-        var populateCalled = 0
+        let populateCalled = Counter()
 
         let first = try await cache.acquire(testSetupID: "setup-2") {
-            populateCalled += 1
-            return try self.makeStaging()
+            populateCalled.increment()
+            return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: first) }
 
         let second = try await cache.acquire(testSetupID: "setup-2") {
-            populateCalled += 1   // must NOT be called on a hit
-            return try self.makeStaging()
+            populateCalled.increment()   // must NOT be called on a hit
+            return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: second) }
 
-        XCTAssertEqual(populateCalled, 1, "populate must be called exactly once; second call should be a cache hit")
+        XCTAssertEqual(
+            populateCalled.value, 1,
+            "populate must be called exactly once; second call should be a cache hit"
+        )
     }
 
     // MARK: - Jobs receive isolated copies
@@ -71,45 +83,58 @@ final class TestSetupCacheTests: XCTestCase {
         let (cache, _) = makeCache()
 
         let first = try await cache.acquire(testSetupID: "setup-3") {
-            return try self.makeStaging(name: "sentinel.sh")
+            return try makeTestStagingDir(name: "sentinel.sh")
         }
         defer { try? FileManager.default.removeItem(at: first) }
 
         let second = try await cache.acquire(testSetupID: "setup-3") {
             XCTFail("populate must not be called on cache hit")
-            return try self.makeStaging()
+            return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: second) }
 
-        // Both copies exist and contain the sentinel file.
-        XCTAssertTrue(FileManager.default.fileExists(atPath: first.appendingPathComponent("sentinel.sh").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: second.appendingPathComponent("sentinel.sh").path))
+        // Both copies contain the sentinel file.
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: first.appendingPathComponent("sentinel.sh").path
+            )
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: second.appendingPathComponent("sentinel.sh").path
+            )
+        )
 
         // The two scratch directories are distinct paths.
         XCTAssertNotEqual(first.path, second.path)
 
-        // Mutating one copy does not affect the other or the cache entry.
-        let extraFile = first.appendingPathComponent("mutation.txt")
-        try "mutated".write(to: extraFile, atomically: true, encoding: .utf8)
-
-        XCTAssertFalse(FileManager.default.fileExists(atPath: second.appendingPathComponent("mutation.txt").path))
+        // Mutating one copy does not affect the other.
+        try "mutated".write(
+            to: first.appendingPathComponent("mutation.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: second.appendingPathComponent("mutation.txt").path
+            )
+        )
     }
 
     // MARK: - Concurrent requests populate only once
 
     func testConcurrentRequestsPopulateOnce() async throws {
         let (cache, _) = makeCache()
-        let populateCount = LockIsolated(0)
+        let populateCount = Counter()
 
-        // Launch several concurrent acquires for the same testSetupID.
         let results = try await withThrowingTaskGroup(of: URL.self) { group in
             for _ in 0..<8 {
                 group.addTask {
                     try await cache.acquire(testSetupID: "setup-concurrent") {
                         populateCount.increment()
-                        // Small delay to allow other tasks to pile up.
+                        // Small delay to let other tasks pile up.
                         try await Task.sleep(for: .milliseconds(20))
-                        return try self.makeStaging()
+                        return try makeTestStagingDir()
                     }
                 }
             }
@@ -117,12 +142,14 @@ final class TestSetupCacheTests: XCTestCase {
             for try await url in group { urls.append(url) }
             return urls
         }
-
         defer {
             for url in results { try? FileManager.default.removeItem(at: url) }
         }
 
-        XCTAssertEqual(populateCount.value, 1, "populate must be called exactly once across concurrent acquires")
+        XCTAssertEqual(
+            populateCount.value, 1,
+            "populate must be called exactly once across concurrent acquires"
+        )
         XCTAssertEqual(results.count, 8)
 
         // All returned paths are distinct scratch copies.
@@ -146,97 +173,115 @@ final class TestSetupCacheTests: XCTestCase {
             // Expected.
         }
 
-        // No entry directory should remain.
-        let entryRoot = root.appendingPathComponent("setup-fail")
-        let tmpRoot   = root.appendingPathComponent("setup-fail.tmp")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: entryRoot.path), "partial entry must be cleaned up")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: tmpRoot.path),   "staging tmp must be cleaned up")
+        // No entry directory or staging tmp should remain.
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("setup-fail").path
+            ),
+            "partial entry must be cleaned up"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("setup-fail.tmp").path
+            ),
+            "staging tmp must be cleaned up"
+        )
 
-        // A subsequent acquire should retry (populate called again).
-        var retryCount = 0
+        // A subsequent acquire must retry populate.
+        let retryCount = Counter()
         let result = try await cache.acquire(testSetupID: "setup-fail") {
-            retryCount += 1
-            return try self.makeStaging()
+            retryCount.increment()
+            return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: result) }
-        XCTAssertEqual(retryCount, 1, "after a failed population the next acquire must re-populate")
+        XCTAssertEqual(retryCount.value, 1, "after a failed population the next acquire must re-populate")
     }
 
-    // MARK: - LRU eviction
+    // MARK: - LRU eviction bounds the cache
 
     func testLRUEvictionBoundsCache() async throws {
         let maxEntries = 4
         let (cache, root) = makeCache(maxEntries: maxEntries)
 
-        // Populate exactly maxEntries + 1 distinct setups.
         for i in 0..<(maxEntries + 1) {
             let result = try await cache.acquire(testSetupID: "setup-evict-\(i)") {
-                try self.makeStaging(name: "script-\(i).sh")
+                try makeTestStagingDir(name: "script-\(i).sh")
             }
             try? FileManager.default.removeItem(at: result)
         }
 
-        // Count how many entry directories exist under cacheRoot.
+        // Count immediate subdirectory entries under cacheRoot.
         var entryCount = 0
-        if let enumerator = FileManager.default.enumerator(
+        if let contents = try? FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+            options: [.skipsHiddenFiles]
         ) {
-            for case let url as URL in enumerator {
+            for url in contents {
                 let vals = try url.resourceValues(forKeys: [.isDirectoryKey])
                 if vals.isDirectory == true { entryCount += 1 }
             }
         }
 
-        XCTAssertEqual(entryCount, maxEntries,
-            "cache must contain exactly maxEntries=\(maxEntries) directories after \(maxEntries + 1) inserts")
+        XCTAssertEqual(
+            entryCount, maxEntries,
+            "cache must hold exactly \(maxEntries) directories after \(maxEntries + 1) inserts"
+        )
     }
+
+    // MARK: - LRU evicts least-recently-used entry
 
     func testLRUEvictsLeastRecentlyUsed() async throws {
         let (cache, root) = makeCache(maxEntries: 2)
 
-        // Insert A then B (cache is now full: [A, B], A is LRU).
-        let a1 = try await cache.acquire(testSetupID: "A") { try self.makeStaging(name: "a.sh") }
+        // Insert A then B (cache full; A is LRU).
+        let a1 = try await cache.acquire(testSetupID: "A") { try makeTestStagingDir(name: "a.sh") }
         defer { try? FileManager.default.removeItem(at: a1) }
 
-        let b1 = try await cache.acquire(testSetupID: "B") { try self.makeStaging(name: "b.sh") }
+        let b1 = try await cache.acquire(testSetupID: "B") { try makeTestStagingDir(name: "b.sh") }
         defer { try? FileManager.default.removeItem(at: b1) }
 
-        // Access A again to make it MRU (LRU order becomes [B, A]).
+        // Re-access A so LRU order becomes [B, A] (B is now LRU).
         let a2 = try await cache.acquire(testSetupID: "A") {
-            XCTFail("A should still be cached"); return try self.makeStaging()
+            XCTFail("A should still be cached"); return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: a2) }
 
-        // Insert C — cache is full, so B (LRU) must be evicted.
-        let c1 = try await cache.acquire(testSetupID: "C") { try self.makeStaging(name: "c.sh") }
+        // Insert C — B (LRU) must be evicted.
+        let c1 = try await cache.acquire(testSetupID: "C") { try makeTestStagingDir(name: "c.sh") }
         defer { try? FileManager.default.removeItem(at: c1) }
 
-        let aEntry = root.appendingPathComponent("A")
-        let bEntry = root.appendingPathComponent("B")
-        let cEntry = root.appendingPathComponent("C")
-
-        XCTAssertTrue (FileManager.default.fileExists(atPath: aEntry.path), "A must remain (was MRU when C inserted)")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: bEntry.path), "B must be evicted (was LRU when C inserted)")
-        XCTAssertTrue (FileManager.default.fileExists(atPath: cEntry.path), "C must be present")
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("A").path
+            ),
+            "A must remain (was MRU when C inserted)"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("B").path
+            ),
+            "B must be evicted (was LRU when C inserted)"
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("C").path
+            ),
+            "C must be present"
+        )
     }
 }
 
-// MARK: - Concurrency helper
+// MARK: - Thread-safe counter
 
-/// Minimal thread-safe counter for use in async test closures.
-private final class LockIsolated: @unchecked Sendable {
+/// Thread-safe integer counter for use inside @Sendable closures in tests.
+///
+/// `@unchecked Sendable`: all mutable state is protected by `NSLock`; the
+/// checker cannot verify this statically, but the invariant is upheld manually.
+private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
-    private var _value: Int
+    private var _value = 0
 
-    init(_ initial: Int = 0) { _value = initial }
-
-    var value: Int {
-        lock.withLock { _value }
-    }
-
-    func increment() {
-        lock.withLock { _value += 1 }
-    }
+    var value: Int { lock.withLock { _value } }
+    func increment() { lock.withLock { _value += 1 } }
 }
