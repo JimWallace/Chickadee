@@ -180,8 +180,11 @@ struct SSOAuthRoutes: RouteCollection {
             return parts.isEmpty ? nil : parts.joined(separator: " ")
         }()
 
-        // userIdentifier: use configured username claim, then sub.
-        let userIdentifier = claims.value(for: claimConfig.usernameClaim)?.nilIfBlank() ?? subject
+        // userIdentifier: prefer explicit provider user_id, then configured username claim, then sub.
+        let userIdentifier =
+            claims.value(for: "user_id")?.nilIfBlank()
+            ?? claims.value(for: claimConfig.usernameClaim)?.nilIfBlank()
+            ?? subject
 
         let studentID = claims.extraClaims["student_id"]?.nilIfBlank()
         let email = claims.value(for: claimConfig.emailClaim)?.nilIfBlank()
