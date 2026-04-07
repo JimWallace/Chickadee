@@ -34,6 +34,11 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "assigned_at")
     var assignedAt: Date?
 
+    /// Set when an instructor triggers a re-test. Used in place of `submittedAt`
+    /// when computing queue-wait and turnaround statistics for re-test runs.
+    @OptionalField(key: "retested_at")
+    var retestedAt: Date?
+
     @OptionalField(key: "attempt_number")
     var attemptNumber: Int?
 

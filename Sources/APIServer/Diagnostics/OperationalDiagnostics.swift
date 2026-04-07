@@ -503,10 +503,13 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.runnerID = workerDiagnostics?.runnerID ?? submission.workerID ?? diagnostics.runnerID
             diagnostics.startedAt = startedAt
             diagnostics.finishedAt = completedAt
-            diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.assignedAt)
+            // For re-tested submissions use the re-test timestamp as the effective enqueue
+            // time so wait and turnaround stats reflect only the re-test queue cycle.
+            let effectiveEnqueuedAt = submission.retestedAt ?? diagnostics.submittedAt
+            diagnostics.queueWaitMs = millisecondsBetween(effectiveEnqueuedAt, diagnostics.assignedAt)
             diagnostics.executionMs = workerDiagnostics?.wallClockMs
                 ?? millisecondsBetween(startedAt, completedAt)
-            diagnostics.turnaroundMs = millisecondsBetween(diagnostics.submittedAt, completedAt)
+            diagnostics.turnaroundMs = millisecondsBetween(effectiveEnqueuedAt, completedAt)
             diagnostics.finalStatus = finalStatus
             diagnostics.timedOut = finalStatus == JobFinalStatus.timeout.rawValue
             diagnostics.exitCode = workerDiagnostics?.exitCode
@@ -1061,7 +1064,7 @@ private extension OperationalDiagnosticsService {
             runnerID: submission.workerID,
             kind: submission.kind,
             attemptNumber: submission.attemptNumber,
-            enqueuedAt: submission.submittedAt
+            enqueuedAt: submission.retestedAt ?? submission.submittedAt
         )
         try await created.save(on: db)
         return created

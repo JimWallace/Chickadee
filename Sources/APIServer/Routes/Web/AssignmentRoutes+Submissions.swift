@@ -412,6 +412,7 @@ extension AssignmentRoutes {
             submission.status = "pending"
             submission.workerID = nil
             submission.assignedAt = nil
+            submission.retestedAt = Date()
             try await submission.save(on: req.db)
         }
 
