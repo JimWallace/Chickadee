@@ -168,6 +168,10 @@ The entrypoint script automatically syncs fresh templates and JupyterLite assets
 from the new image into the data volume on each restart. Fluent schema migrations
 also run automatically on startup.
 
+> **Note (v0.4.46+):** Sessions are now persisted in the database (`_fluent_sessions`
+> table). The migration runs automatically on startup. All existing users will be
+> logged out once when this version is first deployed.
+
 **Rollback** to a specific build (replace the SHA with one from the
 [GHCR package page](https://github.com/JimWallace/Chickadee/pkgs/container/chickadee)
 or the Actions run summary):

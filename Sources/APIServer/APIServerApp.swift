@@ -89,9 +89,9 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.storage[SSOInstructorUsersKey.self] = ssoInstructorUsers
     app.authProvider = LocalAuthProvider()
 
-    // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
+    // MARK: - Sessions (Fluent-backed; persisted in the database)
 
-    app.sessions.use(.memory)
+    app.sessions.use(.fluent)
     var sessionConfig = app.sessions.configuration
     sessionConfig.cookieFactory = { sessionID in
         HTTPCookies.Value(
