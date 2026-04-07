@@ -794,6 +794,25 @@ func nextAssignmentSortOrder(req: Request) async throws -> Int {
     return maxOrder + 1
 }
 
+/// Returns the earned points for a submission result, suitable for LEARN-style CSV export.
+/// Tries Double first (for fractional points), falls back to Int for older results.
+/// When earnedPoints/totalPoints are absent, falls back to passCount.
+func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
+    guard let data = collectionJSON.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return nil
+    }
+    // Prefer weighted points when present (non-nil and non-zero totalPoints).
+    let totalPoints = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
+    if let total = totalPoints, total > 0 {
+        let earned = (root["earnedPoints"] as? Double) ?? (root["earnedPoints"] as? Int).map(Double.init)
+        if let e = earned { return e }
+    }
+    // Fall back to pass count for old results.
+    let passCount = (root["passCount"] as? Double) ?? (root["passCount"] as? Int).map(Double.init)
+    return passCount
+}
+
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
     guard let data = collectionJSON.data(using: .utf8),
           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {

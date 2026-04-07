@@ -101,34 +101,37 @@ extension AssignmentRoutes {
             }
         }
 
-        var bestGradeByUserAndSetup: [String: Int] = [:]
+        var bestPointsByUserAndSetup: [String: Double] = [:]
         for submission in submissions {
             guard let result = preferredResultBySubmissionID[submission.id],
-                  let grade = gradePercentFromCollectionJSON(result.collectionJSON) else {
+                  let points = gradePointsFromCollectionJSON(result.collectionJSON) else {
                 continue
             }
             let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
-            let prior = bestGradeByUserAndSetup[key] ?? -1
-            if grade > prior {
-                bestGradeByUserAndSetup[key] = grade
+            let prior = bestPointsByUserAndSetup[key] ?? -1
+            if points > prior {
+                bestPointsByUserAndSetup[key] = points
             }
         }
 
         var lines: [String] = []
-        let header = ["student_id"] + sortedAssignments.map { $0.title }
+        let header = ["OrgDefinedId", "Username"]
+            + sortedAssignments.map { "\($0.title) Points Grade" }
+            + ["End-of-Line Indicator"]
         lines.append(header.map(csvEscaped).joined(separator: ","))
 
         for student in students {
             guard let userID = student.id else { continue }
-            var row: [String] = [student.username]
+            var row: [String] = [student.studentID ?? "", "#\(student.username)"]
             for assignment in sortedAssignments {
                 let key = "\(userID.uuidString.lowercased())::\(assignment.testSetupID)"
-                if let grade = bestGradeByUserAndSetup[key] {
-                    row.append("\(grade)%")
+                if let points = bestPointsByUserAndSetup[key] {
+                    row.append(String(format: "%.1f", points))
                 } else {
                     row.append("")
                 }
             }
+            row.append("#")
             lines.append(row.map(csvEscaped).joined(separator: ","))
         }
 
