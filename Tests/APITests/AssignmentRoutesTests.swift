@@ -108,6 +108,15 @@ final class AssignmentRoutesTests: XCTestCase {
         return student
     }
 
+    private func enrollStudentInTestCourse(_ student: APIUser) async throws {
+        let courseID = try await makeTestCourseID()
+        let enrollment = APICourseEnrollment(
+            userID: try student.requireID(),
+            courseID: courseID
+        )
+        try await enrollment.save(on: app.db)
+    }
+
     private func multipartAssignmentBody(
         boundary: String,
         csrf: String,
@@ -743,6 +752,7 @@ final class AssignmentRoutesTests: XCTestCase {
             username: "jwallace",
             displayName: "Jim Wallace"
         )
+        try await enrollStudentInTestCourse(student)
 
         let submission = APISubmission(
             id: "sub_display_name",
