@@ -9,7 +9,7 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 import Core
 
 protocol Reporting: Sendable {
-    func report(_ collection: TestOutcomeCollection) async throws(ReporterError)
+    func report(_ report: WorkerExecutionReport) async throws(ReporterError)
     func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError)
 }
 
@@ -41,7 +41,7 @@ struct Reporter: Sendable {
         return URLSession(configuration: cfg)
     }()
 
-    func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
+    func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/results")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -49,7 +49,7 @@ struct Reporter: Sendable {
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        do { request.httpBody = try encoder.encode(collection) } catch { throw .transportError(error) }
+        do { request.httpBody = try encoder.encode(report) } catch { throw .transportError(error) }
         signer.sign(&request)
 
         try await sendWithRetry(
@@ -127,6 +127,12 @@ struct Reporter: Sendable {
 }
 
 extension Reporter: Reporting {}
+
+extension Reporting {
+    func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
+        try await report(WorkerExecutionReport(collection: collection, diagnostics: nil))
+    }
+}
 
 private extension Reporter {
     static func attemptReport(request: URLRequest, expectedStatus: Int) async -> Result<Void, ReporterError> {

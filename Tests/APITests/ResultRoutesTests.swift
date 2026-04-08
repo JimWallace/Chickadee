@@ -31,7 +31,7 @@ final class ResultRoutesTests: XCTestCase {
         app.middleware.use(app.sessions.middleware)
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
 
-        try await configureTestDatabase(app)
+        try await configureTestDatabase(app, options: .observability)
 
         try routes(app)
     }
@@ -70,6 +70,13 @@ final class ResultRoutesTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(collection)
+        return ByteBuffer(data: data)
+    }
+
+    private func bodyData(for report: WorkerExecutionReport) throws -> ByteBuffer {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(report)
         return ByteBuffer(data: data)
     }
 
@@ -139,6 +146,48 @@ final class ResultRoutesTests: XCTestCase {
         let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
         let resultFile = files.first { $0.hasPrefix("sub_disktest") }
         XCTAssertNotNil(resultFile, "Expected a result file for sub_disktest to be written")
+    }
+
+    func testReportResultsAcceptsWrappedExecutionReportPayload() async throws {
+        let collection = makeCollection(submissionID: "sub_wrapped_report")
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+        let report = WorkerExecutionReport(
+            collection: collection,
+            diagnostics: WorkerExecutionDiagnostics(
+                runnerID: "runner-stage",
+                startedAt: Date(timeIntervalSince1970: 100),
+                finishedAt: Date(timeIntervalSince1970: 101),
+                finalStatus: "passed",
+                timedOut: false,
+                exitCode: 0,
+                terminationReason: nil,
+                peakRSSBytes: nil,
+                wallClockMs: 100,
+                childProcessCount: nil,
+                stdoutBytes: nil,
+                stderrBytes: nil,
+                stageTimings: WorkerExecutionStageTimings(
+                    workdirSetupMs: 12,
+                    submissionDownloadMs: 45,
+                    testSetupAcquireMs: 67,
+                    submissionPrepareMs: 89,
+                    testExecutionMs: 100
+                )
+            )
+        )
+        let body = try bodyData(for: report)
+
+        try await app.asyncTest(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
+            req.body = body
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+        })
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
+        let resultFile = files.first { $0.hasPrefix(collection.submissionID) }
+        XCTAssertNotNil(resultFile, "Expected a result file for wrapped reports to be written")
     }
 
     func testReportResultsWithFailedBuild() throws {

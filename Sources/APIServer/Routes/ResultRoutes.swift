@@ -20,7 +20,7 @@ struct ResultRoutes: RouteCollection {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let collection: TestOutcomeCollection
+        let report: WorkerExecutionReport
         do {
             let collectedBuffer = try await req.body.collect(
                 upTo: req.application.routes.defaultMaxBodySize.value
@@ -29,10 +29,11 @@ struct ResultRoutes: RouteCollection {
             guard let data = readableBuffer.readData(length: readableBuffer.readableBytes) else {
                 throw Abort(.badRequest, reason: "Empty request body")
             }
-            collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            report = try decodeWorkerReport(from: data, using: decoder)
         } catch let decodingError as DecodingError {
-            throw Abort(.unprocessableEntity, reason: "Invalid TestOutcomeCollection: \(decodingError)")
+            throw Abort(.unprocessableEntity, reason: "Invalid worker result payload: \(decodingError)")
         }
+        let collection = report.collection
 
         async let dbPersist: Void   = persistToDB(collection, on: req)
         async let diskPersist: Void = persistToDisk(collection, on: req)
@@ -45,9 +46,9 @@ struct ResultRoutes: RouteCollection {
             try await submission.save(on: req.db)
 
             // Record execution diagnostics (execution time + queue wait).
-            await req.application.diagnostics.recordWorkerResult(
+            await req.application.diagnostics.recordWorkerExecutionReport(
                 collection: collection,
-                submission: submission,
+                diagnostics: report.diagnostics,
                 on: req.db,
                 logger: req.logger
             )
@@ -105,6 +106,36 @@ struct ResultRoutes: RouteCollection {
         try await req.fileio.writeFile(.init(data: data), at: filePath)
         req.logger.info("Stored result for submission \(collection.submissionID) at \(filePath)")
     }
+}
+
+private func decodeWorkerReport(
+    from data: Data,
+    using decoder: JSONDecoder
+) throws -> WorkerExecutionReport {
+    if
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let collectionObject = json["collection"]
+    {
+        let collectionData = try JSONSerialization.data(withJSONObject: collectionObject)
+        let collection = try decoder.decode(TestOutcomeCollection.self, from: collectionData)
+
+        let diagnostics: WorkerExecutionDiagnostics?
+        if let diagnosticsObject = json["diagnostics"], !(diagnosticsObject is NSNull) {
+            let diagnosticsData = try JSONSerialization.data(withJSONObject: diagnosticsObject)
+            diagnostics = try decoder.decode(WorkerExecutionDiagnostics.self, from: diagnosticsData)
+        } else {
+            diagnostics = nil
+        }
+
+        return WorkerExecutionReport(collection: collection, diagnostics: diagnostics)
+    }
+
+    if let report = try? decoder.decode(WorkerExecutionReport.self, from: data) {
+        return report
+    }
+
+    let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+    return WorkerExecutionReport(collection: collection, diagnostics: nil)
 }
 
 // MARK: - Response

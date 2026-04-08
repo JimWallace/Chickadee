@@ -104,6 +104,7 @@ final class SSOAuthFlowTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
         app.middleware.use(UserSessionAuthenticator())
+        configureLeaf(app)
 
         try await configureTestDatabase(app)
 
@@ -209,14 +210,25 @@ final class SSOAuthFlowTests: XCTestCase {
         guard let setCookie = response.headers.first(name: .setCookie), !setCookie.isEmpty else {
             return existing
         }
-        if existing.isEmpty { return setCookie }
+        return mergedCookie(existing: existing, setCookieHeader: setCookie)
+    }
+
+    private func mergedCookie(existing: String, from response: XCTHTTPResponse) -> String {
+        guard let setCookie = response.headers.first(name: .setCookie), !setCookie.isEmpty else {
+            return existing
+        }
+        return mergedCookie(existing: existing, setCookieHeader: setCookie)
+    }
+
+    private func mergedCookie(existing: String, setCookieHeader: String) -> String {
+        if existing.isEmpty { return setCookieHeader }
 
         func cookiePair(from header: String) -> String {
             header.split(separator: ";", maxSplits: 1).first.map(String.init) ?? header
         }
 
         let oldPair = cookiePair(from: existing)
-        let newPair = cookiePair(from: setCookie)
+        let newPair = cookiePair(from: setCookieHeader)
         let oldName = oldPair.split(separator: "=", maxSplits: 1).first.map(String.init) ?? ""
         let newName = newPair.split(separator: "=", maxSplits: 1).first.map(String.init) ?? ""
 
@@ -698,7 +710,7 @@ final class SSOAuthFlowTests: XCTestCase {
                     }
                 )
 
-                let (csrf, boundCookie) = try await csrfFields(for: "/", cookie: authCookie, on: app)
+                let (csrf, boundCookie) = try await csrfFields(for: "/account", cookie: authCookie, on: app)
                 authCookie = boundCookie
 
                 try await app.asyncTest(

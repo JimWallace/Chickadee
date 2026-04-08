@@ -534,6 +534,16 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
             metric.executionMs = workerDiagnostics?.wallClockMs ?? millisecondsBetween(startedAt, completedAt)
             metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, completedAt)
+            metric.workdirSetupMs = workerDiagnostics?.stageTimings?.workdirSetupMs
+            metric.submissionDirSetupMs = workerDiagnostics?.stageTimings?.submissionDirSetupMs
+            metric.submissionDownloadMs = workerDiagnostics?.stageTimings?.submissionDownloadMs
+            metric.testSetupAcquireMs = workerDiagnostics?.stageTimings?.testSetupAcquireMs
+            metric.submissionUnpackMs = workerDiagnostics?.stageTimings?.submissionUnpackMs
+            metric.starterCleanupMs = workerDiagnostics?.stageTimings?.starterCleanupMs
+            metric.submissionPrepareMs = workerDiagnostics?.stageTimings?.submissionPrepareMs
+            metric.makeStepMs = workerDiagnostics?.stageTimings?.makeStepMs
+            metric.runtimeHelperSetupMs = workerDiagnostics?.stageTimings?.runtimeHelperSetupMs
+            metric.testExecutionMs = workerDiagnostics?.stageTimings?.testExecutionMs
             metric.finalStatus = finalStatus
             metric.testsPassed = collection.passCount
             metric.testsFailed = collection.failCount

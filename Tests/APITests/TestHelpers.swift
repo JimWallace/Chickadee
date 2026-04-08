@@ -129,6 +129,7 @@ private func registerObservabilityTestMigrations(on app: Application) {
     app.migrations.add(CreateSubmissionDiagnostics())
     app.migrations.add(CreateRequestMetrics())
     app.migrations.add(CreateJobExecutionMetrics())
+    app.migrations.add(AddJobExecutionStageTimings())
     app.migrations.add(CreateRunnerSnapshots())
 }
 

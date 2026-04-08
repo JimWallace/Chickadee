@@ -151,6 +151,8 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
+        let overheadSamples = recentJobs.compactMap { overheadMs(for: $0) }
+        let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
         let jobRows = recentJobs.map {
             AdminRunnerJobRow(
                 submissionID: $0.submissionID,
@@ -158,6 +160,8 @@ struct AdminRoutes: RouteCollection {
                 finalStatus: $0.finalStatus ?? "unknown",
                 queueWaitFormatted: $0.queueWaitMs.map(formatMs),
                 executionFormatted: $0.executionMs.map(formatMs),
+                overheadFormatted: overheadMs(for: $0).map(formatMs),
+                stageBreakdownFormatted: stageBreakdown(for: $0)?.formatted,
                 totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
                 completedAt: $0.completedAt.map(iso8601String),
                 testsPassed: $0.testsPassed ?? 0,
@@ -174,6 +178,10 @@ struct AdminRoutes: RouteCollection {
             jobsProcessed: worker.jobsProcessed,
             avgExecutionFormatted: worker.avgExecutionFormatted,
             avgQueueWaitFormatted: worker.avgQueueWaitFormatted,
+            avgOverheadFormatted: average(overheadSamples).map(formatMs),
+            avgCacheAcquireFormatted: average(stageBreakdowns.compactMap { $0?.cacheAcquireMs }).map(formatMs),
+            avgDownloadFormatted: average(stageBreakdowns.compactMap { $0?.downloadMs }).map(formatMs),
+            avgPrepFormatted: average(stageBreakdowns.compactMap { $0?.prepMs }).map(formatMs),
             passedCount: statusCounts["passed", default: 0],
             failedCount: statusCounts["failed", default: 0],
             errorCount: statusCounts["error", default: 0],
@@ -380,6 +388,67 @@ private func formatMs(_ ms: Int) -> String {
     return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s"
 }
 
+private func overheadMs(for metric: JobExecutionMetric) -> Int? {
+    guard
+        let total = metric.totalProcessingMs,
+        let queueWait = metric.queueWaitMs,
+        let execution = metric.executionMs
+    else {
+        return nil
+    }
+
+    return max(0, total - queueWait - execution)
+}
+
+private struct StageBreakdown {
+    let cacheAcquireMs: Int?
+    let downloadMs: Int?
+    let prepMs: Int?
+    let makeMs: Int?
+    let formatted: String?
+}
+
+private func stageBreakdown(for metric: JobExecutionMetric) -> StageBreakdown? {
+    let cacheAcquireMs = metric.testSetupAcquireMs
+    let downloadMs = metric.submissionDownloadMs
+    let prepMs = sum([
+        metric.workdirSetupMs,
+        metric.submissionDirSetupMs,
+        metric.submissionUnpackMs,
+        metric.starterCleanupMs,
+        metric.submissionPrepareMs,
+        metric.runtimeHelperSetupMs,
+    ])
+    let makeMs = metric.makeStepMs
+
+    let parts = [
+        cacheAcquireMs.map { "cache \(formatMs($0))" },
+        downloadMs.map { "dl \(formatMs($0))" },
+        prepMs.map { "prep \(formatMs($0))" },
+        makeMs.map { "make \(formatMs($0))" },
+    ].compactMap { $0 }
+
+    guard !parts.isEmpty else { return nil }
+    return StageBreakdown(
+        cacheAcquireMs: cacheAcquireMs,
+        downloadMs: downloadMs,
+        prepMs: prepMs,
+        makeMs: makeMs,
+        formatted: parts.joined(separator: " · ")
+    )
+}
+
+private func average(_ values: [Int]) -> Int? {
+    guard !values.isEmpty else { return nil }
+    return values.reduce(0, +) / values.count
+}
+
+private func sum(_ values: [Int?]) -> Int? {
+    let present = values.compactMap { $0 }
+    guard !present.isEmpty else { return nil }
+    return present.reduce(0, +)
+}
+
 private func iso8601String(_ date: Date) -> String {
     ISO8601DateFormatter().string(from: date)
 }
@@ -402,4 +471,3 @@ func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
     }
     return counts
 }
-
