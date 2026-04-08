@@ -31,11 +31,11 @@
     #for(row in rows):
         <tr>
             <td>
-                <strong>#(row.assignmentTitle)</strong>
                 #if(row.assignmentSubmissionsURL):
-                <div style="margin-top:.2rem">
-                    <a href="#(row.assignmentSubmissionsURL)" style="font-size:.82rem">Assignment summary</a>
-                </div>
+                <strong><a href="#(row.assignmentSubmissionsURL)">#(row.assignmentTitle)</a></strong>
+                #else:
+                <strong>#(row.assignmentTitle)</strong>
+                #endif
                 #endif
             </td>
             <td>#(row.attemptNumber)</td>

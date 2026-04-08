@@ -33,6 +33,7 @@ struct CourseSectionRow: Encodable {
 
 struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
+    let metrics: [InstructorDashboardMetric]
     let sections: [CourseSectionRow]    // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
@@ -44,11 +45,18 @@ struct AssignmentsContext: Encodable {
     let courseIsArchived: Bool
 }
 
+struct InstructorDashboardMetric: Encodable {
+    let label: String
+    let value: String
+}
+
 struct EnrolledStudentRow: Encodable {
     let id: String
     let username: String
     let displayName: String
     let role: String        // "student" | "instructor" | "admin"
+    let lastLoginAtText: String
+    let lastLoginAtISO: String?
     let submissionsURL: String
 }
 
@@ -56,6 +64,7 @@ struct AssignmentSubmissionsContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
     let assignmentTitle: String
+    let metrics: [InstructorDashboardMetric]
     let rows: [AssignmentStudentRow]
 }
 
@@ -70,6 +79,7 @@ struct AssignmentStudentRow: Encodable {
     let latestSubmittedAtText: String
     let additionalSubmissionCount: Int
     let fullHistoryURL: String
+    let bestGradePercent: Int?
 }
 
 struct ValidateContext: Encodable {

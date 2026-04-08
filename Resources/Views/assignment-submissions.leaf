@@ -14,6 +14,17 @@
     </div>
 </div>
 
+<section class="assignment-diagnostics">
+    <div class="diagnostics-cards">
+        #for(metric in metrics):
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">#(metric.label)</div>
+            <div class="diagnostic-value">#(metric.value)</div>
+        </article>
+        #endfor
+    </div>
+</section>
+
 #if(rows.isEmpty):
 <p class="empty">No student users found.</p>
 #else:
@@ -66,6 +77,31 @@
 </table>
 #endif
 <style>
+.assignment-diagnostics {
+    margin-bottom: 1.25rem;
+}
+.diagnostics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+}
+.diagnostic-card {
+    padding: .75rem .9rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+}
+.diagnostic-label {
+    color: var(--gray-600);
+    font-size: .82rem;
+}
+.diagnostic-value {
+    margin-top: .2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--gray-900);
+}
 #assignment-submissions-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;

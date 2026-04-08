@@ -8,6 +8,16 @@
 #else:
 <h1 style="margin-bottom:1.25rem">Assignments</h1>
 #endif
+<section class="instructor-diagnostics">
+    <div class="diagnostics-cards">
+        #for(metric in metrics):
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">#(metric.label)</div>
+            <div class="diagnostic-value">#(metric.value)</div>
+        </article>
+        #endfor
+    </div>
+</section>
 <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
     <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
     <!-- Add Section inline form -->
@@ -112,11 +122,8 @@
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
                 <td>
                     #if(row.assignmentID):
-                    <span class="reorder-controls">
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
-                    </span>
-                    <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
+                    <span class="assignment-name-cell">
+                        <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
@@ -127,18 +134,21 @@
                     #else:
                     <span style="color:var(--gray-600)">Unpublished</span>
                     #endif
+                    #if(row.assignmentID):
+                    </span>
+                    #endif
                 </td>
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/instructor/#(row.assignmentID)/status">
+                    <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="status-s-#(row.assignmentID)">Status for #(row.title)</label>
                         <select id="status-s-#(row.assignmentID)" class="form-input" name="status"
-                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
+                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem"
+                                onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
-                        <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                     </form>
                     #elseif(row.assignmentID):
                     <span class="tier tier-closed">closed</span>
@@ -263,11 +273,8 @@
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
                 <td>
                     #if(row.assignmentID):
-                    <span class="reorder-controls">
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
-                    </span>
-                    <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
+                    <span class="assignment-name-cell">
+                        <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
@@ -278,18 +285,21 @@
                     #else:
                     <span style="color:var(--gray-600)">Unpublished</span>
                     #endif
+                    #if(row.assignmentID):
+                    </span>
+                    #endif
                 </td>
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/instructor/#(row.assignmentID)/status">
+                    <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="status-u-#(row.assignmentID)">Status for #(row.title)</label>
                         <select id="status-u-#(row.assignmentID)" class="form-input" name="status"
-                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
+                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem"
+                                onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
-                        <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                     </form>
                     #elseif(row.assignmentID):
                     <span class="tier tier-closed">closed</span>
@@ -429,6 +439,7 @@
                 <th class="sortable" data-col="0" style="cursor:pointer;user-select:none">Name <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
+                <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇕</span></th>
             </tr>
         </thead>
         <tbody>
@@ -437,6 +448,10 @@
                 <td><a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a></td>
                 <td><a href="#(student.submissionsURL)"><code>#(student.username)</code></a></td>
                 <td>#(student.role)</td>
+                <td class="js-relative-time"
+                    #if(student.lastLoginAtISO):data-iso="#(student.lastLoginAtISO)"#endif>
+                    #(student.lastLoginAtText)
+                </td>
             </tr>
         #endfor
         </tbody>
@@ -447,13 +462,48 @@
 </div>
 
 <style>
+.instructor-diagnostics {
+    margin-bottom: 1.25rem;
+}
+.diagnostics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+}
+.diagnostic-card {
+    padding: .75rem .9rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+}
+.diagnostic-label {
+    color: var(--gray-600);
+    font-size: .82rem;
+}
+.diagnostic-value {
+    margin-top: .2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--gray-900);
+}
+.assignment-name-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+}
 .assignment-drag-handle {
-    display: inline-block;
-    margin-right: .45rem;
+    display: inline-flex;
+    align-items: center;
     color: var(--gray-500);
     font-weight: 700;
     cursor: grab;
     user-select: none;
+    flex: 0 0 auto;
+}
+.status-form {
+    display: inline-flex;
+    align-items: center;
 }
 .student-row-link {
     cursor: pointer;
@@ -499,6 +549,45 @@ tr.assignment-draggable td {
 (function () {
     'use strict';
 
+    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+    function formatRelative(isoString) {
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) return isoString;
+
+        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
+        var abs = Math.abs(seconds);
+
+        if (abs < 60) return relativeFormatter.format(seconds, 'second');
+        var minutes = Math.round(seconds / 60);
+        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
+        var hours = Math.round(minutes / 60);
+        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
+        var days = Math.round(hours / 24);
+        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
+        var weeks = Math.round(days / 7);
+        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
+        var months = Math.round(days / 30);
+        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
+        var years = Math.round(days / 365);
+        return relativeFormatter.format(years, 'year');
+    }
+
+    function applyRelativeTimes(root) {
+        var scope = root || document;
+        var nodes = scope.querySelectorAll('.js-relative-time[data-iso]');
+        nodes.forEach(function (el) {
+            var iso = el.getAttribute('data-iso');
+            if (!iso) return;
+            var date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return;
+            el.textContent = formatRelative(iso);
+            el.title = date.toLocaleString();
+        });
+    }
+
+    applyRelativeTimes();
+
     // ── Assignment drag-and-drop (within and across sections) ─────────────────
     //
     // All assignment tbodies carry data-section-id (empty string = ungrouped).
@@ -542,7 +631,6 @@ tr.assignment-draggable td {
     document.addEventListener('dragstart', function (event) {
         var target = event.target;
         if (!(target instanceof Element)) return;
-        if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
         var row = target.closest('tr[data-assignment-id]');
         if (!row) return;
         assignDragged = row;
@@ -638,28 +726,6 @@ tr.assignment-draggable td {
             if (newOrder !== startOrder) {
                 persistReorder(currentTbody).catch(function () { window.location.reload(); });
             }
-        }
-    });
-
-    // ↑↓ button reorder (within the same section only).
-    document.addEventListener('click', function (event) {
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        if (!target.classList.contains('reorder-btn')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        var row = target.closest('tr[data-assignment-id]');
-        if (!row) return;
-        var body = row.parentElement;
-        var before = currentOrder(body).join(',');
-        var dir = target.getAttribute('data-reorder');
-        if (dir === 'up' && row.previousElementSibling && row.previousElementSibling.hasAttribute('data-assignment-id')) {
-            body.insertBefore(row, row.previousElementSibling);
-        } else if (dir === 'down' && row.nextElementSibling && row.nextElementSibling.hasAttribute('data-assignment-id')) {
-            body.insertBefore(row.nextElementSibling, row);
-        }
-        if (currentOrder(body).join(',') !== before) {
-            persistReorder(body).catch(function () { window.location.reload(); });
         }
     });
 
