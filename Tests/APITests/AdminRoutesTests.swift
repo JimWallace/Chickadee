@@ -405,4 +405,69 @@ final class AdminRoutesTests: XCTestCase {
             XCTAssertEqual(row["avgQueueWaitFormatted"] as? String, "1m 5s")
         })
     }
+
+    func testRunnerDetailShowsStageTimingBreakdownWhenAvailable() async throws {
+        let cookie = try await loginAsAdmin()
+        let course = try await makeCourse(code: "RUN101", name: "Runner Detail")
+        let courseID = try course.requireID()
+        let setup = try await makeSetup(id: "setup_runner_detail", courseID: courseID)
+        let student = try await makeUser(username: "runner_detail_student", role: "student")
+        let studentID = try student.requireID()
+        let submission = try await makeSubmission(
+            id: "sub_runner_detail",
+            setupID: try setup.requireID(),
+            userID: studentID
+        )
+        submission.workerID = "runner-detail"
+        try await submission.update(on: app.db)
+
+        let metric = JobExecutionMetric(
+            submissionID: try submission.requireID(),
+            jobID: try submission.requireID(),
+            testSetupID: try setup.requireID(),
+            courseID: courseID,
+            assignmentID: nil,
+            userID: studentID,
+            runnerID: "runner-detail",
+            kind: APISubmission.Kind.student,
+            attemptNumber: 1,
+            enqueuedAt: Date().addingTimeInterval(-30)
+        )
+        metric.completedAt = Date().addingTimeInterval(-5)
+        metric.queueWaitMs = 1_000
+        metric.executionMs = 4_000
+        metric.totalProcessingMs = 8_000
+        metric.testSetupAcquireMs = 200
+        metric.submissionDownloadMs = 150
+        metric.workdirSetupMs = 10
+        metric.submissionDirSetupMs = 15
+        metric.submissionUnpackMs = 20
+        metric.starterCleanupMs = 5
+        metric.submissionPrepareMs = 35
+        metric.runtimeHelperSetupMs = 15
+        metric.makeStepMs = 25
+        metric.finalStatus = "passed"
+        try await metric.save(on: app.db)
+
+        await app.workerActivityStore.markActive(
+            workerID: "runner-detail",
+            hostname: "runner-host",
+            runnerVersion: "runner/1.1",
+            maxConcurrentJobs: 2,
+            activeJobs: 0,
+            lastHeartbeatAt: Date()
+        )
+
+        try await app.asyncTest(.GET, "/admin/runners/runner-detail", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = String(buffer: res.body)
+            XCTAssertTrue(body.contains("Avg cache acquire:"))
+            XCTAssertTrue(body.contains("cache 200ms"))
+            XCTAssertTrue(body.contains("dl 150ms"))
+            XCTAssertTrue(body.contains("prep 100ms"))
+            XCTAssertTrue(body.contains("make 25ms"))
+        })
+    }
 }

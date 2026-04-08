@@ -1,5 +1,42 @@
 import Foundation
 
+public struct WorkerExecutionStageTimings: Codable, Sendable, Equatable {
+    public let workdirSetupMs: Int?
+    public let submissionDirSetupMs: Int?
+    public let submissionDownloadMs: Int?
+    public let testSetupAcquireMs: Int?
+    public let submissionUnpackMs: Int?
+    public let starterCleanupMs: Int?
+    public let submissionPrepareMs: Int?
+    public let makeStepMs: Int?
+    public let runtimeHelperSetupMs: Int?
+    public let testExecutionMs: Int?
+
+    public init(
+        workdirSetupMs: Int? = nil,
+        submissionDirSetupMs: Int? = nil,
+        submissionDownloadMs: Int? = nil,
+        testSetupAcquireMs: Int? = nil,
+        submissionUnpackMs: Int? = nil,
+        starterCleanupMs: Int? = nil,
+        submissionPrepareMs: Int? = nil,
+        makeStepMs: Int? = nil,
+        runtimeHelperSetupMs: Int? = nil,
+        testExecutionMs: Int? = nil
+    ) {
+        self.workdirSetupMs = workdirSetupMs
+        self.submissionDirSetupMs = submissionDirSetupMs
+        self.submissionDownloadMs = submissionDownloadMs
+        self.testSetupAcquireMs = testSetupAcquireMs
+        self.submissionUnpackMs = submissionUnpackMs
+        self.starterCleanupMs = starterCleanupMs
+        self.submissionPrepareMs = submissionPrepareMs
+        self.makeStepMs = makeStepMs
+        self.runtimeHelperSetupMs = runtimeHelperSetupMs
+        self.testExecutionMs = testExecutionMs
+    }
+}
+
 /// Diagnostics emitted by a native worker for one job execution.
 ///
 /// These fields are best-effort: platforms or runner modes that cannot collect
@@ -17,6 +54,7 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
     public let childProcessCount: Int?
     public let stdoutBytes: Int?
     public let stderrBytes: Int?
+    public let stageTimings: WorkerExecutionStageTimings?
 
     public init(
         runnerID: String,
@@ -30,7 +68,8 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
         wallClockMs: Int?,
         childProcessCount: Int?,
         stdoutBytes: Int?,
-        stderrBytes: Int?
+        stderrBytes: Int?,
+        stageTimings: WorkerExecutionStageTimings? = nil
     ) {
         self.runnerID = runnerID
         self.startedAt = startedAt
@@ -44,6 +83,7 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
         self.childProcessCount = childProcessCount
         self.stdoutBytes = stdoutBytes
         self.stderrBytes = stderrBytes
+        self.stageTimings = stageTimings
     }
 }
 

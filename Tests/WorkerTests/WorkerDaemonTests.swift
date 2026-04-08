@@ -151,8 +151,8 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         private var collections: [TestOutcomeCollection] = []
         private var heartbeatCount = 0
 
-        func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
-            collections.append(collection)
+        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
+            collections.append(report.collection)
         }
 
         func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
@@ -184,13 +184,13 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             self.heartbeatFailuresRemaining = heartbeatFailuresRemaining
         }
 
-        func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
+        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
             attempts += 1
             if failuresRemaining > 0 {
                 failuresRemaining -= 1
                 throw ReporterError.httpError(500, "temporary failure")
             }
-            collections.append(collection)
+            collections.append(report.collection)
         }
 
         func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {

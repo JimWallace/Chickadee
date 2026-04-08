@@ -48,6 +48,10 @@ struct AdminRunnerSummary: Encodable {
     let jobsProcessed: Int
     let avgExecutionFormatted: String?
     let avgQueueWaitFormatted: String?
+    let avgOverheadFormatted: String?
+    let avgCacheAcquireFormatted: String?
+    let avgDownloadFormatted: String?
+    let avgPrepFormatted: String?
     let passedCount: Int
     let failedCount: Int
     let errorCount: Int
@@ -60,6 +64,8 @@ struct AdminRunnerJobRow: Encodable {
     let finalStatus: String
     let queueWaitFormatted: String?
     let executionFormatted: String?
+    let overheadFormatted: String?
+    let stageBreakdownFormatted: String?
     let totalProcessingFormatted: String?
     let completedAt: String?
     let testsPassed: Int

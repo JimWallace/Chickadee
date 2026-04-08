@@ -14,6 +14,52 @@ private enum RunnerJobStatus: String {
     case timeout
 }
 
+private struct JobStageTimings {
+    private var values: [String: Int] = [:]
+
+    mutating func measureSync<T>(_ stage: String, operation: () throws -> T) rethrows -> T {
+        let start = Date()
+        let result = try operation()
+        values[stage] = millisecondsSince(start)
+        return result
+    }
+
+    mutating func record(_ stage: String, milliseconds: Int) {
+        values[stage] = milliseconds
+    }
+
+    func fields() -> [String: Any] {
+        var result: [String: Any] = [:]
+        for (key, value) in values {
+            result["\(key)_ms"] = value
+        }
+        return result
+    }
+
+    func value(for stage: String) -> Int? {
+        values[stage]
+    }
+
+    func asWorkerExecutionStageTimings() -> WorkerExecutionStageTimings {
+        WorkerExecutionStageTimings(
+            workdirSetupMs: value(for: "workdir_setup"),
+            submissionDirSetupMs: value(for: "submission_dir_setup"),
+            submissionDownloadMs: value(for: "submission_download"),
+            testSetupAcquireMs: value(for: "test_setup_acquire"),
+            submissionUnpackMs: value(for: "submission_unpack"),
+            starterCleanupMs: value(for: "starter_cleanup"),
+            submissionPrepareMs: value(for: "submission_prepare"),
+            makeStepMs: value(for: "make_step"),
+            runtimeHelperSetupMs: value(for: "runtime_helper_setup"),
+            testExecutionMs: value(for: "test_execution")
+        )
+    }
+
+    private func millisecondsSince(_ start: Date) -> Int {
+        Int(Date().timeIntervalSince(start) * 1000)
+    }
+}
+
 private func writeToStandardError(_ message: String) {
     FileHandle.standardError.write(Data(message.utf8))
 }
@@ -382,6 +428,7 @@ actor WorkerDaemon {
         activeJobs += 1
         let jobStartedAt = Date()
         defer { activeJobs = max(0, activeJobs - 1) }
+        var stageTimings = JobStageTimings()
 
         writeStructuredRunnerLog(event: "job_accepted", fields: [
             "runner_id": workerID,
@@ -407,8 +454,25 @@ actor WorkerDaemon {
 
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
+        let workDirSetupStartedAt = Date()
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: workDir) }
+        stageTimings.record("workdir_setup", milliseconds: Int(Date().timeIntervalSince(workDirSetupStartedAt) * 1000))
+        defer {
+            let cleanupStartedAt = Date()
+            try? FileManager.default.removeItem(at: workDir)
+            stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
+            let totalWallClockMs = Int(Date().timeIntervalSince(jobStartedAt) * 1000)
+            var fields: [String: Any] = [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "job_id": job.submissionID,
+                "total_wall_clock_ms": totalWallClockMs,
+            ]
+            for (key, value) in stageTimings.fields() {
+                fields[key] = value
+            }
+            writeStructuredRunnerLog(event: "job_stage_timings", fields: fields)
+        }
 
         // Download submission and acquire the prepared test setup concurrently.
         // The test setup is served from the LRU cache: on a hit the cached
@@ -416,10 +480,14 @@ actor WorkerDaemon {
         // downloaded, unzipped, committed to cache, then copied.
         let submissionZip = workDir.appendingPathComponent("submission.zip")
         let submissionDir = workDir.appendingPathComponent("submission", isDirectory: true)
-        try FileManager.default.createDirectory(at: submissionDir, withIntermediateDirectories: true)
+        try stageTimings.measureSync("submission_dir_setup") {
+            try FileManager.default.createDirectory(at: submissionDir, withIntermediateDirectories: true)
+        }
 
+        let submissionDownloadStartedAt = Date()
         async let submissionDownload: Void = download(url: job.submissionURL, to: submissionZip)
 
+        let testSetupAcquireStartedAt = Date()
         let testSetupDir = try await testSetupCache.acquire(testSetupID: job.testSetupID) {
             let stagingZip = workDir.appendingPathComponent("testsetup.zip")
             let stagingDir = workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
@@ -428,22 +496,26 @@ actor WorkerDaemon {
             try self.unzip(stagingZip, to: stagingDir)
             return stagingDir
         }
+        stageTimings.record("test_setup_acquire", milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000))
         defer { try? FileManager.default.removeItem(at: testSetupDir) }
 
         try await submissionDownload
+        stageTimings.record("submission_download", milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000))
 
         let manifest = job.manifest
 
         // Stage the submission independently from the grading workspace so the
         // worker can normalize it without mutating the raw artifact.
-        if let filename = job.submissionFilename {
-            let dest = submissionDir.appendingPathComponent(filename)
-            if FileManager.default.fileExists(atPath: dest.path) {
-                try FileManager.default.removeItem(at: dest)
+        try stageTimings.measureSync("submission_unpack") {
+            if let filename = job.submissionFilename {
+                let dest = submissionDir.appendingPathComponent(filename)
+                if FileManager.default.fileExists(atPath: dest.path) {
+                    try FileManager.default.removeItem(at: dest)
+                }
+                try FileManager.default.copyItem(at: submissionZip, to: dest)
+            } else {
+                try unzip(submissionZip, to: submissionDir)
             }
-            try FileManager.default.copyItem(at: submissionZip, to: dest)
-        } else {
-            try unzip(submissionZip, to: submissionDir)
         }
 
         // Remove the starter notebook template from the test directory so
@@ -451,56 +523,60 @@ actor WorkerDaemon {
         // and the student/canonical submission.  Older manifests lack
         // starterNotebook — fall back to "assignment.ipynb" since that is
         // the conventional name used by every existing assignment.
-        let starterName = manifest.starterNotebook ?? "assignment.ipynb"
-        do {
-            let starterPath = testSetupDir.appendingPathComponent(starterName)
-            if FileManager.default.fileExists(atPath: starterPath.path),
-               job.submissionFilename != starterName {
-                try FileManager.default.removeItem(at: starterPath)
+        try stageTimings.measureSync("starter_cleanup") {
+            let starterName = manifest.starterNotebook ?? "assignment.ipynb"
+            do {
+                let starterPath = testSetupDir.appendingPathComponent(starterName)
+                if FileManager.default.fileExists(atPath: starterPath.path),
+                   job.submissionFilename != starterName {
+                    try FileManager.default.removeItem(at: starterPath)
+                }
             }
         }
 
         let normalizationWarnings: [String]
         let preferredStudentModule: String?
-        if shouldNormalizePythonSubmission(
-            manifest: manifest,
-            submissionFilename: job.submissionFilename,
-            submissionDirectory: submissionDir
-        ) {
-            let normalizer = SubmissionNormalizer()
-            let normalization = try normalizer.normalizePythonSubmission(
+        (normalizationWarnings, preferredStudentModule) = try stageTimings.measureSync("submission_prepare") {
+            if shouldNormalizePythonSubmission(
                 manifest: manifest,
-                submissionDirectory: submissionDir,
-                workspaceDirectory: testSetupDir,
-                submissionFilename: job.submissionFilename
-            )
-            normalizationWarnings = normalization.warnings
-            preferredStudentModule = normalization.preferredStudentModule
-        } else {
-            try mergeDirectoryContents(from: submissionDir, into: testSetupDir)
-            try extractNotebooksToCode(in: testSetupDir)
-            normalizationWarnings = []
-            preferredStudentModule = legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename)
+                submissionFilename: job.submissionFilename,
+                submissionDirectory: submissionDir
+            ) {
+                let normalizer = SubmissionNormalizer()
+                let normalization = try normalizer.normalizePythonSubmission(
+                    manifest: manifest,
+                    submissionDirectory: submissionDir,
+                    workspaceDirectory: testSetupDir,
+                    submissionFilename: job.submissionFilename
+                )
+                return (normalization.warnings, normalization.preferredStudentModule)
+            } else {
+                try mergeDirectoryContents(from: submissionDir, into: testSetupDir)
+                try extractNotebooksToCode(in: testSetupDir)
+                return ([], legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename))
+            }
         }
 
         // Optional make step.
-        if let makefile = manifest.makefile {
-            try runMake(in: testSetupDir, target: makefile.target)
+        try stageTimings.measureSync("make_step") {
+            if let makefile = manifest.makefile {
+                try runMake(in: testSetupDir, target: makefile.target)
+            }
         }
 
         // Install shared Python test runtime helpers for every run.
-        try writePythonRuntimeHelpers(in: testSetupDir)
-        try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
-
-        // Install shared R test runtime helpers for every run.
-        try writeRRuntimeHelper(in: testSetupDir)
+        try stageTimings.measureSync("runtime_helper_setup") {
+            try writePythonRuntimeHelpers(in: testSetupDir)
+            try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
+            try writeRRuntimeHelper(in: testSetupDir)
+        }
 
         // Run each test script and collect outcomes.
         // `passedScripts` tracks which scripts produced a .pass outcome so that
         // dependent tests can check their prerequisites before running.
         var outcomes: [TestOutcome] = []
         var passedScripts: Set<String> = []
-
+        let testExecutionStartedAt = Date()
         for entry in manifest.testSuites {
             // Dependency pre-check: if any prerequisite did not pass, auto-fail
             // without running the script.
@@ -561,6 +637,7 @@ actor WorkerDaemon {
                 passedScripts.insert(entry.script)
             }
         }
+        stageTimings.record("test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
 
         let collection = makeCollection(
             outcomes: outcomes,
@@ -568,8 +645,25 @@ actor WorkerDaemon {
             job: job,
             startedAt: jobStartedAt
         )
+        let diagnostics = WorkerExecutionDiagnostics(
+            runnerID: workerID,
+            startedAt: jobStartedAt,
+            finishedAt: collection.timestamp,
+            finalStatus: inferredCollectionStatus(collection).rawValue,
+            timedOut: collection.timeoutCount > 0,
+            exitCode: nil,
+            terminationReason: nil,
+            peakRSSBytes: nil,
+            wallClockMs: collection.executionTimeMs,
+            childProcessCount: nil,
+            stdoutBytes: nil,
+            stderrBytes: nil,
+            stageTimings: stageTimings.asWorkerExecutionStageTimings()
+        )
         do {
-            try await reporter.report(collection)
+            let resultReportStartedAt = Date()
+            try await reporter.report(WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
+            stageTimings.record("result_report", milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000))
             writeStructuredRunnerLog(event: "result_submission_succeeded", fields: [
                 "runner_id": workerID,
                 "submission_id": job.submissionID,

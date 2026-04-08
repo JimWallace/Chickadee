@@ -276,7 +276,14 @@ struct CoreCodableTests {
             wallClockMs: 10_000,
             childProcessCount: 2,
             stdoutBytes: 128,
-            stderrBytes: 0
+            stderrBytes: 0,
+            stageTimings: WorkerExecutionStageTimings(
+                workdirSetupMs: 15,
+                submissionDownloadMs: 120,
+                testSetupAcquireMs: 45,
+                submissionPrepareMs: 210,
+                testExecutionMs: 10_000
+            )
         )
         let report = WorkerExecutionReport(collection: col, diagnostics: diag)
 
@@ -287,6 +294,8 @@ struct CoreCodableTests {
         #expect(decoded.diagnostics?.timedOut            == false)
         #expect(decoded.diagnostics?.peakRSSBytes        == 4096)
         #expect(decoded.diagnostics?.terminationReason   == nil)
+        #expect(decoded.diagnostics?.stageTimings?.submissionDownloadMs == 120)
+        #expect(decoded.diagnostics?.stageTimings?.testExecutionMs == 10_000)
     }
 
     @Test func workerExecutionReportNilDiagnosticsRoundTrip() throws {

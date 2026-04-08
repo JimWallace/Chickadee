@@ -55,6 +55,36 @@ final class JobExecutionMetric: Model, Content, @unchecked Sendable {
     @OptionalField(key: "total_processing_ms")
     var totalProcessingMs: Int?
 
+    @OptionalField(key: "workdir_setup_ms")
+    var workdirSetupMs: Int?
+
+    @OptionalField(key: "submission_dir_setup_ms")
+    var submissionDirSetupMs: Int?
+
+    @OptionalField(key: "submission_download_ms")
+    var submissionDownloadMs: Int?
+
+    @OptionalField(key: "test_setup_acquire_ms")
+    var testSetupAcquireMs: Int?
+
+    @OptionalField(key: "submission_unpack_ms")
+    var submissionUnpackMs: Int?
+
+    @OptionalField(key: "starter_cleanup_ms")
+    var starterCleanupMs: Int?
+
+    @OptionalField(key: "submission_prepare_ms")
+    var submissionPrepareMs: Int?
+
+    @OptionalField(key: "make_step_ms")
+    var makeStepMs: Int?
+
+    @OptionalField(key: "runtime_helper_setup_ms")
+    var runtimeHelperSetupMs: Int?
+
+    @OptionalField(key: "test_execution_ms")
+    var testExecutionMs: Int?
+
     @OptionalField(key: "final_status")
     var finalStatus: String?
 

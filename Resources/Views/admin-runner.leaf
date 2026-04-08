@@ -20,6 +20,10 @@ Runner #(runner.workerID)
             <div><strong>Jobs processed:</strong> #(summary.jobsProcessed)</div>
             <div><strong>Avg run:</strong> #if(summary.avgExecutionFormatted):#(summary.avgExecutionFormatted)#else:—#endif</div>
             <div><strong>Avg wait:</strong> #if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</div>
+            <div><strong>Avg setup/other:</strong> #if(summary.avgOverheadFormatted):#(summary.avgOverheadFormatted)#else:—#endif</div>
+            <div><strong>Avg cache acquire:</strong> #if(summary.avgCacheAcquireFormatted):#(summary.avgCacheAcquireFormatted)#else:—#endif</div>
+            <div><strong>Avg download:</strong> #if(summary.avgDownloadFormatted):#(summary.avgDownloadFormatted)#else:—#endif</div>
+            <div><strong>Avg prep:</strong> #if(summary.avgPrepFormatted):#(summary.avgPrepFormatted)#else:—#endif</div>
         </div>
     </div>
 
@@ -33,6 +37,8 @@ Runner #(runner.workerID)
 
 <section class="admin-section">
     <h3 style="margin-top:0">Recent Jobs</h3>
+    <p style="margin:-.35rem 0 1rem;color:var(--muted)">Setup/other is derived as total processing minus queue wait and measured test execution, so it captures setup, reporting, cleanup, and other non-test work.</p>
+    <p style="margin:-.35rem 0 1rem;color:var(--muted)">Stage breakdown is runner-side timing captured before the result upload, grouped into cache acquire, submission download, and prep work (workspace setup, unpack, normalization, helper writes, and similar steps).</p>
     #if(recentJobs.isEmpty):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
@@ -43,6 +49,8 @@ Runner #(runner.workerID)
                 <th>Status</th>
                 <th class="time">Queue Wait</th>
                 <th class="time">Execution</th>
+                <th class="time">Setup/Other</th>
+                <th>Prep Stages</th>
                 <th class="time">Total</th>
                 <th class="time">Tests</th>
                 <th class="time">Completed</th>
@@ -55,6 +63,8 @@ Runner #(runner.workerID)
                 <td>#(job.finalStatus)</td>
                 <td class="time">#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
                 <td class="time">#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
+                <td class="time">#if(job.overheadFormatted):#(job.overheadFormatted)#else:—#endif</td>
+                <td>#if(job.stageBreakdownFormatted):#(job.stageBreakdownFormatted)#else:—#endif</td>
                 <td class="time">#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
                 <td class="time">#(job.testsPassed) / #(job.testsFailed) / #(job.testsErrored) / #(job.testsTimedOut)</td>
                 <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)"#endif>

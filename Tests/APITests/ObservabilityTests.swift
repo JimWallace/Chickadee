@@ -108,6 +108,83 @@ final class ObservabilityTests: XCTestCase {
         XCTAssertEqual(metric?.finalStatus, JobFinalStatus.error.rawValue)
     }
 
+    func testWrappedExecutionReportPersistsStageTimingMetrics() async throws {
+        let (_, submission) = try await makeSubmission(submissionID: "sub_stage_metrics")
+        submission.submittedAt = Date(timeIntervalSince1970: 3_000)
+        submission.workerID = "runner-stage"
+        submission.assignedAt = Date(timeIntervalSince1970: 3_001)
+        submission.status = "assigned"
+        try await submission.update(on: app.db)
+
+        await app.diagnostics.recordSubmissionCreated(submission: submission, on: app.db, logger: app.logger)
+        await app.diagnostics.recordJobAssigned(submission: submission, on: app.db, logger: app.logger)
+
+        let collection = TestOutcomeCollection(
+            submissionID: try submission.requireID(),
+            testSetupID: submission.testSetupID,
+            attemptNumber: submission.attemptNumber ?? 1,
+            buildStatus: .passed,
+            compilerOutput: nil,
+            outcomes: [],
+            totalTests: 0,
+            passCount: 0,
+            failCount: 0,
+            errorCount: 0,
+            timeoutCount: 0,
+            executionTimeMs: 250,
+            jobStartedAt: Date(timeIntervalSince1970: 3_002),
+            runnerVersion: "runner-test/1.0",
+            timestamp: Date(timeIntervalSince1970: 3_003)
+        )
+        let diagnostics = WorkerExecutionDiagnostics(
+            runnerID: "runner-stage",
+            startedAt: Date(timeIntervalSince1970: 3_002),
+            finishedAt: Date(timeIntervalSince1970: 3_003),
+            finalStatus: "passed",
+            timedOut: false,
+            exitCode: 0,
+            terminationReason: nil,
+            peakRSSBytes: nil,
+            wallClockMs: 250,
+            childProcessCount: nil,
+            stdoutBytes: nil,
+            stderrBytes: nil,
+            stageTimings: WorkerExecutionStageTimings(
+                workdirSetupMs: 10,
+                submissionDirSetupMs: 15,
+                submissionDownloadMs: 20,
+                testSetupAcquireMs: 25,
+                submissionUnpackMs: 30,
+                starterCleanupMs: 5,
+                submissionPrepareMs: 40,
+                makeStepMs: 50,
+                runtimeHelperSetupMs: 12,
+                testExecutionMs: 250
+            )
+        )
+
+        await app.diagnostics.recordWorkerExecutionReport(
+            collection: collection,
+            diagnostics: diagnostics,
+            on: app.db,
+            logger: app.logger
+        )
+
+        let metric = try await JobExecutionMetric.query(on: app.db)
+            .filter(\.$submissionID == "sub_stage_metrics")
+            .first()
+        XCTAssertEqual(metric?.workdirSetupMs, 10)
+        XCTAssertEqual(metric?.submissionDirSetupMs, 15)
+        XCTAssertEqual(metric?.submissionDownloadMs, 20)
+        XCTAssertEqual(metric?.testSetupAcquireMs, 25)
+        XCTAssertEqual(metric?.submissionUnpackMs, 30)
+        XCTAssertEqual(metric?.starterCleanupMs, 5)
+        XCTAssertEqual(metric?.submissionPrepareMs, 40)
+        XCTAssertEqual(metric?.makeStepMs, 50)
+        XCTAssertEqual(metric?.runtimeHelperSetupMs, 12)
+        XCTAssertEqual(metric?.testExecutionMs, 250)
+    }
+
     func testWorkerHeartbeatUpdatesRunnerSnapshot() async throws {
         let payload = WorkerActivityPayload(
             workerID: "runner-heartbeat",
