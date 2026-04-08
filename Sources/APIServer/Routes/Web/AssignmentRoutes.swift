@@ -170,6 +170,10 @@ struct AssignmentRoutes: RouteCollection {
                 .filter(\.$testSetupID ~~ courseSetupIDs)
                 .filter(\.$kind == APISubmission.Kind.student)
                 .all()
+            let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
+                for: courseSetupIDs,
+                on: req.db
+            )
 
             let enrolledStudentIDs = Set(
                 enrolledUsers
@@ -190,7 +194,9 @@ struct AssignmentRoutes: RouteCollection {
             let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
             let pendingNow = allCourseStudentSubmissions.filter { submission in
                 guard let userID = submission.userID else { return false }
-                return enrolledStudentIDs.contains(userID) && ["pending", "assigned"].contains(submission.status)
+                return enrolledStudentIDs.contains(userID)
+                    && workerModeSetupIDs.contains(submission.testSetupID)
+                    && ["pending", "assigned"].contains(submission.status)
             }.count
             let submitterIDs = Set(
                 allCourseStudentSubmissions.compactMap { submission -> UUID? in
@@ -201,8 +207,8 @@ struct AssignmentRoutes: RouteCollection {
             let noSubmissionYet = enrolledStudentIDs.subtracting(submitterIDs).count
 
             metrics = [
-                InstructorDashboardMetric(label: "Students Logged In (24h)", value: "\(loggedIn24h)"),
-                InstructorDashboardMetric(label: "Submissions Made (24h)", value: "\(recentStudentSubmissions.count)"),
+                InstructorDashboardMetric(label: "24h Logged In", value: "\(loggedIn24h)"),
+                InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
                 InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
                 InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
                 InstructorDashboardMetric(label: "Students With No Submissions", value: "\(noSubmissionYet)")
@@ -210,8 +216,8 @@ struct AssignmentRoutes: RouteCollection {
         } else {
             enrolledStudents = []
             metrics = [
-                InstructorDashboardMetric(label: "Students Logged In (24h)", value: "—"),
-                InstructorDashboardMetric(label: "Submissions Made (24h)", value: "—"),
+                InstructorDashboardMetric(label: "24h Logged In", value: "—"),
+                InstructorDashboardMetric(label: "24h Submissions", value: "—"),
                 InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
                 InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
                 InstructorDashboardMetric(label: "Students With No Submissions", value: "—")

@@ -313,6 +313,35 @@ final class BrowserRunnerRoutesTests: XCTestCase {
             "stored result JSON should contain the dependency-skip message")
     }
 
+    func testRunnerSubmitRejectsBrowserGradedAssignments() async throws {
+        let setupID = try await insertSetup(manifest: simpleManifest())
+        let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let nb      = minimalNotebook()
+
+        try await app.asyncTest(.POST, "/api/v1/submissions/runner-submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.body = .init(buffer: multipartBody(
+                    boundary: "runner-submit-browser-boundary",
+                    fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
+                    file: ("notebook", "submission.ipynb", nb)
+                ))
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": "runner-submit-browser-boundary"])
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+                XCTAssertTrue(
+                    res.body.string.contains("Browser-graded assignments must be submitted through the browser runner."),
+                    "expected browser-mode runner-submit requests to be rejected with a clear error"
+                )
+            })
+
+        let allSubs = try await APISubmission.query(on: app.db).all()
+        XCTAssertTrue(allSubs.isEmpty, "runner-submit should not create queued submissions for browser-mode setups")
+    }
+
     // MARK: - Private fixtures
 
     private func simpleManifest() -> String {
