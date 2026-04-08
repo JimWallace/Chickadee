@@ -66,6 +66,7 @@ struct DiagnosticsConfiguration: Sendable {
 struct InternalMetricsResponse: Content, Sendable {
     let generatedAt: Date
     let maxQueueDepth: Int
+    let jobsProcessed24h: Int
     let peakUtilizationPercent: Int?
     let maxLoadActiveJobs: Int?
     let maxLoadCapacity: Int?
@@ -817,6 +818,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
         return InternalMetricsResponse(
             generatedAt: now,
             maxQueueDepth: maxQueueDepth,
+            jobsProcessed24h: recentMetrics.count,
             peakUtilizationPercent: peakUtilizationPercent(from: runnerSnapshots),
             maxLoadActiveJobs: peakLoadSnapshot?.activeJobs,
             maxLoadCapacity: peakLoadSnapshot?.maxJobs,

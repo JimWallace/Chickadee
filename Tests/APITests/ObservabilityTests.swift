@@ -311,6 +311,7 @@ final class ObservabilityTests: XCTestCase {
             XCTAssertEqual(response.status, .ok)
             let payload = try response.content.decode(InternalMetricsResponse.self)
             XCTAssertGreaterThanOrEqual(payload.activeRunners, 1)
+            XCTAssertEqual(payload.jobsProcessed24h, 1)
             XCTAssertNotNil(payload.queueWait.averageMs)
             XCTAssertEqual(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count, 1)
             XCTAssertFalse(payload.runnerLoads.isEmpty)

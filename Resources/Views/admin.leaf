@@ -10,8 +10,8 @@ Admin
             <div class="diagnostic-value" id="diag-queue-depth">—</div>
         </article>
         <article class="diagnostic-card">
-            <div class="diagnostic-label">24h Peak Util</div>
-            <div class="diagnostic-value" id="diag-peak-util">—</div>
+            <div class="diagnostic-label">24h Jobs Processed</div>
+            <div class="diagnostic-value" id="diag-jobs-processed">—</div>
         </article>
         <article class="diagnostic-card">
             <div class="diagnostic-label">24h Max Load</div>
@@ -346,7 +346,7 @@ Admin
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     var diagQueueDepth = document.getElementById('diag-queue-depth');
-    var diagPeakUtil = document.getElementById('diag-peak-util');
+    var diagJobsProcessed = document.getElementById('diag-jobs-processed');
     var diagMaxLoad = document.getElementById('diag-max-load');
     var diagQueueP95 = document.getElementById('diag-queue-p95');
     var diagExecP95 = document.getElementById('diag-exec-p95');
@@ -397,7 +397,7 @@ Admin
         if (!metrics) return;
         latestDiagnostics = metrics;
         setText(diagQueueDepth, String(metrics.maxQueueDepth == null ? '—' : metrics.maxQueueDepth));
-        setText(diagPeakUtil, metrics.peakUtilizationPercent == null ? '—' : String(metrics.peakUtilizationPercent) + '%');
+        setText(diagJobsProcessed, String(metrics.jobsProcessed24h == null ? '—' : metrics.jobsProcessed24h));
         renderMaxLoadSummary();
         setText(diagQueueP95, formatDuration(metrics.queueWait && metrics.queueWait.p95Ms));
         setText(diagExecP95, formatDuration(metrics.execution && metrics.execution.p95Ms));

@@ -234,6 +234,19 @@ final class AdminRoutesTests: XCTestCase {
         XCTAssertEqual(readLocalRunnerAutoStartFromDisk(filePath: app.localRunnerAutoStartFilePath), true)
     }
 
+    func testAdminDashboardShowsJobsProcessedCardLabel() async throws {
+        let cookie = try await loginAsAdmin()
+
+        try await app.asyncTest(.GET, "/admin", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = String(buffer: res.body)
+            XCTAssertTrue(body.contains("24h Jobs Processed"))
+            XCTAssertFalse(body.contains("24h Peak Util"))
+        })
+    }
+
     func testEditCourseUpdatesFields() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "EDIT101", name: "Original Name")
