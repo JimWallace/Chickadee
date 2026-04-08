@@ -6,9 +6,10 @@
     <meta name="color-scheme" content="light dark">
     <meta name="csrf-token" content="#csrfToken()">
     <title>#import("title") — Chickadee</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
-    <link rel="shortcut icon" href="/favicon.png" type="image/png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="32x32" type="image/png">
+    <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="16x16" type="image/png">
+    <link rel="shortcut icon" href="/favicon.png?v=#appVersion()" type="image/png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=#appVersion()">
     <link rel="stylesheet" href="/styles.css?v=#appVersion()">
 </head>
 <body>
