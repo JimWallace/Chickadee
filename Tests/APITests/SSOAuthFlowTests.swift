@@ -43,11 +43,13 @@ final class SSOAuthFlowTests: XCTestCase {
         enum Mode {
             case alwaysFail
             case succeedImmediately(idToken: String)
+            case succeedImmediatelyWithRefreshToken(idToken: String, refreshToken: String)
             case succeedWithoutVerifier(idToken: String)
         }
 
         let mode: Mode
         private(set) var requestBodies: [String] = []
+        private(set) var revocationBodies: [String] = []
 
         init(mode: Mode) {
             self.mode = mode
@@ -63,6 +65,10 @@ final class SSOAuthFlowTests: XCTestCase {
                 return (.ok, """
                 {"access_token":"access-token","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
                 """)
+            case .succeedImmediatelyWithRefreshToken(let idToken, let refreshToken):
+                return (.ok, """
+                {"access_token":"access-token","refresh_token":"\(refreshToken)","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
+                """)
             case .succeedWithoutVerifier(let idToken):
                 if body.contains("code_verifier=") {
                     return (.badRequest, #"{"error":"pkce_not_supported"}"#)
@@ -73,8 +79,16 @@ final class SSOAuthFlowTests: XCTestCase {
             }
         }
 
+        func recordRevocation(body: String) {
+            revocationBodies.append(body)
+        }
+
         func recordedBodies() -> [String] {
             requestBodies
+        }
+
+        func recordedRevocations() -> [String] {
+            revocationBodies
         }
     }
 
@@ -158,6 +172,13 @@ final class SSOAuthFlowTests: XCTestCase {
             return response
         }
 
+        app.post("revoke") { req async throws -> HTTPStatus in
+            var body = req.body.data ?? ByteBuffer()
+            let bodyString = body.readString(length: body.readableBytes) ?? ""
+            await tokenEndpoint.recordRevocation(body: bodyString)
+            return .ok
+        }
+
         app.environment.arguments = ["serve"]
         try await app.asyncBoot()
         try await app.startup()
@@ -182,6 +203,43 @@ final class SSOAuthFlowTests: XCTestCase {
         XCTAssertFalse(sessionCookie.isEmpty)
         XCTAssertFalse(state.isEmpty)
         return (sessionCookie, state)
+    }
+
+    private func mergedCookie(existing: String, from response: Response) -> String {
+        guard let setCookie = response.headers.first(name: .setCookie), !setCookie.isEmpty else {
+            return existing
+        }
+        if existing.isEmpty { return setCookie }
+
+        func cookiePair(from header: String) -> String {
+            header.split(separator: ";", maxSplits: 1).first.map(String.init) ?? header
+        }
+
+        let oldPair = cookiePair(from: existing)
+        let newPair = cookiePair(from: setCookie)
+        let oldName = oldPair.split(separator: "=", maxSplits: 1).first.map(String.init) ?? ""
+        let newName = newPair.split(separator: "=", maxSplits: 1).first.map(String.init) ?? ""
+
+        if oldName == newName {
+            return newPair
+        }
+        return oldPair + "; " + newPair
+    }
+
+    private func waitForRevocationCount(
+        _ expectedCount: Int,
+        on endpoint: MockTokenEndpoint,
+        timeoutNanoseconds: UInt64 = 2_000_000_000
+    ) async -> [String] {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            let revocations = await endpoint.recordedRevocations()
+            if revocations.count >= expectedCount {
+                return revocations
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return await endpoint.recordedRevocations()
     }
 
     private static let mockOIDCConfig = OIDCConfiguration(
@@ -588,6 +646,84 @@ final class SSOAuthFlowTests: XCTestCase {
                 XCTAssertEqual(user.userIdentifier, "janedoe")
                 XCTAssertEqual(user.email, "jane@example.com")
                 XCTAssertEqual(user.authProvider, "duo-oidc")
+            }
+        }
+    }
+
+    func testLogoutRevokesAccessAndRefreshTokensAndRedirectsToEndSession() async throws {
+        let idToken = try await signedToken(
+            issuer: "http://127.0.0.1/issuer",
+            audience: ["test-client-id"],
+            subject: "subject-logout"
+        )
+        let provider = try await makeMockOIDCProvider(
+            mode: .succeedImmediatelyWithRefreshToken(
+                idToken: idToken,
+                refreshToken: "refresh-token"
+            )
+        )
+
+        let config = OIDCConfiguration(
+            clientID: "test-client-id",
+            clientSecret: "test-client-secret",
+            redirectURI: "http://localhost:8080/auth/sso/callback",
+            discovery: OIDCDiscovery(
+                issuer: "http://127.0.0.1/issuer",
+                authorizationEndpoint: "http://127.0.0.1:\(provider.port)/authorize",
+                tokenEndpoint: "http://127.0.0.1:\(provider.port)/token",
+                jwksURI: "http://127.0.0.1:\(provider.port)/keys",
+                revocationEndpoint: "http://127.0.0.1:\(provider.port)/revoke",
+                endSessionEndpoint: "http://127.0.0.1:\(provider.port)/logout"
+            ),
+            claimConfig: OIDCClaimConfig()
+        )
+
+        try await withApp(provider.app) { _ in
+            try await withApp(try await makeApp(oidcConfig: config)) { app in
+                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+
+                let start = try await startSSOSession(on: app)
+                var authCookie = start.cookie
+
+                try await app.asyncTest(
+                    .GET,
+                    "/auth/sso/callback?code=code123&state=\(start.state)",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: start.cookie)
+                    },
+                    afterResponse: { res in
+                        XCTAssertEqual(res.status, .seeOther)
+                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                        authCookie = mergedCookie(existing: start.cookie, from: res)
+                    }
+                )
+
+                let (csrf, boundCookie) = try await csrfFields(for: "/", cookie: authCookie, on: app)
+                authCookie = boundCookie
+
+                try await app.asyncTest(
+                    .POST,
+                    "/logout",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: authCookie)
+                        try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                    },
+                    afterResponse: { res in
+                        XCTAssertEqual(res.status, .seeOther)
+                        let redirect = res.headers.first(name: .location) ?? ""
+                        XCTAssertTrue(redirect.hasPrefix("http://127.0.0.1:\(provider.port)/logout"))
+                        XCTAssertTrue(redirect.contains("id_token_hint="))
+                    }
+                )
+
+                let revocations = await waitForRevocationCount(2, on: provider.endpoint)
+                XCTAssertEqual(revocations.count, 2)
+                XCTAssertTrue(revocations.contains(where: {
+                    $0.contains("token=access-token") && $0.contains("token_type_hint=access_token")
+                }))
+                XCTAssertTrue(revocations.contains(where: {
+                    $0.contains("token=refresh-token") && $0.contains("token_type_hint=refresh_token")
+                }))
             }
         }
     }

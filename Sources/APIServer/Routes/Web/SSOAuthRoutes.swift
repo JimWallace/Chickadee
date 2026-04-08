@@ -150,8 +150,10 @@ struct SSOAuthRoutes: RouteCollection {
 
         // Persist tokens in the session for use at logout time.
         // - access token: revoked via revocation_endpoint on logout
+        // - refresh token: revoked too when the provider issued one
         // - id token:     passed as id_token_hint to end_session_endpoint
         req.session.data["oidc_access_token"] = tokenResponse.accessToken
+        req.session.data["oidc_refresh_token"] = tokenResponse.refreshToken
         req.session.data["oidc_id_token"]     = tokenResponse.idToken
 
         // Establish session — identical to local login

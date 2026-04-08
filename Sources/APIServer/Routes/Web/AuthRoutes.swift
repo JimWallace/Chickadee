@@ -143,31 +143,43 @@ struct AuthRoutes: RouteCollection {
     func logout(req: Request) async throws -> Response {
         // Extract any SSO tokens stored at login time before clearing the session.
         let accessToken = req.session.data["oidc_access_token"]
+        let refreshToken = req.session.data["oidc_refresh_token"]
         let idToken     = req.session.data["oidc_id_token"]
+
+        req.session.data["oidc_access_token"] = nil
+        req.session.data["oidc_refresh_token"] = nil
+        req.session.data["oidc_id_token"] = nil
 
         req.auth.logout(APIUser.self)
         req.session.unauthenticate(APIUser.self)
 
         let oidcConfig = req.application.oidcConfig
 
-        // Revoke the access token at the IdP (fire-and-forget; never blocks logout).
-        if let token = accessToken,
-           let endpoint = oidcConfig?.discovery.revocationEndpoint,
+        // Revoke any issued OAuth tokens at the IdP (fire-and-forget; never blocks logout).
+        if let endpoint = oidcConfig?.discovery.revocationEndpoint,
            let config = oidcConfig
         {
             let app = req.application
             let logger = req.logger
             Task {
-                do {
-                    try await revokeToken(
-                        token: token,
-                        endpoint: endpoint,
-                        config: config,
-                        app: app,
-                        logger: logger
-                    )
-                } catch {
-                    logger.warning("Token revocation failed (non-fatal): \(error)")
+                let tokensToRevoke: [(token: String, hint: String)] = [
+                    accessToken.map { ($0, "access_token") },
+                    refreshToken.map { ($0, "refresh_token") },
+                ].compactMap { $0 }
+
+                for entry in tokensToRevoke {
+                    do {
+                        try await revokeToken(
+                            token: entry.token,
+                            tokenTypeHint: entry.hint,
+                            endpoint: endpoint,
+                            config: config,
+                            app: app,
+                            logger: logger
+                        )
+                    } catch {
+                        logger.warning("Token revocation failed (non-fatal): \(error)")
+                    }
                 }
             }
         }
@@ -199,10 +211,11 @@ struct AuthRoutes: RouteCollection {
 
 // MARK: - Token revocation helper
 
-/// Calls the IdP's RFC 7009 revocation endpoint for the given access token.
+/// Calls the IdP's RFC 7009 revocation endpoint for the given token.
 /// Failures are non-fatal — the caller is responsible for logging them.
 private func revokeToken(
     token: String,
+    tokenTypeHint: String,
     endpoint: String,
     config: OIDCConfiguration,
     app: Application,
@@ -215,7 +228,7 @@ private func revokeToken(
             password: config.clientSecret
         )
         try tokenReq.content.encode(
-            ["token": token, "token_type_hint": "access_token"] as [String: String],
+            ["token": token, "token_type_hint": tokenTypeHint] as [String: String],
             as: .urlEncodedForm
         )
     }
