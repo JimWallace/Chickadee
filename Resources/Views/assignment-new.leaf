@@ -18,8 +18,11 @@ Create Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data">
+<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form">
     #csrfFormField()
+    #if(draftID):
+    <input type="hidden" name="draftID" value="#(draftID)">
+    #endif
     <label class="form-label">
         Assignment Name
         <input class="form-input" type="text" name="assignmentName" required
@@ -48,15 +51,99 @@ Create Assignment
     <p id="grading-mode-hint" class="card-meta" style="margin-top:-.4rem;margin-bottom:.25rem;display:none"></p>
     #endif
 
-    <label class="form-label">
-        <span style="white-space:nowrap">Assignment Notebook (<code>assignment.ipynb</code>)</span>
-        <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb" required>
-    </label>
+    <section style="margin:1rem 0;padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:var(--gray-50,#fafafa)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+            <div>
+                <h2 style="margin:0 0 .25rem 0">Notebook Composer</h2>
+                <p class="card-meta" style="margin:0">Create notebooks from scratch in JupyterLite, upload existing notebooks, or upload first and then keep editing from this page.</p>
+            </div>
+            #if(draftID):
+            <p class="card-meta" style="margin:0">Draft ID: <code>#(draftID)</code></p>
+            #endif
+        </div>
 
-    <label class="form-label">
-        <span style="white-space:nowrap">Solution Notebook (<code>solution.ipynb</code>)</span>
-        <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb" required>
-    </label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem;margin-top:1rem">
+            <div style="padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:white">
+                <h3 style="margin:0 0 .4rem 0">Assignment Notebook</h3>
+                #if(assignmentNotebook):
+                <p style="margin:.25rem 0 .75rem 0"><strong>#(assignmentNotebook.name)</strong></p>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
+                    <a class="btn" href="#(assignmentNotebook.editURL)" target="_blank" rel="noopener">Edit</a>
+                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook">Clear</button>
+                </div>
+                #else:
+                <p class="card-meta" style="margin:.25rem 0 .75rem 0">No assignment notebook saved to this draft yet.</p>
+                #endif
+                <label class="form-label" style="margin-bottom:.75rem">
+                    <span style="white-space:nowrap">Upload Assignment Notebook (<code>.ipynb</code>)</span>
+                    <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb">
+                </label>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook">Save Upload to Draft</button>
+                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook">Create Blank Notebook</button>
+                </div>
+            </div>
+
+            <div style="padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:white">
+                <h3 style="margin:0 0 .4rem 0">Solution Notebook</h3>
+                #if(solutionNotebook):
+                <p style="margin:.25rem 0 .75rem 0"><strong>#(solutionNotebook.name)</strong></p>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
+                    <a class="btn" href="#(solutionNotebook.editURL)" target="_blank" rel="noopener">Edit</a>
+                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook">Clear</button>
+                </div>
+                #else:
+                <p class="card-meta" style="margin:.25rem 0 .75rem 0">No solution notebook saved to this draft yet.</p>
+                #endif
+                <label class="form-label" style="margin-bottom:.75rem">
+                    <span style="white-space:nowrap">Upload Solution Notebook (<code>.ipynb</code>)</span>
+                    <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb">
+                </label>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook">Save Upload to Draft</button>
+                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook">Create Blank Notebook</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section style="margin:1rem 0;padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:var(--gray-50,#fafafa)">
+        <h2 style="margin:0 0 .25rem 0">Runner Requirements</h2>
+        <p class="card-meta" style="margin:0 0 .85rem 0">Auto-detected suggestions appear below, but you can edit them before creating the assignment.</p>
+        #if(!detectedLanguages.isEmpty):
+        <div style="margin-bottom:1rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.6rem;background:white">
+            <p style="margin:0 0 .25rem 0"><strong>Detected languages:</strong> #(detectedLanguagesCSV)</p>
+            #if(!detectedCapabilities.isEmpty):
+            <p style="margin:0"><strong>Detected capabilities:</strong> #(detectedCapabilitiesCSV)</p>
+            #endif
+        </div>
+        #endif
+        #if(detectedLanguages.isEmpty):
+        #if(!detectedCapabilities.isEmpty):
+        <div style="margin-bottom:1rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.6rem;background:white">
+            <p style="margin:0"><strong>Detected capabilities:</strong> #(detectedCapabilitiesCSV)</p>
+        </div>
+        #endif
+        #endif
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem">
+            <label class="form-label">
+                Languages
+                <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)" placeholder="python, r">
+            </label>
+            <label class="form-label">
+                Capabilities
+                <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)" placeholder="numpy, pandas, shell-bash">
+            </label>
+            <label class="form-label">
+                Platform (advanced)
+                <input class="form-input" type="text" name="requiredPlatform" value="#(requiredPlatform)" placeholder="linux">
+            </label>
+            <label class="form-label">
+                Architecture (advanced)
+                <input class="form-input" type="text" name="requiredArchitecture" value="#(requiredArchitecture)" placeholder="arm64">
+            </label>
+        </div>
+    </section>
 
     <!-- Generate Tests from Solution -->
     <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
@@ -88,9 +175,16 @@ Create Assignment
 
     <label class="form-label">
         <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>)</span>
-        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple required>
+        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple>
     </label>
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:-.2rem 0 1rem 0">
+        <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="replace-suite-files">Save Suite Files to Draft</button>
+        #if(hasSuiteRows):
+        <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-suite-files">Clear Saved Suite Files</button>
+        #endif
+    </div>
 
     <div id="suite-config-panel" style="display:none">
         <p class="card-meta" style="margin-bottom:.4rem">
@@ -145,6 +239,17 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     // Ordered by desired root-level sequence; children group under their parent visually.
     var items = [];
     var dragName = null;
+    var initialDraftRows = [
+        #for(row in suiteRows):
+        {
+            name: "#(row.name)",
+            index: #(row.order - 1),
+            tier: "#(row.tier)",
+            dependsOn: #(row.dependsOnJSON),
+            points: #(row.points)
+        },
+        #endfor
+    ];
 
     function isLikelyScript(name) {
         var ext = (name || '').toLowerCase().split('.').pop();
@@ -255,6 +360,21 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         syncConfig();
     }
 
+    function loadFromDraftRows() {
+        if (!initialDraftRows.length) return;
+        items = initialDraftRows.map(function (row, idx) {
+            return {
+                name: row.name,
+                index: idx,
+                tier: row.tier || 'support',
+                dependsOn: Array.isArray(row.dependsOn) ? row.dependsOn : [],
+                points: row.points || 1
+            };
+        });
+        renderRows();
+        syncConfig();
+    }
+
     // --- Drag & Drop ---
 
     body.addEventListener('dragstart', function (e) {
@@ -347,6 +467,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     body.addEventListener('input',  function () { syncConfig(); });
 
     filesInput.addEventListener('change', loadFromFiles);
+    loadFromDraftRows();
 
     // ── Generate Tests from Solution ─────────────────────────────────────────
 
@@ -470,9 +591,19 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     if (form) {
         form.addEventListener('submit', function (event) {
             syncConfig();
+            var action = (event.submitter && event.submitter.value) || '';
+            if (action && action !== 'replace-suite-files' && action !== 'clear-suite-files') {
+                return;
+            }
             var config = [];
             try { config = JSON.parse(configField.value || '[]'); } catch (_) {}
-            if (!config.some(function (r) { return r.tier !== 'support'; })) {
+            if (action === 'clear-suite-files') return;
+            if (filesInput.files.length === 0 && items.length === 0) {
+                event.preventDefault();
+                window.alert('Choose suite files before saving them to the draft.');
+                return;
+            }
+            if (filesInput.files.length > 0 && !config.some(function (r) { return r.tier !== 'support'; })) {
                 event.preventDefault();
                 window.alert('Add at least one non-support file to run as a test.');
             }
