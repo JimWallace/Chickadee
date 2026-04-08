@@ -97,8 +97,26 @@ struct NewAssignmentContext: Encodable {
     let dueAt: String
     let sections: [CourseSectionRow]    // available sections for the section picker
     let preselectedSectionID: String    // from ?sectionID= query param
+    let draftID: String?
+    let assignmentNotebook: NewAssignmentNotebookContext?
+    let solutionNotebook: NewAssignmentNotebookContext?
+    let suiteRows: [EditableSuiteRow]
+    let hasSuiteRows: Bool
+    let requiredPlatform: String
+    let requiredArchitecture: String
+    let requiredLanguagesCSV: String
+    let requiredCapabilitiesCSV: String
+    let detectedLanguages: [String]
+    let detectedCapabilities: [String]
+    let detectedLanguagesCSV: String
+    let detectedCapabilitiesCSV: String
     let notice: String?
     let error: String?
+}
+
+struct NewAssignmentNotebookContext: Encodable {
+    let name: String
+    let editURL: String
 }
 
 struct EditAssignmentContext: Encodable {

@@ -212,6 +212,34 @@ final class AssignmentRoutesTests: XCTestCase {
         return body
     }
 
+    private func multipartBody(
+        boundary: String,
+        fields: [(String, String)],
+        files: [(name: String, filename: String, contentType: String, data: Data)] = []
+    ) -> ByteBuffer {
+        var body = ByteBufferAllocator().buffer(capacity: 4096)
+
+        func appendField(_ name: String, _ value: String) {
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.writeString(value)
+            body.writeString("\r\n")
+        }
+
+        func appendFile(_ file: (name: String, filename: String, contentType: String, data: Data)) {
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"\(file.name)\"; filename=\"\(file.filename)\"\r\n")
+            body.writeString("Content-Type: \(file.contentType)\r\n\r\n")
+            body.writeBytes(file.data)
+            body.writeString("\r\n")
+        }
+
+        fields.forEach(appendField)
+        files.forEach(appendFile)
+        body.writeString("--\(boundary)--\r\n")
+        return body
+    }
+
     private func makeZip(at path: String, entries: [(String, String)]) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("assignment-routes-zip-\(UUID().uuidString)")
@@ -583,6 +611,112 @@ final class AssignmentRoutesTests: XCTestCase {
             XCTAssertTrue(body.contains("<th>Tier</th>"))
             XCTAssertTrue(body.contains("support"))
         })
+    }
+
+    func testUpdateNewAssignmentDraftCreatesBlankNotebookAndRendersDraftState() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        let boundary = "Boundary-New-Draft-Create"
+
+        var redirectLocation: String?
+        try await app.asyncTest(.POST, "/instructor/new/draft", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartBody(
+                boundary: boundary,
+                fields: [
+                    ("_csrf", csrf),
+                    ("assignmentName", "Blank Draft Lab"),
+                    ("draftAction", "create-assignment-notebook")
+                ]
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            redirectLocation = res.headers.first(name: .location)
+            XCTAssertTrue((redirectLocation ?? "").contains("/instructor/new?draftID="))
+        })
+
+        let setup = try await APITestSetup.query(on: app.db).first()
+        XCTAssertNotNil(setup)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(setup?.notebookPath)))
+
+        try await app.asyncTest(.GET, try XCTUnwrap(redirectLocation), beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Notebook Composer"))
+            XCTAssertTrue(html.contains("Blank Draft Lab"))
+            XCTAssertTrue(html.contains("Edit"))
+        })
+    }
+
+    func testSaveNewAssignmentFinalizesDraftAndPersistsRequirements() async throws {
+        let courseID = try await makeTestCourseID()
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+        let setupID = "setup_draft_finalize"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+        let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
+        let notebookDir = tmpDir + "testsetups/notebooks/\(setupID)/"
+        try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
+        let assignmentPath = notebookDir + "assignment.ipynb"
+        try defaultNotebookData(title: "Draft Finalize").write(to: URL(fileURLWithPath: assignmentPath))
+        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: tmpDir + "testsetups/", setupID: setupID)
+        try defaultNotebookData(title: "Draft Finalize Solution").write(to: URL(fileURLWithPath: solutionPath))
+
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: manifest,
+            zipPath: zipPath,
+            notebookPath: assignmentPath,
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+
+        let boundary = "Boundary-New-Finalize-Draft"
+        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartBody(
+                boundary: boundary,
+                fields: [
+                    ("_csrf", csrf),
+                    ("draftID", setupID),
+                    ("assignmentName", "Draft-backed Lab"),
+                    ("requiredLanguagesCSV", "python"),
+                    ("requiredCapabilitiesCSV", "numpy, pandas")
+                ]
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db)
+            .filter(\.$title == "Draft-backed Lab")
+            .first()
+        XCTAssertNotNil(assignment)
+        let assignmentID = try XCTUnwrap(assignment?.id)
+
+        let requirement = try await AssignmentRequirement.query(on: app.db)
+            .filter(\.$assignmentID == assignmentID)
+            .first()
+        XCTAssertEqual(requirement?.requirementSpec.requiredLanguages.map(\.language), ["python"])
+        XCTAssertEqual(requirement?.requirementSpec.requiredCapabilities.map(\.name), ["numpy", "pandas"])
     }
 
     // MARK: - POST /instructor/:id/open
