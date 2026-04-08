@@ -253,10 +253,17 @@ extension AssignmentRoutes {
             throw Abort(.notFound)
         }
 
-        let students = try await APIUser.query(on: req.db)
-            .filter(\.$role == "student")
-            .sort(\.$username, .ascending)
+        let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == assignment.courseID)
             .all()
+            .map(\.userID)
+        let students = enrolledUserIDs.isEmpty
+            ? []
+            : try await APIUser.query(on: req.db)
+                .filter(\.$role == "student")
+                .filter(\.$id ~~ enrolledUserIDs)
+                .sort(\.$username, .ascending)
+                .all()
         let studentIDs = Set(students.compactMap(\.id))
 
         let submissions = (studentIDs.isEmpty)
@@ -281,12 +288,13 @@ extension AssignmentRoutes {
         )
 
         let fmt = waterlooDateTimeFormatter()
+        let windowStart = Date().addingTimeInterval(-24 * 60 * 60)
 
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             guard let studentID = student.id else { return nil }
             let history = submissionsByStudentID[studentID] ?? []
             let latest = history.first
-            let grade: String = {
+            let bestGradePercent: Int? = {
                 var best = -1
                 for submission in history {
                     guard let subID = submission.id,
@@ -296,7 +304,7 @@ extension AssignmentRoutes {
                     }
                     if pct > best { best = pct }
                 }
-                return best >= 0 ? "\(best)%" : "—"
+                return best >= 0 ? best : nil
             }()
             let inferredName = splitHumanName(student.displayName)
                 ?? splitHumanName(student.preferredName)
@@ -305,15 +313,40 @@ extension AssignmentRoutes {
                 studentID: student.username,
                 surname: inferredName.surname,
                 givenNames: inferredName.givenNames,
-                gradeText: grade,
+                gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
                 submissionCount: history.count,
                 hasLatestSubmission: latest != nil,
                 latestSubmissionID: latest?.id ?? "",
                 latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
                 additionalSubmissionCount: max(history.count - 1, 0),
-                fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history"
+                fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
+                bestGradePercent: bestGradePercent
             )
         }
+
+        let submittedCount = rows.filter { $0.submissionCount > 0 }.count
+        let neverSubmittedCount = max(rows.count - submittedCount, 0)
+        let submissions24h = submissions.filter { submission in
+            guard let submittedAt = submission.submittedAt else { return false }
+            return submittedAt >= windowStart
+        }.count
+        let pendingLatestCount = rows.reduce(into: 0) { count, row in
+            guard row.hasLatestSubmission,
+                  let latest = submissions.first(where: { $0.id == row.latestSubmissionID }),
+                  ["pending", "assigned"].contains(latest.status) else { return }
+            count += 1
+        }
+        let gradedRows = rows.compactMap(\.bestGradePercent)
+        let averageBestGrade = gradedRows.isEmpty
+            ? "—"
+            : "\(Int((Double(gradedRows.reduce(0, +)) / Double(gradedRows.count)).rounded()))%"
+        let metrics = [
+            InstructorDashboardMetric(label: "Submitted At Least Once", value: "\(submittedCount)/\(rows.count)"),
+            InstructorDashboardMetric(label: "No Submission Yet", value: "\(neverSubmittedCount)"),
+            InstructorDashboardMetric(label: "Submissions (24h)", value: "\(submissions24h)"),
+            InstructorDashboardMetric(label: "Pending Latest Attempts", value: "\(pendingLatestCount)"),
+            InstructorDashboardMetric(label: "Average Best Grade", value: averageBestGrade)
+        ]
 
         return try await req.view.render(
             "assignment-submissions",
@@ -321,6 +354,7 @@ extension AssignmentRoutes {
                 currentUser: req.currentUserContext,
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
+                metrics: metrics,
                 rows: rows
             )
         )

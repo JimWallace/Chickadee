@@ -118,16 +118,108 @@ struct AssignmentRoutes: RouteCollection {
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
+        let isoFormatter = ISO8601DateFormatter()
 
         let decoder = JSONDecoder()
 
         let setupIndexByID: [String: Int] = Dictionary(
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
         )
+        let allSetupIDs = allSetups.compactMap { $0.id }
+
+        let enrolledStudents: [EnrolledStudentRow]
+        let metrics: [InstructorDashboardMetric]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            let enrollments = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == activeCourseUUID)
+                .all()
+            let enrolledUserIDs = enrollments.map(\.userID)
+            let enrolledUsers: [APIUser]
+
+            if enrolledUserIDs.isEmpty {
+                enrolledUsers = []
+                enrolledStudents = []
+            } else {
+                enrolledUsers = try await APIUser.query(on: req.db)
+                    .filter(\.$id ~~ enrolledUserIDs)
+                    .sort(\.$username)
+                    .all()
+                enrolledStudents = enrolledUsers.compactMap { u in
+                    guard let id = u.id else { return nil }
+                    return EnrolledStudentRow(
+                        id: id.uuidString,
+                        username: u.username,
+                        displayName: u.displayName ?? u.username,
+                        role: u.role,
+                        lastLoginAtText: u.lastLoginAt.map { fmt.string(from: $0) } ?? "—",
+                        lastLoginAtISO: u.lastLoginAt.map { isoFormatter.string(from: $0) },
+                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions"
+                    )
+                }
+            }
+
+            let now = Date()
+            let windowStart = now.addingTimeInterval(-24 * 60 * 60)
+            let courseSetupIDs = allSetupIDs
+            let recentSubmissions = courseSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ courseSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$submittedAt >= windowStart)
+                .all()
+            let allCourseStudentSubmissions = courseSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ courseSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .all()
+
+            let enrolledStudentIDs = Set(
+                enrolledUsers
+                    .filter { $0.role == "student" }
+                    .compactMap(\.id)
+            )
+            let loggedIn24h = enrolledUsers.reduce(into: 0) { count, user in
+                guard user.role == "student" else { return }
+                if let lastLoginAt = user.lastLoginAt, lastLoginAt >= windowStart {
+                    count += 1
+                }
+            }
+
+            let recentStudentSubmissions = recentSubmissions.filter { submission in
+                guard let userID = submission.userID else { return false }
+                return enrolledStudentIDs.contains(userID)
+            }
+            let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
+            let pendingNow = allCourseStudentSubmissions.filter { submission in
+                guard let userID = submission.userID else { return false }
+                return enrolledStudentIDs.contains(userID) && ["pending", "assigned"].contains(submission.status)
+            }.count
+            let submitterIDs = Set(
+                allCourseStudentSubmissions.compactMap { submission -> UUID? in
+                    guard let userID = submission.userID, enrolledStudentIDs.contains(userID) else { return nil }
+                    return userID
+                }
+            )
+            let noSubmissionYet = enrolledStudentIDs.subtracting(submitterIDs).count
+
+            metrics = [
+                InstructorDashboardMetric(label: "Students Logged In (24h)", value: "\(loggedIn24h)"),
+                InstructorDashboardMetric(label: "Submissions Made (24h)", value: "\(recentStudentSubmissions.count)"),
+                InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
+                InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
+                InstructorDashboardMetric(label: "Students With No Submissions", value: "\(noSubmissionYet)")
+            ]
+        } else {
+            enrolledStudents = []
+            metrics = [
+                InstructorDashboardMetric(label: "Students Logged In (24h)", value: "—"),
+                InstructorDashboardMetric(label: "Submissions Made (24h)", value: "—"),
+                InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
+                InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
+                InstructorDashboardMetric(label: "Students With No Submissions", value: "—")
+            ]
+        }
 
         // Batch-fetch unique submitter counts: [testSetupID: count of distinct userIDs]
-        let allSetupIDs = allSetups.compactMap { $0.id }
-        let studentSubmissions = try await APISubmission.query(on: req.db)
+        let studentSubmissions = allSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID ~~ allSetupIDs)
             .filter(\.$kind == APISubmission.Kind.student)
             .all()
@@ -245,35 +337,6 @@ struct AssignmentRoutes: RouteCollection {
             )
         }
 
-        // Fetch students enrolled in the active course.
-        let enrolledStudents: [EnrolledStudentRow]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            let enrollments = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .all()
-            let enrolledUserIDs = enrollments.map { $0.userID }
-            if enrolledUserIDs.isEmpty {
-                enrolledStudents = []
-            } else {
-                let users = try await APIUser.query(on: req.db)
-                    .filter(\.$id ~~ enrolledUserIDs)
-                    .sort(\.$username)
-                    .all()
-                enrolledStudents = users.compactMap { u in
-                    guard let id = u.id else { return nil }
-                    return EnrolledStudentRow(
-                        id: id.uuidString,
-                        username: u.username,
-                        displayName: u.displayName ?? u.username,
-                        role: u.role,
-                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions"
-                    )
-                }
-            }
-        } else {
-            enrolledStudents = []
-        }
-
         // Fetch enrollment mode and archived state for the active course.
         var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
         var courseIsArchived = false
@@ -285,6 +348,7 @@ struct AssignmentRoutes: RouteCollection {
 
         let ctx = AssignmentsContext(
             currentUser: userContext,
+            metrics: metrics,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,

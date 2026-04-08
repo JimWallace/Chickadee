@@ -50,6 +50,7 @@ extension WebRoutes {
         if !requestedSubmissionID.isEmpty {
             let notebookData = try await notebookDataForHistorySelection(
                 req: req,
+                caller: user,
                 submissionID: requestedSubmissionID,
                 setupID: setupID,
                 userID: userID
@@ -288,6 +289,7 @@ private func solutionNotebookData(
 
 func notebookDataForHistorySelection(
     req: Request,
+    caller: APIUser,
     submissionID: String,
     setupID: String,
     userID: UUID
@@ -298,7 +300,7 @@ func notebookDataForHistorySelection(
     guard submission.kind == APISubmission.Kind.student else {
         throw Abort(.forbidden)
     }
-    guard submission.userID == userID else {
+    if !caller.isInstructor && submission.userID != userID {
         throw Abort(.forbidden)
     }
     guard submission.testSetupID == setupID else {
