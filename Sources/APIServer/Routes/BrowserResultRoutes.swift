@@ -120,6 +120,12 @@ struct BrowserResultRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
+        let manifestData = Data(setup.manifest.utf8)
+        if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),
+           manifest.gradingMode == .browser {
+            throw Abort(.badRequest, reason: "Browser-graded assignments must be submitted through the browser runner.")
+        }
+
         let subsDir = req.application.submissionsDirectory
         let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
         let nbPath  = subsDir + "\(subID).ipynb"
@@ -157,7 +163,6 @@ struct BrowserResultRoutes: RouteCollection {
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
         // (WorkerJobRoutes filters out browser-mode submissions).
-        let manifestData = Data(setup.manifest.utf8)
         let isWorkerMode = (try? JSONDecoder().decode(TestProperties.self, from: manifestData))
             .map { $0.gradingMode == .worker } ?? true
         if isWorkerMode {

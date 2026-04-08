@@ -1230,22 +1230,6 @@ private extension OperationalDiagnosticsService {
         }
     }
 
-    func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
-        var result: Set<String> = []
-
-        for testSetupID in Set(testSetupIDs) {
-            guard let setup = try await APITestSetup.find(testSetupID, on: db) else { continue }
-            let data = Data(setup.manifest.utf8)
-            guard
-                let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
-                manifest.gradingMode == .worker
-            else { continue }
-            result.insert(testSetupID)
-        }
-
-        return result
-    }
-
     func bucketIndex(
         for date: Date,
         windowStart: Date,
@@ -1445,6 +1429,24 @@ private extension OperationalDiagnosticsService {
             parts.append("capabilities=" + requirements.requiredCapabilities.map(\.name).joined(separator: ","))
         }
         return parts.isEmpty ? "none" : parts.joined(separator: " ")
+    }
+}
+
+extension OperationalDiagnosticsService {
+    func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
+        var result: Set<String> = []
+
+        for testSetupID in Set(testSetupIDs) {
+            guard let setup = try await APITestSetup.find(testSetupID, on: db) else { continue }
+            let data = Data(setup.manifest.utf8)
+            guard
+                let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
+                manifest.gradingMode == .worker
+            else { continue }
+            result.insert(testSetupID)
+        }
+
+        return result
     }
 }
 

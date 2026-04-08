@@ -89,15 +89,12 @@
                 setStatus('loading', 'Capturing notebook…');
                 const notebook = await loadNotebookForSubmit();
 
-                if (gradingMode === 'browser' && window.BrowserRunner) {
+                if (gradingMode === 'browser') {
+                    if (!window.BrowserRunner || typeof window.BrowserRunner.runAndSubmit !== 'function') {
+                        throw new Error('Browser grading is unavailable right now. Please reload and try again.');
+                    }
                     // Browser-graded lab: run tests locally in Pyodide then submit atomically.
-                    setStatus('loading', 'Testing…');
-                    const notebookBytes = new Uint8Array(
-                        new TextEncoder().encode(JSON.stringify(notebook))
-                    );
-                    const { outcomes, response } =
-                        await window.BrowserRunner.runAndSubmit(notebookBytes, setupID);
-                    renderResults(outcomes, response);
+                    const { outcomes } = await submitBrowserNotebook(notebook, setupID);
                     const passCount = outcomes.filter(o => o.status === 'pass').length;
                     const allPassed = passCount === outcomes.length && outcomes.length > 0;
                     const summary   = `${passCount} / ${outcomes.length} passed` +
@@ -444,6 +441,19 @@
                 const uploadedText     = await readFileAsText(file);
                 const uploadedNotebook = JSON.parse(uploadedText);
 
+                if (gradingMode === 'browser') {
+                    if (!window.BrowserRunner || typeof window.BrowserRunner.runAndSubmit !== 'function') {
+                        throw new Error('Browser grading is unavailable right now. Please reload and try again.');
+                    }
+                    const { outcomes } = await submitBrowserNotebook(uploadedNotebook, setupID);
+                    const passCount = outcomes.filter(o => o.status === 'pass').length;
+                    const allPassed = passCount === outcomes.length && outcomes.length > 0;
+                    const summary   = `${passCount} / ${outcomes.length} passed` +
+                                      (allPassed ? ' ✓ All tests passed!' : '');
+                    setStatus('ok', summary);
+                    return;
+                }
+
                 setStatus('loading', 'Submitting…');
                 const response = await postRunnerSubmission(
                     uploadedNotebook,
@@ -705,6 +715,17 @@ else:
             throw new Error(`Server error ${res.status}: ${text}`);
         }
         return res.json();
+    }
+
+    async function submitBrowserNotebook(notebook, testSetupID) {
+        setStatus('loading', 'Testing…');
+        const notebookBytes = new Uint8Array(
+            new TextEncoder().encode(JSON.stringify(notebook))
+        );
+        const { outcomes, response } =
+            await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
+        renderResults(outcomes, response);
+        return { outcomes, response };
     }
 
     // -------------------------------------------------------------------------

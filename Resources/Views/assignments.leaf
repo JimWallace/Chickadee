@@ -4,9 +4,19 @@
 #endexport
 #export("content"):
 #if(currentUser.activeCourse):
-<h1 style="margin-bottom:1.25rem">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+        <h1 style="margin:0">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+    </div>
+</div>
 #else:
-<h1 style="margin-bottom:1.25rem">Assignments</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+        <h1 style="margin:0">Assignments</h1>
+    </div>
+</div>
 #endif
 <section class="instructor-diagnostics">
     <div class="diagnostics-cards">
@@ -19,7 +29,6 @@
     </div>
 </section>
 <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
-    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
     <!-- Add Section inline form -->
     <details class="add-section-details" id="add-section-details" style="position:relative">
         <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
@@ -407,7 +416,6 @@
         <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" style="margin:0">
             #csrfFormField()
             <label class="form-label" style="font-size:.875rem;margin:0">
-                Enrolment
                 <select name="enrollmentMode" class="form-input"
                         style="display:block;font-size:.875rem"
                         onchange="this.form.submit()">
@@ -471,6 +479,10 @@
     gap: .75rem;
 }
 .diagnostic-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 5.5rem;
     padding: .75rem .9rem;
     border: 1px solid var(--border);
     border-radius: .5rem;
@@ -479,9 +491,9 @@
 .diagnostic-label {
     color: var(--gray-600);
     font-size: .82rem;
+    line-height: 1.25;
 }
 .diagnostic-value {
-    margin-top: .2rem;
     font-size: 1.2rem;
     font-weight: 600;
     line-height: 1.2;
