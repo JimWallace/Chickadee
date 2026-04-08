@@ -36,7 +36,6 @@
                 #else:
                 <strong>#(row.assignmentTitle)</strong>
                 #endif
-                #endif
             </td>
             <td>#(row.attemptNumber)</td>
             <td>#(row.submittedAt)</td>

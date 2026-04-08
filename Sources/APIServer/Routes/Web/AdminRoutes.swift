@@ -121,6 +121,7 @@ struct AdminRoutes: RouteCollection {
         guard let worker = workerRows.first(where: { $0.workerID == runnerID }) else {
             throw Abort(.notFound)
         }
+        let runnerProfile = try await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
 
         let snapshots = try await RunnerSnapshot.query(on: req.db)
             .filter(\.$runnerID == runnerID)
@@ -188,9 +189,24 @@ struct AdminRoutes: RouteCollection {
             timeoutCount: statusCounts["timeout", default: 0]
         )
 
+        let tags: [String] = {
+            guard let profile = runnerProfile?.capabilityProfile else { return [] }
+            var values: [String] = []
+            if !profile.platform.isEmpty {
+                values.append(profile.platform)
+            }
+            if !profile.architecture.isEmpty {
+                values.append(profile.architecture)
+            }
+            values.append(contentsOf: profile.languageVersions.map { "\($0.language) \($0.version)" })
+            values.append(contentsOf: profile.capabilities.map(\.name))
+            return values
+        }()
+
         return try await req.view.render("admin-runner", AdminRunnerDetailContext(
             currentUser: req.currentUserContext,
             runner: worker,
+            tags: tags,
             summary: summary,
             recentJobs: jobRows,
             snapshots: snapshotRows

@@ -5,17 +5,13 @@
 #export("content"):
 #if(currentUser.activeCourse):
 <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
-    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-        <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-        <h1 style="margin:0">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
-    </div>
+    <h1 style="margin:0">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
 </div>
 #else:
 <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
-    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-        <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-        <h1 style="margin:0">Assignments</h1>
-    </div>
+    <h1 style="margin:0">Assignments</h1>
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
 </div>
 #endif
 <section class="instructor-diagnostics">
