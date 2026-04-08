@@ -121,7 +121,7 @@ struct AdminRoutes: RouteCollection {
         guard let worker = workerRows.first(where: { $0.workerID == runnerID }) else {
             throw Abort(.notFound)
         }
-        let runnerProfile = try await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
+        let runnerProfile = try? await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
 
         let snapshots = try await RunnerSnapshot.query(on: req.db)
             .filter(\.$runnerID == runnerID)
