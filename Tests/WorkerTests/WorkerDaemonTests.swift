@@ -116,6 +116,8 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
     private actor FlakyPoller: JobPolling {
         enum FailureMode {
             case http500
+            case http401
+            case http403
             case duplicateWorkerID
         }
 
@@ -135,6 +137,10 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
                 switch failureMode {
                 case .http500:
                     throw .httpError(500, "temporary server failure")
+                case .http401:
+                    throw .httpError(401, "temporary unauthorized")
+                case .http403:
+                    throw .httpError(403, "temporary forbidden")
                 case .duplicateWorkerID:
                     throw .duplicateWorkerID("workerID already in use")
                 }
@@ -756,6 +762,39 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
                 await poller.observedRequestCount() >= 3
             }
             XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
+
+            task.cancel()
+            _ = await task.result
+        }
+    }
+
+    func testWorkerDaemonRetriesPollingAfterTransientHTTP401() async throws {
+        try await withEnvironment([
+            "RUNNER_RETRY_BASE_DELAY_MS": "10",
+            "RUNNER_RETRY_MAX_DELAY_MS": "20",
+        ]) {
+            let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http401)
+            let reporter = MockReporter()
+            let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+            let daemon = WorkerDaemon(
+                poller: poller,
+                reporter: reporter,
+                runner: runner,
+                apiBaseURL: URL(string: "http://localhost:8080")!,
+                workerID: "worker-http401-retry",
+                workerSecret: "secret",
+                maxConcurrentJobs: 1,
+                runnerProfile: nil
+            )
+
+            let task = Task {
+                try await daemon.run()
+            }
+
+            let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+                await poller.observedRequestCount() >= 3
+            }
+            XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
 
             task.cancel()
             _ = await task.result

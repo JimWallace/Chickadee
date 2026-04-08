@@ -367,7 +367,7 @@ actor WorkerDaemon {
                 ])
                 try await Task.sleep(for: delay)
             } catch JobPollerError.httpError(let statusCode, let body) {
-                let disposition = classifyHTTPRetry(statusCode: statusCode, body: body)
+                let disposition = classifyPollHTTPRetry(statusCode: statusCode, body: body)
                 switch disposition {
                 case .retryable(let message):
                     let delay = backoff.next()

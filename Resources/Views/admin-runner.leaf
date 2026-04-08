@@ -37,8 +37,6 @@ Runner #(runner.workerID)
 
 <section class="admin-section">
     <h3 style="margin-top:0">Recent Jobs</h3>
-    <p style="margin:-.35rem 0 1rem;color:var(--muted)">Setup/other is derived as total processing minus queue wait and measured test execution, so it captures setup, reporting, cleanup, and other non-test work.</p>
-    <p style="margin:-.35rem 0 1rem;color:var(--muted)">Stage breakdown is runner-side timing captured before the result upload, grouped into cache acquire, submission download, and prep work (workspace setup, unpack, normalization, helper writes, and similar steps).</p>
     #if(recentJobs.isEmpty):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:

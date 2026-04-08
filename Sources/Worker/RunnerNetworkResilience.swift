@@ -90,6 +90,17 @@ func classifyHTTPRetry(statusCode: Int, body: String) -> RetryDisposition {
     }
 }
 
+func classifyPollHTTPRetry(statusCode: Int, body: String) -> RetryDisposition {
+    switch statusCode {
+    case 401, 403:
+        // Keep polling through auth reconfiguration windows so long-lived
+        // runners recover automatically once the server-side state is fixed.
+        return .retryable("HTTP \(statusCode): \(body)")
+    default:
+        return classifyHTTPRetry(statusCode: statusCode, body: body)
+    }
+}
+
 func withRunnerRetry<T>(
     stage: RunnerRetryStage,
     policy: RunnerRetryPolicy,
