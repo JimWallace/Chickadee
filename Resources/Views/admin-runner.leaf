@@ -6,13 +6,19 @@ Runner #(runner.workerID)
 <section class="admin-section">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
         <div>
-            <p style="margin:.1rem 0 .5rem"><a href="/admin">← Back to Admin</a></p>
             <h2 style="margin:0"><code>#(runner.workerID)</code></h2>
             <p style="margin:.4rem 0 0;color:var(--muted)">
                 #if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif
                 ·
                 #if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif
             </p>
+            #if(!tags.isEmpty):
+            <div class="runner-tag-list">
+                #for(tag in tags):
+                <span class="runner-tag">#(tag)</span>
+                #endfor
+            </div>
+            #endif
         </div>
         <div style="min-width:220px">
             <div><strong>Last active:</strong> <span class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></div>
@@ -127,6 +133,23 @@ Runner #(runner.workerID)
 }
 .admin-stat span {
     font-weight: 700;
+}
+.runner-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin-top: .6rem;
+}
+.runner-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    border: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    color: var(--gray-700);
+    font-size: .8rem;
+    line-height: 1.2;
 }
 </style>
 <script>

@@ -123,6 +123,7 @@ struct AdminCourseDetailContext: Encodable {
 struct AdminRunnerDetailContext: Encodable {
     let currentUser: CurrentUserContext?
     let runner: AdminWorkerRow
+    let tags: [String]
     let summary: AdminRunnerSummary
     let recentJobs: [AdminRunnerJobRow]
     let snapshots: [AdminRunnerSnapshotRow]
