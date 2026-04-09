@@ -3,13 +3,10 @@ import Vapor
 import Foundation
 
 enum AssignmentSubmissionGateError: AbortError {
-    case unavailable
     case closed
 
     var status: HTTPResponseStatus {
         switch self {
-        case .unavailable:
-            return .forbidden
         case .closed:
             return .forbidden
         }
@@ -17,8 +14,6 @@ enum AssignmentSubmissionGateError: AbortError {
 
     var reason: String {
         switch self {
-        case .unavailable:
-            return "This assignment is not available for student submissions."
         case .closed:
             return "This assignment is closed and no longer accepts submissions."
         }
@@ -85,11 +80,11 @@ func requireOpenStudentAssignment(
     for testSetupID: String,
     on req: Request,
     now: Date = Date()
-) async throws -> APIAssignment {
+) async throws -> APIAssignment? {
     guard let assignment = try await APIAssignment.query(on: req.db)
         .filter(\.$testSetupID == testSetupID)
         .first() else {
-        throw AssignmentSubmissionGateError.unavailable
+        return nil
     }
 
     _ = try await closeAssignmentIfExpired(assignment, on: req.db, logger: req.logger, now: now)
