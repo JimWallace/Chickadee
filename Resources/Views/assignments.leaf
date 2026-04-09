@@ -914,9 +914,24 @@ tr.assignment-draggable td {
                 var tbody = enrolledTable.querySelector('tbody');
                 var rows = Array.from(tbody.querySelectorAll('tr'));
                 rows.sort(function (a, b) {
-                    var aText = (a.cells[col] ? a.cells[col].textContent : '').trim().toLowerCase();
-                    var bText = (b.cells[col] ? b.cells[col].textContent : '').trim().toLowerCase();
-                    return sortAsc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+                    var result;
+                    if (col === 3) {
+                        var aISO = a.cells[col] ? a.cells[col].getAttribute('data-iso') : '';
+                        var bISO = b.cells[col] ? b.cells[col].getAttribute('data-iso') : '';
+                        var aDate = aISO ? new Date(aISO).getTime() : 0;
+                        var bDate = bISO ? new Date(bISO).getTime() : 0;
+                        result = aDate - bDate;
+                    } else {
+                        var aText = (a.cells[col] ? a.cells[col].textContent : '').trim().toLowerCase();
+                        var bText = (b.cells[col] ? b.cells[col].textContent : '').trim().toLowerCase();
+                        result = aText.localeCompare(bText);
+                    }
+                    if (result === 0) {
+                        var aUsername = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
+                        var bUsername = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
+                        result = aUsername.localeCompare(bUsername);
+                    }
+                    return sortAsc ? result : -result;
                 });
                 rows.forEach(function (row) { tbody.appendChild(row); });
             });

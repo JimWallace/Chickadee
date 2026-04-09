@@ -139,6 +139,7 @@ final class WebRoutesTests: XCTestCase {
         name: String,
         tier: TestTier = .pub,
         status: TestStatus = .pass,
+        shortResult: String? = nil,
         longResult: String? = nil
     ) -> TestOutcome {
         TestOutcome(
@@ -146,8 +147,8 @@ final class WebRoutesTests: XCTestCase {
             testClass: nil,
             tier: tier,
             status: status,
-            shortResult: status == .pass ? "passed" : "failed",
-            longResult: status == .pass ? nil : (longResult ?? "test output here"),
+            shortResult: shortResult ?? (status == .pass ? "passed" : "failed"),
+            longResult: status == .pass ? longResult : (longResult ?? "test output here"),
             executionTimeMs: 10,
             memoryUsageBytes: nil,
             attemptNumber: 1,
@@ -330,6 +331,69 @@ final class WebRoutesTests: XCTestCase {
         })
     }
 
+    func testIndexShowsFirstTryPerfectBadgeForLatestPerfectFirstSubmission() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enrollUser(user)
+        try await insertSetup(id: "setup_badge_latest")
+        try await insertAssignment(testSetupID: "setup_badge_latest", title: "Badge Lab", isOpen: true)
+        try await insertSubmission(id: "sub_badge_latest", testSetupID: "setup_badge_latest", userID: userID, attemptNumber: 1)
+        try await insertResult(submissionID: "sub_badge_latest", outcomes: [
+            makeOutcome(name: "t1", status: .pass),
+            makeOutcome(name: "t2", status: .pass),
+        ])
+
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertTrue(res.body.string.contains("First-Try Perfect"))
+        })
+    }
+
+    func testIndexDoesNotShowFirstTryPerfectBadgeForSecondAttemptPerfectSubmission() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enrollUser(user)
+        try await insertSetup(id: "setup_badge_attempt2")
+        try await insertAssignment(testSetupID: "setup_badge_attempt2", title: "Retry Lab", isOpen: true)
+        try await insertSubmission(id: "sub_badge_attempt2", testSetupID: "setup_badge_attempt2", userID: userID, attemptNumber: 2)
+        try await insertResult(submissionID: "sub_badge_attempt2", outcomes: [
+            makeOutcome(name: "t1", status: .pass),
+            makeOutcome(name: "t2", status: .pass),
+        ])
+
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertFalse(res.body.string.contains("First-Try Perfect"))
+        })
+    }
+
+    func testIndexDoesNotShowFirstTryPerfectBadgeForImperfectFirstSubmission() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await enrollUser(user)
+        try await insertSetup(id: "setup_badge_notperfect")
+        try await insertAssignment(testSetupID: "setup_badge_notperfect", title: "Almost Lab", isOpen: true)
+        try await insertSubmission(id: "sub_badge_notperfect", testSetupID: "setup_badge_notperfect", userID: userID, attemptNumber: 1)
+        try await insertResult(submissionID: "sub_badge_notperfect", outcomes: [
+            makeOutcome(name: "t1", status: .pass),
+            makeOutcome(name: "t2", status: .fail),
+        ])
+
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertFalse(res.body.string.contains("First-Try Perfect"))
+        })
+    }
+
     // MARK: - GET /testsetups/:id/submit
 
     func testSubmitFormRendersForStudent() async throws {
@@ -424,6 +488,50 @@ final class WebRoutesTests: XCTestCase {
         })
     }
 
+    func testSubmissionPageShowsExpandedOutputPanelForFailingTests() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await insertSetup(id: "setup_fail_output")
+        try await insertSubmission(id: "sub_fail_output", testSetupID: "setup_fail_output", userID: userID)
+        try await insertResult(submissionID: "sub_fail_output", outcomes: [
+            makeOutcome(name: "test_failure", status: .fail, shortResult: "Expected 42, got 0", longResult: "Traceback line 1\nTraceback line 2")
+        ])
+
+        try await app.asyncTest(.GET, "/submissions/sub_fail_output", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertFalse(html.contains("<th>Output</th>"))
+            XCTAssertTrue(html.contains("test-short-result"))
+            XCTAssertTrue(html.contains("Expected 42, got 0"))
+            XCTAssertTrue(html.contains("test-output-panel"))
+            XCTAssertTrue(html.contains("Traceback line 1"))
+        })
+    }
+
+    func testSubmissionPageKeepsPassingOutputCollapsedWhenPresent() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await insertSetup(id: "setup_pass_output")
+        try await insertSubmission(id: "sub_pass_output", testSetupID: "setup_pass_output", userID: userID)
+        try await insertResult(submissionID: "sub_pass_output", outcomes: [
+            makeOutcome(name: "test_pass_with_output", status: .pass, longResult: "stdout:\nAll checks passed")
+        ])
+
+        try await app.asyncTest(.GET, "/submissions/sub_pass_output", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Show output"))
+            XCTAssertTrue(html.contains("All checks passed"))
+            XCTAssertFalse(html.contains("<tr class=\"test-output-row"))
+        })
+    }
+
     func testSubmissionPageShowsConfiguredDisplayNameForBrowserResultScriptFilename() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
@@ -488,9 +596,31 @@ final class WebRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
+            XCTAssertTrue(html.contains("test-output-panel"))
             XCTAssertTrue(html.contains("Traceback (most recent call last):"))
             XCTAssertTrue(html.contains("AssertionError"))
             XCTAssertFalse(html.contains("test output here"))
+        })
+    }
+
+    func testSubmissionPageShowsFirstTryPerfectBadge() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        let userID = try user.requireID()
+        try await insertSetup(id: "setup_submission_badge")
+        try await insertSubmission(id: "sub_submission_badge", testSetupID: "setup_submission_badge", userID: userID, attemptNumber: 1)
+        try await insertResult(submissionID: "sub_submission_badge", outcomes: [
+            makeOutcome(name: "t1", status: .pass),
+            makeOutcome(name: "t2", status: .pass),
+        ])
+
+        try await app.asyncTest(.GET, "/submissions/sub_submission_badge", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("First-Try Perfect"))
+            XCTAssertTrue(html.contains("achievement-badge"))
         })
     }
 

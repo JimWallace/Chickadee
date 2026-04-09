@@ -29,6 +29,7 @@ struct TestSetupRow: Encodable {
     let latestSubmittedAtText: String
     let additionalSubmissionCount: Int
     let bestGradeText: String?
+    let badges: [AchievementBadge]
 }
 
 struct LatestSubmissionItem: Encodable {
@@ -107,6 +108,23 @@ struct OutcomeRow: Encodable {
     let pointsLabel: String?     // e.g. "2 pts" when assignment is weighted; nil otherwise
 }
 
+struct AchievementBadge: Encodable {
+    let id: String
+    let label: String
+    let tooltip: String
+
+    static let firstTryPerfect = AchievementBadge(
+        id: "first_try_perfect",
+        label: "First-Try Perfect",
+        tooltip: "Earned 100% on the first submission."
+    )
+
+    static func forSubmission(attemptNumber: Int, gradePercent: Int) -> [AchievementBadge] {
+        guard attemptNumber == 1, gradePercent == 100 else { return [] }
+        return [.firstTryPerfect]
+    }
+}
+
 /// Aggregate summary for a hidden test tier (release before deadline, or secret).
 /// No individual test names or output are included — only counts.
 struct TierSummary: Encodable {
@@ -163,5 +181,6 @@ struct SubmissionContext: Encodable {
     let releaseSummary: TierSummary?
     /// Non-nil for students when secret tests exist (always hidden).
     let secretSummary: TierSummary?
+    let badges: [AchievementBadge]
     let currentUser: CurrentUserContext?
 }

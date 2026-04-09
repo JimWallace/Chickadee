@@ -57,3 +57,20 @@ func visibleTiers(for user: APIUser, assignment: APIAssignment?) -> Set<String> 
     let releaseVisible = assignment?.dueAt.map { $0 <= Date() } ?? true
     return releaseVisible ? ["public", "release"] : ["public"]
 }
+
+func visibleCollection(
+    from collectionJSON: String,
+    for user: APIUser,
+    assignment: APIAssignment?
+) -> TestOutcomeCollection? {
+    guard let data = collectionJSON.data(using: .utf8) else { return nil }
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    guard let collection = try? decoder.decode(TestOutcomeCollection.self, from: data) else { return nil }
+    return collection.filtering(tiers: visibleTiers(for: user, assignment: assignment))
+}
+
+func gradePercent(from collection: TestOutcomeCollection) -> Int? {
+    guard collection.totalPoints > 0 else { return nil }
+    return Int((Double(collection.earnedPoints) / Double(collection.totalPoints) * 100).rounded())
+}
