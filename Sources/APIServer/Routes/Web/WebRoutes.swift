@@ -109,6 +109,7 @@ struct WebRoutes: RouteCollection {
         var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
         var submissionCountBySetupID: [String: Int] = [:]
         var bestGradePercentBySetupID: [String: Int] = [:]
+        var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
         if let userID = user.id {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
@@ -171,6 +172,24 @@ struct WebRoutes: RouteCollection {
                             bestGradePercentBySetupID[setupID] = gradePercent
                         }
                     }
+
+                    for (setupID, latest) in latestSubmissionBySetupID {
+                        guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
+                              let result = preferredResultBySubmissionID[latest.submissionID],
+                              let assignment = assignmentBySetup[setupID],
+                              let collection = visibleCollection(
+                                  from: result.collectionJSON,
+                                  for: user,
+                                  assignment: assignment
+                              ),
+                              let gradePercent = gradePercent(from: collection) else {
+                            continue
+                        }
+                        latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(
+                            attemptNumber: latestSubmission.attemptNumber ?? 1,
+                            gradePercent: gradePercent
+                        )
+                    }
                 }
             }
         }
@@ -227,7 +246,8 @@ struct WebRoutes: RouteCollection {
                 latestSubmissionID: latestSubmission?.submissionID ?? "",
                 latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
                 additionalSubmissionCount: max(submissionCount - 1, 0),
-                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" }
+                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" },
+                badges: latestBadgesBySetupID[setupID] ?? []
             )
         }
 
@@ -331,4 +351,3 @@ struct WebRoutes: RouteCollection {
     }
 
 }
-

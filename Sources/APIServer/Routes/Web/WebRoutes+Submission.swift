@@ -214,6 +214,7 @@ extension WebRoutes {
         var executionTimeMs = 0
         var gradePercent    = 0
         var resultSource    = ""   // "browser" | "worker" | ""
+        var badges: [AchievementBadge] = []
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -307,15 +308,21 @@ extension WebRoutes {
                 gradePercent = totalPoints > 0
                     ? Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
                     : 0
+                badges = AchievementBadge.forSubmission(
+                    attemptNumber: submission.attemptNumber ?? 1,
+                    gradePercent: gradePercent
+                )
                 let weighted = totalPoints != visible.totalTests
                 outcomes = visible.outcomes.map { o in
                     let skip = parseSkip(shortResult: o.shortResult)
                     let shortOutput = formattedShortResult(from: o.shortResult, status: o.status)
-                    let longOutput = formattedDetailedOutput(
-                        primary: o.longResult,
-                        fallback: o.shortResult,
-                        status: o.status
-                    )
+                    let longOutput = o.status == .pass
+                        ? formattedPassingDetailedOutput(primary: o.longResult)
+                        : formattedDetailedOutput(
+                            primary: o.longResult,
+                            fallback: o.shortResult,
+                            status: o.status
+                        )
                     let (markLabel, markClass): (String, String) = {
                         if skip.isSkipped { return ("—", "skipped") }
                         switch o.status {
@@ -388,6 +395,7 @@ extension WebRoutes {
             deltaHeaderText:   deltaHeaderText,
             releaseSummary:    releaseSummary,
             secretSummary:     secretSummary,
+            badges:            badges,
             currentUser:       req.currentUserContext
         )
         return try await req.view.render("submission", ctx)
@@ -467,6 +475,20 @@ func formattedDetailedOutput(primary raw: String?, fallback: String?, status: Te
         return traceback
     }
     return base
+}
+
+func formattedPassingDetailedOutput(primary raw: String?) -> String? {
+    guard let raw else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if let stdout = extractLabeledOutputSection("stdout", in: trimmed) {
+        return stdout
+    }
+    if let stderr = extractLabeledOutputSection("stderr", in: trimmed) {
+        return stderr
+    }
+    return trimmed
 }
 
 func extractStructuredSummaryText(from text: String) -> String? {

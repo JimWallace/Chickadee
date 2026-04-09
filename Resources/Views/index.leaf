@@ -40,7 +40,16 @@
         <tr>
             <td>
                 #if(setup.title):
-                    <strong>#(setup.title)</strong>
+                    <div class="assignment-title-cell">
+                        <strong>#(setup.title)</strong>
+                        #if(!setup.badges.isEmpty):
+                        <span class="achievement-badges achievement-badges-compact">
+                            #for(badge in setup.badges):
+                            <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                            #endfor
+                        </span>
+                        #endif
+                    </div>
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -111,7 +120,16 @@
         <tr>
             <td>
                 #if(setup.title):
-                    <strong>#(setup.title)</strong>
+                    <div class="assignment-title-cell">
+                        <strong>#(setup.title)</strong>
+                        #if(!setup.badges.isEmpty):
+                        <span class="achievement-badges achievement-badges-compact">
+                            #for(badge in setup.badges):
+                            <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                            #endfor
+                        </span>
+                        #endif
+                    </div>
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -182,7 +200,16 @@
         <tr>
             <td>
                 #if(setup.title):
-                    <strong>#(setup.title)</strong>
+                    <div class="assignment-title-cell">
+                        <strong>#(setup.title)</strong>
+                        #if(!setup.badges.isEmpty):
+                        <span class="achievement-badges achievement-badges-compact">
+                            #for(badge in setup.badges):
+                            <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                            #endfor
+                        </span>
+                        #endif
+                    </div>
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
