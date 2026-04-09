@@ -182,13 +182,20 @@ struct DatabaseConfigurationTests {
         try await withApp(app) { app in
             try await configureTestDatabase(app, options: .observability)
 
+            let capabilityProfile = RunnerCapabilityProfile(
+                platform: "macOS",
+                architecture: "arm64",
+                languageVersions: [],
+                capabilities: []
+            )
+            let now = Date()
             let profile = RunnerProfile(
                 runnerID: "runner-observability",
                 displayName: "Runner Observability",
-                profile: nil,
+                profile: capabilityProfile,
                 profileHash: nil,
-                lastRegisteredAt: nil,
-                lastSeenAt: Date(),
+                lastRegisteredAt: now,
+                lastSeenAt: now,
                 isActive: true
             )
             try await profile.save(on: app.db)
