@@ -78,6 +78,28 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         return setupID
     }
 
+    @discardableResult
+    private func insertAssignment(
+        testSetupID: String,
+        isOpen: Bool,
+        dueAt: Date? = nil,
+        deadlineOverrideActive: Bool = false
+    ) async throws -> APIAssignment {
+        let setupOptional = try await APITestSetup.find(testSetupID, on: app.db)
+        XCTAssertNotNil(setupOptional)
+        let setup = setupOptional!
+        let assignment = APIAssignment(
+            testSetupID: testSetupID,
+            title: "Browser Assignment",
+            dueAt: dueAt,
+            isOpen: isOpen,
+            deadlineOverrideActive: deadlineOverrideActive,
+            courseID: setup.courseID
+        )
+        try await assignment.save(on: app.db)
+        return assignment
+    }
+
     // MARK: - Manifest endpoint
 
     func testManifestRequiresAuthentication() async throws {
@@ -230,6 +252,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     /// server without error.
     func testBrowserResultAcceptsDependencySkippedOutcomes() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
+        _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
         let cookie  = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         let nb      = minimalNotebook()
@@ -315,6 +338,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
     func testRunnerSubmitRejectsBrowserGradedAssignments() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
+        _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
         let cookie  = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         let nb      = minimalNotebook()
@@ -340,6 +364,87 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
         let allSubs = try await APISubmission.query(on: app.db).all()
         XCTAssertTrue(allSubs.isEmpty, "runner-submit should not create queued submissions for browser-mode setups")
+    }
+
+    func testBrowserResultRejectsOverdueAssignmentsAndClosesThem() async throws {
+        let setupID = try await insertSetup(manifest: simpleManifest())
+        let assignment = try await insertAssignment(
+            testSetupID: setupID,
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+        let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let nb      = minimalNotebook()
+        let collection = """
+        {"submissionID":"","testSetupID":"\(setupID)","attemptNumber":1,"buildStatus":"passed","compilerOutput":null,"outcomes":[],"totalTests":0,"passCount":0,"failCount":0,"errorCount":0,"timeoutCount":0,"executionTimeMs":0,"runnerVersion":"browser-wasm-runner/1.0","timestamp":"2026-01-01T00:00:00Z"}
+        """
+
+        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.body = .init(buffer: multipartBody(
+                    boundary: "browser-result-overdue-boundary",
+                    fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                    file: ("notebook", "notebook.ipynb", nb)
+                ))
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": "browser-result-overdue-boundary"])
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+                XCTAssertTrue(res.body.string.contains("closed"))
+            })
+
+        let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(refreshedOptional)
+        let refreshed = refreshedOptional!
+        XCTAssertFalse(refreshed.isOpen)
+    }
+
+    func testRunnerSubmitRejectsOverdueAssignmentsAndClosesThem() async throws {
+        let manifest = """
+        {
+          "schemaVersion": 1,
+          "gradingMode": "worker",
+          "requiredFiles": [],
+          "testSuites": [
+            { "tier": "public", "script": "test_public.py" }
+          ],
+          "timeLimitSeconds": 10,
+          "makefile": null
+        }
+        """
+        let setupID = try await insertSetup(manifest: manifest)
+        let assignment = try await insertAssignment(
+            testSetupID: setupID,
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+        let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let nb      = minimalNotebook()
+
+        try await app.asyncTest(.POST, "/api/v1/submissions/runner-submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.body = .init(buffer: multipartBody(
+                    boundary: "runner-submit-overdue-boundary",
+                    fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
+                    file: ("notebook", "submission.ipynb", nb)
+                ))
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": "runner-submit-overdue-boundary"])
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+                XCTAssertTrue(res.body.string.contains("closed"))
+            })
+
+        let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(refreshedOptional)
+        let refreshed = refreshedOptional!
+        XCTAssertFalse(refreshed.isOpen)
     }
 
     // MARK: - Private fixtures

@@ -287,6 +287,10 @@ extension AssignmentRoutes {
 
         assignment.title = title
         assignment.dueAt = due
+        assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
+            dueAt: due,
+            existingOverride: assignment.deadlineOverrideActive ?? false
+        )
         assignment.isOpen = false
         assignment.validationStatus = "pending"
 

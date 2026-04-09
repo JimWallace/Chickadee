@@ -123,6 +123,7 @@ private func registerBaseTestMigrations(on app: Application) {
     app.migrations.add(AddCourseOpenEnrollment())
     app.migrations.add(AddCourseEnrollmentMode())
     app.migrations.add(AddSubmissionRetestedAt())
+    app.migrations.add(AddAssignmentDeadlineOverrideActive())
 }
 
 private func registerObservabilityTestMigrations(on app: Application) {

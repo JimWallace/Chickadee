@@ -201,6 +201,21 @@ final class WebRoutesTests: XCTestCase {
         return result
     }
 
+    private func submitMultipartBody(boundary: String, csrfToken: String) -> ByteBuffer {
+        var buf = ByteBufferAllocator().buffer(capacity: 1024)
+        buf.writeString("--\(boundary)\r\n")
+        buf.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
+        buf.writeString(csrfToken)
+        buf.writeString("\r\n")
+        buf.writeString("--\(boundary)\r\n")
+        buf.writeString("Content-Disposition: form-data; name=\"files\"; filename=\"submission.py\"\r\n")
+        buf.writeString("Content-Type: text/x-python\r\n\r\n")
+        buf.writeString("print('hello')\n")
+        buf.writeString("\r\n")
+        buf.writeString("--\(boundary)--\r\n")
+        return buf
+    }
+
     func testSubmissionPageRendersWarnings() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
@@ -415,6 +430,44 @@ final class WebRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
         })
+    }
+
+    func testSubmitPostRejectsOverdueAssignmentsAndPersistsClosure() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enrollUser(user)
+        _ = try await insertSetup(id: "setup_submit_overdue")
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_submit_overdue",
+            title: "Late Lab",
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+
+        let (csrf, sessionCookie) = try await csrfFields(
+            for: "/testsetups/setup_submit_overdue/submit",
+            cookie: cookie,
+            on: app
+        )
+        let boundary = "late-submit-boundary"
+
+        try await app.asyncTest(.POST, "/testsetups/setup_submit_overdue/submit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: submitMultipartBody(boundary: boundary, csrfToken: csrf))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden)
+            XCTAssertTrue(res.body.string.contains("closed"))
+        })
+
+        let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(refreshedOptional)
+        let refreshed = refreshedOptional!
+        XCTAssertFalse(refreshed.isOpen)
     }
 
     // MARK: - GET /testsetups/:id/history

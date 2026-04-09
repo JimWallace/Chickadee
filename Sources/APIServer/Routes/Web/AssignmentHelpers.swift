@@ -97,6 +97,7 @@ func parseDueDate(_ raw: String?) -> Date? {
 
     let fmt = DateFormatter()
     fmt.locale = Locale(identifier: "en_US_POSIX")
+    fmt.timeZone = TimeZone(identifier: "America/Toronto")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.date(from: raw)
 }
@@ -225,8 +226,25 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     guard let date else { return "" }
     let fmt = DateFormatter()
     fmt.locale = Locale(identifier: "en_US_POSIX")
+    fmt.timeZone = TimeZone(identifier: "America/Toronto")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.string(from: date)
+}
+
+func deadlineOverrideValueForInstructorOpen(
+    dueAt: Date?,
+    now: Date = Date()
+) -> Bool {
+    guard let dueAt else { return false }
+    return dueAt <= now
+}
+
+func normalizedDeadlineOverrideAfterDueDateChange(
+    dueAt: Date?,
+    existingOverride: Bool
+) -> Bool {
+    guard let dueAt else { return false }
+    return dueAt <= Date() ? existingOverride : false
 }
 
 func notebookFilenameForStorage(uploadedName: String?, fallback: String) -> String {

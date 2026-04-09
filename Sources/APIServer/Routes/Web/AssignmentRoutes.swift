@@ -1243,6 +1243,7 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
         }
         assignment.isOpen = true
+        assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
         try await assignment.save(on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -1299,6 +1300,7 @@ struct AssignmentRoutes: RouteCollection {
                 throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
             }
             assignment.isOpen = true
+            assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
         case "closed":
             assignment.isOpen = false
         default:

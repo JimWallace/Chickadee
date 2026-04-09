@@ -37,6 +37,8 @@ extension WebRoutes {
             throw Abort(.notFound)
         }
 
+        _ = try await requireOpenStudentAssignment(for: setupID, on: req)
+
         let body    = try req.content.decode(SubmitFormBody.self)
         let subsDir = req.application.submissionsDirectory
         let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"

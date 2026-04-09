@@ -527,6 +527,20 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertEqual(dueAtLocalInputString(nil), "")
     }
 
+    func testDeadlineOverrideHelpersRespectPastAndFutureDueDates() {
+        let past = Date().addingTimeInterval(-60)
+        let future = Date().addingTimeInterval(60)
+
+        XCTAssertTrue(deadlineOverrideValueForInstructorOpen(dueAt: past))
+        XCTAssertFalse(deadlineOverrideValueForInstructorOpen(dueAt: future))
+        XCTAssertFalse(deadlineOverrideValueForInstructorOpen(dueAt: nil))
+
+        XCTAssertFalse(normalizedDeadlineOverrideAfterDueDateChange(dueAt: future, existingOverride: true))
+        XCTAssertFalse(normalizedDeadlineOverrideAfterDueDateChange(dueAt: nil, existingOverride: true))
+        XCTAssertTrue(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: true))
+        XCTAssertFalse(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: false))
+    }
+
     func testCurrentSetupFilesUsesManifestOrderingAndSolutionFallbacks() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("current-setup-files-\(UUID().uuidString)")
