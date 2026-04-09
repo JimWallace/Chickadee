@@ -36,6 +36,7 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
 
         // Decode the TestOutcomeCollection the browser sent.
         let decoder = JSONDecoder()
@@ -119,6 +120,7 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
 
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),

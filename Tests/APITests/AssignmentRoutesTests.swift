@@ -83,9 +83,22 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     @discardableResult
-    private func insertAssignment(testSetupID: String, title: String, isOpen: Bool) async throws -> APIAssignment {
+    private func insertAssignment(
+        testSetupID: String,
+        title: String,
+        isOpen: Bool,
+        dueAt: Date? = nil,
+        deadlineOverrideActive: Bool = false
+    ) async throws -> APIAssignment {
         let courseID = try await makeTestCourseID()
-        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: isOpen, courseID: courseID)
+        let a = APIAssignment(
+            testSetupID: testSetupID,
+            title: title,
+            dueAt: dueAt,
+            isOpen: isOpen,
+            deadlineOverrideActive: deadlineOverrideActive,
+            courseID: courseID
+        )
         try await a.save(on: app.db)
         return a
     }
@@ -238,6 +251,81 @@ final class AssignmentRoutesTests: XCTestCase {
         files.forEach(appendFile)
         body.writeString("--\(boundary)--\r\n")
         return body
+    }
+
+    func testCloseExpiredAssignmentsClosesOnlyEligibleAssignments() async throws {
+        _ = try await insertSetup(id: "setup_deadline_close")
+        let overdue = try await insertAssignment(
+            testSetupID: "setup_deadline_close",
+            title: "Overdue",
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+
+        _ = try await insertSetup(id: "setup_deadline_open")
+        let noDeadline = try await insertAssignment(
+            testSetupID: "setup_deadline_open",
+            title: "No Deadline",
+            isOpen: true
+        )
+
+        _ = try await insertSetup(id: "setup_deadline_override")
+        let overridden = try await insertAssignment(
+            testSetupID: "setup_deadline_override",
+            title: "Override",
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60),
+            deadlineOverrideActive: true
+        )
+
+        let closedCount = try await closeExpiredAssignments(on: app.db, logger: app.logger)
+        XCTAssertEqual(closedCount, 1)
+
+        let overdueReloadedOptional = try await APIAssignment.find(overdue.id, on: app.db)
+        XCTAssertNotNil(overdueReloadedOptional)
+        let overdueReloaded = overdueReloadedOptional!
+        XCTAssertFalse(overdueReloaded.isOpen)
+
+        let noDeadlineReloadedOptional = try await APIAssignment.find(noDeadline.id, on: app.db)
+        XCTAssertNotNil(noDeadlineReloadedOptional)
+        let noDeadlineReloaded = noDeadlineReloadedOptional!
+        XCTAssertTrue(noDeadlineReloaded.isOpen)
+
+        let overriddenReloadedOptional = try await APIAssignment.find(overridden.id, on: app.db)
+        XCTAssertNotNil(overriddenReloadedOptional)
+        let overriddenReloaded = overriddenReloadedOptional!
+        XCTAssertTrue(overriddenReloaded.isOpen)
+    }
+
+    func testInstructorCanReopenPastDueAssignmentWithOverride() async throws {
+        _ = try await insertSetup(id: "setup_reopen_deadline")
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_reopen_deadline",
+            title: "Past Due",
+            isOpen: false,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+        try await app.asyncTest(.POST, "/instructor/\(assignment.publicID)/open", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        let reopenedOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(reopenedOptional)
+        let reopened = reopenedOptional!
+        XCTAssertTrue(reopened.isOpen)
+        XCTAssertEqual(reopened.deadlineOverrideActive, true)
+
+        _ = try await closeExpiredAssignments(on: app.db, logger: app.logger)
+        let stillOpenOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(stillOpenOptional)
+        let stillOpen = stillOpenOptional!
+        XCTAssertTrue(stillOpen.isOpen)
     }
 
     private func makeZip(at path: String, entries: [(String, String)]) throws {

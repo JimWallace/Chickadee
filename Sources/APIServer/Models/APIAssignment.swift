@@ -39,6 +39,11 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @Field(key: "is_open")
     var isOpen: Bool
 
+    /// True when an instructor manually re-opened a past-due assignment.
+    /// Nil/false means normal deadline auto-close behavior applies.
+    @OptionalField(key: "deadline_override_active")
+    var deadlineOverrideActive: Bool?
+
     /// Instructor-defined ordering for dashboard display (lower first).
     @OptionalField(key: "sort_order")
     var sortOrder: Int?
@@ -73,6 +78,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
 
     init(id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
          dueAt: Date? = nil, isOpen: Bool = true,
+         deadlineOverrideActive: Bool = false,
          sortOrder: Int? = nil,
          validationStatus: String? = nil,
          validationSubmissionID: String? = nil,
@@ -84,6 +90,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.title       = title
         self.dueAt       = dueAt
         self.isOpen      = isOpen
+        self.deadlineOverrideActive = deadlineOverrideActive
         self.sortOrder   = sortOrder
         self.validationStatus = validationStatus
         self.validationSubmissionID = validationSubmissionID
