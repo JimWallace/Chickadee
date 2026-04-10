@@ -500,6 +500,9 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testSaveNewAssignmentPreservesMultipleUploadedSuiteFiles() async throws {
         _ = try await makeTestCourseID()
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
         let boundary = "Boundary-New-MultiSuites"
