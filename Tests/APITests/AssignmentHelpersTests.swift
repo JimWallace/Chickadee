@@ -44,6 +44,31 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertEqual(process.terminationStatus, 0, "zip should succeed")
     }
 
+    private func notebookData(language: String = "python", source: String) -> Data {
+        let json = """
+        {
+          "cells": [
+            {
+              "cell_type": "code",
+              "source": \(String(data: try! JSONEncoder().encode([source]), encoding: .utf8)!)
+            }
+          ],
+          "metadata": {
+            "kernelspec": {
+              "name": "\(language)",
+              "language": "\(language)"
+            },
+            "language_info": {
+              "name": "\(language)"
+            }
+          },
+          "nbformat": 4,
+          "nbformat_minor": 5
+        }
+        """
+        return Data(json.utf8)
+    }
+
     func testSanitizedAssignmentReturnPathAcceptsOnlyInstructorScopedPaths() {
         XCTAssertEqual(
             sanitizedAssignmentReturnPath(
@@ -206,6 +231,32 @@ final class AssignmentHelpersTests: XCTestCase {
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
         XCTAssertEqual(props.testSuites.map(\.script), ["02_release.py"])
         XCTAssertEqual(props.testSuites.first?.dependsOn, [])
+    }
+
+    func testDetectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
+        let zipPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
+            .path
+        try makeZip(at: zipPath, entries: [
+            (name: "tests/run.sh", content: "#!/bin/bash\necho ok\n")
+        ])
+
+        let setup = APITestSetup(
+            id: "setup_detect_requirements",
+            manifest: "{}",
+            zipPath: zipPath,
+            notebookPath: "/tmp/assignment.ipynb",
+            courseID: UUID()
+        )
+
+        let suggestions = detectRequirementSuggestions(
+            assignmentNotebookData: notebookData(source: "import pandas\n"),
+            solutionNotebookData: notebookData(source: "import scipy\nimport matplotlib\n"),
+            setup: setup
+        )
+
+        XCTAssertEqual(suggestions.languages, ["python"])
+        XCTAssertEqual(suggestions.capabilities, ["pandas", "shell-bash"])
     }
 
     func testMakeWorkerManifestJSONTopologicallySortsSuitesAndOmitsDefaults() throws {

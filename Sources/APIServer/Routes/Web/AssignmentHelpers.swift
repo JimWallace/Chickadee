@@ -1003,7 +1003,7 @@ func detectRequirementSuggestions(
     }
 
     if let assignmentNotebookData { scanNotebook(assignmentNotebookData) }
-    if let solutionNotebookData { scanNotebook(solutionNotebookData) }
+    _ = solutionNotebookData
 
     for entry in listZipEntries(zipPath: setup.zipPath) {
         guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: entry) else { continue }
@@ -1544,6 +1544,66 @@ func ensureValidationRunnerAvailability(req: Request) async {
 
     await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
     try? await Task.sleep(nanoseconds: 1_000_000_000)
+}
+
+func hasCompatibleValidationRunner(
+    req: Request,
+    requirements: AssignmentRequirementSpec?,
+    activeWindowSeconds: TimeInterval = 20
+) async throws -> Bool {
+    try await req.application.runnerProfiles.refreshActiveFlags(
+        activeWindowSeconds: activeWindowSeconds,
+        on: req.db
+    )
+
+    let profiles = try await RunnerProfile.query(on: req.db)
+        .filter(\.$isActive == true)
+        .all()
+    let matcher = CompatibilityMatcher()
+
+    return profiles.contains { profile in
+        matcher.evaluate(
+            runnerProfile: profile.capabilityProfile,
+            requirements: requirements
+        ).isCompatible
+    }
+}
+
+func ensureCompatibleValidationRunnerAvailability(
+    req: Request,
+    requirements: AssignmentRequirementSpec?,
+    activeWindowSeconds: TimeInterval = 20,
+    attempts: Int = 3
+) async throws -> Bool {
+    if try await hasCompatibleValidationRunner(
+        req: req,
+        requirements: requirements,
+        activeWindowSeconds: activeWindowSeconds
+    ) {
+        return true
+    }
+
+    let enabled = await req.application.localRunnerAutoStartStore.isEnabled()
+    guard enabled else { return false }
+
+    await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+
+    for attempt in 0..<attempts {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if try await hasCompatibleValidationRunner(
+            req: req,
+            requirements: requirements,
+            activeWindowSeconds: activeWindowSeconds
+        ) {
+            return true
+        }
+
+        if attempt + 1 < attempts {
+            await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+        }
+    }
+
+    return false
 }
 
 func removeMaterializedNotebookFiles(req: Request, setupID: String) {
