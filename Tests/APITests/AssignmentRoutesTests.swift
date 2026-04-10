@@ -503,6 +503,19 @@ final class AssignmentRoutesTests: XCTestCase {
         app.migrations.add(CreateRunnerProfiles())
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
+        let now = Date()
+        let runnerProfile = RunnerProfile()
+        runnerProfile.runnerID = "runner-multi-suite"
+        runnerProfile.displayName = "Runner Multi Suite"
+        runnerProfile.platform = "linux"
+        runnerProfile.architecture = "x86_64"
+        runnerProfile.languageVersionsJSON = "[]"
+        runnerProfile.capabilitiesJSON = "[]"
+        runnerProfile.profileHash = nil
+        runnerProfile.lastRegisteredAt = now
+        runnerProfile.lastSeenAt = now
+        runnerProfile.isActive = true
+        try await runnerProfile.save(on: app.db)
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
         let boundary = "Boundary-New-MultiSuites"
