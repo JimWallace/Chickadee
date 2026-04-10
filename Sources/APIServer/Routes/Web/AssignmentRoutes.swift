@@ -932,6 +932,13 @@ struct AssignmentRoutes: RouteCollection {
             return req.redirect(to: "/instructor/new?\(q)")
         }
 
+        let requirementSpec = assignmentRequirementSpec(
+            platform: requiredPlatform,
+            architecture: requiredArchitecture,
+            languagesCSV: requiredLanguagesCSV,
+            capabilitiesCSV: requiredCapabilitiesCSV
+        )
+
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
         let setupID = draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
@@ -1017,6 +1024,24 @@ struct AssignmentRoutes: RouteCollection {
         )
 
         let shouldQueueValidation = !setupPackage.testSuites.isEmpty
+        if shouldQueueValidation {
+            let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
+                req: req,
+                requirements: requirementSpec
+            )
+            guard hasEligibleRunner else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: draftID,
+                    assignmentName: title,
+                    dueAt: dueAtRaw ?? "",
+                    sectionID: sectionIDRaw ?? "",
+                    notice: nil,
+                    error: "No compatible active runner is available to validate this assignment."
+                )
+            }
+        }
+
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
             testSetupID: setupID,
@@ -1029,6 +1054,13 @@ struct AssignmentRoutes: RouteCollection {
             sectionID: resolvedSectionID,
             courseID: courseID
         )
+        if let requirements = requirementSpec {
+            let requirement = AssignmentRequirement(
+                assignmentID: try assignment.requireID(),
+                specification: requirements
+            )
+            try await requirement.save(on: req.db)
+        }
 
         if shouldQueueValidation {
             let validationSubmissionID = try await enqueueRunnerValidationSubmission(
@@ -1042,18 +1074,6 @@ struct AssignmentRoutes: RouteCollection {
             assignment.validationSubmissionID = validationSubmissionID
             try await assignment.save(on: req.db)
             await ensureValidationRunnerAvailability(req: req)
-        }
-        if let requirements = assignmentRequirementSpec(
-            platform: requiredPlatform,
-            architecture: requiredArchitecture,
-            languagesCSV: requiredLanguagesCSV,
-            capabilitiesCSV: requiredCapabilitiesCSV
-        ) {
-            let requirement = AssignmentRequirement(
-                assignmentID: try assignment.requireID(),
-                specification: requirements
-            )
-            try await requirement.save(on: req.db)
         }
         if !draftID.isEmpty {
             clearDraftFormState(req: req, draftID: draftID)
