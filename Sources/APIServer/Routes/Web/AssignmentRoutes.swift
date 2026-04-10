@@ -35,6 +35,7 @@ struct AssignmentRoutes: RouteCollection {
         let r = routes.grouped("instructor")
         r.get(use: list)
         r.get("grades.csv", use: exportGradesCSV)
+        r.get("enroll-csv", use: enrollCSVForm)
         r.get("students", ":studentID", "submissions", use: courseStudentSubmissionsPage)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)

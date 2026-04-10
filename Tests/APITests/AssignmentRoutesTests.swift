@@ -374,6 +374,20 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
+    func testAssignmentsPageUsesDedicatedEnrollCSVPageLink() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("href=\"/instructor/enroll-csv\""))
+            XCTAssertFalse(html.contains("id=\"enroll-csv-file\""))
+        })
+    }
+
     // MARK: - POST /instructor (publish → creates draft)
 
     func testPublishCreatesDraftAssignment() async throws {

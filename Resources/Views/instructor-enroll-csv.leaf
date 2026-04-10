@@ -1,0 +1,38 @@
+#extend("base"):
+#export("title"):
+Enrol from CSV — #(courseCode)
+#endexport
+#export("content"):
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap">
+    <h1 style="margin:0">Enrol from CSV</h1>
+    <span style="color:var(--text-secondary)">#(courseCode) — #(courseName)</span>
+</div>
+
+#if(error):
+<div class="form-error" style="margin-bottom:1rem">#(error)</div>
+#endif
+
+<section class="admin-section">
+    <h2>Upload enrollment list</h2>
+    <p style="margin-bottom:1rem;color:var(--text-secondary);font-size:.9rem">
+        Upload a CSV or text file containing one username per line. The first column is used, and a header row like
+        <code>username</code> is ignored automatically.
+    </p>
+    <form method="post"
+          action="/courses/#(courseID)/enroll-csv"
+          enctype="multipart/form-data"
+          style="display:flex;flex-direction:column;gap:1rem;max-width:480px">
+        #csrfFormField()
+        <label class="form-label">
+            Enrollment CSV
+            <input class="form-input" type="file" name="file" accept=".csv,.txt" required
+                   style="display:block;margin-top:.25rem">
+        </label>
+        <div style="display:flex;gap:.75rem">
+            <button class="btn btn-primary" type="submit">Enrol</button>
+            <a href="/instructor" class="btn">Cancel</a>
+        </div>
+    </form>
+</section>
+#endexport
+#endextend
