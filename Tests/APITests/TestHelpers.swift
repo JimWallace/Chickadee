@@ -132,10 +132,10 @@ private func registerObservabilityTestMigrations(on app: Application) {
     app.migrations.add(CreateJobExecutionMetrics())
     app.migrations.add(AddJobExecutionStageTimings())
     app.migrations.add(CreateRunnerSnapshots())
+    app.migrations.add(CreateRunnerProfiles())
 }
 
 private func registerRunnerCompatibilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateRunnerProfiles())
     app.migrations.add(CreateAssignmentRequirements())
 }
 

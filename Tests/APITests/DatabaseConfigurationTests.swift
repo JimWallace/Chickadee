@@ -173,4 +173,33 @@ struct DatabaseConfigurationTests {
             #expect(app.databases.configuration(for: .chickadee) != nil)
         }
     }
+
+    @Test func observabilityTestDatabaseIncludesRunnerProfiles() async throws {
+        let env = EnvironmentScope()
+        env.set("TEST_DATABASE_BACKEND", nil)
+
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app, options: .observability)
+
+            let now = Date()
+            let profile = RunnerProfile()
+            profile.runnerID = "runner-observability"
+            profile.displayName = "Runner Observability"
+            profile.platform = "macOS"
+            profile.architecture = "arm64"
+            profile.languageVersionsJSON = "[]"
+            profile.capabilitiesJSON = "[]"
+            profile.profileHash = nil
+            profile.lastRegisteredAt = now
+            profile.lastSeenAt = now
+            profile.isActive = true
+            try await profile.save(on: app.db)
+
+            let saved = try await RunnerProfile.query(on: app.db)
+                .filter(\.$runnerID == "runner-observability")
+                .first()
+            #expect(saved != nil)
+        }
+    }
 }
