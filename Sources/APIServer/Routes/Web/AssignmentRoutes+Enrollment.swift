@@ -8,6 +8,38 @@ import Fluent
 import Core
 
 extension AssignmentRoutes {
+    // MARK: - GET /instructor/enroll-csv
+
+    @Sendable
+    func enrollCSVForm(req: Request) async throws -> View {
+        let caller = try req.auth.require(APIUser.self)
+        guard caller.isInstructor else { throw Abort(.forbidden) }
+
+        let courseState = try await req.resolveActiveCourse(for: caller)
+        guard let courseContext = courseState.active,
+              let courseID = courseState.activeCourseUUID,
+              let course = try await APICourse.find(courseID, on: req.db),
+              !course.isArchived
+        else {
+            throw Abort(.badRequest, reason: "No active course selected.")
+        }
+
+        struct EnrollCSVFormContext: Encodable {
+            let currentUser: CurrentUserContext?
+            let courseID: String
+            let courseCode: String
+            let courseName: String
+            let error: String?
+        }
+
+        return try await req.view.render("instructor-enroll-csv", EnrollCSVFormContext(
+            currentUser: req.currentUserContext,
+            courseID: courseID.uuidString,
+            courseCode: courseContext.code,
+            courseName: courseContext.name,
+            error: req.query[String.self, at: "error"]
+        ))
+    }
 
     // MARK: - POST /courses/:courseID/enrollment-mode
 

@@ -2,6 +2,7 @@
 //
 // Integration tests for AssignmentRoutes+Enrollment:
 //   POST /courses/:courseID/enrollment-mode  — set enrollment mode
+//   GET  /instructor/enroll-csv              — bulk-enrol upload form
 //   POST /courses/:courseID/enroll-csv       — bulk-enrol from CSV upload
 
 import XCTest
@@ -56,6 +57,11 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let user = APIUser(username: username, passwordHash: hash, role: "student")
         try await user.save(on: app.db)
         return user
+    }
+
+    private func enroll(user: APIUser, in course: APICourse) async throws {
+        let enrollment = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
+        try await enrollment.save(on: app.db)
     }
 
     // MARK: - POST /courses/:courseID/enrollment-mode
@@ -126,6 +132,29 @@ final class AssignmentEnrollmentTests: XCTestCase {
     }
 
     // MARK: - POST /courses/:courseID/enroll-csv
+
+    func testEnrollCSVFormShowsDedicatedUploadPage() async throws {
+        let course = try await makeCourse(code: "CSV_FORM1")
+        let cookie = try await loginUser(username: "csv_instructor_form", password: "pw",
+                                         role: "instructor", on: app)
+        let instructorQueryResult = try await APIUser.query(on: app.db)
+            .filter(\.$username == "csv_instructor_form")
+            .first()
+        let instructor = try XCTUnwrap(instructorQueryResult)
+        try await enroll(user: instructor, in: course)
+        let courseID = try course.requireID().uuidString
+
+        try await app.asyncTest(.GET, "/instructor/enroll-csv", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Enrol from CSV"))
+            XCTAssertTrue(html.contains("/courses/\(courseID)/enroll-csv"))
+            XCTAssertTrue(html.contains("type=\"file\""))
+            XCTAssertTrue(html.contains("Cancel"))
+        })
+    }
 
     func testBulkEnrollCSV_enrollsMatchedUsers() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL1")

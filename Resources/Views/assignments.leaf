@@ -405,7 +405,7 @@
 
 <!-- ── Enrolled students ──────────────────────────────────────────────── -->
 <div style="margin-top:2.5rem">
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
         <h2 style="font-size:1.05rem;font-weight:600;margin:0">Enrolled students (#(enrolledStudentCount))</h2>
         #if(currentUser.activeCourse):
         #if(!courseIsArchived):
@@ -421,19 +421,12 @@
                 </select>
             </label>
         </form>
-        <form method="post" action="/courses/#(currentUser.activeCourse.id)/enroll-csv"
-              enctype="multipart/form-data" style="margin:0;margin-left:auto">
-            #csrfFormField()
-            <label class="visually-hidden" for="enroll-csv-file">CSV file</label>
-            <input id="enroll-csv-file" type="file" name="file" accept=".csv,.txt" required
-                   style="font-size:.8rem;max-width:12rem">
-            <button class="btn btn-primary" type="submit" style="margin:0">Enrol</button>
-        </form>
+        <a class="btn btn-primary" href="/instructor/enroll-csv">Enrol</a>
         #endif
         #endif
         <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or username…"
-               style="width:220px;margin-left:auto" aria-label="Filter enrolled students"
+               style="width:220px;flex:1 1 220px;min-width:220px" aria-label="Filter enrolled students"
                readonly onfocus="this.removeAttribute('readonly')">
     </div>
     #if(hasEnrolledStudents):
