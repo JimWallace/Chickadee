@@ -31,7 +31,7 @@ RUN ls -lh .build/release/chickadee-server .build/release/chickadee-runner
 # Stage 2 — Runtime
 # Must use the same Ubuntu version as the build stage (jammy).
 # ============================================================
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
