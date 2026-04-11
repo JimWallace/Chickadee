@@ -892,6 +892,27 @@ final class WebRoutesTests: XCTestCase {
         })
     }
 
+    func testStudentCannotViewPeerSubmissionPage() async throws {
+        // Student A owns the submission; Student B must be forbidden from viewing it.
+        // This exercises the ownership guard in WebRoutes+Submission.swift
+        // (submission.userID == user.id check).
+        let studentA = APIUser(username: "peer_student_a", passwordHash: try Bcrypt.hash("pass"), role: "student")
+        try await studentA.save(on: app.db)
+        let studentAID = try studentA.requireID()
+
+        try await insertSetup(id: "setup_peer")
+        try await insertSubmission(id: "sub_peer_a", testSetupID: "setup_peer", userID: studentAID)
+
+        // Log in as a different student and attempt to access Student A's submission.
+        let cookieB = try await loginUser(username: "peer_student_b", password: "pass", role: "student", on: app)
+
+        try await app.asyncTest(.GET, "/submissions/sub_peer_a", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookieB)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden, "Student B must not view Student A's submission")
+        })
+    }
+
     func testInstructorSeesAllTiers() async throws {
         let cookie = try await loginAsInstructor()
         let student = APIUser(username: "s3", passwordHash: try Bcrypt.hash("pass"), role: "student")

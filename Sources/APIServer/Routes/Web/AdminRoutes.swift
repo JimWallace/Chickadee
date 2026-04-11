@@ -161,11 +161,15 @@ struct AdminRoutes: RouteCollection {
         }
 
         let snapshotRows = snapshots.map {
-            AdminRunnerSnapshotRow(
+            let utilizationPercent = $0.maxJobs > 0
+                ? Int((Double($0.activeJobs) / Double($0.maxJobs) * 100).rounded())
+                : 0
+            return AdminRunnerSnapshotRow(
                 recordedAt: iso8601String($0.recordedAt),
                 activeJobs: $0.activeJobs,
                 maxJobs: $0.maxJobs,
-                availableCapacity: $0.availableCapacity,
+                activeJobsLabel: "\($0.activeJobs) / \($0.maxJobs)",
+                utilizationPercent: utilizationPercent,
                 lastPollAt: $0.lastPollAt.map(iso8601String),
                 lastHeartbeatAt: $0.lastHeartbeatAt.map(iso8601String)
             )
@@ -178,10 +182,14 @@ struct AdminRoutes: RouteCollection {
                 submissionID: $0.submissionID,
                 assignmentID: $0.assignmentID?.uuidString,
                 finalStatus: $0.finalStatus ?? "unknown",
+                queueWaitMs: $0.queueWaitMs,
+                executionMs: $0.executionMs,
+                overheadMs: overheadMs(for: $0),
                 queueWaitFormatted: $0.queueWaitMs.map(formatMs),
                 executionFormatted: $0.executionMs.map(formatMs),
                 overheadFormatted: overheadMs(for: $0).map(formatMs),
                 stageBreakdownFormatted: stageBreakdown(for: $0)?.formatted,
+                totalProcessingMs: $0.totalProcessingMs,
                 totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
                 completedAt: $0.completedAt.map(iso8601String),
                 testsPassed: $0.testsPassed ?? 0,

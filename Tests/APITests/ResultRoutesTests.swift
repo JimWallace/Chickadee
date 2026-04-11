@@ -230,6 +230,49 @@ final class ResultRoutesTests: XCTestCase {
         })
     }
 
+    func testDuplicateResultSubmissionIsIdempotent() throws {
+        // Simulates a worker retry: the same TestOutcomeCollection is submitted
+        // twice (e.g. the first POST timed out from the worker's perspective but
+        // actually succeeded on the server). The second POST must succeed and must
+        // not corrupt the submission's state.
+        let collection = makeCollection(submissionID: "sub_dup_result")
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+        let body = try bodyData(for: collection)
+
+        // First submission
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
+            req.body = body
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
+        })
+
+        // Second submission (worker retry)
+        let body2 = try bodyData(for: collection)
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body2, workerSecret: self.workerSecret)
+            req.body = body2
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, "Second (retry) POST must also succeed")
+            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
+        })
+
+        // Submission must still be "complete" (not rolled back or errored)
+        let submission = try APISubmission.find(collection.submissionID, on: app.db).wait()
+        XCTAssertEqual(submission?.status, "complete", "Submission must remain complete after duplicate result")
+
+        // Two result records should exist — duplicates are appended, not rejected.
+        // The view layer picks the latest, so both records are harmless.
+        let resultCount = try APIResult.query(on: app.db)
+            .filter(\.$submissionID == collection.submissionID)
+            .count()
+            .wait()
+        XCTAssertEqual(resultCount, 2, "Each POST should persist one result record")
+    }
+
     func testReportResultsAcceptsLargeSignedBodyOverRealHTTP() async throws {
         let largeMessage = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
         let outcome = TestOutcome(
