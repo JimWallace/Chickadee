@@ -247,6 +247,32 @@ final class AdminRoutesTests: XCTestCase {
         })
     }
 
+    func testAdminDashboardDefaultsUsersToMostRecentLastLoginFirst() async throws {
+        let cookie = try await loginAsAdmin()
+        let now = Date()
+        _ = try await makeUser(username: "never_logged_in")
+        let older = try await makeUser(username: "older_login", role: "student")
+        older.lastLoginAt = now.addingTimeInterval(-3600)
+        try await older.save(on: app.db)
+        let recent = try await makeUser(username: "recent_login", role: "student")
+        recent.lastLoginAt = now
+        try await recent.save(on: app.db)
+
+        try await app.asyncTest(.GET, "/admin", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = String(buffer: res.body)
+            XCTAssertTrue(body.contains("data-sort-key=\"last-login\""))
+            XCTAssertTrue(body.contains("sortUsersByHeader(defaultUserHeader, 'desc');"))
+            let recentIndex = try XCTUnwrap(body.range(of: "recent_login")?.lowerBound)
+            let olderIndex = try XCTUnwrap(body.range(of: "older_login")?.lowerBound)
+            let neverIndex = try XCTUnwrap(body.range(of: "never_logged_in")?.lowerBound)
+            XCTAssertLessThan(recentIndex, olderIndex)
+            XCTAssertLessThan(olderIndex, neverIndex)
+        })
+    }
+
     func testEditCourseUpdatesFields() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "EDIT101", name: "Original Name")

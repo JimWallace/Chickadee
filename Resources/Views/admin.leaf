@@ -684,7 +684,10 @@ Admin
                 });
             });
 
-            sortUsersByHeader(userHeaders[0], 'asc');
+            var defaultUserHeader = userHeaders.find(function (header) {
+                return header.getAttribute('data-sort-key') === 'last-login';
+            }) || userHeaders[0];
+            sortUsersByHeader(defaultUserHeader, 'desc');
         }
     }
 

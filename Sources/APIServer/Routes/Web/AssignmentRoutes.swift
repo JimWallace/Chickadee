@@ -144,8 +144,20 @@ struct AssignmentRoutes: RouteCollection {
             } else {
                 enrolledUsers = try await APIUser.query(on: req.db)
                     .filter(\.$id ~~ enrolledUserIDs)
-                    .sort(\.$username)
                     .all()
+                    .sorted { lhs, rhs in
+                        switch (lhs.lastLoginAt, rhs.lastLoginAt) {
+                        case let (l?, r?):
+                            if l != r { return l > r }
+                        case (.some, nil):
+                            return true
+                        case (nil, .some):
+                            return false
+                        case (nil, nil):
+                            break
+                        }
+                        return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
+                    }
                 enrolledStudents = enrolledUsers.compactMap { u in
                     guard let id = u.id else { return nil }
                     return EnrolledStudentRow(
