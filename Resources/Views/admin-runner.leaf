@@ -4,13 +4,13 @@ Runner #(runner.workerID)
 #endexport
 #export("content"):
 <section class="admin-section">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+    <div data-runner-id="#(runner.workerID)" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
         <div>
             <h2 style="margin:0"><code>#(runner.workerID)</code></h2>
             <p style="margin:.4rem 0 0;color:var(--muted)">
-                #if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif
+                <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
                 ·
-                #if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif
+                <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
             </p>
             #if(!tags.isEmpty):
             <div class="runner-tag-list">
@@ -21,7 +21,7 @@ Runner #(runner.workerID)
             #endif
         </div>
         <div style="min-width:220px">
-            <div><strong>Last active:</strong> <span class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></div>
+            <div><strong>Last active:</strong> <span id="runner-last-active" class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></div>
             <div><strong>Capacity:</strong> #(summary.activeJobs) / #(summary.maxJobs)</div>
             <div><strong>Jobs processed:</strong> #(summary.jobsProcessed)</div>
             <div><strong>Avg run:</strong> #if(summary.avgExecutionFormatted):#(summary.avgExecutionFormatted)#else:—#endif</div>
@@ -198,13 +198,95 @@ th.sort-desc .sort-header::after {
         return relativeFormatter.format(years, 'year');
     }
 
-    document.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
-        var iso = el.getAttribute('data-iso');
-        if (!iso) return;
-        var date = new Date(iso);
-        if (Number.isNaN(date.getTime())) return;
-        el.textContent = formatRelative(iso);
-        el.title = date.toLocaleString();
+    function applyRelativeTimes() {
+        document.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
+            var iso = el.getAttribute('data-iso');
+            if (!iso) return;
+            var date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return;
+            el.textContent = formatRelative(iso);
+            el.title = date.toLocaleString();
+        });
+    }
+    applyRelativeTimes();
+
+    // Poll the runners endpoint every 5 seconds and update the live-status
+    // fields in the header (version, hostname, last active) without a full
+    // page reload. This mirrors what the main /admin page already does.
+    var RUNNER_ID = (document.querySelector('[data-runner-id]') || {})
+        .getAttribute ? document.querySelector('[data-runner-id]').getAttribute('data-runner-id') : '';
+
+    setInterval(function () {
+        applyRelativeTimes();
+        if (!RUNNER_ID) return;
+        fetch('/admin/runners')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (rows) {
+                if (!Array.isArray(rows)) return;
+                var runner = rows.find(function (w) { return w.workerID === RUNNER_ID; });
+                if (!runner) return;
+                var vEl  = document.getElementById('runner-version');
+                var hEl  = document.getElementById('runner-hostname');
+                var laEl = document.getElementById('runner-last-active');
+                if (vEl)  vEl.textContent = runner.runnerVersion || 'Unknown version';
+                if (hEl)  hEl.textContent = runner.hostname      || 'Unknown host';
+                if (laEl && runner.lastActive) {
+                    laEl.setAttribute('data-iso', runner.lastActive);
+                    laEl.textContent = formatRelative(runner.lastActive);
+                    laEl.title = new Date(runner.lastActive).toLocaleString();
+                }
+            })
+            .catch(function () {});
+    }, 5000);
+
+    function compareValues(a, b, sortType) {
+        if (sortType === 'number') {
+            var aNum = Number(a);
+            var bNum = Number(b);
+            if (Number.isNaN(aNum) && Number.isNaN(bNum)) return 0;
+            if (Number.isNaN(aNum)) return -1;
+            if (Number.isNaN(bNum)) return 1;
+            return aNum - bNum;
+        }
+        if (sortType === 'date') {
+            var aDate = a ? new Date(a).getTime() : 0;
+            var bDate = b ? new Date(b).getTime() : 0;
+            return aDate - bDate;
+        }
+        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    document.querySelectorAll('.sortable-table').forEach(function (table) {
+        var headers = Array.from(table.querySelectorAll('thead th'));
+        var tbody = table.querySelector('tbody');
+        if (!tbody) return;
+
+        headers.forEach(function (th, index) {
+            var button = th.querySelector('.sort-header');
+            if (!button) return;
+
+            button.addEventListener('click', function () {
+                var nextDir = th.classList.contains('sort-asc') ? 'desc' : 'asc';
+                headers.forEach(function (header) {
+                    header.classList.remove('sort-asc', 'sort-desc');
+                });
+                th.classList.add(nextDir === 'asc' ? 'sort-asc' : 'sort-desc');
+
+                var rows = Array.from(tbody.querySelectorAll('tr'));
+                var sortType = th.getAttribute('data-sort-type') || 'text';
+                rows.sort(function (rowA, rowB) {
+                    var cellA = rowA.children[index];
+                    var cellB = rowB.children[index];
+                    var valueA = cellA ? (cellA.getAttribute('data-sort-value') || cellA.textContent || '') : '';
+                    var valueB = cellB ? (cellB.getAttribute('data-sort-value') || cellB.textContent || '') : '';
+                    var result = compareValues(valueA.trim(), valueB.trim(), sortType);
+                    return nextDir === 'asc' ? result : -result;
+                });
+                rows.forEach(function (row) {
+                    tbody.appendChild(row);
+                });
+            });
+        });
     });
 
     function compareValues(a, b, sortType) {
