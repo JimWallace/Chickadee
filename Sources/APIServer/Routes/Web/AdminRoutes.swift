@@ -45,8 +45,27 @@ struct AdminRoutes: RouteCollection {
     @Sendable
     func dashboard(req: Request) async throws -> View {
         let users = try await APIUser.query(on: req.db)
-            .sort(\.$createdAt)
             .all()
+            .sorted { lhs, rhs in
+                switch (lhs.lastLoginAt, rhs.lastLoginAt) {
+                case let (l?, r?):
+                    if l != r { return l > r }
+                case (.some, nil):
+                    return true
+                case (nil, .some):
+                    return false
+                case (nil, nil):
+                    break
+                }
+
+                if lhs.username != rhs.username {
+                    return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
+                }
+
+                let lhsCreated = lhs.createdAt ?? .distantPast
+                let rhsCreated = rhs.createdAt ?? .distantPast
+                return lhsCreated < rhsCreated
+            }
 
         let userRows = users.map { u in
             AdminUserRow(

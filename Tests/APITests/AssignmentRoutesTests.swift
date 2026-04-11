@@ -388,6 +388,40 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
+    func testAssignmentsPageDefaultsEnrolledStudentsToMostRecentLastLoginFirst() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+        let now = Date()
+
+        let never = try await insertStudent(username: "never_login_student", displayName: "Never Login")
+        try await enrollStudentInTestCourse(never)
+
+        let older = try await insertStudent(username: "older_login_student", displayName: "Older Login")
+        older.lastLoginAt = now.addingTimeInterval(-3600)
+        try await older.save(on: app.db)
+        try await enrollStudentInTestCourse(older)
+
+        let recent = try await insertStudent(username: "recent_login_student", displayName: "Recent Login")
+        recent.lastLoginAt = now
+        try await recent.save(on: app.db)
+        try await enrollStudentInTestCourse(recent)
+
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("id=\"enrolled-students-table\""))
+            XCTAssertTrue(html.contains("var sortCol = 3;"))
+            XCTAssertTrue(html.contains("var sortAsc = false;"))
+            let recentIndex = try XCTUnwrap(html.range(of: "recent_login_student")?.lowerBound)
+            let olderIndex = try XCTUnwrap(html.range(of: "older_login_student")?.lowerBound)
+            let neverIndex = try XCTUnwrap(html.range(of: "never_login_student")?.lowerBound)
+            XCTAssertLessThan(recentIndex, olderIndex)
+            XCTAssertLessThan(olderIndex, neverIndex)
+        })
+    }
+
     // MARK: - POST /instructor (publish → creates draft)
 
     func testPublishCreatesDraftAssignment() async throws {

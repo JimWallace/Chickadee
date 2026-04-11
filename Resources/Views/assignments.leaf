@@ -881,8 +881,8 @@ tr.assignment-draggable td {
     // ── Enrolled students table sort ──────────────────────────────────────────
     var enrolledTable = document.getElementById('enrolled-students-table');
     if (enrolledTable) {
-        var sortCol = -1;
-        var sortAsc = true;
+        var sortCol = 3;
+        var sortAsc = false;
         enrolledTable.querySelectorAll('tbody tr.student-row-link').forEach(function (row) {
             row.addEventListener('click', function (event) {
                 var target = event.target;
@@ -929,6 +929,27 @@ tr.assignment-draggable td {
                 rows.forEach(function (row) { tbody.appendChild(row); });
             });
         });
+
+        var defaultEnrolledSortHeader = enrolledTable.querySelector('th.sortable[data-col="3"]');
+        if (defaultEnrolledSortHeader) {
+            defaultEnrolledSortHeader.querySelector('.sort-icon').textContent = '↓';
+            var defaultEnrolledBody = enrolledTable.querySelector('tbody');
+            var defaultEnrolledRows = Array.from(defaultEnrolledBody.querySelectorAll('tr'));
+            defaultEnrolledRows.sort(function (a, b) {
+                var aISO = a.cells[3] ? a.cells[3].getAttribute('data-iso') : '';
+                var bISO = b.cells[3] ? b.cells[3].getAttribute('data-iso') : '';
+                var aDate = aISO ? new Date(aISO).getTime() : 0;
+                var bDate = bISO ? new Date(bISO).getTime() : 0;
+                var result = aDate - bDate;
+                if (result === 0) {
+                    var aUsername = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
+                    var bUsername = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
+                    result = aUsername.localeCompare(bUsername);
+                }
+                return sortAsc ? result : -result;
+            });
+            defaultEnrolledRows.forEach(function (row) { defaultEnrolledBody.appendChild(row); });
+        }
 
         var enrolledFilter = document.getElementById('enrolled-filter');
         if (enrolledFilter) {
