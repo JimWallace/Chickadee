@@ -21,7 +21,7 @@ jobs:
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
@@ -45,7 +45,7 @@ jobs:
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
@@ -92,7 +92,7 @@ jobs:
         run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SPM checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build/checkouts
           key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
