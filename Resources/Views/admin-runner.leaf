@@ -46,32 +46,32 @@ Runner #(runner.workerID)
     #if(recentJobs.isEmpty):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
-    <table class="results-table">
+    <table class="results-table sortable-table">
         <thead>
             <tr>
-                <th>Submission</th>
-                <th>Status</th>
-                <th class="time">Queue Wait</th>
-                <th class="time">Execution</th>
-                <th class="time">Setup/Other</th>
-                <th>Prep Stages</th>
-                <th class="time">Total</th>
-                <th class="time">Tests</th>
-                <th class="time">Completed</th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Submission</button></th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Status</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Queue Wait</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Execution</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Setup/Other</button></th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Prep Stages</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Total</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Tests</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Completed</button></th>
             </tr>
         </thead>
         <tbody>
         #for(job in recentJobs):
             <tr>
-                <td><a href="/submissions/#(job.submissionID)"><code>#(job.submissionID)</code></a></td>
-                <td>#(job.finalStatus)</td>
-                <td class="time">#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
-                <td class="time">#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
-                <td class="time">#if(job.overheadFormatted):#(job.overheadFormatted)#else:—#endif</td>
-                <td>#if(job.stageBreakdownFormatted):#(job.stageBreakdownFormatted)#else:—#endif</td>
-                <td class="time">#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
-                <td class="time">#(job.testsPassed) / #(job.testsFailed) / #(job.testsErrored) / #(job.testsTimedOut)</td>
-                <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)"#endif>
+                <td data-sort-value="#(job.submissionID)"><a href="/submissions/#(job.submissionID)"><code>#(job.submissionID)</code></a></td>
+                <td data-sort-value="#(job.finalStatus)">#(job.finalStatus)</td>
+                <td class="time" #if(job.queueWaitMs):data-sort-value="#(job.queueWaitMs)"#else:data-sort-value="-1"#endif>#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
+                <td class="time" #if(job.executionMs):data-sort-value="#(job.executionMs)"#else:data-sort-value="-1"#endif>#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
+                <td class="time" #if(job.overheadMs):data-sort-value="#(job.overheadMs)"#else:data-sort-value="-1"#endif>#if(job.overheadFormatted):#(job.overheadFormatted)#else:—#endif</td>
+                <td data-sort-value="#if(job.stageBreakdownFormatted):#(job.stageBreakdownFormatted)#else:~#endif">#if(job.stageBreakdownFormatted):#(job.stageBreakdownFormatted)#else:—#endif</td>
+                <td class="time" #if(job.totalProcessingMs):data-sort-value="#(job.totalProcessingMs)"#else:data-sort-value="-1"#endif>#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
+                <td class="time" data-sort-value="#(job.testsTotal)">#(job.testsPassed) / #(job.testsFailed) / #(job.testsErrored) / #(job.testsTimedOut)</td>
+                <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
                     #if(job.completedAt):#(job.completedAt)#else:—#endif
                 </td>
             </tr>
@@ -86,28 +86,26 @@ Runner #(runner.workerID)
     #if(snapshots.isEmpty):
     <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
     #else:
-    <table class="results-table">
+    <table class="results-table sortable-table">
         <thead>
             <tr>
-                <th class="time">Recorded</th>
-                <th class="time">Active Jobs</th>
-                <th class="time">Max Jobs</th>
-                <th class="time">Available</th>
-                <th class="time">Last Poll</th>
-                <th class="time">Last Heartbeat</th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Recorded</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Active Jobs</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Utilization %</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Last Poll</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Last Heartbeat</button></th>
             </tr>
         </thead>
         <tbody>
         #for(snapshot in snapshots):
             <tr>
-                <td class="time js-relative-time" data-iso="#(snapshot.recordedAt)">#(snapshot.recordedAt)</td>
-                <td class="time">#(snapshot.activeJobs)</td>
-                <td class="time">#(snapshot.maxJobs)</td>
-                <td class="time">#(snapshot.availableCapacity)</td>
-                <td class="time js-relative-time" #if(snapshot.lastPollAt):data-iso="#(snapshot.lastPollAt)"#endif>
+                <td class="time js-relative-time" data-iso="#(snapshot.recordedAt)" data-sort-value="#(snapshot.recordedAt)">#(snapshot.recordedAt)</td>
+                <td class="time" data-sort-value="#(snapshot.activeJobs)">#(snapshot.activeJobsLabel)</td>
+                <td class="time" data-sort-value="#(snapshot.utilizationPercent)">#(snapshot.utilizationPercent)%</td>
+                <td class="time js-relative-time" #if(snapshot.lastPollAt):data-iso="#(snapshot.lastPollAt)" data-sort-value="#(snapshot.lastPollAt)"#else:data-sort-value=""#endif>
                     #if(snapshot.lastPollAt):#(snapshot.lastPollAt)#else:—#endif
                 </td>
-                <td class="time js-relative-time" #if(snapshot.lastHeartbeatAt):data-iso="#(snapshot.lastHeartbeatAt)"#endif>
+                <td class="time js-relative-time" #if(snapshot.lastHeartbeatAt):data-iso="#(snapshot.lastHeartbeatAt)" data-sort-value="#(snapshot.lastHeartbeatAt)"#else:data-sort-value=""#endif>
                     #if(snapshot.lastHeartbeatAt):#(snapshot.lastHeartbeatAt)#else:—#endif
                 </td>
             </tr>
@@ -151,6 +149,28 @@ Runner #(runner.workerID)
     font-size: .8rem;
     line-height: 1.2;
 }
+.sort-header {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.sort-header::after {
+    content: "↕";
+    font-size: .8em;
+    color: var(--gray-500);
+}
+th.sort-asc .sort-header::after {
+    content: "↑";
+}
+th.sort-desc .sort-header::after {
+    content: "↓";
+}
 </style>
 <script>
 (function () {
@@ -185,6 +205,56 @@ Runner #(runner.workerID)
         if (Number.isNaN(date.getTime())) return;
         el.textContent = formatRelative(iso);
         el.title = date.toLocaleString();
+    });
+
+    function compareValues(a, b, sortType) {
+        if (sortType === 'number') {
+            var aNum = Number(a);
+            var bNum = Number(b);
+            if (Number.isNaN(aNum) && Number.isNaN(bNum)) return 0;
+            if (Number.isNaN(aNum)) return -1;
+            if (Number.isNaN(bNum)) return 1;
+            return aNum - bNum;
+        }
+        if (sortType === 'date') {
+            var aDate = a ? new Date(a).getTime() : 0;
+            var bDate = b ? new Date(b).getTime() : 0;
+            return aDate - bDate;
+        }
+        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    document.querySelectorAll('.sortable-table').forEach(function (table) {
+        var headers = Array.from(table.querySelectorAll('thead th'));
+        var tbody = table.querySelector('tbody');
+        if (!tbody) return;
+
+        headers.forEach(function (th, index) {
+            var button = th.querySelector('.sort-header');
+            if (!button) return;
+
+            button.addEventListener('click', function () {
+                var nextDir = th.classList.contains('sort-asc') ? 'desc' : 'asc';
+                headers.forEach(function (header) {
+                    header.classList.remove('sort-asc', 'sort-desc');
+                });
+                th.classList.add(nextDir === 'asc' ? 'sort-asc' : 'sort-desc');
+
+                var rows = Array.from(tbody.querySelectorAll('tr'));
+                var sortType = th.getAttribute('data-sort-type') || 'text';
+                rows.sort(function (rowA, rowB) {
+                    var cellA = rowA.children[index];
+                    var cellB = rowB.children[index];
+                    var valueA = cellA ? (cellA.getAttribute('data-sort-value') || cellA.textContent || '') : '';
+                    var valueB = cellB ? (cellB.getAttribute('data-sort-value') || cellB.textContent || '') : '';
+                    var result = compareValues(valueA.trim(), valueB.trim(), sortType);
+                    return nextDir === 'asc' ? result : -result;
+                });
+                rows.forEach(function (row) {
+                    tbody.appendChild(row);
+                });
+            });
+        });
     });
 })();
 </script>

@@ -462,6 +462,20 @@ final class AdminRoutesTests: XCTestCase {
         metric.finalStatus = "passed"
         try await metric.save(on: app.db)
 
+        let snapshot = RunnerSnapshot(
+            runnerID: "runner-detail",
+            recordedAt: Date().addingTimeInterval(-60),
+            activeJobs: 1,
+            maxJobs: 2,
+            availableCapacity: 1,
+            hostname: "runner-host",
+            runnerVersion: "runner/1.1",
+            lastPollAt: Date().addingTimeInterval(-15),
+            lastHeartbeatAt: Date().addingTimeInterval(-10),
+            serverAssignedJobCountSinceStart: 1
+        )
+        try await snapshot.save(on: app.db)
+
         await app.workerActivityStore.markActive(
             workerID: "runner-detail",
             hostname: "runner-host",
@@ -481,6 +495,12 @@ final class AdminRoutesTests: XCTestCase {
             XCTAssertTrue(body.contains("dl 150ms"))
             XCTAssertTrue(body.contains("prep 100ms"))
             XCTAssertTrue(body.contains("make 25ms"))
+            XCTAssertTrue(body.contains("sortable-table"))
+            XCTAssertTrue(body.contains("Active Jobs"))
+            XCTAssertTrue(body.contains("1 / 2"))
+            XCTAssertTrue(body.contains("Utilization %"))
+            XCTAssertFalse(body.contains(">Max Jobs<"))
+            XCTAssertFalse(body.contains(">Available<"))
         })
     }
 }

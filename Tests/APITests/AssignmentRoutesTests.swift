@@ -807,6 +807,84 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertEqual(requirement?.requirementSpec.requiredCapabilities.map(\.name), ["numpy", "pandas"])
     }
 
+    func testSaveNewAssignmentRequiresCompatibleRunnerForValidation() async throws {
+        let courseID = try await makeTestCourseID()
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+        let setupID = "setup_validation_runner_gate"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        var suiteBuffer = ByteBufferAllocator().buffer(capacity: 16)
+        suiteBuffer.writeString("print('ok')\n")
+        _ = try createRunnerSetupZip(
+            suiteFiles: [File(data: suiteBuffer, filename: "test_public.py")],
+            suiteConfigJSON: nil,
+            zipPath: zipPath
+        )
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "test_public.py",
+                    tier: "public",
+                    order: 1,
+                    dependsOn: [],
+                    points: 1,
+                    displayName: nil
+                )
+            ],
+            includeMakefile: false,
+            gradingMode: "worker"
+        )
+        let notebookDir = tmpDir + "testsetups/notebooks/\(setupID)/"
+        try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
+        let assignmentPath = notebookDir + "assignment.ipynb"
+        try defaultNotebookData(title: "Runner Gate").write(to: URL(fileURLWithPath: assignmentPath))
+        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: tmpDir + "testsetups/", setupID: setupID)
+        try defaultNotebookData(title: "Runner Gate Solution").write(to: URL(fileURLWithPath: solutionPath))
+
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: manifest,
+            zipPath: zipPath,
+            notebookPath: assignmentPath,
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+
+        let boundary = "Boundary-New-Runner-Gate"
+        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartBody(
+                boundary: boundary,
+                fields: [
+                    ("_csrf", csrf),
+                    ("draftID", setupID),
+                    ("assignmentName", "Needs Matplotlib"),
+                    ("requiredLanguagesCSV", "python"),
+                    ("requiredCapabilitiesCSV", "matplotlib")
+                ]
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            let location = res.headers.first(name: .location) ?? ""
+            XCTAssertTrue(location.contains("/instructor/new?"))
+            XCTAssertTrue(location.contains("No%20compatible%20active%20runner%20is%20available%20to%20validate%20this%20assignment."))
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db)
+            .filter(\.$title == "Needs Matplotlib")
+            .first()
+        XCTAssertNil(assignment)
+    }
+
     // MARK: - POST /instructor/:id/open
 
     func testOpenAssignmentSetsIsOpenTrue() async throws {
