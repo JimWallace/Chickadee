@@ -6,7 +6,7 @@ Runner #(runner.workerID)
 <section class="admin-section">
     <div data-runner-id="#(runner.workerID)" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
         <div>
-            <h2 style="margin:0"><code>#(runner.workerID)</code></h2>
+            <h2 style="margin:0"><code>#(runner.workerID)</code> <span id="runner-offline-badge" style="display:none;font-size:.7rem;font-weight:600;padding:.1rem .4rem;border-radius:999px;background:var(--gray-200);color:var(--gray-600);vertical-align:middle;letter-spacing:.03em;text-transform:uppercase">Offline</span></h2>
             <p style="margin:.4rem 0 0;color:var(--muted)">
                 <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
                 ·
@@ -198,6 +198,8 @@ th.sort-desc .sort-header::after {
         return relativeFormatter.format(years, 'year');
     }
 
+    var offlineBadge = document.getElementById('runner-offline-badge');
+
     function applyRelativeTimes() {
         document.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
             var iso = el.getAttribute('data-iso');
@@ -207,6 +209,14 @@ th.sort-desc .sort-header::after {
             el.textContent = formatRelative(iso);
             el.title = date.toLocaleString();
         });
+        // Show/hide the offline badge based on how recently the runner checked in.
+        if (offlineBadge) {
+            var laEl = document.getElementById('runner-last-active');
+            var laIso = laEl ? laEl.getAttribute('data-iso') : null;
+            var laMs = laIso ? new Date(laIso).getTime() : 0;
+            var isOffline = laMs > 0 && (Date.now() - laMs) > 5 * 60 * 1000;
+            offlineBadge.style.display = isOffline ? '' : 'none';
+        }
     }
     applyRelativeTimes();
 
