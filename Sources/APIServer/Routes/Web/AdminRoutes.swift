@@ -137,8 +137,42 @@ struct AdminRoutes: RouteCollection {
         }
 
         let workerRows = try await makeWorkerRows(req: req)
-        guard let worker = workerRows.first(where: { $0.workerID == runnerID }) else {
-            throw Abort(.notFound)
+        let worker: AdminWorkerRow
+        if let found = workerRows.first(where: { $0.workerID == runnerID }) {
+            worker = found
+        } else {
+            // Runner was pruned from the in-memory store (offline >60 min).
+            // Reconstruct a minimal row from the most recent DB snapshot so
+            // the detail page can still render historical data instead of 404.
+            guard let latestSnapshot = try await RunnerSnapshot.query(on: req.db)
+                .filter(\.$runnerID == runnerID)
+                .sort(\.$recordedAt, .descending)
+                .first()
+            else {
+                throw Abort(.notFound)
+            }
+            let iso = ISO8601DateFormatter()
+            let processedCount = try await APISubmission.query(on: req.db)
+                .filter(\.$workerID == runnerID)
+                .filter(\.$status ~~ ["complete", "failed"])
+                .count()
+            let avgData = try? await req.application.diagnostics.rollingAverages(
+                for: [runnerID], sampleSize: 50, on: req.db
+            )
+            let avg = avgData?[runnerID]
+            worker = AdminWorkerRow(
+                workerID: runnerID,
+                hostname: latestSnapshot.hostname ?? "",
+                runnerVersion: latestSnapshot.runnerVersion ?? "",
+                maxConcurrentJobs: latestSnapshot.maxJobs,
+                lastActive: iso.string(from: latestSnapshot.recordedAt),
+                assignedJobs: 0,
+                jobsProcessed: processedCount,
+                avgExecutionMs: avg?.avgExecutionMs,
+                avgQueueWaitMs: avg?.avgQueueWaitMs,
+                avgExecutionFormatted: avg?.avgExecutionMs.map(formatMs),
+                avgQueueWaitFormatted: avg?.avgQueueWaitMs.map(formatMs)
+            )
         }
         let runnerProfile = try? await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
 

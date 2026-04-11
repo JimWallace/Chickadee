@@ -290,6 +290,22 @@ Admin
 #courses-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
 }
+tr.runner-row-offline {
+    opacity: .5;
+}
+.runner-badge-offline {
+    display: inline-block;
+    font-size: .7rem;
+    font-weight: 600;
+    padding: .1rem .4rem;
+    border-radius: 999px;
+    background: var(--gray-200);
+    color: var(--gray-600);
+    vertical-align: middle;
+    margin-left: .3rem;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
 </style>
 <script>
 (function () {
@@ -430,7 +446,12 @@ Admin
             var lastActive = escapeHtml(worker.lastActive || '');
             var detailURL = '/admin/runners/' + encodeURIComponent(worker.workerID || '');
 
+            // Runners not seen in the last 5 minutes are considered offline.
+            var lastActiveMs = lastActive ? new Date(lastActive).getTime() : 0;
+            var isOffline = lastActiveMs > 0 && (Date.now() - lastActiveMs) > 5 * 60 * 1000;
+
             var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
+                + (isOffline ? ' <span class="runner-badge-offline">Offline</span>' : '')
                 + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
             var loadCell = maxJobs > 0
                 ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
@@ -438,6 +459,7 @@ Admin
             var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
 
             return '<tr'
+                + (isOffline ? ' class="runner-row-offline"' : '')
                 + ' data-runner="' + id + '"'
                 + ' data-version="' + version + '"'
                 + ' data-load="' + assignedJobs + '"'
@@ -588,6 +610,7 @@ Admin
 
     applyRelativeTimes(document);
     recomputeLoadSummaryFromTable();
+    refreshWorkers();
     refreshDiagnostics();
 
     if (workersTable && workersBody && workerHeaders.length) {

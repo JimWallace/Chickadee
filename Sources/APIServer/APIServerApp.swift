@@ -426,8 +426,14 @@ actor WorkerActivityStore {
         return withinTTL && !entry.hostname.isEmpty && entry.hostname != hostname
     }
 
-    func snapshotsSortedByRecent() -> [WorkerActivitySnapshot] {
-        entries
+    /// Returns snapshots for runners seen within `cutoff` seconds, pruning
+    /// stale entries from the in-memory store at the same time.  Runners that
+    /// have not contacted the server for more than an hour are dropped so they
+    /// don't accumulate forever after a rename or permanent shutdown.
+    func snapshotsSortedByRecent(cutoff: TimeInterval = 3600, now: Date = Date()) -> [WorkerActivitySnapshot] {
+        // Prune any entry that hasn't been seen within the cutoff window.
+        entries = entries.filter { now.timeIntervalSince($0.value.lastSeen) <= cutoff }
+        return entries
             .map { WorkerActivitySnapshot(
                 workerID: $0.key,
                 lastActive: $0.value.lastSeen,
