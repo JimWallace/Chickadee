@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.55] - 2026-04-11
+
+### Added
+
+- **Stale runner cleanup and offline indicators**: runners that have not contacted the server in over 60 minutes are automatically pruned from the in-memory store on the next admin page load. Runners offline for more than 5 minutes show a dimmed row and "Offline" badge on the admin dashboard and runner detail page. Navigating to a pruned runner's detail page now shows historical snapshot and job data instead of a 404.
+
+### Fixed
+
+- **Runner detail page version/hostname now stay current after a restart**: the runner detail page now polls `GET /admin/runners` every 5 seconds (matching the main admin dashboard) and updates the version, hostname, and "Last active" fields in the header without a page reload.
+- **Trivy container scan action version corrected**: `aquasecurity/trivy-action` was pinned to a non-existent tag (`0.30.0`); updated to `v0.35.0` (Trivy 0.69.3), which resolves the docker-build workflow failure.
+
 ## [0.4.54] - 2026-04-10
 
 ### Changed
