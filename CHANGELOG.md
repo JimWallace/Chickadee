@@ -10,7 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- **Stale runner cleanup and offline indicators**: runners that haven't contacted the server in over 60 minutes are automatically pruned from the in-memory store on the next admin page load. Runners offline for more than 5 minutes show a dimmed row and "Offline" badge on the admin dashboard and runner detail page. Navigating to a pruned runner's detail page now shows historical snapshot and job data instead of a 404.
 - **Worker backstop for browser-graded submissions**: pending browser-mode submissions (e.g. from a browser runner failure or pre-fix backlog) are now claimed and graded by the native worker using `python3`, exactly as Pyodide would. Previously these submissions were permanently stuck in "pending".
 
 ### Fixed
