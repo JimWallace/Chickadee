@@ -204,10 +204,11 @@ final class WorkerRoutesTests: XCTestCase {
         XCTAssertEqual(updated?.workerID, "w1")
     }
 
-    func testRequestJob_browserModeStudent_ignored_returns204() async throws {
-        // Browser-mode student submissions should NOT be claimed by the worker runner
+    func testRequestJob_browserModePendingStudent_claimedAsBackstop() async throws {
+        // Browser-mode pending submissions ARE claimed by the worker as a backstop
+        // (e.g., browser runner failed, timed out, or these are pre-fix stuck submissions).
         let setup = try await makeTestSetup(id: "bsetup_01", manifest: browserManifestJSON)
-        _ = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
+        let sub   = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
 
         let path = "/api/v1/worker/request"
         let body = try workerRequestBody(workerID: "w1")
@@ -215,7 +216,80 @@ final class WorkerRoutesTests: XCTestCase {
             req.headers = workerHeaders(method: .POST, path: path, body: body)
             req.body = body
         }, afterResponse: { res in
-            XCTAssertEqual(res.status, .noContent)
+            XCTAssertEqual(res.status, .ok, "Worker must claim browser-mode pending submissions as backstop")
+            let job = try res.content.decode(Job.self)
+            XCTAssertEqual(job.submissionID, sub.id)
+        })
+
+        // Submission should now be "assigned" to the worker
+        let updated = try await APISubmission.find(sub.id, on: app.db)
+        XCTAssertEqual(updated?.status, "assigned")
+        XCTAssertEqual(updated?.workerID, "w1")
+    }
+
+    func testRequestJob_browserModeAlreadyComplete_notReclaimed() async throws {
+        // A submission already completed by the browser runner must never be reclaimed.
+        // The worker should only see "pending" submissions; "complete" ones are invisible.
+        let setup = try await makeTestSetup(id: "bsetup_02", manifest: browserManifestJSON)
+        _ = try await makeSubmission(id: "bsub_complete", setupID: setup.id!,
+                                      status: "complete", kind: APISubmission.Kind.student)
+
+        let path = "/api/v1/worker/request"
+        let body = try workerRequestBody(workerID: "w1")
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .noContent,
+                           "Already-complete browser submission must not be reclaimed by worker")
+        })
+    }
+
+    func testRequestJob_browserAndWorkerMixed_bothClaimable_noContention() async throws {
+        // Both browser-mode and worker-mode pending submissions are claimable.
+        // Two sequential worker polls should each claim one; no double-claiming.
+        let workerSetup  = try await makeTestSetup(id: "mixed_wsetup", manifest: workerManifestJSON)
+        let browserSetup = try await makeTestSetup(id: "mixed_bsetup", manifest: browserManifestJSON)
+        let workerSub    = try await makeSubmission(id: "mixed_wsub", setupID: workerSetup.id!)
+        let browserSub   = try await makeSubmission(id: "mixed_bsub", setupID: browserSetup.id!)
+
+        let path = "/api/v1/worker/request"
+
+        // First poll — claims the student submission (submitted first by sort order).
+        let body1 = try workerRequestBody(workerID: "w1")
+        var firstJobID: String?
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body1)
+            req.body = body1
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            firstJobID = try res.content.decode(Job.self).submissionID
+        })
+
+        // Second poll — claims the remaining submission.
+        let body2 = try workerRequestBody(workerID: "w2")
+        var secondJobID: String?
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body2)
+            req.body = body2
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            secondJobID = try res.content.decode(Job.self).submissionID
+        })
+
+        // Both submissions should be claimed, each by a different worker.
+        let allIDs = Set([firstJobID, secondJobID].compactMap { $0 })
+        XCTAssertEqual(allIDs.count, 2, "Both submissions must be claimed exactly once")
+        XCTAssertTrue(allIDs.contains(workerSub.id!))
+        XCTAssertTrue(allIDs.contains(browserSub.id!))
+
+        // Third poll — nothing left.
+        let body3 = try workerRequestBody(workerID: "w3")
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body3)
+            req.body = body3
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .noContent, "Queue must be empty after both submissions are claimed")
         })
     }
 

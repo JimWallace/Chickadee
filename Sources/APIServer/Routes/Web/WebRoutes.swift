@@ -240,6 +240,7 @@ struct WebRoutes: RouteCollection {
                 dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },
                 status:     status,
                 isOpen:     assignment?.isOpen ?? false,
+                gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,
                 hasNotebook: hasNotebook,
                 submissionCount: submissionCount,
                 hasLatestSubmission: latestSubmission != nil,
