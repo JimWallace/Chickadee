@@ -760,7 +760,7 @@ final class AssignmentRoutesTests: XCTestCase {
             XCTAssertEqual(res.status, .ok)
             let body = res.body.string
             XCTAssertFalse(body.contains("<th>Test?</th>"))
-            XCTAssertTrue(body.contains("<th>Tier</th>"))
+            XCTAssertTrue(body.contains("Visibility"))   // new column header (was "Tier")
             XCTAssertTrue(body.contains("support"))
         })
     }
@@ -802,8 +802,8 @@ final class AssignmentRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
-            XCTAssertTrue(html.contains("Notebook Composer"))
             XCTAssertTrue(html.contains("Blank Draft Lab"))
+            XCTAssertTrue(html.contains("Assignment Notebook"))  // notebook table row
             XCTAssertTrue(html.contains("Edit"))
         })
     }
