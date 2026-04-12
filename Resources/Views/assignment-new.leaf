@@ -3,8 +3,6 @@
 Create Assignment
 #endexport
 #export("content"):
-<h1>Create new Assignment</h1>
-
 #if(error):
 <div class="error-box" style="margin-bottom:1rem">
     <h2>Could not create assignment</h2>
@@ -18,134 +16,138 @@ Create Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form">
+<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
     #csrfFormField()
     #if(draftID):
     <input type="hidden" name="draftID" value="#(draftID)">
     #endif
-    <label class="form-label">
-        Assignment Name
-        <input class="form-input" type="text" name="assignmentName" required
-               value="#(assignmentName)"
-               placeholder="e.g. Lab 2 - Linked Lists">
-    </label>
 
-    <label class="form-label">
-        Due Date (optional)
-        <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
-    </label>
-    <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:-.5rem;margin-bottom:.5rem"></div>
-
-    #if(!sections.isEmpty):
-    <label class="form-label">
-        Section (optional)
-        <select class="form-input" name="sectionID" id="sectionID">
-            <option value="" #if(!preselectedSectionID):selected#endif>— Ungrouped —</option>
-            #for(section in sections):
-            <option value="#(section.sectionID)"
-                    data-grading-mode="#(section.defaultGradingMode)"
-                    #if(preselectedSectionID == section.sectionID):selected#endif>#(section.name)</option>
-            #endfor
-        </select>
-    </label>
-    <p id="grading-mode-hint" class="card-meta" style="margin-top:-.4rem;margin-bottom:.25rem;display:none"></p>
-    #endif
-
-    <section style="margin:1rem 0;padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:var(--gray-50,#fafafa)">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-            <div>
-                <h2 style="margin:0 0 .25rem 0">Notebook Composer</h2>
-                <p class="card-meta" style="margin:0">Create notebooks from scratch in JupyterLite, upload existing notebooks, or upload first and then keep editing from this page.</p>
-            </div>
-            #if(draftID):
-            <p class="card-meta" style="margin:0">Draft ID: <code>#(draftID)</code></p>
-            #endif
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem;margin-top:1rem">
-            <div style="padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:white">
-                <h3 style="margin:0 0 .4rem 0">Assignment Notebook</h3>
-                #if(assignmentNotebook):
-                <p style="margin:.25rem 0 .75rem 0"><strong>#(assignmentNotebook.name)</strong></p>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
-                    <a class="btn" href="#(assignmentNotebook.editURL)" target="_blank" rel="noopener">Edit</a>
-                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook">Clear</button>
-                </div>
-                #else:
-                <p class="card-meta" style="margin:.25rem 0 .75rem 0">No assignment notebook saved to this draft yet.</p>
-                #endif
-                <label class="form-label" style="margin-bottom:.75rem">
-                    <span style="white-space:nowrap">Upload Assignment Notebook (<code>.ipynb</code>)</span>
-                    <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb">
+    <!-- ── Top header row ─────────────────────────────────────────────── -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div style="flex:1;min-width:16rem">
+            <label class="visually-hidden" for="assignmentNameInput">Assignment Name</label>
+            <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
+                   value="#(assignmentName)"
+                   placeholder="Assignment name"
+                   style="font-size:1.4rem;font-weight:600;border:none;border-bottom:2px solid var(--border,#ddd);border-radius:0;padding:.15rem 0;background:transparent;width:100%">
+            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.6rem;align-items:center">
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                    Due
+                    <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)"
+                           style="font-size:.875rem;padding:.2rem .5rem">
                 </label>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook">Save Upload to Draft</button>
-                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook">Create Blank Notebook</button>
-                </div>
-            </div>
-
-            <div style="padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:white">
-                <h3 style="margin:0 0 .4rem 0">Solution Notebook</h3>
-                #if(solutionNotebook):
-                <p style="margin:.25rem 0 .75rem 0"><strong>#(solutionNotebook.name)</strong></p>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
-                    <a class="btn" href="#(solutionNotebook.editURL)" target="_blank" rel="noopener">Edit</a>
-                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook">Clear</button>
-                </div>
-                #else:
-                <p class="card-meta" style="margin:.25rem 0 .75rem 0">No solution notebook saved to this draft yet.</p>
-                #endif
-                <label class="form-label" style="margin-bottom:.75rem">
-                    <span style="white-space:nowrap">Upload Solution Notebook (<code>.ipynb</code>)</span>
-                    <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb">
+                #if(!sections.isEmpty):
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                    Section
+                    <select class="form-input" name="sectionID" id="sectionID"
+                            style="font-size:.875rem;padding:.2rem .5rem">
+                        <option value="" #if(!preselectedSectionID):selected#endif>— Ungrouped —</option>
+                        #for(section in sections):
+                        <option value="#(section.sectionID)"
+                                data-grading-mode="#(section.defaultGradingMode)"
+                                #if(preselectedSectionID == section.sectionID):selected#endif>#(section.name)</option>
+                        #endfor
+                    </select>
                 </label>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook">Save Upload to Draft</button>
-                    <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook">Create Blank Notebook</button>
-                </div>
+                #endif
             </div>
+            <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem"></div>
+            <p id="grading-mode-hint" class="card-meta" style="margin-top:.3rem;display:none"></p>
         </div>
-    </section>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
+            <button class="btn btn-primary" type="submit">Create &amp; Validate</button>
+            <a class="btn" href="/instructor">Cancel</a>
+        </div>
+    </div>
 
-    <section style="margin:1rem 0;padding:1rem;border:1px solid var(--border,#ddd);border-radius:.75rem;background:var(--gray-50,#fafafa)">
-        <h2 style="margin:0 0 .25rem 0">Runner Requirements</h2>
-        <p class="card-meta" style="margin:0 0 .85rem 0">Auto-detected suggestions appear below, but you can edit them before creating the assignment.</p>
-        #if(!detectedLanguages.isEmpty):
-        <div style="margin-bottom:1rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.6rem;background:white">
-            <p style="margin:0 0 .25rem 0"><strong>Detected languages:</strong> #(detectedLanguagesCSV)</p>
-            #if(!detectedCapabilities.isEmpty):
-            <p style="margin:0"><strong>Detected capabilities:</strong> #(detectedCapabilitiesCSV)</p>
-            #endif
-        </div>
-        #endif
-        #if(detectedLanguages.isEmpty):
-        #if(!detectedCapabilities.isEmpty):
-        <div style="margin-bottom:1rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.6rem;background:white">
-            <p style="margin:0"><strong>Detected capabilities:</strong> #(detectedCapabilitiesCSV)</p>
-        </div>
-        #endif
-        #endif
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem">
-            <label class="form-label">
-                Languages
-                <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)" placeholder="python, r">
-            </label>
-            <label class="form-label">
-                Capabilities
-                <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)" placeholder="numpy, pandas, shell-bash">
-            </label>
-            <label class="form-label">
-                Platform (advanced)
-                <input class="form-input" type="text" name="requiredPlatform" value="#(requiredPlatform)" placeholder="linux">
-            </label>
-            <label class="form-label">
-                Architecture (advanced)
-                <input class="form-input" type="text" name="requiredArchitecture" value="#(requiredArchitecture)" placeholder="arm64">
-            </label>
-        </div>
-    </section>
+    <!-- ── Notebooks ──────────────────────────────────────────────────── -->
 
-    <!-- Generate Tests from Solution -->
+    <!-- Hidden file inputs triggered by JS buttons -->
+    <input type="file" id="assignment-notebook-file-input" name="assignmentNotebookFile" accept=".ipynb" style="display:none">
+    <input type="file" id="solution-notebook-file-input"   name="solutionNotebookFile"   accept=".ipynb" style="display:none">
+
+    <!-- Hidden submit buttons for draft notebook actions, fired by JS -->
+    <button id="js-upload-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook"  style="display:none"></button>
+    <button id="js-upload-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook"    style="display:none"></button>
+    <button id="js-create-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook"  style="display:none"></button>
+    <button id="js-create-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook"    style="display:none"></button>
+    <button id="js-clear-assignment-notebook"   type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook"   style="display:none"></button>
+    <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     style="display:none"></button>
+
+    <div style="margin:0 0 1.25rem">
+        <table class="results-table" id="notebook-files-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>File</th>
+                    <th class="time">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Assignment Notebook</strong></td>
+                    <td>
+                        #if(assignmentNotebook):
+                        <a href="#(assignmentNotebook.editURL)"><code id="assignment-notebook-name">#(assignmentNotebook.name)</code></a>
+                        #else:
+                        <code class="card-meta">— not set —</code>
+                        #endif
+                    </td>
+                    <td class="time">
+                        <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                            #if(assignmentNotebook):
+                            <a class="btn action-btn" href="#(assignmentNotebook.editURL)">Edit</a>
+                            <button class="btn action-btn action-danger" type="button"
+                                    onclick="document.getElementById('js-clear-assignment-notebook').click()">Clear</button>
+                            #else:
+                            <button class="btn action-btn" type="button" id="upload-assignment-notebook-btn">Upload</button>
+                            <button class="btn action-btn" type="button"
+                                    onclick="document.getElementById('js-create-assignment-notebook').click()">Create Blank</button>
+                            #endif
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Solution Notebook</strong></td>
+                    <td>
+                        #if(solutionNotebook):
+                        <a href="#(solutionNotebook.editURL)"><code id="solution-notebook-name">#(solutionNotebook.name)</code></a>
+                        #else:
+                        <code class="card-meta">— not set —</code>
+                        #endif
+                    </td>
+                    <td class="time">
+                        <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                            #if(solutionNotebook):
+                            <a class="btn action-btn" href="#(solutionNotebook.editURL)">Edit</a>
+                            <button class="btn action-btn action-danger" type="button"
+                                    onclick="document.getElementById('js-clear-solution-notebook').click()">Clear</button>
+                            #else:
+                            <button class="btn action-btn" type="button" id="upload-solution-notebook-btn">Upload</button>
+                            <button class="btn action-btn" type="button"
+                                    onclick="document.getElementById('js-create-solution-notebook').click()">Create Blank</button>
+                            #endif
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Test Suite ─────────────────────────────────────────────────── -->
+    <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
+    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
+    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
+        <h2 style="margin:0">Test Suite</h2>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
+            <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
+        </div>
+    </div>
+
+    <!-- Generate Tests from Solution (hidden; shown when solution file selected) -->
     <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
         <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
             <span style="font-size:.875rem;font-weight:600">Generate Starter Tests</span>
@@ -173,46 +175,139 @@ Create Assignment
         </div>
     </div>
 
-    <label class="form-label">
-        <span style="white-space:nowrap">Test Suite Files (include one or more scripts like <code>.sh</code> or <code>.py</code>)</span>
-        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple>
-    </label>
-    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+    <table class="results-table" id="suite-config-table">
+        <thead>
+            <tr>
+                <th title="Student-facing name (edit to override the filename)">Name</th>
+                <th>Visibility</th>
+                <th title="Grade point weight for this test (default 1)">Pts</th>
+                <th class="time">Action</th>
+            </tr>
+        </thead>
+        <tbody id="suite-config-body">
+            #for(row in suiteRows):
+            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
+                <td><div class="suite-name-cell">
+                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
+                    <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
+                </div></td>
+                <td>
+                    <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
+                        <option value="support" #if(row.tier == "support"):selected#endif>support</option>
+                        <option value="public"  #if(row.tier == "public"):selected#endif>public</option>
+                        <option value="secret"  #if(row.tier == "secret"):selected#endif>secret</option>
+                        <option value="release" #if(row.tier == "release"):selected#endif>release</option>
+                    </select>
+                </td>
+                <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
+                <td class="time">
+                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>
+                    </div>
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
 
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:-.2rem 0 1rem 0">
-        <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="replace-suite-files">Save Suite Files to Draft</button>
-        #if(hasSuiteRows):
-        <button class="btn" type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-suite-files">Clear Saved Suite Files</button>
+    <!-- ── Runner Requirements ────────────────────────────────────────── -->
+    #if(!detectedLanguages.isEmpty):
+    <p class="card-meta" style="margin:.75rem 0 .4rem">
+        <strong>Auto-detected:</strong>
+        Languages: #(detectedLanguagesCSV)
+        #if(!detectedCapabilities.isEmpty):
+        · Capabilities: #(detectedCapabilitiesCSV)
         #endif
+    </p>
+    #endif
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1.25rem">
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+            Languages
+            <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
+                   placeholder="python, r" style="font-size:.875rem;padding:.25rem .5rem">
+        </label>
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+            Capabilities
+            <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
+                   placeholder="numpy, pandas, shell-bash" style="font-size:.875rem;padding:.25rem .5rem">
+        </label>
     </div>
 
-    <div id="suite-config-panel" style="display:none">
-        <p class="card-meta" style="margin-bottom:.4rem">
-            Drag ⣿ to reorder. Drag a file onto another to make it a dependent (child) test.
-            Drag to the strip at the bottom to remove a dependency.
-        </p>
-        <table class="results-table" id="suite-config-table">
-            <thead>
-                <tr>
-                    <th>File</th>
-                    <th>Tier</th>
-                    <th title="Grade point weight for this test (default 1)">Pts</th>
-                </tr>
-            </thead>
-            <tbody id="suite-config-body"></tbody>
-        </table>
-    </div>
-
-    <p class="card-meta">
+    <p class="card-meta" style="margin-bottom:.75rem">
         The uploaded solution is validated immediately by a runner. The assignment stays closed until validation passes.
         Once it passes, open it from the Instructor dashboard.
     </p>
-
-    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit">Create &amp; Validate</button>
-        <a class="btn" href="/instructor">Cancel</a>
-    </div>
 </form>
+
+<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
+<div id="script-editor-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
+                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
+                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
+            <div id="editor-title" style="font-weight:600;flex:1">New Test Script</div>
+            <button class="btn-link" id="editor-close-btn" type="button"
+                    aria-label="Close editor" title="Close"
+                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+        </div>
+        <!-- New-file controls -->
+        <div id="new-file-controls" style="padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
+            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
+                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
+                    Filename
+                    <input type="text" id="new-filename-input" class="form-input"
+                           placeholder="e.g. test_correctness.py"
+                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
+                </label>
+                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
+                    Tier
+                    <select id="new-file-tier" class="form-input" style="padding:.25rem .5rem;font-size:.875rem">
+                        <option value="public">public</option>
+                        <option value="secret">secret</option>
+                        <option value="release">release</option>
+                        <option value="support">support (not graded)</option>
+                    </select>
+                </label>
+                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
+                    Points
+                    <input type="number" id="new-file-points" class="form-input" min="1" max="100" value="1"
+                           style="width:4rem;padding:.25rem .5rem;font-size:.875rem">
+                </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
+                <select id="template-select" class="form-input"
+                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
+                    <optgroup label="Python">
+                        <option value="py:exists">Function Exists</option>
+                        <option value="py:correctness">Correctness (input/output pairs)</option>
+                        <option value="py:corner_cases">Corner Cases</option>
+                        <option value="py:exception">Exception Handling</option>
+                        <option value="py:type_check">Return Type Check</option>
+                        <option value="py:performance">Performance / Runtime</option>
+                        <option value="py:differential">Differential (reference solution)</option>
+                    </optgroup>
+                    <optgroup label="Shell">
+                        <option value="sh:always_pass">Always Pass (placeholder)</option>
+                        <option value="sh:file_exists">File Exists Check</option>
+                        <option value="sh:command_output">Command Output Check</option>
+                    </optgroup>
+                    <option value="blank">Blank</option>
+                </select>
+                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
+            </div>
+        </div>
+        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
+                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
+            <button class="btn btn-primary" id="editor-save-btn" type="button">Add to Suite</button>
+            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
+            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+        </div>
+    </div>
+</div>
+
 <style>
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
@@ -220,40 +315,48 @@ Create Assignment
 tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
 tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
 tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
+.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
 .suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
 .suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
 .suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
+.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
+#suite-config-table td { vertical-align: top; }
 </style>
 <script>
 (function () {
     'use strict';
 
-    var filesInput = document.getElementById('suite-files-input');
+    var filesInput  = document.getElementById('suite-files-input');
     var configField = document.getElementById('suite-config-field');
-    var panel       = document.getElementById('suite-config-panel');
     var body        = document.getElementById('suite-config-body');
-    if (!filesInput || !configField || !panel || !body) return;
+    if (!filesInput || !configField || !body) return;
 
-    // items: [{ name, index, tier, dependsOn: [], points: 1 }]
-    // Ordered by desired root-level sequence; children group under their parent visually.
+    // items: { name, source, index?, displayName, isTest, tier, dependsOn[], points, errors? }
     var items = [];
     var dragName = null;
-    var initialDraftRows = [
-        #for(row in suiteRows):
-        {
-            name: "#(row.name)",
-            index: #(row.order - 1),
-            tier: "#(row.tier)",
-            dependsOn: #(row.dependsOnJSON),
-            points: #(row.points)
-        },
-        #endfor
-    ];
 
     function isLikelyScript(name) {
         var ext = (name || '').toLowerCase().split('.').pop();
         return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
+    }
+
+    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
+                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
+                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
+
+    function fileErrors(file) {
+        var errs = [];
+        var ext = (file.name || '').toLowerCase().split('.').pop();
+        if (BINARY_EXTS.indexOf(ext) >= 0) errs.push('Binary file — unlikely to work as a test script');
+        if (!file.name.includes('.'))       errs.push('No file extension');
+        if (file.size === 0)                errs.push('Empty file');
+        return errs;
+    }
+
+    function stemOf(filename) {
+        var dot = filename.lastIndexOf('.');
+        return dot > 0 ? filename.slice(0, dot) : filename;
     }
 
     function hasChildren(name) {
@@ -265,7 +368,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         return it ? it.dependsOn.length > 0 : false;
     }
 
-    // Returns items in visual order: each root followed immediately by its children.
     function visualOrder() {
         var result = [];
         var childMap = {};
@@ -291,92 +393,105 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         }).join('');
     }
 
-    function itemIsTest(item) {
-        return item.tier !== 'support';
-    }
+    function itemIsTest(item) { return item.tier !== 'support'; }
 
     function rowHTML(item, depth) {
-        var indentStyle = depth > 0 ? ' class="suite-child-indent"' : '';
-        var connector   = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var pts         = item.points || 1;
-        return '<tr data-name="' + escAttr(item.name) + '">'
-            + '<td' + indentStyle + '>'
-            +   '<span class="suite-drag-handle" title="Drag to reorder or adopt">⋮⋮</span>'
+        var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
+        var errBadge = errs.length > 0
+            ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
+            : '';
+        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
+        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
+        var pts       = item.points || 1;
+        var nameVal   = escAttr(item.displayName || stemOf(item.name));
+        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
+            + '<td' + indent + '><div class="suite-name-cell">'
+            +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
-            +   '<code>' + escHtml(item.name) + '</code>'
-            + '</td>'
+            +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
+            +   errBadge
+            + '</div></td>'
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
             + '</select></td>'
             + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
+            + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
+            +   '<button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>'
+            + '</div></td>'
             + '</tr>';
     }
 
-    function renderRows() {
+    function renderTree() {
         var visual = visualOrder();
-        if (visual.length === 0) {
-            panel.style.display = 'none';
-            body.innerHTML = '';
-            configField.value = '';
-            return;
-        }
-        panel.style.display = '';
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="3">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
         var visual = visualOrder();
         var config = visual.map(function (v, i) {
             var item = v.item;
-            var row = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
+            var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
             if (row) {
-                var tierEl   = row.querySelector('.suite-tier');
-                var ptsEl    = row.querySelector('.suite-points');
-                if (tierEl)   item.tier   = tierEl.value;
-                if (ptsEl)    item.points = Math.max(1, parseInt(ptsEl.value) || 1);
+                var tierEl        = row.querySelector('.suite-tier');
+                var ptsEl         = row.querySelector('.suite-points');
+                var displayNameEl = row.querySelector('.suite-display-name');
+                if (tierEl)        item.tier   = tierEl.value;
+                item.isTest = itemIsTest(item);
+                if (ptsEl)         item.points = Math.max(1, parseInt(ptsEl.value) || 1);
+                if (displayNameEl) {
+                    var val = displayNameEl.value.trim();
+                    item.displayName = (val && val !== stemOf(item.name)) ? val : null;
+                }
             }
-            return { index: item.index, isTest: itemIsTest(item), tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1 };
+            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
+            if (item.source === 'upload') { base.index = item.index; }
+            else                          { base.name  = item.name;  }
+            return base;
         });
         configField.value = JSON.stringify(config);
     }
 
-    function loadFromFiles() {
-        var files = Array.from(filesInput.files || []);
-        var oldMap = {};
-        items.forEach(function (it) { oldMap[it.name] = it; });
-        var newNames = new Set(files.map(function (f) { return f.name; }));
-        items = files.map(function (file, idx) {
-            var old = oldMap[file.name];
-            return {
-                name:      file.name,
-                index:     idx,
-                tier:      old ? old.tier    : (isLikelyScript(file.name) ? 'public' : 'support'),
-                dependsOn: old ? old.dependsOn.filter(function (d) { return newNames.has(d); }) : [],
-                points:    old ? old.points  : 1
-            };
+    function initFromDOM() {
+        items = [];
+        body.querySelectorAll('tr[data-source="existing"]').forEach(function (row) {
+            var name        = row.getAttribute('data-name') || '';
+            var tier        = row.getAttribute('data-tier') || 'public';
+            var depsRaw     = row.getAttribute('data-depends-on') || '[]';
+            var dependsOn   = [];
+            try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
+            var points      = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
+            var displayName = row.getAttribute('data-display-name') || '';
+            items.push({ name: name, displayName: displayName, source: 'existing', isTest: tier !== 'support', tier: tier, dependsOn: dependsOn, points: points });
         });
-        renderRows();
+        renderTree();
         syncConfig();
     }
 
-    function loadFromDraftRows() {
-        if (!initialDraftRows.length) return;
-        items = initialDraftRows.map(function (row, idx) {
-            return {
-                name: row.name,
-                index: idx,
-                tier: row.tier || 'support',
-                dependsOn: Array.isArray(row.dependsOn) ? row.dependsOn : [],
-                points: row.points || 1
-            };
+    function addUploadedFiles() {
+        var files = Array.from(filesInput.files || []);
+        items = items.filter(function (it) { return it.source !== 'upload'; });
+        files.forEach(function (file, idx) {
+            var name = file.name;
+            // Don't add if a same-named item already exists from draft
+            if (items.some(function (it) { return it.name === name; })) return;
+            items.push({
+                name:        name,
+                displayName: '',
+                source:      'upload',
+                index:       idx,
+                isTest:      isLikelyScript(name),
+                tier:        isLikelyScript(name) ? 'public' : 'support',
+                dependsOn:   [],
+                points:      1,
+                errors:      fileErrors(file)
+            });
         });
-        renderRows();
+        renderTree();
         syncConfig();
     }
 
     // --- Drag & Drop ---
-
     body.addEventListener('dragstart', function (e) {
         var handle = e.target.closest && e.target.closest('.suite-drag-handle');
         if (!handle) { e.preventDefault(); return; }
@@ -384,6 +499,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         if (!row) { e.preventDefault(); return; }
         dragName = row.getAttribute('data-name');
         e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragName);
         row.classList.add('suite-row-dragging');
     });
 
@@ -407,20 +523,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         if (rootZone) { rootZone.classList.add('drop-hover'); return; }
         var target = e.target.closest && e.target.closest('tr[data-name]');
         if (!target) return;
-        var rect   = target.getBoundingClientRect();
-        var relY   = (e.clientY - rect.top) / rect.height;
-        var tName  = target.getAttribute('data-name');
+        var rect  = target.getBoundingClientRect();
+        var relY  = (e.clientY - rect.top) / rect.height;
+        var tName = target.getAttribute('data-name');
         if (tName === dragName) return;
-        if (relY < 0.3) {
-            target.classList.add('drop-before');
-        } else if (relY > 0.7) {
-            target.classList.add('drop-after');
-        } else if (!isChild(tName) && !hasChildren(dragName)) {
-            // Middle zone and target is a root: offer adopt
-            target.classList.add('drop-adopt');
-        } else {
-            target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
-        }
+        if (relY < 0.3)       { target.classList.add('drop-before'); }
+        else if (relY > 0.7)  { target.classList.add('drop-after'); }
+        else if (!isChild(tName) && !hasChildren(dragName)) { target.classList.add('drop-adopt'); }
+        else { target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after'); }
     });
 
     body.addEventListener('dragleave', function (e) {
@@ -433,57 +543,101 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         if (!dragName) return;
         var dragItem = items.find(function (it) { return it.name === dragName; });
         if (!dragItem) return;
-
-        // Root zone: un-parent
         var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) {
-            dragItem.dependsOn = [];
-            renderRows(); syncConfig(); return;
-        }
-
+        if (rootZone) { dragItem.dependsOn = []; renderTree(); syncConfig(); return; }
         var target = e.target.closest && e.target.closest('tr[data-name]');
         if (!target) return;
         var tName = target.getAttribute('data-name');
         if (!tName || tName === dragName) return;
-
         var rect = target.getBoundingClientRect();
         var relY = (e.clientY - rect.top) / rect.height;
-
         if (relY >= 0.3 && relY <= 0.7 && !isChild(tName) && !hasChildren(dragName)) {
-            // Adopt
             dragItem.dependsOn = [tName];
         } else {
-            // Reorder: clear parent, move in flat array
             dragItem.dependsOn = [];
             items = items.filter(function (it) { return it.name !== dragName; });
             var tIdx = items.findIndex(function (it) { return it.name === tName; });
             items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
         }
-        renderRows(); syncConfig();
+        renderTree(); syncConfig();
     });
 
-    // Live sync on any table input change
+    body.addEventListener('click', function (event) {
+        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
+        if (!btn) return;
+        var row = btn.closest('tr[data-name]');
+        if (!row) return;
+        var name = row.getAttribute('data-name');
+        items = items.filter(function (it) { return it.name !== name; });
+        items.forEach(function (it) { it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; }); });
+        renderTree(); syncConfig();
+    });
+
     body.addEventListener('change', function () { syncConfig(); });
     body.addEventListener('input',  function () { syncConfig(); });
 
-    filesInput.addEventListener('change', loadFromFiles);
-    loadFromDraftRows();
+    // Upload button opens the hidden file input
+    var addTestBtn = document.getElementById('add-test-btn');
+    if (addTestBtn) {
+        addTestBtn.addEventListener('click', function () {
+            filesInput.value = '';
+            filesInput.click();
+        });
+    }
+    filesInput.addEventListener('change', addUploadedFiles);
+
+    // Notebook upload buttons: open picker, auto-submit draft action on selection
+    function wireNotebookUpload(btnID, inputID, draftBtnID) {
+        var btn       = document.getElementById(btnID);
+        var fileInput = document.getElementById(inputID);
+        var draftBtn  = document.getElementById(draftBtnID);
+        if (!btn || !fileInput || !draftBtn) return;
+        btn.addEventListener('click', function () { fileInput.value = ''; fileInput.click(); });
+        fileInput.addEventListener('change', function () {
+            if (fileInput.files.length > 0) draftBtn.click();
+        });
+    }
+    wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'js-upload-assignment-notebook');
+    wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'js-upload-solution-notebook');
+
+    // Solution file selection shows Generate Tests panel
+    var solutionFileInput = document.getElementById('solution-notebook-file-input');
+    var genPanel          = document.getElementById('gen-tests-panel');
+    if (solutionFileInput && genPanel) {
+        solutionFileInput.addEventListener('change', function () {
+            // Panel shown after draft round-trip; for new uploads trigger via scan button only
+        });
+    }
+
+    var form = document.getElementById('new-assignment-form');
+    if (form) {
+        form.addEventListener('submit', function () { syncConfig(); });
+        form.addEventListener('chickadee:before-multipart-submit', function () { syncConfig(); });
+    }
+
+    function escHtml(v) {
+        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    }
+    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
+
+    initFromDOM();
 
     // ── Generate Tests from Solution ─────────────────────────────────────────
 
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var solutionInput   = document.querySelector('input[name="solutionNotebookFile"]');
-    var genPanel        = document.getElementById('gen-tests-panel');
+    var csrfToken       = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     var scanBtn         = document.getElementById('scan-solution-btn');
     var scanStatus      = document.getElementById('scan-status');
     var scanResults     = document.getElementById('scan-results');
     var fnChecklist     = document.getElementById('fn-checklist');
     var genTplSelect    = document.getElementById('gen-template-select');
     var addGenTestsBtn  = document.getElementById('add-gen-tests-btn');
+    var scannedFunctions = [];
 
-    var scannedFunctions = [];  // [{name, paramNames}]
+    // Show gen-tests panel if solution notebook already in draft
+    #if(solutionNotebook):
+    if (genPanel) genPanel.style.display = '';
+    #endif
 
-    // Inline Python template function (mirrors TestScriptTemplates.swift)
     function genPyTemplate(type, fnName, paramNames) {
         var argList = paramNames.join(', ');
         switch (type) {
@@ -493,83 +647,65 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         case 'py:correctness':
             var argTuple = paramNames.length === 0 ? '()' : paramNames.length === 1 ? '(' + paramNames[0] + ',)' : '(' + argList + ')';
             return '# Test: ' + fnName + ' returns the correct output for known inputs\ntest_cases = [\n    (' + argTuple + ', None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.' + fnName + '(*args)\n    if result != expected:\n        failures.append(f"  ' + fnName + '{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n';
-        case 'py:corner_cases':
-            return '# Test: ' + fnName + ' handles edge / corner cases\ncorner_cases = [\n    ((None,), None),\n    ((0,), None),\n    ((-1,), None),\n    (([],), None),\n    (("",), None),\n]\nfailures = []\nfor args, expected in corner_cases:\n    try:\n        result = student_module.' + fnName + '(*args)\n        if expected is not None and result != expected:\n            failures.append(f"  ' + fnName + '{args} = {result!r}, expected {expected!r}")\n    except Exception as e:\n        failures.append(f"  ' + fnName + '{args} raised {type(e).__name__}: {e}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(corner_cases)} corner case(s) handled")\n';
         default:
             return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
         }
     }
 
-    if (solutionInput) {
-        solutionInput.addEventListener('change', function () {
-            genPanel.style.display = solutionInput.files.length > 0 ? '' : 'none';
-            scanResults.style.display = 'none';
-            fnChecklist.innerHTML = '';
-            scannedFunctions = [];
+    if (scanBtn) {
+        scanBtn.addEventListener('click', function () {
+            var solInput = document.getElementById('solution-notebook-file-input');
+            // After a draft save the solution file input is empty; fetch from draft
+            #if(solutionNotebook):
+            if (!solInput || solInput.files.length === 0) {
+                fetch('/instructor/new/draft/solution-notebook', { headers: { 'x-csrf-token': csrfToken } })
+                    .then(function (r) { return r.ok ? r.text() : Promise.reject(r.statusText); })
+                    .then(function (text) { runScan(text); })
+                    .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
+                return;
+            }
+            #endif
+            if (!solInput || solInput.files.length === 0) {
+                if (scanStatus) scanStatus.textContent = 'Upload a solution notebook first.';
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (e) { runScan(e.target.result); };
+            reader.readAsText(solInput.files[0]);
         });
     }
 
-    if (scanBtn) {
-        scanBtn.addEventListener('click', function () {
-            if (!solutionInput || solutionInput.files.length === 0) {
-                scanStatus.textContent = 'Select a solution notebook first.';
-                return;
-            }
-            var file = solutionInput.files[0];
-            scanStatus.textContent = 'Scanning…';
-            scanResults.style.display = 'none';
-
-            var reader = new FileReader();
-            reader.onload = function (e) {
-                var notebookBytes = e.target.result;
-                fetch('/instructor/scan-notebook', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-csrf-token': csrfToken
-                    },
-                    body: notebookBytes
-                })
-                .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
-                .then(function (functions) {
-                    scannedFunctions = functions || [];
-                    scanStatus.textContent = scannedFunctions.length === 0
-                        ? 'No top-level functions found in notebook.'
-                        : scannedFunctions.length + ' function(s) found.';
-                    fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
-                        var id = 'fn-chk-' + fn.name;
-                        var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
-                        return '<label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer">'
-                            + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
-                            + '<code>' + escHtml(label) + '</code></label>';
-                    }).join('');
-                    if (scannedFunctions.length > 0) {
-                        scanResults.style.display = '';
-                    }
-                })
-                .catch(function (err) {
-                    scanStatus.textContent = 'Scan failed: ' + err;
-                });
-            };
-            reader.readAsText(file);
-        });
+    function runScan(notebookText) {
+        if (scanStatus) scanStatus.textContent = 'Scanning…';
+        if (scanResults) scanResults.style.display = 'none';
+        fetch('/instructor/scan-notebook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: notebookText
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
+        .then(function (functions) {
+            scannedFunctions = functions || [];
+            if (scanStatus) scanStatus.textContent = scannedFunctions.length === 0 ? 'No functions found.' : scannedFunctions.length + ' function(s) found.';
+            if (fnChecklist) fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
+                var id = 'fn-chk-' + fn.name;
+                var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
+                return '<label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer">'
+                    + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
+                    + '<code>' + escHtml(label) + '</code></label>';
+            }).join('');
+            if (scannedFunctions.length > 0 && scanResults) scanResults.style.display = '';
+        })
+        .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
     }
 
     if (addGenTestsBtn) {
         addGenTestsBtn.addEventListener('click', function () {
             var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
             var checked = Array.from(fnChecklist.querySelectorAll('input[type=checkbox]:checked'));
-            if (checked.length === 0) {
-                scanStatus.textContent = 'Select at least one function.';
-                return;
-            }
-
+            if (checked.length === 0) { if (scanStatus) scanStatus.textContent = 'Select at least one function.'; return; }
             var dt = new DataTransfer();
-            // Preserve existing files
-            for (var i = 0; i < filesInput.files.length; i++) {
-                dt.items.add(filesInput.files[i]);
-            }
-            // Add generated scripts
+            for (var i = 0; i < filesInput.files.length; i++) dt.items.add(filesInput.files[i]);
             checked.forEach(function (chk) {
                 var fnName = chk.value;
                 var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
@@ -578,45 +714,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                 var filename = 'test_' + fnName + '.py';
                 dt.items.add(new File([content], filename, { type: 'text/plain' }));
             });
-
             filesInput.files = dt.files;
             filesInput.dispatchEvent(new Event('change'));
-            scanStatus.textContent = checked.length + ' test file(s) added to suite.';
-            scanResults.style.display = 'none';
+            if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
+            if (scanResults) scanResults.style.display = 'none';
         });
     }
-
-    // Form submit validation
-    var form = filesInput.closest('form');
-    if (form) {
-        form.addEventListener('submit', function (event) {
-            syncConfig();
-            var action = (event.submitter && event.submitter.value) || '';
-            if (action && action !== 'replace-suite-files' && action !== 'clear-suite-files') {
-                return;
-            }
-            var config = [];
-            try { config = JSON.parse(configField.value || '[]'); } catch (_) {}
-            if (action === 'clear-suite-files') return;
-            if (filesInput.files.length === 0 && items.length === 0) {
-                event.preventDefault();
-                window.alert('Choose suite files before saving them to the draft.');
-                return;
-            }
-            if (filesInput.files.length > 0 && !config.some(function (r) { return r.tier !== 'support'; })) {
-                event.preventDefault();
-                window.alert('Add at least one non-support file to run as a test.');
-            }
-        });
-        form.addEventListener('chickadee:before-multipart-submit', function () {
-            syncConfig();
-        });
-    }
-
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-    }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
 
     // UWaterloo important-date proximity warning
     (function () {
@@ -626,7 +729,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         dueAtInput.addEventListener('change', function () { checkUWDates(dueAtInput.value, warning); });
     })();
 
-    // Grading mode hint when a section is selected
+    // Grading mode hint
     (function () {
         var sectionSelect = document.getElementById('sectionID');
         var hint = document.getElementById('grading-mode-hint');
@@ -634,20 +737,172 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         function updateHint() {
             var selected = sectionSelect.options[sectionSelect.selectedIndex];
             var mode = selected ? selected.getAttribute('data-grading-mode') : null;
-            if (mode === 'browser') {
-                hint.textContent = '\u24d8 This section uses Student Browser grading by default.';
-                hint.style.display = '';
-            } else if (mode === 'worker') {
-                hint.textContent = '\u24d8 This section uses Chickadee grading by default.';
-                hint.style.display = '';
-            } else {
-                hint.style.display = 'none';
-            }
+            if (mode === 'browser') { hint.textContent = '\u24d8 This section uses Student Browser grading by default.'; hint.style.display = ''; }
+            else if (mode === 'worker') { hint.textContent = '\u24d8 This section uses Chickadee grading by default.'; hint.style.display = ''; }
+            else { hint.style.display = 'none'; }
         }
         sectionSelect.addEventListener('change', updateHint);
         updateHint();
     })();
+
 })();
+</script>
+<style>
+#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
+#cm-editor-mount .cm-scroller { overflow: auto; }
+@media (prefers-color-scheme: dark) {
+    #cm-editor-mount .cm-editor    { background: var(--gray-100); }
+    #cm-editor-mount .cm-gutters   { background: var(--gray-200); border-color: var(--gray-200); color: var(--gray-500); }
+    #cm-editor-mount .cm-content   { color: var(--gray-900); caret-color: var(--gray-900); }
+    #cm-editor-mount .cm-activeLine { background: var(--gray-200); }
+    #cm-editor-mount .cm-selectionBackground, #cm-editor-mount ::selection { background: var(--hover-bg) !important; }
+    #cm-editor-mount .cm-cursor    { border-left-color: var(--gray-900); }
+    #script-editor-overlay input, #script-editor-overlay select { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-200); }
+}
+</style>
+<script type="module">
+// ── CodeMirror 6 script creator (new scripts added client-side via DataTransfer) ──
+import { EditorView, keymap, lineNumbers, highlightActiveLine,
+         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
+import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
+import { defaultKeymap, history, historyKeymap, indentWithTab }
+                                      from 'https://esm.sh/@codemirror/commands@6';
+import { syntaxHighlighting, defaultHighlightStyle }
+                                      from 'https://esm.sh/@codemirror/language@6';
+import { python }                     from 'https://esm.sh/@codemirror/lang-python@6';
+import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6';
+import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell';
+import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r';
+
+const langComp = new Compartment();
+
+function langExtensionFor(filename) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    if (ext === 'py') return python();
+    if (ext === 'r')  return StreamLanguage.define(r);
+    return StreamLanguage.define(shell);
+}
+
+function makeEditorState(content, filename) {
+    return EditorState.create({
+        doc: content,
+        extensions: [
+            lineNumbers(), highlightActiveLine(), drawSelection(), dropCursor(),
+            history(), syntaxHighlighting(defaultHighlightStyle),
+            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+            langComp.of(langExtensionFor(filename)),
+            EditorView.lineWrapping,
+            EditorView.theme({ '&': { height: '100%' } })
+        ]
+    });
+}
+
+const overlay      = document.getElementById('script-editor-overlay');
+const mount        = document.getElementById('cm-editor-mount');
+const titleEl      = document.getElementById('editor-title');
+const statusEl     = document.getElementById('editor-status');
+const saveBtn      = document.getElementById('editor-save-btn');
+const cancelBtn    = document.getElementById('editor-cancel-btn');
+const closeBtn     = document.getElementById('editor-close-btn');
+const newControls  = document.getElementById('new-file-controls');
+const newNameInput = document.getElementById('new-filename-input');
+const tierSelect   = document.getElementById('new-file-tier');
+const pointsInput  = document.getElementById('new-file-points');
+const templateSel  = document.getElementById('template-select');
+const applyTplBtn  = document.getElementById('apply-template-btn');
+const newScriptBtn = document.getElementById('new-script-btn');
+const filesInput   = document.getElementById('suite-files-input');
+const csrfToken    = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+let view = null;
+
+function initView(content, filename) {
+    if (view) { view.destroy(); view = null; }
+    try { view = new EditorView({ state: makeEditorState(content, filename), parent: mount }); }
+    catch (e) { if (statusEl) statusEl.textContent = 'Editor failed to load: ' + e.message; }
+}
+
+function openCreator() {
+    if (titleEl)  titleEl.textContent  = 'New Test Script';
+    if (statusEl) statusEl.textContent = '';
+    if (newControls) newControls.style.display = '';
+    if (newNameInput) newNameInput.value = '';
+    overlay.style.display = 'flex';
+    initView('', '');
+    if (newNameInput) newNameInput.focus();
+}
+
+function closeEditor() {
+    overlay.style.display = 'none';
+    if (view) { view.destroy(); view = null; }
+}
+
+if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
+if (closeBtn)     closeBtn.addEventListener('click',   closeEditor);
+if (cancelBtn)    cancelBtn.addEventListener('click',  closeEditor);
+
+overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
+
+// Save: create a File blob and inject it into the suite files input via DataTransfer
+if (saveBtn) {
+    saveBtn.addEventListener('click', function () {
+        const filename = newNameInput ? newNameInput.value.trim() : '';
+        if (!filename) { if (statusEl) statusEl.textContent = 'Enter a filename.'; if (newNameInput) newNameInput.focus(); return; }
+        const content  = view ? view.state.doc.toString() : '';
+        const file     = new File([content], filename, { type: 'text/plain' });
+
+        const dt = new DataTransfer();
+        for (let i = 0; i < filesInput.files.length; i++) dt.items.add(filesInput.files[i]);
+        // Replace if same name already exists; otherwise append
+        let replaced = false;
+        const existing = Array.from(dt.files);
+        const dt2 = new DataTransfer();
+        existing.forEach(function (f) { if (f.name !== filename) dt2.items.add(f); else replaced = true; });
+        dt2.items.add(file);
+
+        filesInput.files = dt2.files;
+        filesInput.dispatchEvent(new Event('change'));
+        closeEditor();
+    });
+}
+
+// Template apply
+let templateCache = null;
+
+function fetchTemplates() {
+    if (templateCache) return Promise.resolve(templateCache);
+    return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': csrfToken } })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => { templateCache = data; return data; });
+}
+
+if (applyTplBtn) {
+    applyTplBtn.addEventListener('click', function () {
+        const tpl = templateSel ? templateSel.value : 'blank';
+        if (tpl === 'blank') {
+            if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
+            if (newNameInput && !newNameInput.value) newNameInput.focus();
+            return;
+        }
+        fetchTemplates()
+            .then(templates => {
+                const content = templates[tpl] || '';
+                if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+                const ext = tpl.startsWith('sh:') ? '.sh' : tpl.startsWith('r:') ? '.R' : '.py';
+                if (newNameInput && !newNameInput.value) newNameInput.value = 'test_' + tpl.split(':').pop() + ext;
+                // Update language
+                if (view) view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput ? newNameInput.value : '')) });
+            })
+            .catch(err => { if (statusEl) statusEl.textContent = 'Could not load template: ' + err; });
+    });
+}
+
+// Update language highlighting as filename is typed
+if (newNameInput) {
+    newNameInput.addEventListener('input', function () {
+        if (view) view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput.value)) });
+    });
+}
 </script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
@@ -662,7 +917,7 @@ function checkUWDates(dateTimeValue, warningEl) {
         var threeDays = 3 * 86400000;
         var near = dates.filter(function (d) {
             var start = new Date(d.startDate);
-            var end = new Date(d.endDate);
+            var end   = new Date(d.endDate);
             return selected >= new Date(start.getTime() - threeDays)
                 && selected < new Date(end.getTime() + threeDays);
         });
@@ -672,7 +927,7 @@ function checkUWDates(dateTimeValue, warningEl) {
         } else {
             warningEl.style.display = 'none';
         }
-    }).catch(function () { /* silently ignore */ });
+    }).catch(function () {});
 }
 </script>
 #endexport
