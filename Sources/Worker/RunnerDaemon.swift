@@ -800,7 +800,7 @@ actor WorkerDaemon {
             earnedPoints:    earnedPoints,
             warnings:        warnings,
             jobStartedAt:    startedAt,
-            runnerVersion:   "shell-runner/1.0",
+            runnerVersion:   ChickadeeVersion.current,
             timestamp:       Date()
         )
     }
@@ -911,7 +911,7 @@ actor WorkerDaemon {
             executionTimeMs: 0,
             warnings:        [],
             jobStartedAt:    Date(),
-            runnerVersion:   "shell-runner/1.0",
+            runnerVersion:   ChickadeeVersion.current,
             timestamp:       Date()
         )
         try await reporter.report(collection)
