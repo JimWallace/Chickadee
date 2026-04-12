@@ -671,6 +671,74 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         XCTAssertEqual(runnerInvocations, 1)
     }
 
+    func testJSONFooterStrippedFromLongResult() async throws {
+        // When a test script emits human-readable output followed by a JSON footer line,
+        // the JSON footer must NOT appear in longResult shown to students.
+        // Only the human-readable lines should be visible.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-json-footer-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let server = try StaticFileServer(directory: root)
+        defer { server.stop() }
+
+        let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_json_footer")
+
+        let stdoutWithFooter = """
+        Hello, World!
+        Some diagnostic output here.
+        {"shortResult": "3/4 cases passed", "score": 0.75}
+        """
+
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(output: ScriptOutput(
+            exitCode: 1,            // fail so longResult is populated
+            stdout: stdoutWithFooter,
+            stderr: "",
+            executionTimeMs: 10,
+            timedOut: false
+        ))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-json-footer",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy
+        )
+
+        let task = Task { try await daemon.run() }
+        _ = await waitUntil(timeoutSeconds: 5) { await reporter.snapshot().count == 1 }
+        task.cancel()
+        try? await task.value
+
+        let reports = await reporter.snapshot()
+        let report = try XCTUnwrap(reports.first)
+        XCTAssertEqual(report.outcomes.count, 1)
+
+        let outcome = try XCTUnwrap(report.outcomes.first)
+        // shortResult must be extracted from the JSON footer
+        XCTAssertEqual(outcome.shortResult, "3/4 cases passed")
+
+        // longResult must contain the human-readable lines…
+        let longResult = try XCTUnwrap(outcome.longResult)
+        XCTAssertTrue(longResult.contains("Hello, World!"),
+                      "Human-readable stdout must appear in longResult")
+        XCTAssertTrue(longResult.contains("Some diagnostic output here."),
+                      "All human-readable lines must appear in longResult")
+
+        // …but must NOT contain the raw JSON footer
+        XCTAssertFalse(longResult.contains("shortResult"),
+                       "JSON footer must be stripped from longResult shown to students")
+        XCTAssertFalse(longResult.contains("{"),
+                       "No JSON braces should appear in longResult")
+    }
+
     func testWorkerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = FlakyReporter(failuresRemaining: 0, heartbeatFailuresRemaining: 2)

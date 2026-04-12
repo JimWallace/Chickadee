@@ -720,7 +720,21 @@ actor WorkerDaemon {
         }
 
         let stderrText = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stdoutText = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip the JSON footer line from stdout before displaying to students.
+        // The footer is the last non-empty line; if it parsed as JSON above we
+        // remove it so only human-readable output appears in longResult.
+        let strippedStdout: String = {
+            guard let line = lastLine,
+                  let data = line.data(using: .utf8),
+                  (try? JSONDecoder().decode(ScriptResultJSON.self, from: data)) != nil
+            else { return output.stdout }
+            var lines = output.stdout.components(separatedBy: "\n")
+            if let lastIdx = lines.indices.last(where: { !lines[$0].trimmingCharacters(in: .whitespaces).isEmpty }) {
+                lines.remove(at: lastIdx)
+            }
+            return lines.joined(separator: "\n")
+        }()
+        let stdoutText = strippedStdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let longResult: String? = {
             guard status != .pass else { return stderrText.isEmpty ? nil : stderrText }
             var sections: [String] = []
