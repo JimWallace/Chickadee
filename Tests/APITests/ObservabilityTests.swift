@@ -331,7 +331,9 @@ final class ObservabilityTests: XCTestCase {
         })
     }
 
-    func testQueueDepthCountsOnlyWorkerClaimablePendingJobs() async throws {
+    func testQueueDepthCountsBothWorkerAndBrowserModePendingJobs() async throws {
+        // Both worker-mode and browser-mode pending submissions are now claimable by
+        // the worker (browser-mode as a backstop), so both should count toward queue depth.
         _ = try await makeSubmission(submissionID: "sub_worker_pending", gradingMode: "worker")
         _ = try await makeSubmission(submissionID: "sub_browser_pending", gradingMode: "browser")
 
@@ -347,7 +349,7 @@ final class ObservabilityTests: XCTestCase {
         }, afterResponse: { response in
             XCTAssertEqual(response.status, .ok)
             let payload = try response.content.decode(InternalMetricsResponse.self)
-            XCTAssertEqual(payload.maxQueueDepth, 1)
+            XCTAssertEqual(payload.maxQueueDepth, 2)
         })
     }
 
