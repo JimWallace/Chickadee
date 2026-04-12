@@ -134,14 +134,6 @@ Create Assignment
                 Capabilities
                 <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)" placeholder="numpy, pandas, shell-bash">
             </label>
-            <label class="form-label">
-                Platform (advanced)
-                <input class="form-input" type="text" name="requiredPlatform" value="#(requiredPlatform)" placeholder="linux">
-            </label>
-            <label class="form-label">
-                Architecture (advanced)
-                <input class="form-input" type="text" name="requiredArchitecture" value="#(requiredArchitecture)" placeholder="arm64">
-            </label>
         </div>
     </section>
 
