@@ -13,15 +13,21 @@ extension WebRoutes {
     // MARK: - GET /testsetups/:id/submit
 
     @Sendable
-    func submitForm(req: Request) async throws -> View {
+    func submitForm(req: Request) async throws -> Response {
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let _ = try await APITestSetup.find(setupID, on: req.db)
+            let setup   = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+        // Browser-graded assignments are submitted from the notebook page, not this form.
+        let manifestData = Data(setup.manifest.utf8)
+        if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),
+           manifest.gradingMode == .browser {
+            return req.redirect(to: "/testsetups/\(setupID)/notebook")
+        }
         return try await req.view.render("submit",
-            SubmitContext(testSetupID: setupID, currentUser: req.currentUserContext))
+            SubmitContext(testSetupID: setupID, currentUser: req.currentUserContext)).encodeResponse(for: req)
     }
 
     // MARK: - POST /testsetups/:id/submit
@@ -32,9 +38,16 @@ extension WebRoutes {
 
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let _ = try await APITestSetup.find(setupID, on: req.db)
+            let setup   = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
+        }
+
+        // Browser-graded assignments must be submitted from the notebook page.
+        let manifestData = Data(setup.manifest.utf8)
+        if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),
+           manifest.gradingMode == .browser {
+            return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
 
         _ = try await requireOpenStudentAssignment(for: setupID, on: req)

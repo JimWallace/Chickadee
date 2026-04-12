@@ -22,6 +22,7 @@ struct TestSetupRow: Encodable {
     let dueAt: String?      // formatted due date, nil if no assignment or no due date
     let status: String      // "unpublished" | "open" | "closed"
     let isOpen: Bool
+    let gradingMode: String  // "browser" | "worker"
     let hasNotebook: Bool   // false → hide Edit button (no starter notebook available)
     let submissionCount: Int
     let hasLatestSubmission: Bool

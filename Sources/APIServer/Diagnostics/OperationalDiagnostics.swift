@@ -1433,19 +1433,15 @@ private extension OperationalDiagnosticsService {
 }
 
 extension OperationalDiagnosticsService {
+    // Returns the set of test setup IDs from the given list that exist in the database.
+    // Previously restricted to worker-mode setups; now includes browser-mode because
+    // the worker serves as a backstop for pending browser submissions.
     func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
         var result: Set<String> = []
-
         for testSetupID in Set(testSetupIDs) {
-            guard let setup = try await APITestSetup.find(testSetupID, on: db) else { continue }
-            let data = Data(setup.manifest.utf8)
-            guard
-                let manifest = try? JSONDecoder().decode(TestProperties.self, from: data),
-                manifest.gradingMode == .worker
-            else { continue }
+            guard (try await APITestSetup.find(testSetupID, on: db)) != nil else { continue }
             result.insert(testSetupID)
         }
-
         return result
     }
 }

@@ -86,11 +86,16 @@
             <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
+                    #if(setup.gradingMode == "browser"):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    #else:
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
                        style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
                     #endif
                     #endif
                 </div>
@@ -166,11 +171,16 @@
             <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
+                    #if(setup.gradingMode == "browser"):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    #else:
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
                        style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
                     #endif
                     #endif
                 </div>
@@ -246,11 +256,16 @@
             <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
+                    #if(setup.gradingMode == "browser"):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    #else:
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
                        style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
                     #endif
                     #endif
                 </div>

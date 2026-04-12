@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.56] - 2026-04-11
+
+### Added
+
+- **Stale runner cleanup and offline indicators**: runners that haven't contacted the server in over 60 minutes are automatically pruned from the in-memory store on the next admin page load. Runners offline for more than 5 minutes show a dimmed row and "Offline" badge on the admin dashboard and runner detail page. Navigating to a pruned runner's detail page now shows historical snapshot and job data instead of a 404.
+- **Worker backstop for browser-graded submissions**: pending browser-mode submissions (e.g. from a browser runner failure or pre-fix backlog) are now claimed and graded by the native worker using `python3`, exactly as Pyodide would. Previously these submissions were permanently stuck in "pending".
+
+### Fixed
+
+- **Browser-graded assignments no longer accept zip uploads**: the student dashboard "Submit" button for browser-graded assignments now routes directly to the notebook page instead of the zip-upload form. Direct `GET`/`POST` to the submit route for a browser-mode setup redirects to the notebook page.
+- **Runner detail page version/hostname now stay current after a restart**: the runner detail page now polls `GET /admin/runners` every 5 seconds (matching the main admin dashboard) and updates the version, hostname, and "Last active" fields in the header without a page reload.
+- **Trivy container scan action version corrected**: `aquasecurity/trivy-action` was pinned to a non-existent tag (`0.30.0`); updated to `v0.35.0` (Trivy 0.69.3), which resolves the docker-build workflow failure.
+
 ## [0.4.54] - 2026-04-10
 
 ### Changed
