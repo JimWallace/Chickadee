@@ -105,6 +105,23 @@ struct BrowserResultRoutes: RouteCollection {
 
         req.logger.info("Browser result stored for \(subID)")
 
+        // Update the student's server-side working copy with what they just
+        // submitted. Without this, the working copy stays as the blank starter
+        // template forever, so students who return to the assignment (or open
+        // it on a different device) would have their editor re-seeded with the
+        // blank template instead of their latest submitted work.
+        // Use the student's own notebook (body.notebook) — not notebookToSave,
+        // which contains the instructor's injected hidden-test cells.
+        if let userID = caller.id {
+            _ = try? await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fallbackSetup: setup,
+                overwriteWith: body.notebook
+            )
+        }
+
         return BrowserResultResponse(submissionID: subID)
     }
 
