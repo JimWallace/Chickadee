@@ -47,6 +47,14 @@ extension WebRoutes {
             return "Assignment"
         }()
         let requestedSubmissionID = (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let userSlug = userID.uuidString.lowercased()
+
+        // --- Submission view (read-only) ---
+        // Use a submission-specific working copy path and workspace ID so:
+        //   1. The viewer's own assignment working copy is never overwritten.
+        //   2. Each submission gets a fresh JupyterLite workspace; the browser
+        //      IndexedDB cache from a previous visit to the edit/submit page
+        //      cannot shadow the student's actual content.
         if !requestedSubmissionID.isEmpty {
             let notebookData = try await notebookDataForHistorySelection(
                 req: req,
@@ -55,14 +63,43 @@ extension WebRoutes {
                 setupID: setupID,
                 userID: userID
             )
+            let submissionRelativePath = "users/\(userSlug)/\(setupID)/view-\(requestedSubmissionID).ipynb"
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
                 setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
-                overwriteWith: notebookData
+                relativePath: submissionRelativePath,
+                overwriteWith: notebookData   // always overwrite — we want the exact submission
             )
-        } else if fileKind == .solution {
+            let encodedPath = submissionRelativePath
+                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+                ?? submissionRelativePath
+            let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
+            let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
+            let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
+            let manifestGradingMode: String = {
+                let data = Data(setup.manifest.utf8)
+                guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+                    return GradingMode.browser.rawValue
+                }
+                return manifest.gradingMode.rawValue
+            }()
+            return try await req.view.render("notebook",
+                NotebookContext(
+                    testSetupID: setupID,
+                    assignmentTitle: assignmentTitle,
+                    notebookURL: notebookURL,
+                    jupyterLiteEditorURL: editorURL,
+                    downloadURL: nil,           // download link lives on the submission page
+                    gradingMode: manifestGradingMode,
+                    showSubmit: false,          // read-only view
+                    currentUser: req.currentUserContext
+                ))
+        }
+
+        // --- Normal assignment / solution view ---
+        if fileKind == .solution {
             let solutionData = try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
@@ -81,26 +118,19 @@ extension WebRoutes {
             )
         }
         let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
-        let encodedPath = jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryAllowed)
+        let encodedPath = jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
             ?? jupyterLiteNotebookPath
-        let userSlug = userID.uuidString.lowercased()
         let workspaceID = "\(setupID)-\(userSlug)-\(fileKind.rawValue)"
         let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
-        let notebookURL = {
-            switch fileKind {
-            case .assignment:
-                return "/testsetups/\(setupID)/notebook/source"
-            case .solution:
-                return "/testsetups/\(setupID)/notebook/source?file=solution"
-            }
-        }()
+        let notebookURL = switch fileKind {
+            case .assignment: "/testsetups/\(setupID)/notebook/source"
+            case .solution:   "/testsetups/\(setupID)/notebook/source?file=solution"
+        }
         let downloadURL: String? = {
             guard let assignment else { return nil }
-            switch fileKind {
-            case .assignment:
-                return "/api/v1/testsetups/\(setupID)/assignment/download"
-            case .solution:
-                return "/instructor/\(assignment.publicID)/files/solution"
+            return switch fileKind {
+                case .assignment: "/api/v1/testsetups/\(setupID)/assignment/download"
+                case .solution:   "/instructor/\(assignment.publicID)/files/solution"
             }
         }()
 
@@ -133,6 +163,7 @@ extension WebRoutes {
     func notebookSource(req: Request) async throws -> Response {
         struct NotebookSourceQuery: Content {
             var file: String?
+            var submissionID: String?
         }
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else { throw Abort(.unauthorized) }
@@ -146,6 +177,24 @@ extension WebRoutes {
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
 
         let query = try req.query.decode(NotebookSourceQuery.self)
+
+        // When serving a submission view, read from the submission-specific
+        // working copy path that notebookPage already wrote to disk.
+        if let submissionID = query.submissionID, !submissionID.isEmpty {
+            let userSlug = userID.uuidString.lowercased()
+            let relativePath = "users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
+            let payload = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setupID,
+                userID: userID,
+                fallbackSetup: setup,
+                relativePath: relativePath
+            )
+            var headers = HTTPHeaders()
+            headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
+            return Response(status: .ok, headers: headers, body: .init(data: payload))
+        }
+
         let fileKind = notebookFileKind(from: query.file)
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
