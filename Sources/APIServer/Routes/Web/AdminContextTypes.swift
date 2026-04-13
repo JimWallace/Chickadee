@@ -61,6 +61,7 @@ struct AdminRunnerSummary: Encodable {
 struct AdminRunnerJobRow: Encodable {
     let submissionID: String
     let assignmentID: String?
+    let username: String?
     let finalStatus: String
     let queueWaitMs: Int?
     let executionMs: Int?
@@ -68,18 +69,9 @@ struct AdminRunnerJobRow: Encodable {
     let queueWaitFormatted: String?
     let executionFormatted: String?
     let overheadFormatted: String?
-    let stageBreakdownFormatted: String?
     let totalProcessingMs: Int?
     let totalProcessingFormatted: String?
     let completedAt: String?
-    let testsPassed: Int
-    let testsFailed: Int
-    let testsErrored: Int
-    let testsTimedOut: Int
-    let skippedCount: Int
-    var testsTotal: Int {
-        testsPassed + testsFailed + testsErrored + testsTimedOut + skippedCount
-    }
 }
 
 struct AdminRunnerSnapshotRow: Encodable {
@@ -89,7 +81,6 @@ struct AdminRunnerSnapshotRow: Encodable {
     let activeJobsLabel: String
     let utilizationPercent: Int
     let lastPollAt: String?
-    let lastHeartbeatAt: String?
 }
 
 struct AdminContext: Encodable {
@@ -135,6 +126,7 @@ struct AdminRunnerDetailContext: Encodable {
     let summary: AdminRunnerSummary
     let recentJobs: [AdminRunnerJobRow]
     let snapshots: [AdminRunnerSnapshotRow]
+    let firstSeenAt: String?
 }
 
 struct AdminCourseEnrolledUserRow: Encodable {

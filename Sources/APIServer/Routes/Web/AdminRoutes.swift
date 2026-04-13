@@ -188,6 +188,23 @@ struct AdminRoutes: RouteCollection {
             .limit(50)
             .all()
 
+        // Batch-fetch usernames for all distinct user IDs in recent jobs.
+        let userIDs = Array(Set(recentJobs.compactMap { $0.userID }))
+        let users = userIDs.isEmpty ? [] : try await APIUser.query(on: req.db)
+            .filter(\.$id ~~ userIDs)
+            .all()
+        let usernameByID: [UUID: String] = Dictionary(uniqueKeysWithValues: users.compactMap {
+            guard let id = $0.id else { return nil }
+            return (id, $0.username)
+        })
+
+        // Earliest snapshot for this runner tells us how long it's been online.
+        let firstSnapshot = try await RunnerSnapshot.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$recordedAt, .ascending)
+            .first()
+        let firstSeenAt = firstSnapshot.map { iso8601String($0.recordedAt) }
+
         var statusCounts: [String: Int] = [:]
         for job in recentJobs {
             guard let status = job.finalStatus else { continue }
@@ -204,8 +221,7 @@ struct AdminRoutes: RouteCollection {
                 maxJobs: $0.maxJobs,
                 activeJobsLabel: "\($0.activeJobs) / \($0.maxJobs)",
                 utilizationPercent: utilizationPercent,
-                lastPollAt: $0.lastPollAt.map(iso8601String),
-                lastHeartbeatAt: $0.lastHeartbeatAt.map(iso8601String)
+                lastPollAt: $0.lastPollAt.map(iso8601String)
             )
         }
 
@@ -215,6 +231,7 @@ struct AdminRoutes: RouteCollection {
             AdminRunnerJobRow(
                 submissionID: $0.submissionID,
                 assignmentID: $0.assignmentID?.uuidString,
+                username: $0.userID.flatMap { usernameByID[$0] },
                 finalStatus: $0.finalStatus ?? "unknown",
                 queueWaitMs: $0.queueWaitMs,
                 executionMs: $0.executionMs,
@@ -222,15 +239,9 @@ struct AdminRoutes: RouteCollection {
                 queueWaitFormatted: $0.queueWaitMs.map(formatMs),
                 executionFormatted: $0.executionMs.map(formatMs),
                 overheadFormatted: overheadMs(for: $0).map(formatMs),
-                stageBreakdownFormatted: stageBreakdown(for: $0)?.formatted,
                 totalProcessingMs: $0.totalProcessingMs,
                 totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
-                completedAt: $0.completedAt.map(iso8601String),
-                testsPassed: $0.testsPassed ?? 0,
-                testsFailed: $0.testsFailed ?? 0,
-                testsErrored: $0.testsErrored ?? 0,
-                testsTimedOut: $0.testsTimedOut ?? 0,
-                skippedCount: $0.skippedCount ?? 0
+                completedAt: $0.completedAt.map(iso8601String)
             )
         }
 
@@ -270,7 +281,8 @@ struct AdminRoutes: RouteCollection {
             tags: tags,
             summary: summary,
             recentJobs: jobRows,
-            snapshots: snapshotRows
+            snapshots: snapshotRows,
+            firstSeenAt: firstSeenAt
         ))
     }
 
