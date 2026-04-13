@@ -350,6 +350,13 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
         """
     }
 
+    private func makeTempCacheRoot(named prefix: String) throws -> URL {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+        return path
+    }
+
     private func makeZip(at zipPath: String, files: [(path: String, contents: String)]) throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-zip-\(UUID().uuidString)", isDirectory: true)
@@ -553,6 +560,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             .appendingPathComponent("worker-daemon-report-failure-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-report-failure-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
         let server = try StaticFileServer(directory: root)
         defer { server.stop() }
@@ -576,7 +585,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             workerSecret: "secret",
             maxConcurrentJobs: 1,
             runnerProfile: nil,
-            downloadRetryPolicy: fastRetryPolicy
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
         )
 
         let task = Task {
@@ -615,6 +625,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             .appendingPathComponent("worker-daemon-next-job-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-next-job-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
         let server = try StaticFileServer(directory: root)
         defer { server.stop() }
@@ -639,7 +651,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             workerSecret: "secret",
             maxConcurrentJobs: 1,
             runnerProfile: nil,
-            downloadRetryPolicy: fastRetryPolicy
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
         )
 
         let task = Task {
@@ -679,6 +692,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             .appendingPathComponent("worker-daemon-json-footer-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-json-footer-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
         let server = try StaticFileServer(directory: root)
         defer { server.stop() }
@@ -709,7 +724,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
             workerSecret: "secret",
             maxConcurrentJobs: 1,
             runnerProfile: nil,
-            downloadRetryPolicy: fastRetryPolicy
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
         )
 
         let task = Task { try await daemon.run() }

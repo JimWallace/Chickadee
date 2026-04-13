@@ -760,7 +760,7 @@ final class AssignmentRoutesTests: XCTestCase {
             XCTAssertEqual(res.status, .ok)
             let body = res.body.string
             XCTAssertFalse(body.contains("<th>Test?</th>"))
-            XCTAssertTrue(body.contains("Visibility"))   // new column header (was "Tier")
+            XCTAssertTrue(body.contains("<th>Tier</th>"))
             XCTAssertTrue(body.contains("support"))
         })
     }
