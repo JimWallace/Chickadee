@@ -1439,7 +1439,12 @@ extension OperationalDiagnosticsService {
     func workerModeTestSetupIDs(for testSetupIDs: [String], on db: Database) async throws -> Set<String> {
         var result: Set<String> = []
         for testSetupID in Set(testSetupIDs) {
-            guard (try await APITestSetup.find(testSetupID, on: db)) != nil else { continue }
+            guard let setup = try await APITestSetup.find(testSetupID, on: db) else { continue }
+            let manifest = try? JSONDecoder().decode(
+                TestProperties.self, from: Data(setup.manifest.utf8))
+            // Browser-graded setups are processed by the in-browser Pyodide runner,
+            // not the native worker. Exclude them from the worker queue depth metric.
+            guard manifest?.gradingMode != .browser else { continue }
             result.insert(testSetupID)
         }
         return result
