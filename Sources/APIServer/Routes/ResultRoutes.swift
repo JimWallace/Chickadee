@@ -70,6 +70,25 @@ struct ResultRoutes: RouteCollection {
                     req.logger.info("Validation \(status) for assignment '\(assignment.title)' (submission \(submission.id!))")
                 }
             }
+
+            // Award class-wide badges when a student submission earns 100%.
+            if submission.kind == APISubmission.Kind.student,
+               collection.buildStatus == .passed,
+               let userID = submission.userID,
+               let subID  = submission.id
+            {
+                let grade = gradePercent(from: collection) ?? 0
+                if grade == 100 {
+                    try await awardClassBadgesFor100Percent(
+                        testSetupID:     submission.testSetupID,
+                        userID:          userID,
+                        submissionID:    subID,
+                        executionTimeMs: collection.executionTimeMs,
+                        attemptNumber:   submission.attemptNumber ?? 1,
+                        on: req.db
+                    )
+                }
+            }
         }
 
         return ReportResponse(received: true)

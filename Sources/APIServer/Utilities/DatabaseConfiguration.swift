@@ -198,5 +198,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateAssignmentRequirements())
     app.migrations.add(AddSubmissionRetestedAt())
     app.migrations.add(AddAssignmentDeadlineOverrideActive())
+    app.migrations.add(CreateClassAchievements())
     app.migrations.add(SessionRecord.migration)
 }

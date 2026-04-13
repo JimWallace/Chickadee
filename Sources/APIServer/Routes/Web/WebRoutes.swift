@@ -185,10 +185,30 @@ struct WebRoutes: RouteCollection {
                               let gradePercent = gradePercent(from: collection) else {
                             continue
                         }
-                        latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(
-                            attemptNumber: latestSubmission.attemptNumber ?? 1,
-                            gradePercent: gradePercent
-                        )
+                        let latestAttempt = latestSubmission.attemptNumber ?? 1
+                        let priorSub = grouped[setupID]?.first(where: { $0.attemptNumber == latestAttempt - 1 })
+                        let priorGradePercent: Int? = priorSub.flatMap { ps in
+                            guard let psID = ps.id,
+                                  let pr = preferredResultBySubmissionID[psID] else { return nil }
+                            return gradePercentFromCollectionJSON(pr.collectionJSON)
+                        }
+                        latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(BadgeContext(
+                            attemptNumber:     latestAttempt,
+                            gradePercent:      gradePercent,
+                            executionTimeMs:   collection.executionTimeMs,
+                            priorGradePercent: priorGradePercent
+                        ))
+                    }
+
+                    // Batch-query class-wide badges this user currently holds across all setups.
+                    let classAchievements = try await APIClassAchievement.query(on: req.db)
+                        .filter(\.$userID == userID)
+                        .filter(\.$testSetupID ~~ setupIDs)
+                        .all()
+                    for ach in classAchievements {
+                        if let badge = AchievementBadge.forClassAchievement(ach.achievementID) {
+                            latestBadgesBySetupID[ach.testSetupID, default: []].append(badge)
+                        }
                     }
                 }
             }
