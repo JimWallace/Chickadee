@@ -253,15 +253,19 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         try await enroll(user)
 
         let setupID = "setup_nb_history"
+        let submissionID = "sub_nb_history"
         _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
         _ = try await insertNotebookSubmission(
-            id: "sub_nb_history",
+            id: submissionID,
             testSetupID: setupID,
             userID: userID,
             notebookJSON: notebookJSON(markdown: "History selection"),
             attemptNumber: 2
         )
 
+        // Plant a stale working copy at the regular assignment path.
+        // With the fix, viewing a submission must NOT overwrite this file —
+        // the submission is written to a separate view-{submissionID}.ipynb path.
         let staleCopyPath = workingCopyPath(setupID: setupID, userID: userID)
         try FileManager.default.createDirectory(
             atPath: (staleCopyPath as NSString).deletingLastPathComponent,
@@ -271,15 +275,21 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             .data(using: .utf8)!
             .write(to: URL(fileURLWithPath: staleCopyPath))
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_history", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=\(submissionID)", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
         })
 
-        let restored = try String(contentsOfFile: staleCopyPath, encoding: .utf8)
-        XCTAssertTrue(restored.contains("History selection"))
-        XCTAssertFalse(restored.contains("Stale working copy"))
+        // The submission-specific view file should contain the student's content.
+        let userSlug = userID.uuidString.lowercased()
+        let viewPath = publicDir + "jupyterlite/files/users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
+        let viewContent = try String(contentsOfFile: viewPath, encoding: .utf8)
+        XCTAssertTrue(viewContent.contains("History selection"), "view file should contain submission content")
+
+        // The regular working copy must be left untouched.
+        let staleCopyAfter = try String(contentsOfFile: staleCopyPath, encoding: .utf8)
+        XCTAssertTrue(staleCopyAfter.contains("Stale working copy"), "regular working copy must not be overwritten")
     }
 
     func testNotebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
