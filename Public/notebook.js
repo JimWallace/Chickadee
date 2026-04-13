@@ -26,6 +26,17 @@
 
     if (!frame || !setupID) return;
 
+    // Disable Submit until the student's notebook has been synced into the
+    // JupyterLite editor. This prevents a race condition where students click
+    // Submit before their work is loaded, causing a blank notebook to be
+    // submitted (the fallback path reads the starter template instead of
+    // their saved cells).
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.title = 'Loading notebook\u2026';
+    }
+    setStatus('loading', 'Loading notebook\u2026');
+
     // -------------------------------------------------------------------------
     // 1. Load JupyterLite in the iframe
     // -------------------------------------------------------------------------
@@ -74,6 +85,18 @@
             frameError.style.display = '';
         }
     }, 5000);
+
+    // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
+    // iframe never loaded) re-enable Submit so the student isn't stuck. The
+    // fallback submit path (server snapshot → DOM → contents API) will still
+    // attempt to find their work.
+    setTimeout(() => {
+        if (submitBtn && submitBtn.disabled) {
+            submitBtn.disabled = false;
+            submitBtn.title = '';
+            if (!serverSyncComplete) setStatus('', '');
+        }
+    }, 15000);
 
     // -------------------------------------------------------------------------
     // 2. Submit button — queue runner grading
@@ -357,6 +380,13 @@
             // Retry on the next load tick if synchronization fails.
         } finally {
             serverSyncInFlight = false;
+            // Always re-enable Submit — either the sync loaded the student's
+            // saved work, or the fallback submit path will handle it.
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.title = '';
+            }
+            setStatus('', '');
         }
     }
 
