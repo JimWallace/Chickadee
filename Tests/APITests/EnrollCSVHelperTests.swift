@@ -3,124 +3,106 @@
 // Unit tests for parseUsernamesFromCSV — header detection, quote stripping,
 // encoding fallback, and edge cases.
 
-import XCTest
+import Testing
 @testable import chickadee_server
+import Fluent
 import Foundation
 
-final class EnrollCSVHelperTests: XCTestCase {
+@Suite struct EnrollCSVHelperTests {
 
     // MARK: - Basic parsing
 
-    func testSimpleOneColumnList() {
+    @Test func simpleOneColumnList() {
         let csv = "alice\nbob\ncharlie\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob", "charlie"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob", "charlie"])
     }
 
-    func testMultiColumnTakesFirstOnly() {
+    @Test func multiColumnTakesFirstOnly() {
         let csv = "alice,Alice Smith,alice@example.com\nbob,Bob Jones,bob@example.com\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
-    func testStripsQuotes() {
+    @Test func stripsQuotes() {
         let csv = "\"alice\"\n'bob'\n\"charlie\"\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob", "charlie"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob", "charlie"])
     }
 
-    func testStripsWhitespace() {
+    @Test func stripsWhitespace() {
         let csv = "  alice  \n  bob  \n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
-    func testSkipsBlankLines() {
+    @Test func skipsBlankLines() {
         let csv = "alice\n\n\nbob\n\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
     // MARK: - Header detection
 
-    func testSkipsUsernameHeader() {
+    @Test func skipsUsernameHeader() {
         let csv = "username\nalice\nbob\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
-    func testSkipsUserHeader() {
+    @Test func skipsUserHeader() {
         let csv = "User\nalice\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice"])
     }
 
-    func testSkipsStudentIdHeader() {
+    @Test func skipsStudentIdHeader() {
         let csv = "student_id\nalice\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice"])
     }
 
-    func testSkipsLoginIdHeader() {
+    @Test func skipsLoginIdHeader() {
         let csv = "\"login_id\",\"name\"\nalice,Alice\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice"])
     }
 
-    func testSkipsUserIdHeaderWithSpaces() {
+    @Test func skipsUserIdHeaderWithSpaces() {
         // "user id" → normalized to "userid" → matches
         let csv = "User ID\nalice\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice"])
     }
 
-    func testDoesNotSkipNonHeaderFirstRow() {
+    @Test func doesNotSkipNonHeaderFirstRow() {
         let csv = "alice\nbob\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
     // MARK: - Edge cases
 
-    func testEmptyData() {
-        let result = parseUsernamesFromCSV(Data())
-        XCTAssertTrue(result.isEmpty)
+    @Test func emptyData() {
+        #expect(parseUsernamesFromCSV(Data()).isEmpty)
     }
 
-    func testOnlyHeader() {
+    @Test func onlyHeader() {
         let csv = "username\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertTrue(result.isEmpty)
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)).isEmpty)
     }
 
-    func testOnlyBlankLines() {
+    @Test func onlyBlankLines() {
         let csv = "\n\n\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertTrue(result.isEmpty)
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)).isEmpty)
     }
 
-    func testISOLatin1Fallback() throws {
-        // swift-corelibs-foundation on Linux does not support .isoLatin1 encoding
-        // (String(data:encoding:.isoLatin1) always returns nil), so both the
-        // production fallback and this test are macOS-only.
-        #if !os(Linux)
+    // swift-corelibs-foundation on Linux does not support .isoLatin1 encoding
+    // (String(data:encoding:.isoLatin1) always returns nil), so this test is macOS-only.
+    #if !os(Linux)
+    @Test func isoLatin1Fallback() {
         // Build the bytes manually: "José,Eng\nAlice,Sci\n" in ISO-8859-1.
         let bytes: [UInt8] = [
             0x4A, 0x6F, 0x73, 0xE9, 0x2C, 0x45, 0x6E, 0x67, 0x0A,  // José,Eng\n
             0x41, 0x6C, 0x69, 0x63, 0x65, 0x2C, 0x53, 0x63, 0x69, 0x0A  // Alice,Sci\n
         ]
-        let data = Data(bytes)
-        let result = parseUsernamesFromCSV(data)
-        XCTAssertTrue(result.contains("Alice"), "Expected 'Alice' in results: \(result)")
-        XCTAssertGreaterThanOrEqual(result.count, 1)
-        #else
-        throw XCTSkip("isoLatin1 encoding not supported on Linux Foundation")
-        #endif
+        let result = parseUsernamesFromCSV(Data(bytes))
+        #expect(result.contains("Alice"), "Expected 'Alice' in results: \(result)")
+        #expect(result.count >= 1)
     }
+    #endif
 
-    func testWindowsLineEndings() {
+    @Test func windowsLineEndings() {
         let csv = "alice\r\nbob\r\ncharlie\r\n"
-        let result = parseUsernamesFromCSV(Data(csv.utf8))
-        XCTAssertEqual(result, ["alice", "bob", "charlie"])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob", "charlie"])
     }
 }

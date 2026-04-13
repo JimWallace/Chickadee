@@ -36,6 +36,7 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
 
         // Decode the TestOutcomeCollection the browser sent.
         let decoder = JSONDecoder()
@@ -57,7 +58,13 @@ struct BrowserResultRoutes: RouteCollection {
         let subsDir        = req.application.submissionsDirectory
         let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
         let nbPath         = subsDir + "\(subID).ipynb"
-        let instructorData = (try? notebookData(for: setup)) ?? body.notebook
+        let instructorData: Data
+        do {
+            instructorData = try notebookData(for: setup)
+        } catch {
+            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            instructorData = body.notebook
+        }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
@@ -113,13 +120,26 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
+
+        let manifestData = Data(setup.manifest.utf8)
+        if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),
+           manifest.gradingMode == .browser {
+            throw Abort(.badRequest, reason: "Browser-graded assignments must be submitted through the browser runner.")
+        }
 
         let subsDir = req.application.submissionsDirectory
         let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
         let nbPath  = subsDir + "\(subID).ipynb"
 
         // Always merge with canonical instructor notebook so hidden tests are present.
-        let instructorData = (try? notebookData(for: setup)) ?? body.notebook
+        let instructorData: Data
+        do {
+            instructorData = try notebookData(for: setup)
+        } catch {
+            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            instructorData = body.notebook
+        }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
@@ -145,7 +165,6 @@ struct BrowserResultRoutes: RouteCollection {
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
         // (WorkerJobRoutes filters out browser-mode submissions).
-        let manifestData = Data(setup.manifest.utf8)
         let isWorkerMode = (try? JSONDecoder().decode(TestProperties.self, from: manifestData))
             .map { $0.gradingMode == .worker } ?? true
         if isWorkerMode {

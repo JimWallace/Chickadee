@@ -19,6 +19,7 @@ struct AdminRoutes: RouteCollection {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
         admin.get("runners", use: runners)
+        admin.get("runners", ":runnerID", use: runnerDetail)
         admin.get("workers", use: workers)
         admin.post("users", ":userID", "role", use: changeRole)
         admin.post("runner-secret", use: updateWorkerSecret)
@@ -44,8 +45,27 @@ struct AdminRoutes: RouteCollection {
     @Sendable
     func dashboard(req: Request) async throws -> View {
         let users = try await APIUser.query(on: req.db)
-            .sort(\.$createdAt)
             .all()
+            .sorted { lhs, rhs in
+                switch (lhs.lastLoginAt, rhs.lastLoginAt) {
+                case let (l?, r?):
+                    if l != r { return l > r }
+                case (.some, nil):
+                    return true
+                case (nil, .some):
+                    return false
+                case (nil, nil):
+                    break
+                }
+
+                if lhs.username != rhs.username {
+                    return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
+                }
+
+                let lhsCreated = lhs.createdAt ?? .distantPast
+                let rhsCreated = rhs.createdAt ?? .distantPast
+                return lhsCreated < rhsCreated
+            }
 
         let userRows = users.map { u in
             AdminUserRow(
@@ -62,12 +82,12 @@ struct AdminRoutes: RouteCollection {
         let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
         let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
 
-        // Course management data.
-        let allCourses = try await APICourse.query(on: req.db)
-            .sort(\.$createdAt)
-            .all()
-        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
-        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
+        // Course management data — all three queries are independent so run in parallel.
+        async let coursesFetch      = APICourse.query(on: req.db).sort(\.$createdAt).all()
+        async let enrollmentsFetch  = enrollmentCountsByCourse(on: req.db)
+        async let assignmentsFetch  = assignmentCountsByCourse(on: req.db)
+        let (allCourses, enrollmentCounts, assignmentCounts) =
+            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
             guard let id = course.id else { return nil }
             return AdminCourseRow(
@@ -106,6 +126,164 @@ struct AdminRoutes: RouteCollection {
     @Sendable
     func workers(req: Request) async throws -> [AdminWorkerRow] {
         try await makeWorkerRows(req: req)
+    }
+
+    // MARK: - GET /admin/runners/:runnerID
+
+    @Sendable
+    func runnerDetail(req: Request) async throws -> View {
+        guard let runnerID = req.parameters.get("runnerID"), !runnerID.isEmpty else {
+            throw Abort(.notFound)
+        }
+
+        let workerRows = try await makeWorkerRows(req: req)
+        let worker: AdminWorkerRow
+        if let found = workerRows.first(where: { $0.workerID == runnerID }) {
+            worker = found
+        } else {
+            // Runner was pruned from the in-memory store (offline >60 min).
+            // Reconstruct a minimal row from the most recent DB snapshot so
+            // the detail page can still render historical data instead of 404.
+            guard let latestSnapshot = try await RunnerSnapshot.query(on: req.db)
+                .filter(\.$runnerID == runnerID)
+                .sort(\.$recordedAt, .descending)
+                .first()
+            else {
+                throw Abort(.notFound)
+            }
+            let iso = ISO8601DateFormatter()
+            let processedCount = try await APISubmission.query(on: req.db)
+                .filter(\.$workerID == runnerID)
+                .filter(\.$status ~~ ["complete", "failed"])
+                .count()
+            let avgData = try? await req.application.diagnostics.rollingAverages(
+                for: [runnerID], sampleSize: 50, on: req.db
+            )
+            let avg = avgData?[runnerID]
+            worker = AdminWorkerRow(
+                workerID: runnerID,
+                hostname: latestSnapshot.hostname ?? "",
+                runnerVersion: latestSnapshot.runnerVersion ?? "",
+                maxConcurrentJobs: latestSnapshot.maxJobs,
+                lastActive: iso.string(from: latestSnapshot.recordedAt),
+                assignedJobs: 0,
+                jobsProcessed: processedCount,
+                avgExecutionMs: avg?.avgExecutionMs,
+                avgQueueWaitMs: avg?.avgQueueWaitMs,
+                avgExecutionFormatted: avg?.avgExecutionMs.map(formatMs),
+                avgQueueWaitFormatted: avg?.avgQueueWaitMs.map(formatMs)
+            )
+        }
+        let runnerProfile = try? await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
+
+        let snapshots = try await RunnerSnapshot.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$recordedAt, .descending)
+            .limit(50)
+            .all()
+
+        let recentJobs = try await JobExecutionMetric.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$completedAt, .descending)
+            .limit(50)
+            .all()
+
+        // Batch-fetch usernames for all distinct user IDs in recent jobs.
+        let userIDs = Array(Set(recentJobs.compactMap { $0.userID }))
+        let users = userIDs.isEmpty ? [] : try await APIUser.query(on: req.db)
+            .filter(\.$id ~~ userIDs)
+            .all()
+        let usernameByID: [UUID: String] = Dictionary(uniqueKeysWithValues: users.compactMap {
+            guard let id = $0.id else { return nil }
+            return (id, $0.username)
+        })
+
+        // Earliest snapshot for this runner tells us how long it's been online.
+        let firstSnapshot = try await RunnerSnapshot.query(on: req.db)
+            .filter(\.$runnerID == runnerID)
+            .sort(\.$recordedAt, .ascending)
+            .first()
+        let firstSeenAt = firstSnapshot.map { iso8601String($0.recordedAt) }
+
+        var statusCounts: [String: Int] = [:]
+        for job in recentJobs {
+            guard let status = job.finalStatus else { continue }
+            statusCounts[status, default: 0] += 1
+        }
+
+        let snapshotRows = snapshots.map {
+            let utilizationPercent = $0.maxJobs > 0
+                ? Int((Double($0.activeJobs) / Double($0.maxJobs) * 100).rounded())
+                : 0
+            return AdminRunnerSnapshotRow(
+                recordedAt: iso8601String($0.recordedAt),
+                activeJobs: $0.activeJobs,
+                maxJobs: $0.maxJobs,
+                activeJobsLabel: "\($0.activeJobs) / \($0.maxJobs)",
+                utilizationPercent: utilizationPercent,
+                lastPollAt: $0.lastPollAt.map(iso8601String)
+            )
+        }
+
+        let overheadSamples = recentJobs.compactMap { overheadMs(for: $0) }
+        let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
+        let jobRows = recentJobs.map {
+            AdminRunnerJobRow(
+                submissionID: $0.submissionID,
+                assignmentID: $0.assignmentID?.uuidString,
+                username: $0.userID.flatMap { usernameByID[$0] },
+                finalStatus: $0.finalStatus ?? "unknown",
+                queueWaitMs: $0.queueWaitMs,
+                executionMs: $0.executionMs,
+                overheadMs: overheadMs(for: $0),
+                queueWaitFormatted: $0.queueWaitMs.map(formatMs),
+                executionFormatted: $0.executionMs.map(formatMs),
+                overheadFormatted: overheadMs(for: $0).map(formatMs),
+                totalProcessingMs: $0.totalProcessingMs,
+                totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
+                completedAt: $0.completedAt.map(iso8601String)
+            )
+        }
+
+        let summary = AdminRunnerSummary(
+            activeJobs: worker.assignedJobs,
+            maxJobs: worker.maxConcurrentJobs,
+            jobsProcessed: worker.jobsProcessed,
+            avgExecutionFormatted: worker.avgExecutionFormatted,
+            avgQueueWaitFormatted: worker.avgQueueWaitFormatted,
+            avgOverheadFormatted: average(overheadSamples).map(formatMs),
+            avgCacheAcquireFormatted: average(stageBreakdowns.compactMap { $0?.cacheAcquireMs }).map(formatMs),
+            avgDownloadFormatted: average(stageBreakdowns.compactMap { $0?.downloadMs }).map(formatMs),
+            avgPrepFormatted: average(stageBreakdowns.compactMap { $0?.prepMs }).map(formatMs),
+            passedCount: statusCounts["passed", default: 0],
+            failedCount: statusCounts["failed", default: 0],
+            errorCount: statusCounts["error", default: 0],
+            timeoutCount: statusCounts["timeout", default: 0]
+        )
+
+        let tags: [String] = {
+            guard let profile = runnerProfile?.capabilityProfile else { return [] }
+            var values: [String] = []
+            if !profile.platform.isEmpty {
+                values.append(profile.platform)
+            }
+            if !profile.architecture.isEmpty {
+                values.append(profile.architecture)
+            }
+            values.append(contentsOf: profile.languageVersions.map { "\($0.language) \($0.version)" })
+            values.append(contentsOf: profile.capabilities.map(\.name))
+            return values
+        }()
+
+        return try await req.view.render("admin-runner", AdminRunnerDetailContext(
+            currentUser: req.currentUserContext,
+            runner: worker,
+            tags: tags,
+            summary: summary,
+            recentJobs: jobRows,
+            snapshots: snapshotRows,
+            firstSeenAt: firstSeenAt
+        ))
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -174,288 +352,6 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
-    // MARK: - GET /admin/courses/new
-
-    @Sendable
-    func newCourseForm(req: Request) async throws -> View {
-        let emptyCourse = AdminCourseRow(
-            id:              "",
-            code:            "",
-            name:            "",
-            isArchived:      false,
-            enrollmentMode:  CourseEnrollmentMode.open.rawValue,
-            enrollmentCount: 0,
-            assignmentCount: 0,
-            createdAt:       ""
-        )
-        return try await req.view.render("admin-course", AdminCourseDetailContext(
-            currentUser:   req.currentUserContext,
-            course:        emptyCourse,
-            enrolledUsers: [],
-            assignments:   [],
-            isNew:         true,
-            error:         req.query[String.self, at: "error"]
-        ))
-    }
-
-    // MARK: - POST /admin/courses
-
-    @Sendable
-    func createCourse(req: Request) async throws -> Response {
-        struct CourseBody: Content {
-            var code: String
-            var name: String
-        }
-        let body = try req.content.decode(CourseBody.self)
-        let code = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty, !name.isEmpty else {
-            return req.redirect(to: "/admin/courses/new?error=course_fields_required")
-        }
-        let course = APICourse(code: code, name: name)
-        try await course.save(on: req.db)
-        let id = try course.requireID().uuidString
-        return req.redirect(to: "/admin/courses/\(id)")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/archive
-
-    @Sendable
-    func toggleCourseArchive(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-        course.isArchived.toggle()
-        try await course.save(on: req.db)
-        return req.redirect(to: "/admin/courses/\(idString)")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/enrollment-mode
-
-    @Sendable
-    func setEnrollmentMode(req: Request) async throws -> Response {
-        struct Body: Content { var enrollmentMode: String? }
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-        let body = try? req.content.decode(Body.self)
-        course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
-        try await course.save(on: req.db)
-        return req.redirect(to: "/admin/courses/\(idString)")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/copy
-
-    @Sendable
-    func copyCourse(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let source   = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        let sourceID  = try source.requireID()
-        let newCode   = try await uniqueCopyCode(base: source.code, db: req.db)
-        let setupsDir = req.application.testSetupsDirectory
-
-        // Load source data before the transaction (read-only queries).
-        let setups = try await APITestSetup.query(on: req.db)
-            .filter(\.$courseID == sourceID)
-            .all()
-        let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == sourceID)
-            .sort(\.$sortOrder)
-            .all()
-
-        let newCourseID = try await req.db.transaction { db -> UUID in
-            // 1. Create the new course.
-            let newCourse = APICourse(code: newCode, name: "\(source.name) (Copy)")
-            try await newCourse.save(on: db)
-            let newCourseID = try newCourse.requireID()
-
-            // 2. Copy each test setup (zip + optional notebook) to a new ID.
-            var setupIDMap: [String: String] = [:]
-            for setup in setups {
-                guard let oldID = setup.id else { continue }
-                let newID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-                setupIDMap[oldID] = newID
-
-                let srcZip = URL(fileURLWithPath: setupsDir + "\(oldID).zip")
-                let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
-                try FileManager.default.copyItem(at: srcZip, to: dstZip)
-
-                var newNotebookPath: String? = nil
-                if setup.notebookPath != nil {
-                    let srcNb = URL(fileURLWithPath: setupsDir + "\(oldID).ipynb")
-                    if FileManager.default.fileExists(atPath: srcNb.path) {
-                        let dstNb = URL(fileURLWithPath: setupsDir + "\(newID).ipynb")
-                        try FileManager.default.copyItem(at: srcNb, to: dstNb)
-                        newNotebookPath = dstNb.path
-                    }
-                }
-
-                let newSetup = APITestSetup(
-                    id:           newID,
-                    manifest:     setup.manifest,
-                    zipPath:      dstZip.path,
-                    notebookPath: newNotebookPath,
-                    courseID:     newCourseID
-                )
-                try await newSetup.save(on: db)
-            }
-
-            // 3. Copy each assignment, remapping to the new test setup IDs.
-            //    Validation state is reset so the instructor re-validates before opening.
-            for (idx, a) in assignments.enumerated() {
-                guard let newSetupID = setupIDMap[a.testSetupID] else { continue }
-                let newAssignment = APIAssignment(
-                    testSetupID:          newSetupID,
-                    title:                a.title,
-                    dueAt:                a.dueAt,
-                    isOpen:               false,
-                    sortOrder:            a.sortOrder ?? idx,
-                    validationStatus:     nil,
-                    validationSubmissionID: nil,
-                    courseID:             newCourseID
-                )
-                try await newAssignment.save(on: db)
-            }
-
-            return newCourseID
-        }
-
-        req.logger.info("Admin copied course \(source.code) → \(newCode) (new ID: \(newCourseID))")
-        return req.redirect(to: "/admin/courses/\(newCourseID.uuidString)")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/delete
-
-    @Sendable
-    func deleteCourse(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
-        else { throw Abort(.notFound) }
-        guard course.isArchived else {
-            throw Abort(.badRequest, reason: "Only archived courses can be deleted.")
-        }
-
-        let setupsDir = req.application.testSetupsDirectory
-
-        try await req.db.transaction { db in
-            // 1. Test setups for this course.
-            let setups = try await APITestSetup.query(on: db)
-                .filter(\.$courseID == courseID).all()
-            let setupIDs = setups.compactMap { $0.id }
-
-            // 2. Submissions → results → delete.
-            let submissions = try await APISubmission.query(on: db)
-                .filter(\.$testSetupID ~~ setupIDs).all()
-            let subIDs = submissions.compactMap { $0.id }
-            if !subIDs.isEmpty {
-                try await APIResult.query(on: db)
-                    .filter(\.$submissionID ~~ subIDs).delete()
-            }
-
-            // 3. Delete submission zip files then submission records.
-            for sub in submissions {
-                try? FileManager.default.removeItem(atPath: sub.zipPath)
-            }
-            if !setupIDs.isEmpty {
-                try await APISubmission.query(on: db)
-                    .filter(\.$testSetupID ~~ setupIDs).delete()
-            }
-
-            // 4. Assignments.
-            try await APIAssignment.query(on: db)
-                .filter(\.$courseID == courseID).delete()
-
-            // 5. Test setup files then setup records.
-            for setup in setups {
-                guard let sid = setup.id else { continue }
-                try? FileManager.default.removeItem(atPath: setupsDir + "\(sid).zip")
-                try? FileManager.default.removeItem(atPath: setupsDir + "\(sid).ipynb")
-            }
-            try await APITestSetup.query(on: db)
-                .filter(\.$courseID == courseID).delete()
-
-            // 6. Enrollments then course record.
-            try await APICourseEnrollment.query(on: db)
-                .filter(\.$course.$id == courseID).delete()
-            try await course.delete(on: db)
-        }
-
-        req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
-        return req.redirect(to: "/admin")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/edit
-
-    @Sendable
-    func editCourse(req: Request) async throws -> Response {
-        struct EditCourseBody: Content { var code: String; var name: String }
-
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        let body = try req.content.decode(EditCourseBody.self)
-        let rawCode = body.code.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawName = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Fall back to the existing value if the field was submitted blank.
-        let code = rawCode.isEmpty ? course.code : rawCode
-        let name = rawName.isEmpty ? course.name : rawName
-
-        // Reject duplicate code (excluding this course itself).
-        let existing = try await APICourse.query(on: req.db)
-            .filter(\.$code == code)
-            .first()
-        if let existing, existing.id != courseID {
-            return req.redirect(to: "/admin/courses/\(idString)?error=code_taken")
-        }
-
-        course.code = code
-        course.name = name
-        try await course.save(on: req.db)
-        return req.redirect(to: "/admin/courses/\(idString)")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/unenroll/:userID
-
-    @Sendable
-    func unenrollUserFromCourse(req: Request) async throws -> Response {
-        guard
-            let courseIDString = req.parameters.get("courseID"),
-            let courseID       = UUID(uuidString: courseIDString),
-            let userIDString   = req.parameters.get("userID"),
-            let userID         = UUID(uuidString: userIDString)
-        else {
-            throw Abort(.badRequest)
-        }
-
-        try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .filter(\.$userID == userID)
-            .delete()
-
-        return req.redirect(to: "/admin/courses/\(courseIDString)")
-    }
-
     // MARK: - GET /admin/users/:userID
 
     @Sendable
@@ -503,221 +399,6 @@ struct AdminRoutes: RouteCollection {
         ))
     }
 
-    // MARK: - GET /admin/courses/:courseID
-
-    @Sendable
-    func courseDetail(req: Request) async throws -> View {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
-        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
-        let courseRow = AdminCourseRow(
-            id:              idString,
-            code:            course.code,
-            name:            course.name,
-            isArchived:      course.isArchived,
-            enrollmentMode:  course.enrollmentMode.rawValue,
-            enrollmentCount: enrollmentCounts[courseID] ?? 0,
-            assignmentCount: assignmentCounts[courseID] ?? 0,
-            createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
-        )
-
-        // Load enrollments for this course, then fetch the corresponding users.
-        let enrollments = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .all()
-
-        let enrolledUserIDs = enrollments.map { $0.userID }
-        let enrolledUsers: [AdminCourseEnrolledUserRow]
-        if enrolledUserIDs.isEmpty {
-            enrolledUsers = []
-        } else {
-            let users = try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ enrolledUserIDs)
-                .sort(\.$username)
-                .all()
-            enrolledUsers = users.compactMap { u in
-                guard let uid = u.id else { return nil }
-                return AdminCourseEnrolledUserRow(
-                    id:          uid.uuidString,
-                    username:    u.username,
-                    displayName: u.displayName,
-                    role:        u.role
-                )
-            }
-        }
-
-        // Load assignments for this course.
-        let assignmentModels = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .sort(\.$dueAt)
-            .all()
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .short
-        let assignments = assignmentModels.map { a in
-            AdminCourseAssignmentRow(
-                id:     a.publicID,
-                title:  a.title,
-                dueAt:  a.dueAt.map { df.string(from: $0) },
-                isOpen: a.isOpen
-            )
-        }
-
-        return try await req.view.render("admin-course", AdminCourseDetailContext(
-            currentUser:   req.currentUserContext,
-            course:        courseRow,
-            enrolledUsers: enrolledUsers,
-            assignments:   assignments,
-            isNew:         false,
-            error:         nil
-        ))
-    }
-
-    // MARK: - POST /admin/users/:userID/enroll
-
-    @Sendable
-    func adminEnrollUser(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("userID"),
-            let userID   = UUID(uuidString: idString),
-            let _        = try await APIUser.find(userID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        struct EnrollBody: Content { var courseID: String }
-        let body = try req.content.decode(EnrollBody.self)
-
-        guard
-            let courseID = UUID(uuidString: body.courseID),
-            let course   = try await APICourse.find(courseID, on: req.db),
-            !course.isArchived
-        else {
-            return req.redirect(to: "/admin/users/\(idString)?error=invalid_course")
-        }
-
-        let existing = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .count()
-
-        if existing == 0 {
-            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try await enrollment.save(on: req.db)
-        }
-
-        return req.redirect(to: "/admin/users/\(idString)")
-    }
-
-    // MARK: - POST /admin/users/:userID/unenroll/:courseID
-
-    @Sendable
-    func adminUnenrollUser(req: Request) async throws -> Response {
-        guard
-            let idString       = req.parameters.get("userID"),
-            let userID         = UUID(uuidString: idString),
-            let courseIDString = req.parameters.get("courseID"),
-            let courseID       = UUID(uuidString: courseIDString)
-        else {
-            throw Abort(.badRequest)
-        }
-
-        try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .delete()
-
-        return req.redirect(to: "/admin/users/\(idString)")
-    }
-
-    // MARK: - POST /admin/courses/:courseID/enroll-csv
-
-    @Sendable
-    func adminBulkEnrollCSV(req: Request) async throws -> View {
-        struct BulkEnrollForm: Content {
-            var file: Data
-        }
-
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db),
-            !course.isArchived
-        else {
-            throw Abort(.badRequest, reason: "Invalid or archived course.")
-        }
-
-        let form = try req.content.decode(BulkEnrollForm.self)
-
-        // Parse unique, non-empty usernames from the CSV (first column, header auto-skipped).
-        let rawUsernames = parseUsernamesFromCSV(form.file)
-        var seen = Set<String>()
-        let uniqueUsernames = rawUsernames.filter { seen.insert($0).inserted }
-
-        // Match against APIUser.username in-memory (simpler than a Fluent IN query).
-        let usernameSet = Set(uniqueUsernames)
-        let allUsers = try await APIUser.query(on: req.db).all()
-        let matchedUsers = allUsers.filter { usernameSet.contains($0.username) }
-
-        let matchedUsernameSet = Set(matchedUsers.map { $0.username })
-        let notFoundUsernames = uniqueUsernames
-            .filter { !matchedUsernameSet.contains($0) }
-            .sorted()
-
-        // Load existing enrollments for this course to detect already-enrolled users.
-        let existingEnrollments = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .all()
-        let alreadyEnrolledUserIDs = Set(existingEnrollments.map { $0.userID })
-
-        var enrolledCount = 0
-        var alreadyEnrolledCount = 0
-
-        for user in matchedUsers {
-            guard let userID = user.id else { continue }
-            if alreadyEnrolledUserIDs.contains(userID) {
-                alreadyEnrolledCount += 1
-            } else {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try await enrollment.save(on: req.db)
-                enrolledCount += 1
-            }
-        }
-
-        return try await req.view.render("admin-enroll-csv-result", EnrollCSVResultContext(
-            currentUser:          req.currentUserContext,
-            courseCode:           course.code,
-            courseName:           course.name,
-            enrolledCount:        enrolledCount,
-            alreadyEnrolledCount: alreadyEnrolledCount,
-            notFoundUsernames:    notFoundUsernames,
-            returnURL:            "/admin/courses/\(idString)"
-        ))
-    }
-
-}
-
-/// Returns a course code derived from `base` that doesn't already exist in the DB.
-/// Tries `{BASE}-COPY`, then `{BASE}-COPY-2` … `{BASE}-COPY-10`.
-private func uniqueCopyCode(base: String, db: Database) async throws -> String {
-    let first = "\(base)-COPY"
-    if try await APICourse.query(on: db).filter(\.$code == first).count() == 0 {
-        return first
-    }
-    for n in 2...10 {
-        let candidate = "\(base)-COPY-\(n)"
-        if try await APICourse.query(on: db).filter(\.$code == candidate).count() == 0 {
-            return candidate
-        }
-    }
-    throw Abort(.conflict, reason: "Could not generate a unique course code. Rename an existing copy first.")
 }
 
 private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
@@ -727,7 +408,6 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
 
     var assignedByWorkerID: [String: Int] = [:]
     var processedByWorkerID: [String: Int] = [:]
-
     for submission in submissions {
         guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
         if submission.status == "assigned" {
@@ -738,20 +418,131 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
         }
     }
 
+    // Fetch rolling averages (last 50 jobs per runner) via the diagnostics service.
+    let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
+    let averages = (try? await req.application.diagnostics.rollingAverages(
+        for: runnerIDs, sampleSize: 50, on: req.db
+    )) ?? [:]
+
     return workers.map { snapshot in
-        let assigned = assignedByWorkerID[snapshot.workerID, default: 0]
+        let assigned  = assignedByWorkerID[snapshot.workerID,  default: 0]
         let processed = processedByWorkerID[snapshot.workerID, default: 0]
+        let avg = averages[snapshot.workerID]
+        let avgExec = avg?.avgExecutionMs
+        let avgWait = avg?.avgQueueWaitMs
         return AdminWorkerRow(
-            workerID: snapshot.workerID,
-            lastActive: iso.string(from: snapshot.lastActive),
-            status: assigned > 0 ? "busy" : "idle",
-            assignedJobs: assigned,
-            jobsProcessed: processed
+            workerID:              snapshot.workerID,
+            hostname:              snapshot.hostname,
+            runnerVersion:         snapshot.runnerVersion,
+            maxConcurrentJobs:     snapshot.maxConcurrentJobs,
+            lastActive:            iso.string(from: snapshot.lastActive),
+            assignedJobs:          assigned,
+            jobsProcessed:         processed,
+            avgExecutionMs:        avgExec,
+            avgQueueWaitMs:        avgWait,
+            avgExecutionFormatted: avgExec.map(formatMs),
+            avgQueueWaitFormatted: avgWait.map(formatMs)
         )
+    }
+    .sorted { lhs, rhs in
+        let compare = lhs.workerID.localizedStandardCompare(rhs.workerID)
+        if compare == .orderedSame {
+            return lhs.hostname.localizedStandardCompare(rhs.hostname) == .orderedAscending
+        }
+        return compare == .orderedAscending
     }
 }
 
-private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+private func formatMs(_ ms: Int) -> String {
+    if ms < 1000 {
+        return "\(ms)ms"
+    }
+
+    let totalSeconds = ms / 1000
+    if totalSeconds < 60 {
+        return "\(totalSeconds)s"
+    }
+
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
+    let seconds = totalSeconds % 60
+
+    if hours > 0 {
+        if seconds == 0 {
+            return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
+        }
+        return "\(hours)h \(minutes)m"
+    }
+
+    return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s"
+}
+
+private func overheadMs(for metric: JobExecutionMetric) -> Int? {
+    guard
+        let total = metric.totalProcessingMs,
+        let queueWait = metric.queueWaitMs,
+        let execution = metric.executionMs
+    else {
+        return nil
+    }
+
+    return max(0, total - queueWait - execution)
+}
+
+private struct StageBreakdown {
+    let cacheAcquireMs: Int?
+    let downloadMs: Int?
+    let prepMs: Int?
+    let makeMs: Int?
+    let formatted: String?
+}
+
+private func stageBreakdown(for metric: JobExecutionMetric) -> StageBreakdown? {
+    let cacheAcquireMs = metric.testSetupAcquireMs
+    let downloadMs = metric.submissionDownloadMs
+    let prepMs = sum([
+        metric.workdirSetupMs,
+        metric.submissionDirSetupMs,
+        metric.submissionUnpackMs,
+        metric.starterCleanupMs,
+        metric.submissionPrepareMs,
+        metric.runtimeHelperSetupMs,
+    ])
+    let makeMs = metric.makeStepMs
+
+    let parts = [
+        cacheAcquireMs.map { "cache \(formatMs($0))" },
+        downloadMs.map { "dl \(formatMs($0))" },
+        prepMs.map { "prep \(formatMs($0))" },
+        makeMs.map { "make \(formatMs($0))" },
+    ].compactMap { $0 }
+
+    guard !parts.isEmpty else { return nil }
+    return StageBreakdown(
+        cacheAcquireMs: cacheAcquireMs,
+        downloadMs: downloadMs,
+        prepMs: prepMs,
+        makeMs: makeMs,
+        formatted: parts.joined(separator: " · ")
+    )
+}
+
+private func average(_ values: [Int]) -> Int? {
+    guard !values.isEmpty else { return nil }
+    return values.reduce(0, +) / values.count
+}
+
+private func sum(_ values: [Int?]) -> Int? {
+    let present = values.compactMap { $0 }
+    guard !present.isEmpty else { return nil }
+    return present.reduce(0, +)
+}
+
+private func iso8601String(_ date: Date) -> String {
+    ISO8601DateFormatter().string(from: date)
+}
+
+func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
     let enrollments = try await APICourseEnrollment.query(on: db).all()
     var counts: [UUID: Int] = [:]
     for e in enrollments {
@@ -760,7 +551,7 @@ private func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: In
     return counts
 }
 
-private func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
+func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
     let assignments = try await APIAssignment.query(on: db).all()
     var counts: [UUID: Int] = [:]
     for a in assignments {
@@ -768,84 +559,4 @@ private func assignmentCountsByCourse(on db: Database) async throws -> [UUID: In
         counts[cid, default: 0] += 1
     }
     return counts
-}
-
-// MARK: - View context types
-
-private struct AdminUserRow: Encodable {
-    let id: String
-    let displayName: String?
-    let username: String
-    let role: String
-    let createdAt: String
-    let lastLoginAt: String?
-}
-
-struct AdminWorkerRow: Content {
-    let workerID: String
-    let lastActive: String
-    let status: String
-    let assignedJobs: Int
-    let jobsProcessed: Int
-}
-
-private struct AdminCourseRow: Encodable {
-    let id: String
-    let code: String
-    let name: String
-    let isArchived: Bool
-    let enrollmentMode: String
-    let enrollmentCount: Int
-    let assignmentCount: Int
-    let createdAt: String
-}
-
-private struct AdminContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let users: [AdminUserRow]
-    let workers: [AdminWorkerRow]
-    let workerSecret: String
-    let localRunnerAutoStartEnabled: Bool
-    let courses: [AdminCourseRow]
-    let version: String
-}
-
-private struct AdminUserDetailContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let targetUserID: String
-    let displayName: String?
-    let username: String
-    let role: String
-    let enrolledCourses: [AdminUserCourseRow]
-    let availableCourses: [AdminUserCourseRow]
-}
-
-private struct AdminUserCourseRow: Encodable {
-    let id: String
-    let code: String
-    let name: String
-}
-
-private struct AdminCourseDetailContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let course: AdminCourseRow
-    let enrolledUsers: [AdminCourseEnrolledUserRow]
-    let assignments: [AdminCourseAssignmentRow]
-    let isNew: Bool
-    let error: String?
-    var assignmentCount: Int { assignments.count }
-}
-
-private struct AdminCourseEnrolledUserRow: Encodable {
-    let id: String
-    let username: String
-    let displayName: String?
-    let role: String
-}
-
-private struct AdminCourseAssignmentRow: Encodable {
-    let id: String      // publicID — used in /instructor/:id/... URLs
-    let title: String
-    let dueAt: String?
-    let isOpen: Bool
 }

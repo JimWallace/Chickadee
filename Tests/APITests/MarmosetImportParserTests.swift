@@ -2,31 +2,57 @@
 //
 // Unit tests for the MarmosetImportParser utility functions.
 
-import XCTest
+import Testing
 @testable import chickadee_server
+import Fluent
 import Foundation
 import Core
 
-final class MarmosetImportParserTests: XCTestCase {
+@Suite struct MarmosetImportParserTests {
+
+    /// Creates a zip archive via Python's zipfile module.
+    /// Returns nil (and the calling test should return early) if python3 is not available.
+    private func makeZip(entries: [(name: String, content: String)]) throws -> String? {
+        let zipPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("marmoset-parser-\(UUID().uuidString).zip")
+            .path
+        let entriesCode = entries.map { entry in
+            "z.writestr(\(entry.name.debugDescription), \(entry.content.debugDescription))"
+        }.joined(separator: "\n    ")
+        let script = """
+import zipfile
+with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
+    \(entriesCode)
+"""
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", script]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        do { try process.run() } catch { return nil }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return zipPath
+    }
 
     // MARK: - parseJavaProperties
 
-    func testParseSimpleProperties() {
+    @Test func parseSimpleProperties() {
         let input = "key1=value1\nkey2=value2\n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["key1"], "value1")
-        XCTAssertEqual(result["key2"], "value2")
-        XCTAssertEqual(result.count, 2)
+        #expect(result["key1"] == "value1")
+        #expect(result["key2"] == "value2")
+        #expect(result.count == 2)
     }
 
-    func testParseColonSeparator() {
+    @Test func parseColonSeparator() {
         let input = "key1:value1\nkey2: value2\n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["key1"], "value1")
-        XCTAssertEqual(result["key2"], "value2")
+        #expect(result["key1"] == "value1")
+        #expect(result["key2"] == "value2")
     }
 
-    func testParseComments() {
+    @Test func parseComments() {
         let input = """
         # This is a comment
         ! This too
@@ -35,50 +61,49 @@ final class MarmosetImportParserTests: XCTestCase {
         key2=value2
         """
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result.count, 2)
-        XCTAssertEqual(result["key1"], "value1")
-        XCTAssertEqual(result["key2"], "value2")
+        #expect(result.count == 2)
+        #expect(result["key1"] == "value1")
+        #expect(result["key2"] == "value2")
     }
 
-    func testParseEmptyLines() {
+    @Test func parseEmptyLines() {
         let input = "key1=value1\n\n\nkey2=value2\n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result.count, 2)
+        #expect(result.count == 2)
     }
 
-    func testParseBackslashContinuation() {
+    @Test func parseBackslashContinuation() {
         let input = "key1=val1,\\\n  val2,\\\n  val3\nkey2=simple\n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["key1"], "val1,val2,val3")
-        XCTAssertEqual(result["key2"], "simple")
+        #expect(result["key1"] == "val1,val2,val3")
+        #expect(result["key2"] == "simple")
     }
 
-    func testParseWhitespaceTrimming() {
+    @Test func parseWhitespaceTrimming() {
         let input = "  key1  =  value1  \n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["key1"], "value1")
+        #expect(result["key1"] == "value1")
     }
 
-    func testParseEqualsInValue() {
+    @Test func parseEqualsInValue() {
         // Only split on first =
         let input = "key1=a=b=c\n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["key1"], "a=b=c")
+        #expect(result["key1"] == "a=b=c")
     }
 
-    func testParseEmptyValue() {
+    @Test func parseEmptyValue() {
         let input = "key1=\nkey2=value\n"
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["key1"], "")
-        XCTAssertEqual(result["key2"], "value")
+        #expect(result["key1"] == "")
+        #expect(result["key2"] == "value")
     }
 
-    func testParseEmptyData() {
-        let result = parseJavaProperties(Data())
-        XCTAssertTrue(result.isEmpty)
+    @Test func parseEmptyData() {
+        #expect(parseJavaProperties(Data()).isEmpty)
     }
 
-    func testParseTypicalMarmosetTestProperties() {
+    @Test func parseTypicalMarmosetTestProperties() {
         let input = """
         # Marmoset test properties
         test.class.public=TestPublicA,TestPublicB
@@ -88,139 +113,86 @@ final class MarmosetImportParserTests: XCTestCase {
         build.language=python
         """
         let result = parseJavaProperties(Data(input.utf8))
-        XCTAssertEqual(result["test.class.public"], "TestPublicA,TestPublicB")
-        XCTAssertEqual(result["test.class.release"], "TestReleaseA")
-        XCTAssertEqual(result["test.class.secret"], "TestSecretA,  TestSecretB")
-        XCTAssertEqual(result["build.language"], "python")
+        #expect(result["test.class.public"] == "TestPublicA,TestPublicB")
+        #expect(result["test.class.release"] == "TestReleaseA")
+        #expect(result["test.class.secret"] == "TestSecretA,  TestSecretB")
+        #expect(result["build.language"] == "python")
     }
 
     // MARK: - parseTestClassList
 
-    func testParseTestClassListSimple() {
-        let result = parseTestClassList("TestA,TestB,TestC")
-        XCTAssertEqual(result, ["TestA", "TestB", "TestC"])
+    @Test func parseTestClassListSimple() {
+        #expect(parseTestClassList("TestA,TestB,TestC") == ["TestA", "TestB", "TestC"])
     }
 
-    func testParseTestClassListWithWhitespace() {
-        let result = parseTestClassList("TestA , TestB , TestC")
-        XCTAssertEqual(result, ["TestA", "TestB", "TestC"])
+    @Test func parseTestClassListWithWhitespace() {
+        #expect(parseTestClassList("TestA , TestB , TestC") == ["TestA", "TestB", "TestC"])
     }
 
-    func testParseTestClassListWithNewlines() {
-        let result = parseTestClassList("TestA,\n  TestB,\n  TestC")
-        XCTAssertEqual(result, ["TestA", "TestB", "TestC"])
+    @Test func parseTestClassListWithNewlines() {
+        #expect(parseTestClassList("TestA,\n  TestB,\n  TestC") == ["TestA", "TestB", "TestC"])
     }
 
-    func testParseTestClassListEmpty() {
-        let result = parseTestClassList("")
-        XCTAssertTrue(result.isEmpty)
+    @Test func parseTestClassListEmpty() {
+        #expect(parseTestClassList("").isEmpty)
     }
 
-    func testParseTestClassListSingle() {
-        let result = parseTestClassList("OnlyOne")
-        XCTAssertEqual(result, ["OnlyOne"])
+    @Test func parseTestClassListSingle() {
+        #expect(parseTestClassList("OnlyOne") == ["OnlyOne"])
     }
 
-    func testParseTestClassListTrailingComma() {
-        let result = parseTestClassList("TestA,TestB,")
-        XCTAssertEqual(result, ["TestA", "TestB"])
+    @Test func parseTestClassListTrailingComma() {
+        #expect(parseTestClassList("TestA,TestB,") == ["TestA", "TestB"])
     }
 
     // MARK: - extractTitleFromProjectOut
 
-    func testExtractTitleFromValidData() {
-        // Encode a 2-byte big-endian length + UTF-8 string
+    private func makeTitleData(_ title: String) -> Data {
         var data = Data()
-        let title = "Assignment 1 BMI Calculator"
-        let titleBytes = Array(title.utf8)
-        data.append(UInt8(titleBytes.count >> 8))
-        data.append(UInt8(titleBytes.count & 0xFF))
-        data.append(contentsOf: titleBytes)
-        // Add some padding bytes before/after
+        let bytes = Array(title.utf8)
+        data.append(UInt8(bytes.count >> 8))
+        data.append(UInt8(bytes.count & 0xFF))
+        data.append(contentsOf: bytes)
+        return data
+    }
+
+    @Test func extractTitleFromValidData() {
         var fullData = Data(repeating: 0x00, count: 10)
-        fullData.append(data)
+        fullData.append(makeTitleData("Assignment 1 BMI Calculator"))
         fullData.append(Data(repeating: 0x00, count: 10))
-
-        let result = extractTitleFromProjectOut(fullData)
-        XCTAssertEqual(result, "Assignment 1 BMI Calculator")
+        #expect(extractTitleFromProjectOut(fullData) == "Assignment 1 BMI Calculator")
     }
 
-    func testExtractTitlePrefersSpaceContaining() {
-        var data = Data()
-        // First: a capitalized word without space
-        let word = "SomeClass"
-        let wordBytes = Array(word.utf8)
-        data.append(UInt8(wordBytes.count >> 8))
-        data.append(UInt8(wordBytes.count & 0xFF))
-        data.append(contentsOf: wordBytes)
-        // Then: a title with a space
-        let title = "Project One"
-        let titleBytes = Array(title.utf8)
-        data.append(UInt8(titleBytes.count >> 8))
-        data.append(UInt8(titleBytes.count & 0xFF))
-        data.append(contentsOf: titleBytes)
-
-        let result = extractTitleFromProjectOut(data)
-        XCTAssertEqual(result, "Project One")
+    @Test func extractTitlePrefersSpaceContaining() {
+        var data = makeTitleData("SomeClass")
+        data.append(makeTitleData("Project One"))
+        #expect(extractTitleFromProjectOut(data) == "Project One")
     }
 
-    func testExtractTitleRejectsNumbers() {
-        var data = Data()
-        let number = "12345"
-        let bytes = Array(number.utf8)
-        data.append(UInt8(bytes.count >> 8))
-        data.append(UInt8(bytes.count & 0xFF))
-        data.append(contentsOf: bytes)
-
-        let result = extractTitleFromProjectOut(data)
-        XCTAssertNil(result)
+    @Test func extractTitleRejectsNumbers() {
+        #expect(extractTitleFromProjectOut(makeTitleData("12345")) == nil)
     }
 
-    func testExtractTitleRejectsDotPaths() {
-        var data = Data()
-        let path = "com.example.Test"
-        let bytes = Array(path.utf8)
-        data.append(UInt8(bytes.count >> 8))
-        data.append(UInt8(bytes.count & 0xFF))
-        data.append(contentsOf: bytes)
-
-        let result = extractTitleFromProjectOut(data)
-        XCTAssertNil(result)
+    @Test func extractTitleRejectsDotPaths() {
+        #expect(extractTitleFromProjectOut(makeTitleData("com.example.Test")) == nil)
     }
 
-    func testExtractTitleRejectsSlashPaths() {
-        var data = Data()
-        let path = "src/main/Test"
-        let bytes = Array(path.utf8)
-        data.append(UInt8(bytes.count >> 8))
-        data.append(UInt8(bytes.count & 0xFF))
-        data.append(contentsOf: bytes)
-
-        let result = extractTitleFromProjectOut(data)
-        XCTAssertNil(result)
+    @Test func extractTitleRejectsSlashPaths() {
+        #expect(extractTitleFromProjectOut(makeTitleData("src/main/Test")) == nil)
     }
 
-    func testExtractTitleEmptyData() {
-        let result = extractTitleFromProjectOut(Data())
-        XCTAssertNil(result)
+    @Test func extractTitleEmptyData() {
+        #expect(extractTitleFromProjectOut(Data()) == nil)
     }
 
-    func testExtractTitleTooShortStrings() {
-        // String of length 2 should be rejected (minimum is 3)
-        var data = Data()
-        let short = "Hi"
-        let bytes = Array(short.utf8)
-        data.append(UInt8(bytes.count >> 8))
-        data.append(UInt8(bytes.count & 0xFF))
-        data.append(contentsOf: bytes)
-
-        let result = extractTitleFromProjectOut(data)
-        XCTAssertNil(result)
+    @Test func extractTitleTooShortStrings() {
+        // Strings of length 2 should be rejected (minimum is 3).
+        #expect(extractTitleFromProjectOut(makeTitleData("Hi")) == nil)
     }
 
     // MARK: - convertToChickadeeManifest
 
-    func testConvertManifestBasic() throws {
+    @Test func convertManifestBasic() throws {
         let project = MarmosetProject(
             number: 1,
             publicTests: ["test_public.sh"],
@@ -232,18 +204,18 @@ final class MarmosetImportParserTests: XCTestCase {
         let json = try convertToChickadeeManifest(project: project)
         let decoded = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
 
-        XCTAssertEqual(decoded["schemaVersion"] as? Int, 1)
-        XCTAssertEqual(decoded["gradingMode"] as? String, "worker")
-        XCTAssertEqual(decoded["timeLimitSeconds"] as? Int, 10)
-        XCTAssertEqual(decoded["starterNotebook"] as? String, "assignment.ipynb")
+        #expect(decoded["schemaVersion"] as? Int == 1)
+        #expect(decoded["gradingMode"] as? String == "worker")
+        #expect(decoded["timeLimitSeconds"] as? Int == 10)
+        #expect(decoded["starterNotebook"] as? String == "assignment.ipynb")
 
         let suites = decoded["testSuites"] as! [[String: String]]
-        XCTAssertEqual(suites.count, 2)
-        XCTAssertTrue(suites.contains { $0["tier"] == "public" && $0["script"] == "test_public.sh" })
-        XCTAssertTrue(suites.contains { $0["tier"] == "release" && $0["script"] == "test_release.sh" })
+        #expect(suites.count == 2)
+        #expect(suites.contains { $0["tier"] == "public"  && $0["script"] == "test_public.sh" })
+        #expect(suites.contains { $0["tier"] == "release" && $0["script"] == "test_release.sh" })
     }
 
-    func testConvertManifestAllTiers() throws {
+    @Test func convertManifestAllTiers() throws {
         let project = MarmosetProject(
             number: 2,
             publicTests: ["pub1.sh", "pub2.sh"],
@@ -254,34 +226,26 @@ final class MarmosetImportParserTests: XCTestCase {
         )
         let json = try convertToChickadeeManifest(project: project)
         let decoded = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
-
         let suites = decoded["testSuites"] as! [[String: String]]
-        XCTAssertEqual(suites.count, 5)
-        let pubCount = suites.filter { $0["tier"] == "public" }.count
-        let relCount = suites.filter { $0["tier"] == "release" }.count
-        let secCount = suites.filter { $0["tier"] == "secret" }.count
-        XCTAssertEqual(pubCount, 2)
-        XCTAssertEqual(relCount, 1)
-        XCTAssertEqual(secCount, 2)
+
+        #expect(suites.count == 5)
+        #expect(suites.filter { $0["tier"] == "public"  }.count == 2)
+        #expect(suites.filter { $0["tier"] == "release" }.count == 1)
+        #expect(suites.filter { $0["tier"] == "secret"  }.count == 2)
     }
 
-    func testConvertManifestEmptyTests() throws {
+    @Test func convertManifestEmptyTests() throws {
         let project = MarmosetProject(
-            number: 1,
-            publicTests: [],
-            releaseTests: [],
-            secretTests: [],
-            hasMakefile: false,
-            suggestedTitle: nil
+            number: 1, publicTests: [], releaseTests: [], secretTests: [],
+            hasMakefile: false, suggestedTitle: nil
         )
         let json = try convertToChickadeeManifest(project: project)
         let decoded = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
-
         let suites = decoded["testSuites"] as! [[String: String]]
-        XCTAssertEqual(suites.count, 0)
+        #expect(suites.isEmpty)
     }
 
-    func testConvertManifestProducesValidTestProperties() throws {
+    @Test func convertManifestProducesValidTestProperties() throws {
         let project = MarmosetProject(
             number: 1,
             publicTests: ["test.sh"],
@@ -291,18 +255,18 @@ final class MarmosetImportParserTests: XCTestCase {
             suggestedTitle: nil
         )
         let json = try convertToChickadeeManifest(project: project)
-        // Verify it round-trips through TestProperties decoder
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
-        XCTAssertEqual(props.schemaVersion, 1)
-        XCTAssertEqual(props.testSuites.count, 1)
-        XCTAssertEqual(props.testSuites.first?.script, "test.sh")
-        XCTAssertEqual(props.testSuites.first?.tier, .pub)
-        XCTAssertEqual(props.timeLimitSeconds, 10)
+
+        #expect(props.schemaVersion == 1)
+        #expect(props.testSuites.count == 1)
+        #expect(props.testSuites.first?.script == "test.sh")
+        #expect(props.testSuites.first?.tier == .pub)
+        #expect(props.timeLimitSeconds == 10)
     }
 
     // MARK: - MarmosetProject struct
 
-    func testMarmosetProjectStoresAllFields() {
+    @Test func marmosetProjectStoresAllFields() {
         let p = MarmosetProject(
             number: 3,
             publicTests: ["a", "b"],
@@ -311,11 +275,35 @@ final class MarmosetImportParserTests: XCTestCase {
             hasMakefile: true,
             suggestedTitle: "Test Project"
         )
-        XCTAssertEqual(p.number, 3)
-        XCTAssertEqual(p.publicTests, ["a", "b"])
-        XCTAssertEqual(p.releaseTests, ["c"])
-        XCTAssertTrue(p.secretTests.isEmpty)
-        XCTAssertTrue(p.hasMakefile)
-        XCTAssertEqual(p.suggestedTitle, "Test Project")
+        #expect(p.number == 3)
+        #expect(p.publicTests == ["a", "b"])
+        #expect(p.releaseTests == ["c"])
+        #expect(p.secretTests.isEmpty)
+        #expect(p.hasMakefile)
+        #expect(p.suggestedTitle == "Test Project")
+    }
+
+    @Test func firstNotebookInZipFindsNestedNotebook() throws {
+        guard let zipPath = try makeZip(entries: [
+            ("starter-files/Lab 1.ipynb", "{}"),
+            ("starter-files/readme.txt", "hello")
+        ]) else { return }
+        defer { try? FileManager.default.removeItem(atPath: zipPath) }
+
+        #expect(try firstNotebookInZip(zipPath: zipPath) == "Lab 1.ipynb")
+        let extracted = try extractNotebookFromZip(zipPath: zipPath, filename: "Lab 1.ipynb")
+        #expect(String(data: try #require(extracted), encoding: .utf8) == "{}")
+    }
+
+    @Test func extractSolutionFromCanonicalZipHandlesNestedEntry() throws {
+        guard let zipPath = try makeZip(entries: [
+            ("canonical/solution.py", "print('ok')\n")
+        ]) else { return }
+        defer { try? FileManager.default.removeItem(atPath: zipPath) }
+
+        let solution = try extractSolutionFromCanonicalZip(zipPath: zipPath)
+        #expect(solution?.originalFilename == "solution.py")
+        #expect(solution?.ext == "py")
+        #expect(String(data: try #require(solution?.data), encoding: .utf8) == "print('ok')\n")
     }
 }

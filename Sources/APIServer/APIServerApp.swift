@@ -2,8 +2,6 @@
 
 import Vapor
 import Fluent
-import FluentSQLiteDriver
-import SQLKit
 import Leaf
 import CSRF
 import Core
@@ -78,6 +76,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     let localRunnerAutoStartEnabled = readLocalRunnerAutoStartFromDisk(
         filePath: localRunnerAutoStartFile
     ) ?? false
+    app.storage[WorkerClaimQueueKey.self]      = WorkerClaimQueue()
     app.storage[WorkerSecretStoreKey.self]    = WorkerSecretStore(initialOverride: startupWorkerSecret)
     app.storage[WorkerActivityStoreKey.self]  = WorkerActivityStore()
     app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
@@ -90,9 +89,9 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.storage[SSOInstructorUsersKey.self] = ssoInstructorUsers
     app.authProvider = LocalAuthProvider()
 
-    // MARK: - Sessions (in-memory; swap to .fluent for multi-process deployments)
+    // MARK: - Sessions (Fluent-backed; persisted in the database)
 
-    app.sessions.use(.memory)
+    app.sessions.use(.fluent)
     var sessionConfig = app.sessions.configuration
     sessionConfig.cookieFactory = { sessionID in
         HTTPCookies.Value(
@@ -124,40 +123,32 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
+    app.leaf.tags["appVersion"] = AppVersionTag()
+    // FileMiddleware is registered first so static files are served directly.
+    // It short-circuits the responder chain (returns without calling next), so
+    // middleware registered after it only runs for dynamic Leaf-rendered pages.
+    // This is intentional: JupyterLite's static files must NOT receive COEP
+    // require-corp because JupyterLite's service worker produces synthetic
+    // responses (virtual filesystem, contents API) that lack Cross-Origin-
+    // Resource-Policy headers.  COEP on the page would block those responses
+    // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
+    // require SharedArrayBuffer — it uses a service-worker-based synchronisation
+    // fallback — so cross-origin isolation on the iframe document is unnecessary.
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    // COOP/COEP headers enable SharedArrayBuffer in browsers, required for
-    // WebR (R WASM kernel) and the browser-side WASM runner (Issue #96/#77).
     app.middleware.use(COEPMiddleware())
-    // Defence-in-depth headers: X-Content-Type-Options, X-Frame-Options,
-    // Referrer-Policy (see SecurityHeadersMiddleware.swift for rationale).
     app.middleware.use(SecurityHeadersMiddleware())
 
     // MARK: - Database
 
-    let sqliteConfig = SQLiteConfiguration(
-        storage: .file(path: workDir + "chickadee.sqlite"),
-        enableForeignKeys: true
+    let databaseSettings = try DatabaseSettings.fromEnvironment(
+        defaultSQLitePath: workDir + "chickadee.sqlite"
     )
-    app.databases.use(.sqlite(sqliteConfig), as: .sqlite)
-
-    // WAL improves mixed read/write behavior on the single-file SQLite store.
-    if let sql = app.db as? SQLDatabase {
-        _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
-    }
-
-    app.migrations.add(CreateUsers())
-    app.migrations.add(CreateCourses())
-    app.migrations.add(CreateCourseEnrollments())
-    app.migrations.add(CreateTestSetups())
-    app.migrations.add(CreateSubmissions())
-    app.migrations.add(CreateResults())
-    app.migrations.add(CreateAssignments())
-    app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
+    try configureDatabase(app, settings: databaseSettings)
+    registerMigrations(on: app)
 
     try app.autoMigrate().wait()
+    app.lifecycle.use(ObservabilityLifecycleHandler())
+    app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
 
     if authMode != .local {
         if !nonSSOModesEnabled {
@@ -343,24 +334,122 @@ actor WorkerSecretStore {
 struct WorkerActivitySnapshot: Sendable {
     let workerID: String
     let lastActive: Date
+    let hostname: String
+    let runnerVersion: String
+    let maxConcurrentJobs: Int
+    let activeJobs: Int
+    let lastPollAt: Date?
+    let lastHeartbeatAt: Date?
+    let serverAssignedJobCountSinceStart: Int
 }
 
 actor WorkerActivityStore {
-    private var lastSeenByWorkerID: [String: Date] = [:]
+    private struct Entry: Sendable {
+        let lastSeen: Date
+        let hostname: String
+        let runnerVersion: String
+        let maxConcurrentJobs: Int
+        let activeJobs: Int
+        let lastPollAt: Date?
+        let lastHeartbeatAt: Date?
+        let serverAssignedJobCountSinceStart: Int
+    }
+    private var entries: [String: Entry] = [:]
 
-    func markActive(workerID: String, at date: Date = Date()) {
+    /// Record activity for `workerID`. Empty/zero values for `hostname`,
+    /// `runnerVersion`, and `maxConcurrentJobs` are treated as "no update" —
+    /// the existing values are preserved so that HMAC middleware keep-alive
+    /// touches do not clobber fields set by the job-request body handler.
+    func markActive(
+        workerID: String,
+        hostname: String,
+        runnerVersion: String = "",
+        maxConcurrentJobs: Int = 0,
+        activeJobs: Int? = nil,
+        lastPollAt: Date? = nil,
+        lastHeartbeatAt: Date? = nil,
+        at date: Date = Date()
+    ) {
         guard !workerID.isEmpty else { return }
-        lastSeenByWorkerID[workerID] = date
+        let prev = entries[workerID]
+        let effectiveHostname = hostname.isEmpty ? (prev?.hostname ?? "") : hostname
+        let effectiveVersion = runnerVersion.isEmpty ? (prev?.runnerVersion ?? "") : runnerVersion
+        let effectiveConcurrency = maxConcurrentJobs == 0 ? (prev?.maxConcurrentJobs ?? 0) : maxConcurrentJobs
+        let effectiveActiveJobs = max(0, activeJobs ?? (prev?.activeJobs ?? 0))
+        entries[workerID] = Entry(
+            lastSeen: date,
+            hostname: effectiveHostname,
+            runnerVersion: effectiveVersion,
+            maxConcurrentJobs: effectiveConcurrency,
+            activeJobs: effectiveActiveJobs,
+            lastPollAt: lastPollAt ?? prev?.lastPollAt,
+            lastHeartbeatAt: lastHeartbeatAt ?? prev?.lastHeartbeatAt,
+            serverAssignedJobCountSinceStart: prev?.serverAssignedJobCountSinceStart ?? 0
+        )
     }
 
-    func snapshotsSortedByRecent() -> [WorkerActivitySnapshot] {
-        lastSeenByWorkerID
-            .map { WorkerActivitySnapshot(workerID: $0.key, lastActive: $0.value) }
+    func incrementAssignedJobs(for workerID: String) {
+        guard let entry = entries[workerID] else { return }
+        entries[workerID] = Entry(
+            lastSeen: entry.lastSeen,
+            hostname: entry.hostname,
+            runnerVersion: entry.runnerVersion,
+            maxConcurrentJobs: entry.maxConcurrentJobs,
+            activeJobs: entry.activeJobs,
+            lastPollAt: entry.lastPollAt,
+            lastHeartbeatAt: entry.lastHeartbeatAt,
+            serverAssignedJobCountSinceStart: entry.serverAssignedJobCountSinceStart + 1
+        )
+    }
+
+    func snapshot(for workerID: String) -> WorkerActivitySnapshot? {
+        guard let entry = entries[workerID] else { return nil }
+        return WorkerActivitySnapshot(
+            workerID: workerID,
+            lastActive: entry.lastSeen,
+            hostname: entry.hostname,
+            runnerVersion: entry.runnerVersion,
+            maxConcurrentJobs: entry.maxConcurrentJobs,
+            activeJobs: entry.activeJobs,
+            lastPollAt: entry.lastPollAt,
+            lastHeartbeatAt: entry.lastHeartbeatAt,
+            serverAssignedJobCountSinceStart: entry.serverAssignedJobCountSinceStart
+        )
+    }
+
+    /// Returns true when `workerID` has been seen within `ttlSeconds` AND the
+    /// stored hostname differs from `hostname`. Same hostname = restart of the
+    /// same runner process, which is not treated as a conflict.
+    func isConflict(workerID: String, hostname: String, ttlSeconds: TimeInterval, now: Date = Date()) -> Bool {
+        guard let entry = entries[workerID] else { return false }
+        let withinTTL = now.timeIntervalSince(entry.lastSeen) <= ttlSeconds
+        return withinTTL && !entry.hostname.isEmpty && entry.hostname != hostname
+    }
+
+    /// Returns snapshots for runners seen within `cutoff` seconds, pruning
+    /// stale entries from the in-memory store at the same time.  Runners that
+    /// have not contacted the server for more than an hour are dropped so they
+    /// don't accumulate forever after a rename or permanent shutdown.
+    func snapshotsSortedByRecent(cutoff: TimeInterval = 3600, now: Date = Date()) -> [WorkerActivitySnapshot] {
+        // Prune any entry that hasn't been seen within the cutoff window.
+        entries = entries.filter { now.timeIntervalSince($0.value.lastSeen) <= cutoff }
+        return entries
+            .map { WorkerActivitySnapshot(
+                workerID: $0.key,
+                lastActive: $0.value.lastSeen,
+                hostname: $0.value.hostname,
+                runnerVersion: $0.value.runnerVersion,
+                maxConcurrentJobs: $0.value.maxConcurrentJobs,
+                activeJobs: $0.value.activeJobs,
+                lastPollAt: $0.value.lastPollAt,
+                lastHeartbeatAt: $0.value.lastHeartbeatAt,
+                serverAssignedJobCountSinceStart: $0.value.serverAssignedJobCountSinceStart
+            ) }
             .sorted { $0.lastActive > $1.lastActive }
     }
 
     func hasRecentActivity(within seconds: TimeInterval, now: Date = Date()) -> Bool {
-        lastSeenByWorkerID.values.contains { now.timeIntervalSince($0) <= seconds }
+        entries.values.contains { now.timeIntervalSince($0.lastSeen) <= seconds }
     }
 }
 
@@ -423,7 +512,7 @@ actor LocalRunnerManager {
 
         let logPath = workDir + "results/local-runner.log"
         if !FileManager.default.fileExists(atPath: logPath) {
-            FileManager.default.createFile(atPath: logPath, contents: nil)
+            _ = FileManager.default.createFile(atPath: logPath, contents: nil)
         }
         if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
             _ = try? handle.seekToEnd()
@@ -477,7 +566,7 @@ actor LocalRunnerManager {
     }
 }
 
-private func normalizedHost(_ raw: String) -> String {
+func normalizedHost(_ raw: String) -> String {
     let host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     if host.isEmpty || host == "0.0.0.0" || host == "::" {
         return "localhost"
@@ -485,7 +574,7 @@ private func normalizedHost(_ raw: String) -> String {
     return host
 }
 
-private func runnerSharedSecretFromEnvironment() -> String? {
+func runnerSharedSecretFromEnvironment() -> String? {
     let primary = Environment.get("RUNNER_SHARED_SECRET")?
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if let primary, !primary.isEmpty { return primary }
@@ -497,7 +586,7 @@ private func runnerSharedSecretFromEnvironment() -> String? {
     return nil
 }
 
-private func environmentBool(_ key: String) -> Bool? {
+func environmentBool(_ key: String) -> Bool? {
     guard let raw = Environment.get(key)?
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased(),
@@ -605,7 +694,7 @@ extension Application {
     }
 }
 
-private func extractWorkerSecretArgument(from env: inout Environment) -> String? {
+func extractWorkerSecretArgument(from env: inout Environment) -> String? {
     let args = env.arguments
     guard !args.isEmpty else { return nil }
 
@@ -642,7 +731,7 @@ private func extractWorkerSecretArgument(from env: inout Environment) -> String?
     return found
 }
 
-private func resolveStartupWorkerSecret(
+func resolveStartupWorkerSecret(
     cliWorkerSecret: String?,
     workerSecretFilePath: String,
     workerSecretWordlistPath: String
@@ -691,7 +780,7 @@ func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
     try? value.write(to: url, atomically: true, encoding: .utf8)
 }
 
-private func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
+func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
     let fallbackWords = [
         "oak", "river", "falcon", "amber", "lumen", "cedar", "thunder", "pebble",
         "meadow", "quartz", "north", "willow", "harbor", "maple", "breeze",
@@ -703,11 +792,11 @@ private func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String 
     return (0..<3).compactMap { _ in source.randomElement() }.joined(separator: "-")
 }
 
-private func isPlaceholderWorkerSecret(_ value: String) -> Bool {
+func isPlaceholderWorkerSecret(_ value: String) -> Bool {
     value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "cli-arg-secret"
 }
 
-private func loadDicewareWords(from path: String) -> [String] {
+func loadDicewareWords(from path: String) -> [String] {
     guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
         return []
     }
@@ -726,7 +815,7 @@ private func loadDicewareWords(from path: String) -> [String] {
     return words
 }
 
-private func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
+func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
           let text = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)

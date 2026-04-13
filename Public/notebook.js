@@ -89,15 +89,12 @@
                 setStatus('loading', 'Capturing notebook…');
                 const notebook = await loadNotebookForSubmit();
 
-                if (gradingMode === 'browser' && window.BrowserRunner) {
+                if (gradingMode === 'browser') {
+                    if (!window.BrowserRunner || typeof window.BrowserRunner.runAndSubmit !== 'function') {
+                        throw new Error('Browser grading is unavailable right now. Please reload and try again.');
+                    }
                     // Browser-graded lab: run tests locally in Pyodide then submit atomically.
-                    setStatus('loading', 'Testing…');
-                    const notebookBytes = new Uint8Array(
-                        new TextEncoder().encode(JSON.stringify(notebook))
-                    );
-                    const { outcomes, response } =
-                        await window.BrowserRunner.runAndSubmit(notebookBytes, setupID);
-                    renderResults(outcomes, response);
+                    const { outcomes } = await submitBrowserNotebook(notebook, setupID);
                     const passCount = outcomes.filter(o => o.status === 'pass').length;
                     const allPassed = passCount === outcomes.length && outcomes.length > 0;
                     const summary   = `${passCount} / ${outcomes.length} passed` +
@@ -444,6 +441,19 @@
                 const uploadedText     = await readFileAsText(file);
                 const uploadedNotebook = JSON.parse(uploadedText);
 
+                if (gradingMode === 'browser') {
+                    if (!window.BrowserRunner || typeof window.BrowserRunner.runAndSubmit !== 'function') {
+                        throw new Error('Browser grading is unavailable right now. Please reload and try again.');
+                    }
+                    const { outcomes } = await submitBrowserNotebook(uploadedNotebook, setupID);
+                    const passCount = outcomes.filter(o => o.status === 'pass').length;
+                    const allPassed = passCount === outcomes.length && outcomes.length > 0;
+                    const summary   = `${passCount} / ${outcomes.length} passed` +
+                                      (allPassed ? ' ✓ All tests passed!' : '');
+                    setStatus('ok', summary);
+                    return;
+                }
+
                 setStatus('loading', 'Submitting…');
                 const response = await postRunnerSubmission(
                     uploadedNotebook,
@@ -707,6 +717,17 @@ else:
         return res.json();
     }
 
+    async function submitBrowserNotebook(notebook, testSetupID) {
+        setStatus('loading', 'Testing…');
+        const notebookBytes = new Uint8Array(
+            new TextEncoder().encode(JSON.stringify(notebook))
+        );
+        const { outcomes, response } =
+            await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
+        renderResults(outcomes, response);
+        return { outcomes, response };
+    }
+
     // -------------------------------------------------------------------------
     // 9. Inline results rendering
     // -------------------------------------------------------------------------
@@ -723,6 +744,7 @@ else:
 
     function renderResults(outcomes, response) {
         if (!resultsEl) return;
+        const displayNameMap = buildOutcomeDisplayNameMap(outcomes);
 
         const pass    = outcomes.filter(o => o.status === 'pass').length;
         const fail    = outcomes.filter(o => o.status === 'fail').length;
@@ -758,9 +780,13 @@ else:
             const isSkipped  = !!skipMatch;
             const blockerRaw = isSkipped ? skipMatch[1] : null;
             // Strip file extension: "test_build.py" → "test_build"
-            const blockerName = blockerRaw
+            const blockerKey = blockerRaw
                 ? (blockerRaw.includes('.') ? blockerRaw.replace(/\.[^.]+$/, '') : blockerRaw)
                 : null;
+            const blockerName = blockerKey ? (displayNameMap.get(blockerKey) || blockerKey) : null;
+            const displayName = bestOutcomeDisplayName(o);
+            const shortResult = formattedOutcomeShortResult(o);
+            const longResult = formattedOutcomeDetailedOutput(o);
 
             const tr = document.createElement('tr');
             tr.className = isSkipped ? 'status-skipped' : `status-${o.status}`;
@@ -787,16 +813,16 @@ else:
             // Output cell
             let outputHtml;
             if (isSkipped) {
-                outputHtml = `<span class="skip-reason">${escHtml(o.shortResult)}</span>`;
+                outputHtml = `<span class="skip-reason">${escHtml(shortResult)}</span>`;
             } else {
-                const longHtml = o.longResult
-                    ? `<details><summary>Show output ▸</summary><pre>${escHtml(o.longResult)}</pre></details>`
+                const longHtml = longResult
+                    ? `<details><summary>Show output ▸</summary><pre>${escHtml(longResult)}</pre></details>`
                     : '';
-                outputHtml = escHtml(o.shortResult) + longHtml;
+                outputHtml = escHtml(shortResult) + longHtml;
             }
 
             tr.innerHTML = `
-                <td><code>${escHtml(o.testName)}</code>${blockerHtml}</td>
+                <td><code>${escHtml(displayName)}</code>${blockerHtml}</td>
                 <td><span class="tier">${escHtml(o.tier)}</span></td>
                 <td>${outputHtml}</td>
                 <td><span class="result-mark result-mark-${markClass}">${escHtml(markLabel)}</span></td>`;
@@ -819,6 +845,127 @@ else:
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function buildOutcomeDisplayNameMap(outcomes) {
+        const map = new Map();
+        for (const outcome of outcomes || []) {
+            const displayName = bestOutcomeDisplayName(outcome);
+            const keys = [outcome && outcome.scriptName, outcome && outcome.testName];
+            for (const key of keys) {
+                if (typeof key === 'string' && key.trim()) {
+                    map.set(key.trim(), displayName);
+                    const stem = key.replace(/\.[^.]+$/, '').trim();
+                    if (stem) map.set(stem, displayName);
+                }
+            }
+        }
+        return map;
+    }
+
+    function bestOutcomeDisplayName(outcome) {
+        const explicit = trimmedString(outcome && outcome.displayName);
+        if (explicit) return explicit;
+        const testName = trimmedString(outcome && outcome.testName);
+        if (testName) return testName;
+        return trimmedString(outcome && outcome.scriptName) || 'test';
+    }
+
+    function formattedOutcomeShortResult(outcome) {
+        const shortResult = trimmedString(outcome && outcome.shortResult);
+        const parsed = parseStructuredPayload(shortResult)
+            || parseStructuredPayload(trimmedString(outcome && outcome.longResult));
+        if (parsed) {
+            const summary = structuredSummaryText(parsed, outcome && outcome.status);
+            if (summary) return summary;
+        }
+        return shortResult || defaultShortResult(outcome && outcome.status);
+    }
+
+    function formattedOutcomeDetailedOutput(outcome) {
+        const longResult = trimmedString(outcome && outcome.longResult);
+        const shortResult = trimmedString(outcome && outcome.shortResult);
+        const parsed = parseStructuredPayload(longResult) || parseStructuredPayload(shortResult);
+        const traceback = extractTracebackText(parsed)
+            || extractTracebackText(longResult)
+            || extractTracebackText(shortResult);
+        if (traceback) return traceback;
+        return longResult || null;
+    }
+
+    function structuredSummaryText(payload, status) {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+
+        if (status && status !== 'pass') {
+            for (const key of ['error', 'message', 'detail', 'reason']) {
+                const text = trimmedString(payload[key]);
+                if (text) return text;
+            }
+        }
+
+        const shortResult = trimmedString(payload.shortResult);
+        if (shortResult) {
+            const label = trimmedString(payload.test);
+            return stripLeadingLabel(shortResult, label) || shortResult;
+        }
+
+        return trimmedString(payload.status) || null;
+    }
+
+    function extractTracebackText(value) {
+        if (!value) return null;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            return trimmedString(value.traceback) || null;
+        }
+
+        const text = trimmedString(value);
+        if (!text) return null;
+        const parsed = parseStructuredPayload(text);
+        if (parsed) {
+            const traceback = extractTracebackText(parsed);
+            if (traceback) return traceback;
+        }
+        const marker = text.indexOf('Traceback (most recent call last):');
+        return marker >= 0 ? text.slice(marker).trim() : null;
+    }
+
+    function parseStructuredPayload(text) {
+        const trimmed = trimmedString(text);
+        if (!trimmed) return null;
+
+        const candidates = [trimmed];
+        const stdoutMatch = trimmed.match(/(?:^|\n)stdout:\n([\s\S]*?)(?:\n\nstderr:\n|$)/);
+        if (stdoutMatch && stdoutMatch[1]) candidates.unshift(stdoutMatch[1].trim());
+        const stderrMatch = trimmed.match(/(?:^|\n)stderr:\n([\s\S]*)$/);
+        if (stderrMatch && stderrMatch[1]) candidates.push(stderrMatch[1].trim());
+
+        for (const candidate of candidates) {
+            try {
+                return JSON.parse(candidate);
+            } catch (_) {
+                // Try the next shape.
+            }
+        }
+        return null;
+    }
+
+    function stripLeadingLabel(text, label) {
+        const trimmedText = trimmedString(text);
+        const trimmedLabel = trimmedString(label);
+        if (!trimmedText || !trimmedLabel) return null;
+        const prefix = `${trimmedLabel}: `;
+        return trimmedText.startsWith(prefix) ? trimmedText.slice(prefix.length).trim() : null;
+    }
+
+    function trimmedString(value) {
+        return typeof value === 'string' ? value.trim() : '';
+    }
+
+    function defaultShortResult(status) {
+        if (status === 'pass') return 'passed';
+        if (status === 'fail') return 'failed';
+        if (status === 'timeout') return 'timed out';
+        return 'error';
     }
 
     // -------------------------------------------------------------------------
@@ -851,5 +998,18 @@ else:
 
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    const testHooks = globalThis.__CHICKADEE_NOTEBOOK_TEST_HOOKS__;
+    if (testHooks) {
+        testHooks.exports = {
+            buildOutcomeDisplayNameMap,
+            bestOutcomeDisplayName,
+            formattedOutcomeShortResult,
+            formattedOutcomeDetailedOutput,
+            structuredSummaryText,
+            extractTracebackText,
+            parseStructuredPayload,
+        };
     }
 })();

@@ -2,12 +2,13 @@
 //
 // Integration tests for AssignmentRoutes+Enrollment:
 //   POST /courses/:courseID/enrollment-mode  — set enrollment mode
+//   GET  /instructor/enroll-csv              — bulk-enrol upload form
 //   POST /courses/:courseID/enroll-csv       — bulk-enrol from CSV upload
 
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 import Core
 
@@ -17,7 +18,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-enroll-\(UUID().uuidString)/")
@@ -32,25 +33,13 @@ final class AssignmentEnrollmentTests: XCTestCase {
 
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await configureTestDatabase(app)
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -70,6 +59,11 @@ final class AssignmentEnrollmentTests: XCTestCase {
         return user
     }
 
+    private func enroll(user: APIUser, in course: APICourse) async throws {
+        let enrollment = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
+        try await enrollment.save(on: app.db)
+    }
+
     // MARK: - POST /courses/:courseID/enrollment-mode
 
     func testSetEnrollmentMode_instructorCanSetToOpen() async throws {
@@ -79,7 +73,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -97,7 +91,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["enrollmentMode": "closed", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -115,7 +109,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let courseID = try course.requireID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -129,7 +123,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let bogusID = UUID().uuidString
         let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
-        try await app.test(.POST, "/courses/\(bogusID)/enrollment-mode", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(bogusID)/enrollment-mode", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -138,6 +132,29 @@ final class AssignmentEnrollmentTests: XCTestCase {
     }
 
     // MARK: - POST /courses/:courseID/enroll-csv
+
+    func testEnrollCSVFormShowsDedicatedUploadPage() async throws {
+        let course = try await makeCourse(code: "CSV_FORM1")
+        let cookie = try await loginUser(username: "csv_instructor_form", password: "pw",
+                                         role: "instructor", on: app)
+        let instructorQueryResult = try await APIUser.query(on: app.db)
+            .filter(\.$username == "csv_instructor_form")
+            .first()
+        let instructor = try XCTUnwrap(instructorQueryResult)
+        try await enroll(user: instructor, in: course)
+        let courseID = try course.requireID().uuidString
+
+        try await app.asyncTest(.GET, "/instructor/enroll-csv", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Enrol from CSV"))
+            XCTAssertTrue(html.contains("/courses/\(courseID)/enroll-csv"))
+            XCTAssertTrue(html.contains("type=\"file\""))
+            XCTAssertTrue(html.contains("Cancel"))
+        })
+    }
 
     func testBulkEnrollCSV_enrollsMatchedUsers() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL1")
@@ -150,7 +167,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
 
         let csvData = "csv_alice\ncsv_bob\ncsv_notexist\n"
 
-        try await app.test(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             var body = ByteBufferAllocator().buffer(capacity: 256)
             let boundary = "----TestBoundary"
@@ -191,7 +208,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let boundary = "----TestBoundary2"
         let part = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"users.csv\"\r\nContent-Type: text/csv\r\n\r\n\(csvData)\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
 
-        try await app.test(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             var body = ByteBufferAllocator().buffer(capacity: 256)
             body.writeString(part)
@@ -218,7 +235,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let boundary = "----TestBoundary3"
         let part = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"u.csv\"\r\nContent-Type: text/csv\r\n\r\nalice\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
 
-        try await app.test(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
             req.headers.add(name: .cookie, value: newCookie)
             var body = ByteBufferAllocator().buffer(capacity: 256)
             body.writeString(part)

@@ -16,89 +16,116 @@
 </div>
 #endif
 
-<!-- View mode header (outside form) -->
-<div id="assign-header-view" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem">
-    <h1 style="margin:0">#(assignmentName)</h1>
-    <span class="card-meta" id="assign-due-display" style="font-size:.9rem"></span>
-    <button class="btn-link" id="assign-edit-toggle" type="button"
-            title="Edit name and due date" aria-label="Edit assignment name and due date"
-            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-    </button>
-</div>
-
 <form class="form" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
     #csrfFormField()
-    <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
-    <div id="assign-header-edit" style="display:none;margin-bottom:1.25rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
-        <div style="display:flex;align-items:center;margin-bottom:.6rem">
-            <strong style="font-size:.875rem">Name &amp; Due Date</strong>
-            <button class="btn-link" id="assign-edit-cancel" type="button"
-                    aria-label="Cancel" title="Cancel"
-                    style="margin-left:auto;font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem">
+        <div style="flex:1;min-width:16rem">
+            <!-- View mode header -->
+            <div id="assign-header-view" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                <h1 style="margin:0">#(assignmentName)</h1>
+                <span class="card-meta" id="assign-due-display" style="font-size:.9rem"></span>
+                <button class="btn-link" id="assign-edit-toggle" type="button"
+                        title="Edit name and due date" aria-label="Edit assignment name and due date"
+                        style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </button>
+            </div>
+
+            <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
+            <div id="assign-header-edit" style="display:none;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
+                <div style="display:flex;align-items:center;margin-bottom:.6rem">
+                    <strong style="font-size:.875rem">Name &amp; Due Date</strong>
+                    <button class="btn-link" id="assign-edit-cancel" type="button"
+                            aria-label="Cancel" title="Cancel"
+                            style="margin-left:auto;font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                </div>
+                <label class="form-label" style="margin-bottom:.5rem">
+                    Assignment Name
+                    <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
+                           value="#(assignmentName)"
+                           placeholder="e.g. Lab 2 - Linked Lists">
+                </label>
+                <label class="form-label" style="margin:0">
+                    Due Date (optional)
+                    <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
+                </label>
+                <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+            </div>
         </div>
-        <label class="form-label" style="margin-bottom:.5rem">
-            Assignment Name
-            <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
-                   value="#(assignmentName)"
-                   placeholder="e.g. Lab 2 - Linked Lists">
-        </label>
-        <label class="form-label" style="margin:0">
-            Due Date (optional)
-            <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
-        </label>
-        <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
+            <button class="btn btn-primary" type="submit">Save</button>
+            <a class="btn" href="/instructor">Cancel</a>
+        </div>
     </div>
 
-    <div class="form-label">
-        <span style="white-space:nowrap">Assignment Notebook (<a href="#(currentAssignmentURL)"><code>#(currentAssignmentFile)</code></a>)</span>
-        <input class="form-input" type="file" name="assignmentNotebookFile" accept=".ipynb">
+    <div style="margin:0 0 1.25rem">
+        <table class="results-table" id="notebook-files-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>File</th>
+                    <th class="time">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Assignment Notebook</strong></td>
+                    <td>
+                        <a href="#(currentAssignmentURL)"><code id="assignment-notebook-name">#(currentAssignmentFile)</code></a>
+                    </td>
+                    <td class="time">
+                        <a class="btn action-btn" id="assignment-notebook-edit-btn" href="#(assignmentNotebookEditURL)">Edit</a>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Solution Notebook</strong></td>
+                    <td>
+                        #if(currentSolutionURL):
+                        <a href="#(currentSolutionURL)"><code id="solution-notebook-name">#(currentSolutionFile)</code></a>
+                        #else:
+                        <code id="solution-notebook-name">not set</code>
+                        #endif
+                    </td>
+                    <td class="time">
+                        #if(solutionNotebookEditURL):
+                        <a class="btn action-btn" id="solution-notebook-edit-btn" href="#(solutionNotebookEditURL)">Edit</a>
+                        #else:
+                        <span class="card-meta">—</span>
+                        #endif
+                    </td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
-    <div class="form-label">
-        #if(currentSolutionURL):
-        <span style="white-space:nowrap">Solution Notebook (<a href="#(currentSolutionURL)"><code>#(currentSolutionFile)</code></a>)</span>
-        #else:
-        <span style="white-space:nowrap">Solution Notebook (<code>not set</code>)</span>
-        #endif
-        <input class="form-input" type="file" name="solutionNotebookFile" accept=".ipynb">
-    </div>
-
-    <label class="form-label">
-        <span style="white-space:nowrap">Add Test Suite Files (scripts/support files like <code>.py</code> or <code>.r</code>)</span>
-        <input class="form-input" id="suite-files-input" type="file" name="suiteFiles" multiple>
-    </label>
+    <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
+    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
     <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
 
-    <p class="card-meta" style="margin-bottom:.4rem">
-        Drag ⋮⋮ to reorder. Drag a file onto another to make it a dependent (child) test.
-        Drag to the strip at the bottom to remove a dependency.
-    </p>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
+        <h2 style="margin:0">Test Suite</h2>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
+            <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
+        </div>
+    </div>
     <table class="results-table" id="suite-config-table">
         <thead>
             <tr>
                 <th title="Student-facing name (edit to override the filename)">Name</th>
-                <th>Test?</th>
-                <th>Tier</th>
+                <th>Visibility</th>
                 <th title="Grade point weight for this test (default 1)">Pts</th>
-                <th class="time">Delete</th>
+                <th class="time">Action</th>
             </tr>
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
             <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td>
+                <td><div class="suite-name-cell">
                     <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
                     <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                    <div class="suite-file-hint">
-                        <a href="#(row.url)"><code>#(row.name)</code></a>
-                        <button class="btn-link suite-edit-btn" type="button"
-                                data-filename="#(row.name)"
-                                style="font-size:.75rem;margin-left:.4rem;color:var(--blue,#0070c9)"
-                                title="Edit script in browser">Edit</button>
-                    </div>
-                </td>
-                <td><input type="checkbox" class="suite-test-toggle" #if(row.isTest):checked#endif></td>
+                </div></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
                         <option value="support" #if(row.tier == "support"):selected#endif>support</option>
@@ -108,31 +135,22 @@
                     </select>
                 </td>
                 <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
-                <td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>
+                <td class="time">
+                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <button class="btn action-btn suite-edit-btn" type="button" data-filename="#(row.name)">Edit</button>
+                        <button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>
+                    </div>
+                </td>
             </tr>
             #endfor
         </tbody>
     </table>
-
-    <p class="card-meta">
-        Use Delete to remove a file. Add more files above, or click <strong>New Script</strong> to create one from a template.
-        At least one row marked as a test is required.
-    </p>
-
-    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem">
-        <button class="btn" type="button" id="new-script-btn">+ New Script</button>
-    </div>
-
-    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit">Save</button>
-        <a class="btn" href="/instructor">Cancel</a>
-    </div>
 </form>
 
 <!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
 <div id="script-editor-overlay"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--bg,#fff);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
                 display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
 
         <!-- Header -->
@@ -169,7 +187,7 @@
                 </label>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--meta)">Template:</span>
+                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
                 <select id="template-select" class="form-input"
                         style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
                     <optgroup label="Python">
@@ -200,7 +218,7 @@
                     border-top:1px solid var(--border,#ddd);flex-shrink:0">
             <button class="btn btn-primary" id="editor-save-btn" type="button">Save</button>
             <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--meta);margin-left:.5rem"></span>
+            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
         </div>
     </div>
 </div>
@@ -211,6 +229,7 @@
 tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
 tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
 tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
+.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
 .suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
 .suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
@@ -218,10 +237,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
 .suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
 .suite-file-hint a { color: inherit; }
+#suite-config-table td { vertical-align: top; }
 </style>
 <script>
 (function () {
     'use strict';
+
+    var form = document.querySelector('form.form');
 
     // ── Header view/edit toggle ────────────────────────────────────────────────
     var headerView   = document.getElementById('assign-header-view');
@@ -231,7 +253,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     var nameInput    = document.getElementById('assignmentNameInput');
     var dueInput     = document.getElementById('dueAt');
     var dueDisplay   = document.getElementById('assign-due-display');
-
     function formatDueDate(val) {
         if (!val) return 'No deadline';
         // datetime-local format: "2024-03-15T09:00"
@@ -281,8 +302,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     // items: { name, source, index?, isTest, tier, dependsOn[], points, url? }
     var items = [];
     var dragName = null;
-    var uploadCount = 0;  // running count of uploaded files added
-
     function isLikelyScript(name) {
         var ext = (name || '').toLowerCase().split('.').pop();
         return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
@@ -340,42 +359,44 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         return dot > 0 ? filename.slice(0, dot) : filename;
     }
 
+    function itemIsTest(item) {
+        return item.tier !== 'support';
+    }
+
     function rowHTML(item, depth) {
         var isNew    = item.source === 'upload';
         var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
         var errBadge = errs.length > 0
             ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
             : '';
-        // File link shown below the name input as a hint
-        var fileHint = isNew
-            ? '<div class="suite-file-hint"><code>' + escHtml(item.name) + '</code> <span class="card-meta">(new)</span>' + errBadge + '</div>'
-            : '<div class="suite-file-hint"><a href="' + escAttr(item.url || '#') + '"><code>' + escHtml(item.name) + '</code></a></div>';
+        var fileHint = isNew ? errBadge : '';
         var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var checked   = item.isTest ? ' checked' : '';
         var pts       = item.points || 1;
         // Default input value to display name if set, otherwise the filename stem
         var nameVal   = escAttr(item.displayName || stemOf(item.name));
         return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
-            + '<td' + indent + '>'
+            + '<td' + indent + '><div class="suite-name-cell">'
             +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
             +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
             +   fileHint
-            + '</td>'
-            + '<td><input type="checkbox" class="suite-test-toggle"' + checked + '></td>'
+            + '</div></td>'
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
             + '</select></td>'
             + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-            + '<td class="time"><button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button></td>'
+            + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
+            +   (isNew ? '' : '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.name) + '">Edit</button>')
+            +   '<button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>'
+            + '</div></td>'
             + '</tr>';
     }
 
     function renderTree() {
         var visual = visualOrder();
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="5">&#9660; Drop here to remove dependency</td></tr>';
+            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
     }
 
     function syncConfig() {
@@ -385,11 +406,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
             if (row) {
                 var tierEl        = row.querySelector('.suite-tier');
-                var toggleEl      = row.querySelector('.suite-test-toggle');
                 var ptsEl         = row.querySelector('.suite-points');
                 var displayNameEl = row.querySelector('.suite-display-name');
                 if (tierEl)        item.tier        = tierEl.value;
-                if (toggleEl)      item.isTest      = toggleEl.checked && item.tier !== 'support';
+                item.isTest = itemIsTest(item);
                 if (ptsEl)         item.points      = Math.max(1, parseInt(ptsEl.value) || 1);
                 if (displayNameEl) {
                     var val = displayNameEl.value.trim();
@@ -550,6 +570,22 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     body.addEventListener('input',  function () { syncConfig(); });
 
     filesInput.addEventListener('change', addUploadedFiles);
+    if (form) {
+        form.addEventListener('submit', function () {
+            syncConfig();
+        });
+        form.addEventListener('chickadee:before-multipart-submit', function () {
+            syncConfig();
+        });
+    }
+
+    var addTestBtn = document.getElementById('add-test-btn');
+    if (addTestBtn) {
+        addTestBtn.addEventListener('click', function () {
+            filesInput.value = '';
+            filesInput.click();
+        });
+    }
 
     function escHtml(v) {
         return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
@@ -570,20 +606,52 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 /* CodeMirror 6 host element */
 #cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
 #cm-editor-mount .cm-scroller { overflow: auto; }
+/* Dark-mode overrides for the CodeMirror editor */
+@media (prefers-color-scheme: dark) {
+    #cm-editor-mount .cm-editor {
+        background: var(--gray-100);
+    }
+    #cm-editor-mount .cm-gutters {
+        background: var(--gray-200);
+        border-color: var(--gray-200);
+        color: var(--gray-500);
+    }
+    #cm-editor-mount .cm-content {
+        color: var(--gray-900);
+        caret-color: var(--gray-900);
+    }
+    #cm-editor-mount .cm-activeLine {
+        background: var(--gray-200);
+    }
+    #cm-editor-mount .cm-selectionBackground,
+    #cm-editor-mount ::selection {
+        background: var(--hover-bg) !important;
+    }
+    #cm-editor-mount .cm-cursor {
+        border-left-color: var(--gray-900);
+    }
+    /* Modal inputs & selects */
+    #script-editor-overlay input,
+    #script-editor-overlay select {
+        background: var(--gray-100);
+        color: var(--gray-900);
+        border-color: var(--gray-200);
+    }
+}
 </style>
 <script type="module">
 // ── CodeMirror 6 script editor ─────────────────────────────────────────────
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6?bundle';
-import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6?bundle';
+         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
+import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
 import { defaultKeymap, history, historyKeymap, indentWithTab }
-                                      from 'https://esm.sh/@codemirror/commands@6?bundle';
+                                      from 'https://esm.sh/@codemirror/commands@6';
 import { syntaxHighlighting, defaultHighlightStyle }
-                                      from 'https://esm.sh/@codemirror/language@6?bundle';
-import { python }                     from 'https://esm.sh/@codemirror/lang-python@6?bundle';
-import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6?bundle';
-import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell?bundle';
-import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r?bundle';
+                                      from 'https://esm.sh/@codemirror/language@6';
+import { python }                     from 'https://esm.sh/@codemirror/lang-python@6';
+import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6';
+import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell';
+import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r';
 
 const langComp = new Compartment();
 
@@ -627,10 +695,21 @@ const templateSel = document.getElementById('template-select');
 const applyTplBtn = document.getElementById('apply-template-btn');
 const newScriptBtn = document.getElementById('new-script-btn');
 const assignmentID = '#(assignmentID)';
+const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
 let view = null;
 let currentFilename = null;  // null when creating a new file
 let isCreating = false;
+
+function initView(content, filename) {
+    if (view) { view.destroy(); view = null; }
+    try {
+        view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
+    } catch (e) {
+        statusEl.textContent = 'Editor failed to load: ' + e.message;
+        console.error('EditorView init error:', e);
+    }
+}
 
 function openEditor(filename, content) {
     currentFilename = filename;
@@ -638,10 +717,9 @@ function openEditor(filename, content) {
     titleEl.textContent = 'Edit: ' + filename;
     newControls.style.display = 'none';
     statusEl.textContent = '';
-    if (view) { view.destroy(); }
-    view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
     overlay.style.display = 'flex';
-    view.focus();
+    initView(content, filename);
+    if (view) view.focus();
 }
 
 function openCreator() {
@@ -651,9 +729,8 @@ function openCreator() {
     newControls.style.display = '';
     newNameInput.value = '';
     statusEl.textContent = '';
-    if (view) { view.destroy(); }
-    view = new EditorView({ state: makeEditorState('', ''), parent: mount });
     overlay.style.display = 'flex';
+    initView('', '');
     newNameInput.focus();
 }
 
@@ -671,10 +748,12 @@ document.addEventListener('click', function(e) {
     if (!filename) return;
     statusEl.textContent = 'Loading…';
     overlay.style.display = 'flex';
-    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename))
-        .then(r => r.ok ? r.text() : Promise.reject(r.statusText))
+    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename), {
+        headers: { 'x-csrf-token': csrfToken }
+    })
+        .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(r.status + ' ' + t)))
         .then(content => openEditor(filename, content))
-        .catch(err => { statusEl.textContent = 'Error: ' + err; });
+        .catch(err => { statusEl.textContent = 'Error: ' + err; console.error('getScript error:', err); });
 });
 
 // ── New Script button ──────────────────────────────────────────────────────
@@ -692,7 +771,10 @@ function fetchTemplates() {
     return fetch('/instructor/scan-notebook', {
         method: 'POST',
         body: JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }),
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken
+        }
     })
     .then(r => r.ok ? r.json() : [])
     .then(functions => {
@@ -754,7 +836,7 @@ applyTplBtn.addEventListener('click', function() {
 // ── Save ───────────────────────────────────────────────────────────────────
 
 saveBtn.addEventListener('click', function() {
-    if (!view) return;
+    if (!view) { statusEl.textContent = 'Editor not ready — try closing and reopening.'; return; }
     const content = view.state.doc.toString();
 
     if (isCreating) {
@@ -767,7 +849,7 @@ saveBtn.addEventListener('click', function() {
         saveBtn.disabled = true;
         fetch('/instructor/' + assignmentID + '/scripts', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
             body: JSON.stringify({ filename, content, tier, points, isTest })
         })
         .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
@@ -787,12 +869,12 @@ saveBtn.addEventListener('click', function() {
         saveBtn.disabled = true;
         fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(currentFilename), {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
             body: JSON.stringify({ content })
         })
         .then(r => {
             if (r.ok || r.status === 204) {
-                statusEl.textContent = 'Saved.';
+                closeEditor();
             } else {
                 return r.text().then(t => Promise.reject(t));
             }

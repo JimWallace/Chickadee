@@ -2,10 +2,11 @@
 //
 // Unit tests for NotebookFunctionScanner.
 
-import XCTest
+import Testing
+import Foundation
 @testable import Core
 
-final class NotebookFunctionScannerTests: XCTestCase {
+struct NotebookFunctionScannerTests {
 
     // MARK: - Helpers
 
@@ -60,116 +61,114 @@ final class NotebookFunctionScannerTests: XCTestCase {
 
     // MARK: - Tests
 
-    func testEmptyNotebook() {
+    @Test func emptyNotebook() {
         let nb = Data("""
         {"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}
         """.utf8)
-        let fns = scanNotebookForFunctions(nb)
-        XCTAssertTrue(fns.isEmpty)
+        #expect(scanNotebookForFunctions(nb).isEmpty)
     }
 
-    func testInvalidJSON() {
-        let fns = scanNotebookForFunctions(Data("not json".utf8))
-        XCTAssertTrue(fns.isEmpty)
+    @Test func invalidJSON() {
+        #expect(scanNotebookForFunctions(Data("not json".utf8)).isEmpty)
     }
 
-    func testSingleSimpleFunction() {
+    @Test func singleSimpleFunction() {
         let nb = notebook(code: "def foo(a, b):\n    return a + b\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].name, "foo")
-        XCTAssertEqual(fns[0].paramNames, ["a", "b"])
-        XCTAssertFalse(fns[0].hasTypeHints)
-        XCTAssertFalse(fns[0].hasDocstring)
+        #expect(fns.count == 1)
+        #expect(fns[0].name == "foo")
+        #expect(fns[0].paramNames == ["a", "b"])
+        #expect(!fns[0].hasTypeHints)
+        #expect(!fns[0].hasDocstring)
     }
 
-    func testFunctionWithTypeHints() {
+    @Test func functionWithTypeHints() {
         let nb = notebook(code: "def bar(x: int, y: str) -> bool:\n    return True\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].name, "bar")
-        XCTAssertEqual(fns[0].paramNames, ["x", "y"])
-        XCTAssertTrue(fns[0].hasTypeHints)
+        #expect(fns.count == 1)
+        #expect(fns[0].name == "bar")
+        #expect(fns[0].paramNames == ["x", "y"])
+        #expect(fns[0].hasTypeHints)
     }
 
-    func testFunctionWithReturnTypeHintOnly() {
+    @Test func functionWithReturnTypeHintOnly() {
         let nb = notebook(code: "def baz(n) -> list:\n    return []\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertTrue(fns[0].hasTypeHints)
+        #expect(fns.count == 1)
+        #expect(fns[0].hasTypeHints)
     }
 
-    func testFunctionWithDocstring() {
+    @Test func functionWithDocstring() {
         let nb = notebook(code: "def greet(name):\n    \"\"\"Greet someone.\"\"\"\n    return 'Hi ' + name\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertTrue(fns[0].hasDocstring)
+        #expect(fns.count == 1)
+        #expect(fns[0].hasDocstring)
     }
 
-    func testPrivateFunctionExcluded() {
+    @Test func privateFunctionExcluded() {
         let nb = notebook(code: "def _helper(x):\n    pass\ndef public_fn(x):\n    pass\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].name, "public_fn")
+        #expect(fns.count == 1)
+        #expect(fns[0].name == "public_fn")
     }
 
-    func testSelfAndClsExcluded() {
+    @Test func selfAndClsExcluded() {
         let nb = notebook(code: "def method(self, x, y):\n    pass\n")
         // Top-level def with self — unusual but the scanner just strips self
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].paramNames, ["x", "y"])
+        #expect(fns.count == 1)
+        #expect(fns[0].paramNames == ["x", "y"])
     }
 
-    func testNoParameters() {
+    @Test func noParameters() {
         let nb = notebook(code: "def get_count():\n    return 0\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].paramNames, [])
+        #expect(fns.count == 1)
+        #expect(fns[0].paramNames == [])
     }
 
-    func testVarargsExcluded() {
+    @Test func varargsExcluded() {
         let nb = notebook(code: "def variadic(a, *args, **kwargs):\n    pass\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].paramNames, ["a"])
+        #expect(fns.count == 1)
+        #expect(fns[0].paramNames == ["a"])
     }
 
-    func testDefaultValueStripped() {
+    @Test func defaultValueStripped() {
         let nb = notebook(code: "def increment(n, step=1):\n    return n + step\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].paramNames, ["n", "step"])
+        #expect(fns.count == 1)
+        #expect(fns[0].paramNames == ["n", "step"])
     }
 
-    func testMultipleFunctionsInOneCell() {
+    @Test func multipleFunctionsInOneCell() {
         let nb = notebook(code: "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 2)
-        XCTAssertEqual(fns[0].name, "add")
-        XCTAssertEqual(fns[1].name, "subtract")
+        #expect(fns.count == 2)
+        #expect(fns[0].name == "add")
+        #expect(fns[1].name == "subtract")
     }
 
-    func testFunctionsAcrossMultipleCells() {
+    @Test func functionsAcrossMultipleCells() {
         let nb = notebook(cells: [
             "def foo(x):\n    return x\n",
             "x = 1  # not a function",
             "def bar(y):\n    return y\n"
         ])
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.count, 2)
-        XCTAssertEqual(fns[0].name, "foo")
-        XCTAssertEqual(fns[1].name, "bar")
+        #expect(fns.count == 2)
+        #expect(fns[0].name == "foo")
+        #expect(fns[1].name == "bar")
     }
 
-    func testIndentedFunctionNotTopLevel() {
+    @Test func indentedFunctionNotTopLevel() {
         // Class methods or nested functions — indented, not top-level.
         let nb = notebook(code: "class MyClass:\n    def method(self, x):\n        pass\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertTrue(fns.isEmpty, "Indented method should not be treated as top-level")
+        #expect(fns.isEmpty, "Indented method should not be treated as top-level")
     }
 
-    func testMarkdownCellIgnored() {
+    @Test func markdownCellIgnored() {
         let json = """
         {
           "cells": [
@@ -184,17 +183,16 @@ final class NotebookFunctionScannerTests: XCTestCase {
           "nbformat_minor": 5
         }
         """
-        let fns = scanNotebookForFunctions(Data(json.utf8))
-        XCTAssertTrue(fns.isEmpty)
+        #expect(scanNotebookForFunctions(Data(json.utf8)).isEmpty)
     }
 
-    func testParamCount() {
+    @Test func paramCount() {
         let nb = notebook(code: "def triple(a, b, c):\n    pass\n")
         let fns = scanNotebookForFunctions(nb)
-        XCTAssertEqual(fns.first?.paramCount, 3)
+        #expect(fns.first?.paramCount == 3)
     }
 
-    func testSourceAsArrayOfLines() {
+    @Test func sourceAsArrayOfLines() {
         // JupyterLite stores source as an array of strings, one per line.
         let json = """
         {
@@ -211,7 +209,7 @@ final class NotebookFunctionScannerTests: XCTestCase {
         }
         """
         let fns = scanNotebookForFunctions(Data(json.utf8))
-        XCTAssertEqual(fns.count, 1)
-        XCTAssertEqual(fns[0].name, "greet")
+        #expect(fns.count == 1)
+        #expect(fns[0].name == "greet")
     }
 }

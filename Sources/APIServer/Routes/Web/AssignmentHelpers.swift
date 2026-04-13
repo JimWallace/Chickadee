@@ -40,7 +40,7 @@ struct ResolvedEditSuiteFiles {
 
 struct SuiteConfigRow: Decodable {
     let index: Int
-    let isTest: Bool
+    let isTest: Bool?
     let tier: String?
     let order: Int?
     let dependsOn: [String]?   // script names of prerequisites
@@ -68,6 +68,10 @@ enum RunnerValidationOutcome {
     case timedOut
 }
 
+func minimalEmptyNotebookData() -> Data {
+    Data(#"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
+}
+
 // MARK: - Free functions
 
 /// Validates a sectionID string (UUID) against the given course and returns the UUID if valid.
@@ -93,8 +97,49 @@ func parseDueDate(_ raw: String?) -> Date? {
 
     let fmt = DateFormatter()
     fmt.locale = Locale(identifier: "en_US_POSIX")
+    fmt.timeZone = TimeZone(identifier: "America/Toronto")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.date(from: raw)
+}
+
+func waterlooDateTimeFormatter() -> DateFormatter {
+    let fmt = DateFormatter()
+    fmt.locale = Locale(identifier: "en_CA")
+    fmt.timeZone = TimeZone(identifier: "America/Toronto")
+    fmt.dateStyle = .medium
+    fmt.timeStyle = .short
+    return fmt
+}
+
+func splitHumanName(_ raw: String?) -> (surname: String, givenNames: String)? {
+    guard let raw else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if trimmed.contains(",") {
+        let parts = trimmed.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+        let surname = String(parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let givenNames = parts.count > 1
+            ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
+        return (
+            surname.isEmpty ? "—" : surname,
+            givenNames.isEmpty ? "—" : givenNames
+        )
+    }
+
+    let parts = trimmed.split(whereSeparator: \.isWhitespace)
+    guard !parts.isEmpty else { return nil }
+    if parts.count == 1 {
+        return ("—", String(parts[0]))
+    }
+
+    let surname = String(parts.last ?? "")
+    let givenNames = parts.dropLast().joined(separator: " ")
+    return (
+        surname.isEmpty ? "—" : surname,
+        givenNames.isEmpty ? "—" : givenNames
+    )
 }
 
 func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> APIAssignment? {
@@ -181,8 +226,25 @@ func dueAtLocalInputString(_ date: Date?) -> String {
     guard let date else { return "" }
     let fmt = DateFormatter()
     fmt.locale = Locale(identifier: "en_US_POSIX")
+    fmt.timeZone = TimeZone(identifier: "America/Toronto")
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
     return fmt.string(from: date)
+}
+
+func deadlineOverrideValueForInstructorOpen(
+    dueAt: Date?,
+    now: Date = Date()
+) -> Bool {
+    guard let dueAt else { return false }
+    return dueAt <= now
+}
+
+func normalizedDeadlineOverrideAfterDueDateChange(
+    dueAt: Date?,
+    existingOverride: Bool
+) -> Bool {
+    guard let dueAt else { return false }
+    return dueAt <= Date() ? existingOverride : false
 }
 
 func notebookFilenameForStorage(uploadedName: String?, fallback: String) -> String {
@@ -632,8 +694,8 @@ func resolveEditSuiteFiles(
         buffer.writeBytes(data)
         resolvedFiles.append(File(data: buffer, filename: name))
 
-        let tier = normalizeTier(row.tier)
-        let isTest = (row.isTest ?? false) && tier != "support"
+        let tier = normalizeTier(row.tier, isTest: row.isTest)
+        let isTest = tier != "support"
         configRows.append(ReindexedSuiteConfigRow(
             index: resolvedFiles.count - 1,
             isTest: isTest,
@@ -658,6 +720,35 @@ func resolveEditSuiteFiles(
 struct ExistingSolution {
     let data: Data
     let filename: String
+}
+
+struct NewAssignmentDraftFormState: Codable {
+    var assignmentName: String
+    var dueAt: String
+    var sectionID: String
+    var requiredPlatform: String
+    var requiredArchitecture: String
+    var requiredLanguagesCSV: String
+    var requiredCapabilitiesCSV: String
+    var assignmentNotebookName: String?
+    var solutionNotebookName: String?
+
+    static let empty = NewAssignmentDraftFormState(
+        assignmentName: "",
+        dueAt: "",
+        sectionID: "",
+        requiredPlatform: "",
+        requiredArchitecture: "",
+        requiredLanguagesCSV: "",
+        requiredCapabilitiesCSV: "",
+        assignmentNotebookName: nil,
+        solutionNotebookName: nil
+    )
+}
+
+struct DraftRequirementSuggestions {
+    let languages: [String]
+    let capabilities: [String]
 }
 
 func loadExistingSolution(req: Request, assignment: APIAssignment) async throws -> ExistingSolution? {
@@ -687,10 +778,323 @@ func loadExistingSolution(req: Request, assignment: APIAssignment) async throws 
     return nil
 }
 
+func draftFormStateSessionKey(_ draftID: String) -> String {
+    "newAssignmentDraft:\(draftID)"
+}
+
+func loadDraftFormState(req: Request, draftID: String) -> NewAssignmentDraftFormState {
+    guard let raw = req.session.data[draftFormStateSessionKey(draftID)],
+          let data = raw.data(using: .utf8),
+          let decoded = try? JSONDecoder().decode(NewAssignmentDraftFormState.self, from: data) else {
+        return .empty
+    }
+    return decoded
+}
+
+func saveDraftFormState(req: Request, draftID: String, state: NewAssignmentDraftFormState) {
+    guard let data = try? JSONEncoder().encode(state),
+          let raw = String(data: data, encoding: .utf8) else {
+        return
+    }
+    req.session.data[draftFormStateSessionKey(draftID)] = raw
+}
+
+func clearDraftFormState(req: Request, draftID: String) {
+    req.session.data[draftFormStateSessionKey(draftID)] = nil
+}
+
+func draftNotebookDirectory(testSetupsDirectory: String, setupID: String) -> String {
+    testSetupsDirectory + "notebooks/\(setupID)/"
+}
+
+func draftSolutionNotebookPath(testSetupsDirectory: String, setupID: String) -> String {
+    draftNotebookDirectory(testSetupsDirectory: testSetupsDirectory, setupID: setupID) + "solution.ipynb"
+}
+
+func ensureDraftNotebookDirectory(testSetupsDirectory: String, setupID: String) throws -> String {
+    let dir = draftNotebookDirectory(testSetupsDirectory: testSetupsDirectory, setupID: setupID)
+    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    return dir
+}
+
+func draftNotebookData(
+    req: Request,
+    setupID: String,
+    userID: UUID,
+    fileKind: NotebookFileKind,
+    fallbackPath: String?
+) -> Data? {
+    let workingCopyPath = req.application.directory.publicDirectory
+        + "jupyterlite/files/"
+        + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
+    if let data = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
+       !data.isEmpty,
+       (try? JSONSerialization.jsonObject(with: data)) != nil {
+        return data
+    }
+    guard let fallbackPath,
+          let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackPath)),
+          !data.isEmpty,
+          (try? JSONSerialization.jsonObject(with: data)) != nil else {
+        return nil
+    }
+    return data
+}
+
+func removeDraftNotebookFiles(
+    req: Request,
+    setupID: String,
+    userID: UUID,
+    fileKind: NotebookFileKind,
+    persistedPath: String?
+) {
+    let workingCopyPath = req.application.directory.publicDirectory
+        + "jupyterlite/files/"
+        + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
+    try? FileManager.default.removeItem(atPath: workingCopyPath)
+    if let persistedPath {
+        try? FileManager.default.removeItem(atPath: persistedPath)
+    }
+}
+
+func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
+    let entries = listZipEntries(zipPath: setup.zipPath)
+        .filter { $0 != "assignment.ipynb" && $0 != "solution.ipynb" }
+        .sorted()
+
+    let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
+        guard let data = setup.manifest.data(using: .utf8),
+              let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+            return [:]
+        }
+        var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = [:]
+        for (idx, entry) in props.testSuites.enumerated() {
+            map[entry.script] = (entry.tier.rawValue, idx + 1, entry.dependsOn, entry.points, entry.name)
+        }
+        return map
+    }()
+
+    return entries.enumerated().map { idx, name in
+        let info = manifestTests[name]
+        return EditableSuiteRow(
+            name: name,
+            url: "#",
+            isTest: (info?.tier ?? "support") != "support",
+            tier: info?.tier ?? "support",
+            order: info?.order ?? (idx + 1),
+            dependsOn: info?.dependsOn ?? [],
+            points: info?.points ?? 1,
+            displayName: info?.name
+        )
+    }
+    .sorted { lhs, rhs in
+        if lhs.order != rhs.order { return lhs.order < rhs.order }
+        return lhs.name < rhs.name
+    }
+}
+
+func parsedRequirementCSV(_ raw: String) -> [String] {
+    raw
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+}
+
+func assignmentRequirementSpec(
+    platform: String,
+    architecture: String,
+    languagesCSV: String,
+    capabilitiesCSV: String
+) -> AssignmentRequirementSpec? {
+    let platformValue = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+    let architectureValue = architecture.trimmingCharacters(in: .whitespacesAndNewlines)
+    let languages = parsedRequirementCSV(languagesCSV)
+        .map { AssignmentLanguageRequirement(language: $0.lowercased()) }
+    let capabilities = parsedRequirementCSV(capabilitiesCSV)
+        .map { RunnerCapability(name: $0.lowercased()) }
+    let spec = AssignmentRequirementSpec(
+        requiredPlatform: platformValue.isEmpty ? nil : platformValue.lowercased(),
+        requiredArchitecture: architectureValue.isEmpty ? nil : architectureValue.lowercased(),
+        requiredLanguages: languages,
+        requiredCapabilities: capabilities
+    )
+    guard spec.requiredPlatform != nil
+            || spec.requiredArchitecture != nil
+            || !spec.requiredLanguages.isEmpty
+            || !spec.requiredCapabilities.isEmpty else {
+        return nil
+    }
+    return spec
+}
+
+func detectRequirementSuggestions(
+    assignmentNotebookData: Data?,
+    solutionNotebookData: Data?,
+    setup: APITestSetup
+) -> DraftRequirementSuggestions {
+    var languages = Set<String>()
+    var capabilities = Set<String>()
+
+    func addLanguage(_ raw: String) {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+        languages.insert(normalized)
+    }
+
+    func addCapability(_ raw: String) {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+        capabilities.insert(normalized)
+    }
+
+    func scanPythonSource(_ source: String) {
+        for module in pythonCapabilitySuggestions(in: source) {
+            addCapability(module)
+        }
+    }
+
+    func scanNotebook(_ data: Data) {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+        if let metadata = root["metadata"] as? [String: Any] {
+            if let kernelspec = metadata["kernelspec"] as? [String: Any] {
+                let name = (kernelspec["name"] as? String ?? "").lowercased()
+                let language = (kernelspec["language"] as? String ?? "").lowercased()
+                if name == "python" || language == "python" { addLanguage("python") }
+                if ["ir", "r", "webr"].contains(name) || language == "r" { addLanguage("r") }
+            }
+            if let languageInfo = metadata["language_info"] as? [String: Any],
+               let language = languageInfo["name"] as? String {
+                addLanguage(language)
+            }
+        }
+        guard let cells = root["cells"] as? [[String: Any]] else { return }
+        for cell in cells where (cell["cell_type"] as? String) == "code" {
+            let source: String
+            if let sourceArray = cell["source"] as? [String] {
+                source = sourceArray.joined()
+            } else {
+                source = cell["source"] as? String ?? ""
+            }
+            scanPythonSource(source)
+        }
+    }
+
+    func scanZipEntry(name: String, data: Data) {
+        let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
+        switch ext {
+        case "py":
+            addLanguage("python")
+            if let source = String(data: data, encoding: .utf8) {
+                scanPythonSource(source)
+            }
+        case "r":
+            addLanguage("r")
+        case "sh", "bash":
+            addCapability("shell-bash")
+        case "zsh":
+            addCapability("shell-zsh")
+        case "swift":
+            addLanguage("swift")
+        case "js":
+            addLanguage("javascript")
+        default:
+            break
+        }
+    }
+
+    if let assignmentNotebookData { scanNotebook(assignmentNotebookData) }
+    _ = solutionNotebookData
+
+    for entry in listZipEntries(zipPath: setup.zipPath) {
+        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: entry) else { continue }
+        scanZipEntry(name: entry, data: data)
+    }
+
+    return DraftRequirementSuggestions(
+        languages: languages.sorted(),
+        capabilities: capabilities.sorted()
+    )
+}
+
+private func pythonCapabilitySuggestions(in source: String) -> [String] {
+    let allowed: [String: String] = [
+        "numpy": "numpy",
+        "pandas": "pandas",
+        "scipy": "scipy",
+        "matplotlib": "matplotlib"
+    ]
+    let patterns = [
+        #"(?m)^\s*import\s+([A-Za-z_][A-Za-z0-9_\.]*)"#,
+        #"(?m)^\s*from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+"#
+    ]
+    var matches = Set<String>()
+    for pattern in patterns {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+        let nsrange = NSRange(source.startIndex..<source.endIndex, in: source)
+        for match in regex.matches(in: source, range: nsrange) where match.numberOfRanges > 1 {
+            guard let range = Range(match.range(at: 1), in: source) else { continue }
+            let root = source[range].split(separator: ".").first.map(String.init)?.lowercased() ?? ""
+            if let capability = allowed[root] {
+                matches.insert(capability)
+            }
+        }
+    }
+    return matches.sorted()
+}
+
 func urlEncode(_ s: String) -> String {
     var allowed = CharacterSet.alphanumerics
     allowed.insert(charactersIn: "-._~")
     return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+}
+
+func multipartParts(from req: Request) throws -> [MultipartPart]? {
+    guard let contentType = req.headers.contentType,
+          contentType.type == "multipart",
+          contentType.subType == "form-data",
+          let boundary = contentType.parameters["boundary"],
+          let body = req.body.data else {
+        return nil
+    }
+
+    let parser = MultipartParser(boundary: boundary)
+    var parts: [MultipartPart] = []
+    var headers = HTTPHeaders()
+    var partBody = ByteBuffer()
+
+    parser.onHeader = { field, value in
+        headers.replaceOrAdd(name: field, value: value)
+    }
+    parser.onBody = { chunk in
+        partBody.writeBuffer(&chunk)
+    }
+    parser.onPartComplete = {
+        parts.append(MultipartPart(headers: headers, body: partBody))
+        headers = HTTPHeaders()
+        partBody = ByteBuffer()
+    }
+
+    try parser.execute(body)
+    return parts
+}
+
+func multipartFiles(named names: [String], from req: Request) throws -> [File]? {
+    guard let parts = try multipartParts(from: req) else { return nil }
+    let files = names
+        .flatMap { name in parts.allParts(named: name) }
+        .compactMap(File.init(multipart:))
+    return files.isEmpty ? nil : files
+}
+
+func multipartTextField(named names: [String], from req: Request) throws -> String? {
+    guard let parts = try multipartParts(from: req) else { return nil }
+    for name in names {
+        if let part = parts.firstPart(named: name),
+           let value = String(multipart: part) {
+            return value
+        }
+    }
+    return nil
 }
 
 func nextAssignmentSortOrder(req: Request) async throws -> Int {
@@ -699,6 +1103,25 @@ func nextAssignmentSortOrder(req: Request) async throws -> Int {
         .compactMap(\.sortOrder)
         .max() ?? 0
     return maxOrder + 1
+}
+
+/// Returns the earned points for a submission result, suitable for LEARN-style CSV export.
+/// Tries Double first (for fractional points), falls back to Int for older results.
+/// When earnedPoints/totalPoints are absent, falls back to passCount.
+func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
+    guard let data = collectionJSON.data(using: .utf8),
+          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return nil
+    }
+    // Prefer weighted points when present (non-nil and non-zero totalPoints).
+    let totalPoints = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
+    if let total = totalPoints, total > 0 {
+        let earned = (root["earnedPoints"] as? Double) ?? (root["earnedPoints"] as? Int).map(Double.init)
+        if let e = earned { return e }
+    }
+    // Fall back to pass count for old results.
+    let passCount = (root["passCount"] as? Double) ?? (root["passCount"] as? Int).map(Double.init)
+    return passCount
 }
 
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
@@ -730,17 +1153,7 @@ func inferNameFromStudentID(_ studentID: String) -> (surname: String, givenNames
     let raw = studentID.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !raw.isEmpty else { return ("—", "—") }
 
-    if raw.contains(",") {
-        let parts = raw.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
-        let surname = String(parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let given = parts.count > 1
-            ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-            : ""
-        return (
-            surname.isEmpty ? "—" : surname,
-            given.isEmpty ? "—" : given
-        )
-    }
+    if let parsed = splitHumanName(raw), raw.contains(",") { return parsed }
     return ("—", "—")
 }
 
@@ -831,24 +1244,42 @@ func createRunnerSetupZip(
         storedNameByIndex: storedNameByIndex,
         suiteConfigJSON: suiteConfigJSON
     )
-    guard !testSuites.isEmpty else {
-        throw Abort(.badRequest, reason: "Select at least one test file in the suite file list")
-    }
 
-    let zip = Process()
-    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    zip.currentDirectoryURL = tempDir
-    zip.arguments = ["-q", "-r", zipPath, "."]
-    try zip.run()
-    zip.waitUntilExit()
-    guard zip.terminationStatus == 0 else {
-        throw Abort(.internalServerError, reason: "Failed to package setup zip")
+    if storedNameByIndex.isEmpty {
+        try writeEmptyZip(to: zipPath)
+    } else {
+        // Rebuilding an existing setup zip must start from a clean archive.
+        // `zip -r existing.zip .` updates/adds entries but does not remove files
+        // that are absent from the new source directory, which makes deleted
+        // suite/support files reappear on the next edit.
+        try? fm.removeItem(atPath: zipPath)
+        let zip = Process()
+        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        zip.currentDirectoryURL = tempDir
+        zip.arguments = ["-q", "-r", zipPath, "."]
+        try zip.run()
+        zip.waitUntilExit()
+        guard zip.terminationStatus == 0 else {
+            throw Abort(.internalServerError, reason: "Failed to package setup zip")
+        }
     }
     let hasMakefile = storedNameByIndex.values.contains {
         let n = $0.lowercased()
         return n == "makefile" || n == "gnumakefile"
     }
     return RunnerSetupPackage(testSuites: testSuites, hasMakefile: hasMakefile)
+}
+
+private func writeEmptyZip(to path: String) throws {
+    let emptyZip = Data([
+        0x50, 0x4b, 0x05, 0x06,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00
+    ])
+    try emptyZip.write(to: URL(fileURLWithPath: path))
 }
 
 func sanitizeSuiteFilename(_ raw: String) -> String {
@@ -881,9 +1312,10 @@ func buildSuiteEntries(
         }
         var selected: [ConfiguredSuiteEntry] = []
         for index in suiteFiles.indices {
-            guard let row = rowsByIndex[index], row.isTest else { continue }
+            guard let row = rowsByIndex[index] else { continue }
             guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
-            let tier = normalizeTier(row.tier)
+            let tier = normalizeTier(row.tier, isTest: row.isTest)
+            guard tier != "support" else { continue }
             selected.append(ConfiguredSuiteEntry(
                 script: script,
                 tier: tier,
@@ -936,11 +1368,19 @@ func inferredOrder(from filename: String) -> Int? {
     return Int(base[orderRange])
 }
 
-func normalizeTier(_ raw: String?) -> String {
+func normalizeTier(_ raw: String?, isTest: Bool? = nil) -> String {
+    if isTest == false {
+        return "support"
+    }
     switch (raw ?? "public").lowercased() {
+    case "support":
+        return "support"
     case "secret": return "secret"
     case "release": return "release"
-    default: return "public"
+    case "public":
+        return "public"
+    default:
+        return "public"
     }
 }
 
@@ -1059,7 +1499,7 @@ func enqueueRunnerValidationSubmission(
 func waitForRunnerValidation(
     req: Request,
     submissionID: String,
-    timeoutSeconds: TimeInterval = 45
+    timeoutSeconds: TimeInterval = 20
 ) async throws -> RunnerValidationOutcome {
     let started = Date()
     let decoder = JSONDecoder()
@@ -1104,6 +1544,66 @@ func ensureValidationRunnerAvailability(req: Request) async {
 
     await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
     try? await Task.sleep(nanoseconds: 1_000_000_000)
+}
+
+func hasCompatibleValidationRunner(
+    req: Request,
+    requirements: AssignmentRequirementSpec?,
+    activeWindowSeconds: TimeInterval = 20
+) async throws -> Bool {
+    try await req.application.runnerProfiles.refreshActiveFlags(
+        activeWindowSeconds: activeWindowSeconds,
+        on: req.db
+    )
+
+    let profiles = try await RunnerProfile.query(on: req.db)
+        .filter(\.$isActive == true)
+        .all()
+    let matcher = CompatibilityMatcher()
+
+    return profiles.contains { profile in
+        matcher.evaluate(
+            runnerProfile: profile.capabilityProfile,
+            requirements: requirements
+        ).isCompatible
+    }
+}
+
+func ensureCompatibleValidationRunnerAvailability(
+    req: Request,
+    requirements: AssignmentRequirementSpec?,
+    activeWindowSeconds: TimeInterval = 20,
+    attempts: Int = 3
+) async throws -> Bool {
+    if try await hasCompatibleValidationRunner(
+        req: req,
+        requirements: requirements,
+        activeWindowSeconds: activeWindowSeconds
+    ) {
+        return true
+    }
+
+    let enabled = await req.application.localRunnerAutoStartStore.isEnabled()
+    guard enabled else { return false }
+
+    await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+
+    for attempt in 0..<attempts {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if try await hasCompatibleValidationRunner(
+            req: req,
+            requirements: requirements,
+            activeWindowSeconds: activeWindowSeconds
+        ) {
+            return true
+        }
+
+        if attempt + 1 < attempts {
+            await req.application.localRunnerManager.ensureRunning(app: req.application, logger: req.logger)
+        }
+    }
+
+    return false
 }
 
 func removeMaterializedNotebookFiles(req: Request, setupID: String) {
@@ -1154,7 +1654,12 @@ func extractSupportFilesToSharedDirectory(
         try fm.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         for name in supportNames {
             guard let data = extractZipEntry(zipPath: zipPath, entryName: name) else { continue }
-            try data.write(to: URL(fileURLWithPath: sharedDir + name))
+            let destination = URL(fileURLWithPath: sharedDir + name)
+            try fm.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: destination)
         }
     } catch {
         // Non-fatal: support files are a convenience; log and continue.

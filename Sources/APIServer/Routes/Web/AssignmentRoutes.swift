@@ -35,10 +35,13 @@ struct AssignmentRoutes: RouteCollection {
         let r = routes.grouped("instructor")
         r.get(use: list)
         r.get("grades.csv", use: exportGradesCSV)
+        r.get("enroll-csv", use: enrollCSVForm)
+        r.get("students", ":studentID", "submissions", use: courseStudentSubmissionsPage)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.get("new", use: newAssignmentPage)
+        r.post("new", "draft", use: updateNewAssignmentDraft)
         r.post("new", "save", use: saveNewAssignment)
         r.post("reorder", use: reorderAssignments)
         r.post("sections", use: createSection)
@@ -117,12 +120,135 @@ struct AssignmentRoutes: RouteCollection {
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
+        let isoFormatter = ISO8601DateFormatter()
 
         let decoder = JSONDecoder()
 
         let setupIndexByID: [String: Int] = Dictionary(
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
         )
+        let allSetupIDs = allSetups.compactMap { $0.id }
+
+        let enrolledStudents: [EnrolledStudentRow]
+        let metrics: [InstructorDashboardMetric]
+        if let activeCourseUUID = courseState.activeCourseUUID {
+            let enrollments = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == activeCourseUUID)
+                .all()
+            let enrolledUserIDs = enrollments.map(\.userID)
+            let enrolledUsers: [APIUser]
+
+            if enrolledUserIDs.isEmpty {
+                enrolledUsers = []
+                enrolledStudents = []
+            } else {
+                enrolledUsers = try await APIUser.query(on: req.db)
+                    .filter(\.$id ~~ enrolledUserIDs)
+                    .all()
+                    .sorted { lhs, rhs in
+                        switch (lhs.lastLoginAt, rhs.lastLoginAt) {
+                        case let (l?, r?):
+                            if l != r { return l > r }
+                        case (.some, nil):
+                            return true
+                        case (nil, .some):
+                            return false
+                        case (nil, nil):
+                            break
+                        }
+                        return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
+                    }
+                enrolledStudents = enrolledUsers.compactMap { u in
+                    guard let id = u.id else { return nil }
+                    return EnrolledStudentRow(
+                        id: id.uuidString,
+                        username: u.username,
+                        displayName: u.displayName ?? u.username,
+                        role: u.role,
+                        lastLoginAtText: u.lastLoginAt.map { fmt.string(from: $0) } ?? "—",
+                        lastLoginAtISO: u.lastLoginAt.map { isoFormatter.string(from: $0) },
+                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions"
+                    )
+                }
+            }
+
+            let now = Date()
+            let windowStart = now.addingTimeInterval(-24 * 60 * 60)
+            let courseSetupIDs = allSetupIDs
+            let recentSubmissions = courseSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ courseSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$submittedAt >= windowStart)
+                .all()
+            let allCourseStudentSubmissions = courseSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ courseSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .all()
+            let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
+                for: courseSetupIDs,
+                on: req.db
+            )
+
+            let enrolledStudentIDs = Set(
+                enrolledUsers
+                    .filter { $0.role == "student" }
+                    .compactMap(\.id)
+            )
+            let loggedIn24h = enrolledUsers.reduce(into: 0) { count, user in
+                guard user.role == "student" else { return }
+                if let lastLoginAt = user.lastLoginAt, lastLoginAt >= windowStart {
+                    count += 1
+                }
+            }
+
+            let recentStudentSubmissions = recentSubmissions.filter { submission in
+                guard let userID = submission.userID else { return false }
+                return enrolledStudentIDs.contains(userID)
+            }
+            let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
+            let pendingNow = allCourseStudentSubmissions.filter { submission in
+                guard let userID = submission.userID else { return false }
+                return enrolledStudentIDs.contains(userID)
+                    && workerModeSetupIDs.contains(submission.testSetupID)
+                    && ["pending", "assigned"].contains(submission.status)
+            }.count
+            let submitterIDs = Set(
+                allCourseStudentSubmissions.compactMap { submission -> UUID? in
+                    guard let userID = submission.userID, enrolledStudentIDs.contains(userID) else { return nil }
+                    return userID
+                }
+            )
+            let noSubmissionYet = enrolledStudentIDs.subtracting(submitterIDs).count
+
+            metrics = [
+                InstructorDashboardMetric(label: "24h Logged In", value: "\(loggedIn24h)"),
+                InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
+                InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
+                InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
+                InstructorDashboardMetric(label: "Students With No Submissions", value: "\(noSubmissionYet)")
+            ]
+        } else {
+            enrolledStudents = []
+            metrics = [
+                InstructorDashboardMetric(label: "24h Logged In", value: "—"),
+                InstructorDashboardMetric(label: "24h Submissions", value: "—"),
+                InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
+                InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
+                InstructorDashboardMetric(label: "Students With No Submissions", value: "—")
+            ]
+        }
+
+        // Batch-fetch unique submitter counts: [testSetupID: count of distinct userIDs]
+        let studentSubmissions = allSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID ~~ allSetupIDs)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+        var submitterSets: [String: Set<UUID>] = [:]
+        for sub in studentSubmissions {
+            guard let uid = sub.userID else { continue }
+            submitterSets[sub.testSetupID, default: []].insert(uid)
+        }
+        let uniqueSubmittersBySetup: [String: Int] = submitterSets.mapValues { $0.count }
 
         let unsortedRows: [AssignmentRow] = allSetups.map { setup in
             let assignment = assignmentBySetup[setup.id ?? ""]
@@ -157,7 +283,8 @@ struct AssignmentRoutes: RouteCollection {
                 validationStatus: validationStatus,
                 validationSubmissionID: validationSubmissionID,
                 suiteCount:   suiteCount,
-                createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—"
+                createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—",
+                submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil
             )
         }
 
@@ -230,34 +357,6 @@ struct AssignmentRoutes: RouteCollection {
             )
         }
 
-        // Fetch students enrolled in the active course.
-        let enrolledStudents: [EnrolledStudentRow]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            let enrollments = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .all()
-            let enrolledUserIDs = enrollments.map { $0.userID }
-            if enrolledUserIDs.isEmpty {
-                enrolledStudents = []
-            } else {
-                let users = try await APIUser.query(on: req.db)
-                    .filter(\.$id ~~ enrolledUserIDs)
-                    .sort(\.$username)
-                    .all()
-                enrolledStudents = users.compactMap { u in
-                    guard let id = u.id else { return nil }
-                    return EnrolledStudentRow(
-                        id: id.uuidString,
-                        username: u.username,
-                        displayName: u.displayName ?? u.username,
-                        role: u.role
-                    )
-                }
-            }
-        } else {
-            enrolledStudents = []
-        }
-
         // Fetch enrollment mode and archived state for the active course.
         var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
         var courseIsArchived = false
@@ -269,6 +368,7 @@ struct AssignmentRoutes: RouteCollection {
 
         let ctx = AssignmentsContext(
             currentUser: userContext,
+            metrics: metrics,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,
@@ -292,8 +392,10 @@ struct AssignmentRoutes: RouteCollection {
             var error: String?
             var notice: String?
             var sectionID: String?
+            var draftID: String?
         }
         let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
         let courseState = try await req.resolveActiveCourse(for: user)
         let q = (try? req.query.decode(NewQuery.self))
 
@@ -314,16 +416,394 @@ struct AssignmentRoutes: RouteCollection {
             sections = []
         }
 
+        let draftID = (q?.draftID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let setup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
+        let storedState = setup == nil ? NewAssignmentDraftFormState.empty : loadDraftFormState(req: req, draftID: draftID)
+
+        let assignmentNotebook: NewAssignmentNotebookContext? = {
+            guard let setup, let notebookPath = setup.notebookPath else { return nil }
+            let name = storedState.assignmentNotebookName
+                ?? URL(fileURLWithPath: notebookPath).lastPathComponent
+            return NewAssignmentNotebookContext(
+                name: name,
+                editURL: "/testsetups/\(setup.id!)/notebook?title=\(urlEncode((storedState.assignmentName.isEmpty ? "Assignment Notebook" : storedState.assignmentName)))"
+            )
+        }()
+
+        let solutionNotebook: NewAssignmentNotebookContext? = {
+            guard let setup else { return nil }
+            let draftPath = draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            let fallbackData = draftNotebookData(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fileKind: .solution,
+                fallbackPath: draftPath
+            )
+            guard fallbackData != nil else { return nil }
+            let name = storedState.solutionNotebookName
+                ?? URL(fileURLWithPath: draftPath).lastPathComponent
+            return NewAssignmentNotebookContext(
+                name: name,
+                editURL: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+            )
+        }()
+
+        let suiteRows = setup.map(editableSuiteRowsForSetup) ?? []
+        let detected = {
+            guard let setup else { return DraftRequirementSuggestions(languages: [], capabilities: []) }
+            let assignmentData = draftNotebookData(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fileKind: .assignment,
+                fallbackPath: setup.notebookPath
+            )
+            let solutionData = draftNotebookData(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fileKind: .solution,
+                fallbackPath: draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            )
+            return detectRequirementSuggestions(
+                assignmentNotebookData: assignmentData,
+                solutionNotebookData: solutionData,
+                setup: setup
+            )
+        }()
+
+        let assignmentName = (q?.assignmentName ?? storedState.assignmentName).trimmingCharacters(in: .whitespacesAndNewlines)
+        let dueAt = q?.dueAt ?? storedState.dueAt
+        let selectedSectionID = q?.sectionID ?? storedState.sectionID
+
         let ctx = NewAssignmentContext(
             currentUser: req.currentUserContext,
-            assignmentName: (q?.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-            dueAt: q?.dueAt ?? "",
+            assignmentName: assignmentName,
+            dueAt: dueAt,
             sections: sections,
-            preselectedSectionID: q?.sectionID ?? "",
+            preselectedSectionID: selectedSectionID,
+            draftID: setup?.id,
+            assignmentNotebook: assignmentNotebook,
+            solutionNotebook: solutionNotebook,
+            suiteRows: suiteRows,
+            hasSuiteRows: !suiteRows.isEmpty,
+            requiredPlatform: storedState.requiredPlatform,
+            requiredArchitecture: storedState.requiredArchitecture,
+            requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty
+                ? detected.languages.joined(separator: ", ")
+                : storedState.requiredLanguagesCSV,
+            requiredCapabilitiesCSV: storedState.requiredCapabilitiesCSV.isEmpty
+                ? detected.capabilities.joined(separator: ", ")
+                : storedState.requiredCapabilitiesCSV,
+            detectedLanguages: detected.languages,
+            detectedCapabilities: detected.capabilities,
+            detectedLanguagesCSV: detected.languages.joined(separator: ", "),
+            detectedCapabilitiesCSV: detected.capabilities.joined(separator: ", "),
             notice: q?.notice,
             error: q?.error
         )
         return try await req.view.render("assignment-new", ctx)
+    }
+
+    @Sendable
+    func updateNewAssignmentDraft(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(.badRequest, reason: "No active course selected. Please select a course before creating an assignment.")
+        }
+
+        struct DraftBodyMany: Content {
+            var assignmentName: String?
+            var dueAt: String?
+            var sectionID: String?
+            var draftID: String?
+            var draftAction: String?
+            var assignmentNotebookFile: File?
+            var solutionNotebookFile: File?
+            var suiteFiles: [File]?
+            var suiteConfig: String?
+            var requiredPlatform: String?
+            var requiredArchitecture: String?
+            var requiredLanguagesCSV: String?
+            var requiredCapabilitiesCSV: String?
+        }
+        struct DraftBodySingle: Content {
+            var assignmentName: String?
+            var dueAt: String?
+            var sectionID: String?
+            var draftID: String?
+            var draftAction: String?
+            var assignmentNotebookFile: File?
+            var solutionNotebookFile: File?
+            var suiteFiles: File?
+            var suiteConfig: String?
+            var requiredPlatform: String?
+            var requiredArchitecture: String?
+            var requiredLanguagesCSV: String?
+            var requiredCapabilitiesCSV: String?
+        }
+
+        let bodyMany = try? req.content.decode(DraftBodyMany.self)
+        let bodySingle = bodyMany == nil ? (try? req.content.decode(DraftBodySingle.self)) : nil
+        guard bodyMany != nil || bodySingle != nil else {
+            throw Abort(.badRequest, reason: "Invalid assignment draft payload")
+        }
+
+        let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
+            ?? bodyMany?.assignmentName
+            ?? bodySingle?.assignmentName
+            ?? ""
+        let dueAt = try multipartTextField(named: ["dueAt"], from: req)
+            ?? bodyMany?.dueAt
+            ?? bodySingle?.dueAt
+            ?? ""
+        let sectionIDRaw = try multipartTextField(named: ["sectionID"], from: req)
+            ?? bodyMany?.sectionID
+            ?? bodySingle?.sectionID
+            ?? ""
+        let draftIDRaw = try multipartTextField(named: ["draftID"], from: req)
+            ?? bodyMany?.draftID
+            ?? bodySingle?.draftID
+        let action = (try multipartTextField(named: ["draftAction"], from: req)
+            ?? bodyMany?.draftAction
+            ?? bodySingle?.draftAction
+            ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
+        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
+        let suiteFiles = (try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+            ?? bodyMany?.suiteFiles
+            ?? (bodySingle?.suiteFiles.map { [$0] } ?? []))
+            .filter { $0.data.readableBytes > 0 }
+        let suiteConfigRaw = try multipartTextField(named: ["suiteConfig"], from: req)
+            ?? bodyMany?.suiteConfig
+            ?? bodySingle?.suiteConfig
+        let requiredPlatform = try multipartTextField(named: ["requiredPlatform"], from: req)
+            ?? bodyMany?.requiredPlatform
+            ?? bodySingle?.requiredPlatform
+            ?? ""
+        let requiredArchitecture = try multipartTextField(named: ["requiredArchitecture"], from: req)
+            ?? bodyMany?.requiredArchitecture
+            ?? bodySingle?.requiredArchitecture
+            ?? ""
+        let requiredLanguagesCSV = try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
+            ?? bodyMany?.requiredLanguagesCSV
+            ?? bodySingle?.requiredLanguagesCSV
+            ?? ""
+        let requiredCapabilitiesCSV = try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
+            ?? bodyMany?.requiredCapabilitiesCSV
+            ?? bodySingle?.requiredCapabilitiesCSV
+            ?? ""
+
+        let setup = try await resolveOrCreateNewAssignmentDraft(
+            req: req,
+            courseID: courseID,
+            draftID: draftIDRaw,
+            sectionIDRaw: sectionIDRaw
+        )
+
+        var formState = loadDraftFormState(req: req, draftID: setup.id!)
+        formState.assignmentName = assignmentName
+        formState.dueAt = dueAt
+        formState.sectionID = sectionIDRaw
+        formState.requiredPlatform = requiredPlatform
+        formState.requiredArchitecture = requiredArchitecture
+        formState.requiredLanguagesCSV = requiredLanguagesCSV
+        formState.requiredCapabilitiesCSV = requiredCapabilitiesCSV
+
+        let actionTitle = assignmentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let notebookTitle = actionTitle.isEmpty ? "New Assignment" : actionTitle
+
+        switch action {
+        case "create-assignment-notebook":
+            let data = defaultNotebookData(title: notebookTitle)
+            let dir = try ensureDraftNotebookDirectory(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            let path = dir + "assignment.ipynb"
+            try data.write(to: URL(fileURLWithPath: path))
+            setup.notebookPath = path
+            try await setup.save(on: req.db)
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fallbackSetup: setup,
+                overwriteWith: data
+            )
+            formState.assignmentNotebookName = "assignment.ipynb"
+        case "upload-assignment-notebook":
+            guard let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: setup.id!,
+                    assignmentName: assignmentName,
+                    dueAt: dueAt,
+                    sectionID: sectionIDRaw,
+                    notice: nil,
+                    error: "Select an assignment notebook to upload"
+                )
+            }
+            let raw = Data(assignmentNotebookFile.data.readableBytesView)
+            guard (try? JSONSerialization.jsonObject(with: raw)) != nil else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: setup.id!,
+                    assignmentName: assignmentName,
+                    dueAt: dueAt,
+                    sectionID: sectionIDRaw,
+                    notice: nil,
+                    error: "Assignment notebook must be valid JSON (.ipynb)"
+                )
+            }
+            let normalized = normalizeNotebookForJupyterLite(raw)
+            let dir = try ensureDraftNotebookDirectory(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            let filename = notebookFilenameForStorage(uploadedName: assignmentNotebookFile.filename, fallback: "assignment.ipynb")
+            let path = dir + filename
+            try normalized.write(to: URL(fileURLWithPath: path))
+            setup.notebookPath = path
+            try await setup.save(on: req.db)
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fallbackSetup: setup,
+                overwriteWith: normalized
+            )
+            formState.assignmentNotebookName = filename
+        case "clear-assignment-notebook":
+            removeDraftNotebookFiles(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fileKind: .assignment,
+                persistedPath: setup.notebookPath
+            )
+            setup.notebookPath = nil
+            try await setup.save(on: req.db)
+            formState.assignmentNotebookName = nil
+        case "create-solution-notebook":
+            let data = defaultNotebookData(title: "\(notebookTitle) Solution")
+            let path = draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            _ = try ensureDraftNotebookDirectory(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            try data.write(to: URL(fileURLWithPath: path))
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fallbackSetup: setup,
+                relativePath: userNotebookWorkingCopyRelativePath(setupID: setup.id!, userID: userID, fileKind: .solution),
+                overwriteWith: data
+            )
+            formState.solutionNotebookName = "solution.ipynb"
+        case "upload-solution-notebook":
+            guard let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: setup.id!,
+                    assignmentName: assignmentName,
+                    dueAt: dueAt,
+                    sectionID: sectionIDRaw,
+                    notice: nil,
+                    error: "Select a solution notebook to upload"
+                )
+            }
+            let raw = Data(solutionNotebookFile.data.readableBytesView)
+            guard (try? JSONSerialization.jsonObject(with: raw)) != nil else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: setup.id!,
+                    assignmentName: assignmentName,
+                    dueAt: dueAt,
+                    sectionID: sectionIDRaw,
+                    notice: nil,
+                    error: "Solution notebook must be valid JSON (.ipynb)"
+                )
+            }
+            let normalized = normalizeNotebookForJupyterLite(raw)
+            let path = draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            _ = try ensureDraftNotebookDirectory(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            try normalized.write(to: URL(fileURLWithPath: path))
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fallbackSetup: setup,
+                relativePath: userNotebookWorkingCopyRelativePath(setupID: setup.id!, userID: userID, fileKind: .solution),
+                overwriteWith: normalized
+            )
+            formState.solutionNotebookName = notebookFilenameForStorage(uploadedName: solutionNotebookFile.filename, fallback: "solution.ipynb")
+        case "clear-solution-notebook":
+            removeDraftNotebookFiles(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fileKind: .solution,
+                persistedPath: draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            )
+            formState.solutionNotebookName = nil
+        case "replace-suite-files":
+            let setupPackage = try createRunnerSetupZip(
+                suiteFiles: suiteFiles,
+                suiteConfigJSON: suiteConfigRaw,
+                zipPath: setup.zipPath
+            )
+            let sectionGradingMode = try await newAssignmentSectionGradingMode(
+                req: req,
+                courseID: courseID,
+                sectionIDRaw: sectionIDRaw
+            )
+            let starterNotebook = setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
+            setup.manifest = try makeWorkerManifestJSON(
+                testSuites: setupPackage.testSuites,
+                includeMakefile: setupPackage.hasMakefile,
+                gradingMode: sectionGradingMode,
+                starterNotebook: starterNotebook
+            )
+            try await setup.save(on: req.db)
+            extractSupportFilesToSharedDirectory(
+                zipPath: setup.zipPath,
+                setupID: setup.id!,
+                testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
+                testSetupsDirectory: req.application.testSetupsDirectory
+            )
+        case "clear-suite-files":
+            let starterNotebook = setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
+            _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: setup.zipPath)
+            setup.manifest = try makeWorkerManifestJSON(
+                testSuites: [],
+                includeMakefile: false,
+                gradingMode: try await newAssignmentSectionGradingMode(req: req, courseID: courseID, sectionIDRaw: sectionIDRaw),
+                starterNotebook: starterNotebook
+            )
+            try await setup.save(on: req.db)
+        default:
+            break
+        }
+
+        saveDraftFormState(req: req, draftID: setup.id!, state: formState)
+
+        let notice = switch action {
+        case "create-assignment-notebook": "Assignment notebook draft created"
+        case "upload-assignment-notebook": "Assignment notebook saved to draft"
+        case "clear-assignment-notebook": "Assignment notebook cleared"
+        case "create-solution-notebook": "Solution notebook draft created"
+        case "upload-solution-notebook": "Solution notebook saved to draft"
+        case "clear-solution-notebook": "Solution notebook cleared"
+        case "replace-suite-files": "Suite files saved to draft"
+        case "clear-suite-files": "Suite files cleared"
+        default: "Draft updated"
+        }
+
+        return redirectToNewAssignmentDraft(
+            req: req,
+            draftID: setup.id!,
+            assignmentName: assignmentName,
+            dueAt: dueAt,
+            sectionID: sectionIDRaw,
+            notice: notice,
+            error: nil
+        )
     }
 
     // MARK: - POST /instructor/new/save
@@ -340,19 +820,29 @@ struct AssignmentRoutes: RouteCollection {
             var assignmentName: String?
             var dueAt: String?
             var sectionID: String?
+            var draftID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: [File]?
             var suiteConfig: String?
+            var requiredPlatform: String?
+            var requiredArchitecture: String?
+            var requiredLanguagesCSV: String?
+            var requiredCapabilitiesCSV: String?
         }
         struct SaveBodySingle: Content {
             var assignmentName: String?
             var dueAt: String?
             var sectionID: String?
+            var draftID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: File?
             var suiteConfig: String?
+            var requiredPlatform: String?
+            var requiredArchitecture: String?
+            var requiredLanguagesCSV: String?
+            var requiredCapabilitiesCSV: String?
         }
 
         let bodyMany = try? req.content.decode(SaveBodyMany.self)
@@ -361,71 +851,155 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Invalid assignment upload payload")
         }
 
-        let assignmentName = bodyMany?.assignmentName ?? bodySingle?.assignmentName
-        let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
-        let sectionIDRaw = bodyMany?.sectionID ?? bodySingle?.sectionID
+        let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
+            ?? bodyMany?.assignmentName
+            ?? bodySingle?.assignmentName
+        let dueAtRaw = try multipartTextField(named: ["dueAt"], from: req)
+            ?? bodyMany?.dueAt
+            ?? bodySingle?.dueAt
+        let sectionIDRaw = try multipartTextField(named: ["sectionID"], from: req)
+            ?? bodyMany?.sectionID
+            ?? bodySingle?.sectionID
+        let draftIDRaw = try multipartTextField(named: ["draftID"], from: req)
+            ?? bodyMany?.draftID
+            ?? bodySingle?.draftID
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw = bodyMany?.suiteFiles ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
+        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+            ?? bodyMany?.suiteFiles
+            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
+        let suiteConfigRaw = try multipartTextField(named: ["suiteConfig"], from: req)
+            ?? bodyMany?.suiteConfig
+            ?? bodySingle?.suiteConfig
+        let requiredPlatform = try multipartTextField(named: ["requiredPlatform"], from: req)
+            ?? bodyMany?.requiredPlatform
+            ?? bodySingle?.requiredPlatform
+            ?? ""
+        let requiredArchitecture = try multipartTextField(named: ["requiredArchitecture"], from: req)
+            ?? bodyMany?.requiredArchitecture
+            ?? bodySingle?.requiredArchitecture
+            ?? ""
+        let requiredLanguagesCSV = try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
+            ?? bodyMany?.requiredLanguagesCSV
+            ?? bodySingle?.requiredLanguagesCSV
+            ?? ""
+        let requiredCapabilitiesCSV = try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
+            ?? bodyMany?.requiredCapabilitiesCSV
+            ?? bodySingle?.requiredCapabilitiesCSV
+            ?? ""
 
         let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(dueAtRaw)
+        let draftID = (draftIDRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let draftSetup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
+        let draftState = draftSetup == nil ? NewAssignmentDraftFormState.empty : loadDraftFormState(req: req, draftID: draftID)
 
         guard !title.isEmpty else {
-            let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
+            let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Assignment%20name%20is%20required"
             return req.redirect(to: "/instructor/new?\(q)")
         }
 
-        guard let assignmentNotebookFile,
-              assignmentNotebookFile.data.readableBytes > 0 else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
-        guard let solutionNotebookFile,
-              solutionNotebookFile.data.readableBytes > 0 else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
         let suiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
-        guard !suiteFiles.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=At%20least%20one%20test%20suite%20file%20is%20required"
+
+        let assignmentNotebookRaw: Data = {
+            if let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 {
+                return Data(assignmentNotebookFile.data.readableBytesView)
+            }
+            guard let draftSetup, let saveUserID = saveUser.id else { return Data() }
+            return draftNotebookData(
+                req: req,
+                setupID: draftSetup.id!,
+                userID: saveUserID,
+                fileKind: .assignment,
+                fallbackPath: draftSetup.notebookPath
+            ) ?? Data()
+        }()
+        guard !assignmentNotebookRaw.isEmpty else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
             return req.redirect(to: "/instructor/new?\(q)")
         }
-
-        let assignmentNotebookRaw = Data(assignmentNotebookFile.data.readableBytesView)
-        let solutionNotebookRaw = Data(solutionNotebookFile.data.readableBytesView)
+        let solutionNotebookRaw: Data = {
+            if let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 {
+                return Data(solutionNotebookFile.data.readableBytesView)
+            }
+            guard let draftSetup, let saveUserID = saveUser.id else { return Data() }
+            return draftNotebookData(
+                req: req,
+                setupID: draftSetup.id!,
+                userID: saveUserID,
+                fileKind: .solution,
+                fallbackPath: draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: draftSetup.id!)
+            ) ?? Data()
+        }()
+        guard !solutionNotebookRaw.isEmpty else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Solution%20notebook%20(.ipynb)%20is%20required"
+            return req.redirect(to: "/instructor/new?\(q)")
+        }
         guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
             return req.redirect(to: "/instructor/new?\(q)")
         }
         guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
             return req.redirect(to: "/instructor/new?\(q)")
         }
 
-        let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
+        let requirementSpec = assignmentRequirementSpec(
+            platform: requiredPlatform,
+            architecture: requiredArchitecture,
+            languagesCSV: requiredLanguagesCSV,
+            capabilitiesCSV: requiredCapabilitiesCSV
+        )
 
-        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
+        let setupID = draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
+        let uploadedAssignmentFilename = assignmentNotebookFile?.filename
         let notebookFilename = notebookFilenameForStorage(
-            uploadedName: assignmentNotebookFile.filename,
-            fallback: "assignment.ipynb"
+            uploadedName: uploadedAssignmentFilename ?? draftState.assignmentNotebookName,
+            fallback: draftSetup?.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
         )
         let notebookDir = setupsDir + "notebooks/\(setupID)/"
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let notebookPath = notebookDir + notebookFilename
-        let zipPath = setupsDir + "\(setupID).zip"
+        let zipPath = draftSetup?.zipPath ?? (setupsDir + "\(setupID).zip")
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
+        let resolvedSuiteFiles: [File] = {
+            if !suiteFiles.isEmpty { return suiteFiles }
+            guard let draftSetup else { return [] }
+            return editableSuiteRowsForSetup(draftSetup).compactMap { row in
+                guard let data = extractZipEntry(zipPath: draftSetup.zipPath, entryName: row.name) else { return nil }
+                var buffer = ByteBufferAllocator().buffer(capacity: data.count)
+                buffer.writeBytes(data)
+                return File(data: buffer, filename: row.name)
+            }
+        }()
+        let resolvedSuiteConfigJSON: String? = {
+            if let suiteConfigRaw, !suiteConfigRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return suiteConfigRaw
+            }
+            return draftSetup?.manifest.data(using: .utf8).flatMap { data in
+                guard let props = try? JSONDecoder().decode(TestProperties.self, from: data) else { return nil }
+                let rows = props.testSuites.enumerated().map { index, entry in
+                    ReindexedSuiteConfigRow(
+                        index: index,
+                        isTest: entry.tier.rawValue != "support",
+                        tier: entry.tier.rawValue,
+                        order: index + 1,
+                        dependsOn: entry.dependsOn,
+                        points: entry.points,
+                        displayName: entry.name
+                    )
+                }
+                guard let encoded = try? JSONEncoder().encode(rows) else { return nil }
+                return String(data: encoded, encoding: .utf8)
+            }
+        }()
         let setupPackage = try createRunnerSetupZip(
-            suiteFiles: suiteFiles,
-            suiteConfigJSON: suiteConfigRaw,
+            suiteFiles: resolvedSuiteFiles,
+            suiteConfigJSON: resolvedSuiteConfigJSON,
             zipPath: zipPath
         )
-        guard !setupPackage.testSuites.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
 
         // Resolve the section up front so we can inherit its grading mode.
         let resolvedSectionID: UUID? = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db)
@@ -442,13 +1016,17 @@ struct AssignmentRoutes: RouteCollection {
             includeMakefile: setupPackage.hasMakefile,
             gradingMode: sectionGradingMode
         )
-        let setup = APITestSetup(
+        let setup = draftSetup ?? APITestSetup(
             id: setupID,
             manifest: manifest,
             zipPath: zipPath,
             notebookPath: notebookPath,
             courseID: courseID
         )
+        setup.manifest = manifest
+        setup.zipPath = zipPath
+        setup.notebookPath = notebookPath
+        setup.courseID = courseID
         try await setup.save(on: req.db)
         extractSupportFilesToSharedDirectory(
             zipPath: zipPath,
@@ -457,6 +1035,25 @@ struct AssignmentRoutes: RouteCollection {
             testSetupsDirectory: req.application.testSetupsDirectory
         )
 
+        let shouldQueueValidation = !setupPackage.testSuites.isEmpty
+        if shouldQueueValidation {
+            let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
+                req: req,
+                requirements: requirementSpec
+            )
+            guard hasEligibleRunner else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: draftID,
+                    assignmentName: title,
+                    dueAt: dueAtRaw ?? "",
+                    sectionID: sectionIDRaw ?? "",
+                    notice: nil,
+                    error: "No compatible active runner is available to validate this assignment."
+                )
+            }
+        }
+
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
             testSetupID: setupID,
@@ -464,43 +1061,113 @@ struct AssignmentRoutes: RouteCollection {
             dueAt: due,
             isOpen: false,
             sortOrder: try await nextAssignmentSortOrder(req: req),
-            validationStatus: "pending",
+            validationStatus: shouldQueueValidation ? "pending" : nil,
             validationSubmissionID: nil,
             sectionID: resolvedSectionID,
             courseID: courseID
         )
-
-        let validationSubmissionID = try await enqueueRunnerValidationSubmission(
-            req: req,
-            setupID: setupID,
-            solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
-            filename: solutionNotebookFile.filename
-        )
-        assignment.validationSubmissionID = validationSubmissionID
-        try await assignment.save(on: req.db)
-
-        await ensureValidationRunnerAvailability(req: req)
-        let validation = try await waitForRunnerValidation(req: req, submissionID: validationSubmissionID)
-        switch validation {
-        case .passed(let summary):
-            assignment.validationStatus = "passed"
-            try await assignment.save(on: req.db)
-            req.logger.info("Assignment validation passed for setup \(setupID): \(summary)")
-            return req.redirect(to: "/instructor")
-        case .failed(let summary):
-            assignment.validationStatus = "failed"
-            try await assignment.save(on: req.db)
-            req.logger.warning("Assignment validation failed for setup \(setupID): \(summary) (submission \(validationSubmissionID))")
-            return req.redirect(to: "/submissions/\(validationSubmissionID)")
-        case .timedOut:
-            assignment.validationStatus = "pending"
-            try await assignment.save(on: req.db)
-            return req.redirect(to: "/instructor")
+        if let requirements = requirementSpec {
+            let requirement = AssignmentRequirement(
+                assignmentID: try assignment.requireID(),
+                specification: requirements
+            )
+            try await requirement.save(on: req.db)
         }
+
+        if shouldQueueValidation {
+            let validationSubmissionID = try await enqueueRunnerValidationSubmission(
+                req: req,
+                setupID: setupID,
+                solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
+                filename: solutionNotebookFile?.filename
+                    ?? draftState.solutionNotebookName
+                    ?? "solution.ipynb"
+            )
+            assignment.validationSubmissionID = validationSubmissionID
+            try await assignment.save(on: req.db)
+            await ensureValidationRunnerAvailability(req: req)
+        }
+        if !draftID.isEmpty {
+            clearDraftFormState(req: req, draftID: draftID)
+        }
+        return req.redirect(to: "/instructor")
     }
 
     // MARK: - POST /instructor
     // Creates a draft (isOpen: false) assignment and redirects to the validate page.
+
+    private func redirectToNewAssignmentDraft(
+        req: Request,
+        draftID: String,
+        assignmentName: String,
+        dueAt: String,
+        sectionID: String,
+        notice: String?,
+        error: String?
+    ) -> Response {
+        var parts: [String] = [
+            "draftID=\(urlEncode(draftID))",
+            "assignmentName=\(urlEncode(assignmentName))",
+            "dueAt=\(urlEncode(dueAt))",
+            "sectionID=\(urlEncode(sectionID))"
+        ]
+        if let notice, !notice.isEmpty {
+            parts.append("notice=\(urlEncode(notice))")
+        }
+        if let error, !error.isEmpty {
+            parts.append("error=\(urlEncode(error))")
+        }
+        return req.redirect(to: "/instructor/new?\(parts.joined(separator: "&"))")
+    }
+
+    private func resolveOrCreateNewAssignmentDraft(
+        req: Request,
+        courseID: UUID,
+        draftID: String?,
+        sectionIDRaw: String
+    ) async throws -> APITestSetup {
+        if let draftID,
+           !draftID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let existing = try await APITestSetup.find(draftID, on: req.db) {
+            return existing
+        }
+
+        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let zipPath = req.application.testSetupsDirectory + "\(setupID).zip"
+        _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+        let gradingMode = try await newAssignmentSectionGradingMode(
+            req: req,
+            courseID: courseID,
+            sectionIDRaw: sectionIDRaw
+        )
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [],
+            includeMakefile: false,
+            gradingMode: gradingMode,
+            starterNotebook: "assignment.ipynb"
+        )
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: manifest,
+            zipPath: zipPath,
+            notebookPath: nil,
+            courseID: courseID
+        )
+        try await setup.save(on: req.db)
+        return setup
+    }
+
+    private func newAssignmentSectionGradingMode(
+        req: Request,
+        courseID: UUID,
+        sectionIDRaw: String
+    ) async throws -> String {
+        guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db),
+              let sec = try await APICourseSection.find(sid, on: req.db) else {
+            return "worker"
+        }
+        return sec.defaultGradingMode
+    }
 
     @Sendable
     func publish(req: Request) async throws -> Response {
@@ -609,6 +1276,7 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
         }
         assignment.isOpen = true
+        assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
         try await assignment.save(on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -665,6 +1333,7 @@ struct AssignmentRoutes: RouteCollection {
                 throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
             }
             assignment.isOpen = true
+            assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
         case "closed":
             assignment.isOpen = false
         default:
@@ -763,12 +1432,17 @@ struct AssignmentRoutes: RouteCollection {
         let ctx = EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
+            testSetupID: setup.id!,
             assignmentName: (q?.assignmentName ?? assignment.title).trimmingCharacters(in: .whitespacesAndNewlines),
             dueAt: q?.dueAt ?? currentDueAt,
             currentAssignmentFile: currentFiles.assignmentFile.name,
             currentAssignmentURL: currentFiles.assignmentFile.url,
+            assignmentNotebookEditURL: "/testsetups/\(setup.id!)/notebook?title=\(urlEncode(assignment.title))",
             currentSolutionFile: currentFiles.solutionFile?.name,
             currentSolutionURL: currentFiles.solutionFile?.url,
+            solutionNotebookEditURL: currentFiles.solutionFile != nil
+                ? "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+                : nil,
             existingSuiteRows: currentFiles.existingSuiteRows,
             notice: q?.notice,
             error: q?.error
@@ -776,540 +1450,4 @@ struct AssignmentRoutes: RouteCollection {
         return try await req.view.render("assignment-edit", ctx)
     }
 
-    // MARK: - GET /instructor/:assignmentID/files/notebook
-
-    @Sendable
-    func downloadCurrentNotebookFile(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        let data = try notebookData(for: setup)
-        let downloadName = currentSetupFiles(
-            for: setup,
-            assignmentID: idStr,
-            hasValidationSolution: assignment.validationSubmissionID != nil
-        ).assignmentFile.name
-        return buildFileResponse(data: data, filename: downloadName)
-    }
-
-    // MARK: - GET /instructor/:assignmentID/files/item?name=<filename>
-
-    @Sendable
-    func downloadCurrentSetupItem(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        struct FileQuery: Content {
-            let name: String
-        }
-        let q = try req.query.decode(FileQuery.self)
-        let fileName = (q.name as NSString).lastPathComponent
-        guard !fileName.isEmpty, fileName == q.name else {
-            throw Abort(.badRequest, reason: "Invalid file name")
-        }
-
-        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
-            throw Abort(.notFound, reason: "File '\(fileName)' not found in setup")
-        }
-        return buildFileResponse(data: data, filename: fileName)
-    }
-
-    // MARK: - GET /instructor/:assignmentID/files/solution
-
-    @Sendable
-    func downloadCurrentSolutionFile(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        // Look for a solution.* entry inside the test setup zip.
-        let solutionZipEntry = listZipEntries(zipPath: setup.zipPath)
-            .first(where: { $0.hasPrefix("solution.") })
-        if let entryName = solutionZipEntry,
-           let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName) {
-            return buildFileResponse(data: data, filename: entryName)
-        }
-
-        // Fall back to the most recent validation submission, preserving
-        // the instructor's original filename (e.g. bmi.py, dna.py).
-        if let validationID = assignment.validationSubmissionID,
-           let validationSubmission = try await APISubmission.find(validationID, on: req.db),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-           !data.isEmpty {
-            return buildFileResponse(data: data, filename: validationSubmission.filename ?? "solution.ipynb")
-        }
-
-        if let fallbackSubmission = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == assignment.testSetupID)
-            .filter(\.$kind == APISubmission.Kind.validation)
-            .sort(\.$submittedAt, .descending)
-            .first(),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-           !data.isEmpty {
-            return buildFileResponse(data: data, filename: fallbackSubmission.filename ?? "solution.ipynb")
-        }
-
-        throw Abort(.notFound, reason: "No solution notebook is available for this assignment yet")
-    }
-
-    // MARK: - POST /instructor/:assignmentID/edit/save
-
-    @Sendable
-    func saveEditedAssignment(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        struct SaveBodyMany: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-        }
-        struct SaveBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
-            var suiteConfig: String?
-        }
-
-        let bodyMany = try? req.content.decode(SaveBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
-            throw Abort(.badRequest, reason: "Invalid assignment upload payload")
-        }
-
-        let assignmentName = bodyMany?.assignmentName ?? bodySingle?.assignmentName
-        let dueAtRaw = bodyMany?.dueAt ?? bodySingle?.dueAt
-        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
-        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw = bodyMany?.suiteFiles ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw = bodyMany?.suiteConfig ?? bodySingle?.suiteConfig
-
-        let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let due = parseDueDate(dueAtRaw)
-
-        guard !title.isEmpty else {
-            let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-
-        let uploadedSuiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
-
-        let hasUploadedAssignmentNotebook = assignmentNotebookFile?.data.readableBytes ?? 0 > 0
-        // Marmoset-style worker-mode imports often have no starter .ipynb.
-        // Fall back to an empty notebook so the edit can proceed without
-        // requiring the instructor to upload one on every save.
-        // The empty notebook produces no .py code when extractNotebooksToCode
-        // runs, so it doesn't conflict with the student submission.
-        let minimalEmptyNotebook = Data(
-            #"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
-        let assignmentNotebookRaw: Data = {
-            guard let assignmentNotebookFile, hasUploadedAssignmentNotebook else {
-                return (try? notebookData(for: setup)) ?? minimalEmptyNotebook
-            }
-            return Data(assignmentNotebookFile.data.readableBytesView)
-        }()
-        guard !assignmentNotebookRaw.isEmpty,
-              (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-
-        // Resolve solution data + filename. Prefer newly uploaded file, then zip entry, then prior submission.
-        var solutionFilename = "solution.ipynb"
-        let solutionNotebookRaw: Data = {
-            if let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 {
-                solutionFilename = solutionNotebookFile.filename.isEmpty ? "solution.ipynb" : solutionNotebookFile.filename
-                return Data(solutionNotebookFile.data.readableBytesView)
-            }
-            let archiveFiles = listZipEntries(zipPath: setup.zipPath)
-            if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }),
-               let data = extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry) {
-                solutionFilename = solutionEntry
-                return data
-            }
-            return Data()
-        }()
-        var resolvedSolutionNotebookRaw = solutionNotebookRaw
-        if resolvedSolutionNotebookRaw.isEmpty,
-           let existingSolution = try await loadExistingSolution(req: req, assignment: assignment) {
-            resolvedSolutionNotebookRaw = existingSolution.data
-            solutionFilename = existingSolution.filename
-        }
-        guard !resolvedSolutionNotebookRaw.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-        let solutionIsNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
-
-        let resolvedSuite: ResolvedEditSuiteFiles
-        do {
-            resolvedSuite = try resolveEditSuiteFiles(
-                setupZipPath: setup.zipPath,
-                setupManifestJSON: setup.manifest,
-                uploadedSuiteFiles: uploadedSuiteFiles,
-                suiteConfigJSON: suiteConfigRaw
-            )
-        } catch {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=\(urlEncode(error.localizedDescription))"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-        guard !resolvedSuite.files.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20or%20keep%20at%20least%20one%20test%20suite%20or%20support%20file"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-
-        let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
-        let notebookPath: String = {
-            if hasUploadedAssignmentNotebook {
-                let fallbackName = setup.notebookPath
-                    .map { URL(fileURLWithPath: $0).lastPathComponent }
-                    .flatMap { $0.isEmpty ? nil : $0 }
-                    ?? "assignment.ipynb"
-                let uploadedName = assignmentNotebookFile?.filename
-                let filename = notebookFilenameForStorage(uploadedName: uploadedName, fallback: fallbackName)
-                let dir = req.application.testSetupsDirectory + "notebooks/\(setup.id!)/"
-                try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-                return dir + filename
-            }
-            return setup.notebookPath ?? (req.application.testSetupsDirectory + "\(setup.id!).ipynb")
-        }()
-        try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
-
-        let setupPackage = try createRunnerSetupZip(
-            suiteFiles: resolvedSuite.files,
-            suiteConfigJSON: resolvedSuite.reindexedSuiteConfigJSON,
-            zipPath: setup.zipPath
-        )
-        guard !setupPackage.testSuites.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-        // Preserve the grading mode already stored in the manifest — editing
-        // the suite files must not silently reset it back to "worker".
-        let existingGradingMode: String = {
-            guard let data = setup.manifest.data(using: .utf8),
-                  let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let mode = dict["gradingMode"] as? String else { return "worker" }
-            return mode
-        }()
-        setup.manifest = try makeWorkerManifestJSON(
-            testSuites: setupPackage.testSuites,
-            includeMakefile: setupPackage.hasMakefile,
-            gradingMode: existingGradingMode
-        )
-        setup.notebookPath = notebookPath
-        try await setup.save(on: req.db)
-        extractSupportFilesToSharedDirectory(
-            zipPath: setup.zipPath,
-            setupID: setup.id!,
-            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
-            testSetupsDirectory: req.application.testSetupsDirectory
-        )
-
-        assignment.title = title
-        assignment.dueAt = due
-        assignment.isOpen = false
-        assignment.validationStatus = "pending"
-
-        let solutionDataToSubmit = solutionIsNotebook
-            ? normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw)
-            : resolvedSolutionNotebookRaw
-        let validationSubmissionID = try await enqueueRunnerValidationSubmission(
-            req: req,
-            setupID: setup.id!,
-            solutionNotebookData: solutionDataToSubmit,
-            filename: solutionFilename
-        )
-        assignment.validationSubmissionID = validationSubmissionID
-        try await assignment.save(on: req.db)
-
-        await ensureValidationRunnerAvailability(req: req)
-        let validation = try await waitForRunnerValidation(req: req, submissionID: validationSubmissionID)
-        switch validation {
-        case .passed(let summary):
-            assignment.validationStatus = "passed"
-            try await assignment.save(on: req.db)
-            req.logger.info("Assignment updated and validated for setup \(setup.id ?? ""): \(summary)")
-            return req.redirect(to: "/instructor")
-        case .failed(let summary):
-            assignment.validationStatus = "failed"
-            try await assignment.save(on: req.db)
-            req.logger.warning("Assignment edit validation failed for setup \(setup.id ?? ""): \(summary) (submission \(validationSubmissionID))")
-            return req.redirect(to: "/submissions/\(validationSubmissionID)")
-        case .timedOut:
-            assignment.validationStatus = "pending"
-            try await assignment.save(on: req.db)
-            let q = "notice=\(urlEncode("Assignment updated and validation started. It is still pending; refresh shortly."))"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-    }
-
-    // MARK: - GET /instructor/:assignmentID/scripts/:filename
-    //
-    // Returns the raw text content of a single file from the setup zip.
-
-    @Sendable
-    func getScript(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr    = try assignmentPublicIDParameter(from: req)
-        let filename = try safeScriptFilename(from: req)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
-
-        guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
-        }
-        var headers = HTTPHeaders()
-        headers.contentType = .plainText
-        return Response(status: .ok, headers: headers, body: .init(string: content))
-    }
-
-    // MARK: - PUT /instructor/:assignmentID/scripts/:filename
-    //
-    // Replaces the content of an existing script in the setup zip.
-    // Body (JSON): { "content": "..." }
-
-    @Sendable
-    func updateScript(req: Request) async throws -> HTTPStatus {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr    = try assignmentPublicIDParameter(from: req)
-        let filename = try safeScriptFilename(from: req)
-
-        struct UpdateBody: Content { var content: String }
-        let body = try req.content.decode(UpdateBody.self)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
-
-        // Verify the file exists before writing.
-        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
-        }
-
-        do {
-            try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: body.content)
-        } catch ScriptZipError.zipFailed {
-            throw Abort(.internalServerError, reason: "Failed to update setup zip")
-        }
-        return .noContent
-    }
-
-    // MARK: - POST /instructor/:assignmentID/scripts
-    //
-    // Creates a new script file in the setup zip and adds a TestSuiteEntry
-    // to the manifest (default: public tier, 1 point, no dependencies).
-    // Body (JSON): { "filename": "test_new.py", "content": "...", "tier": "public", "points": 1 }
-
-    @Sendable
-    func createScript(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-
-        struct CreateBody: Content {
-            var filename: String
-            var content:  String
-            var tier:     String?
-            var points:   Int?
-            var isTest:   Bool?
-        }
-        let body = try req.content.decode(CreateBody.self)
-
-        // Validate filename: must be a simple filename (no path separators).
-        let cleaned = sanitizeSuiteFilename(body.filename)
-        guard !cleaned.isEmpty, cleaned == body.filename else {
-            throw Abort(.badRequest, reason: "Invalid filename '\(body.filename)'")
-        }
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
-
-        // Reject duplicate filenames.
-        if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-            throw Abort(.conflict, reason: "A file named '\(cleaned)' already exists in this setup")
-        }
-
-        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
-
-        let tier       = normalizeTier(body.tier)
-        let points     = max(1, body.points ?? 1)
-        let shouldTest = (body.isTest ?? true) && tier != "support"
-
-        if shouldTest {
-            let entry = ConfiguredSuiteEntry(
-                script: cleaned, tier: tier, order: 0,
-                dependsOn: [], points: points, displayName: nil
-            )
-            if let updated = updateManifestAddingScript(manifestJSON: setup.manifest, entry: entry) {
-                setup.manifest = updated
-                try await setup.save(on: req.db)
-            }
-        }
-
-        struct CreatedResponse: Content {
-            var filename: String
-            var tier: String
-            var points: Int
-            var isTest: Bool
-            var editURL: String
-        }
-        let resp = CreatedResponse(
-            filename: cleaned,
-            tier: tier,
-            points: points,
-            isTest: shouldTest,
-            editURL: "/instructor/\(idStr)/scripts/\(urlEncode(cleaned))"
-        )
-        return try await resp.encodeResponse(status: .created, for: req)
-    }
-
-    // MARK: - DELETE /instructor/:assignmentID/scripts/:filename
-    //
-    // Removes a script from the setup zip and manifest.
-    // Returns 409 if other scripts in the manifest depend on this one.
-
-    @Sendable
-    func deleteScript(req: Request) async throws -> HTTPStatus {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr    = try assignmentPublicIDParameter(from: req)
-        let filename = try safeScriptFilename(from: req)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
-
-        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
-        }
-
-        let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
-        guard dependents.isEmpty else {
-            throw Abort(.conflict,
-                reason: "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))")
-        }
-
-        do {
-            try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
-        } catch ScriptZipError.zipFailed {
-            throw Abort(.internalServerError, reason: "Failed to update setup zip")
-        }
-
-        if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
-            setup.manifest = updated
-            try await setup.save(on: req.db)
-        }
-        return .noContent
-    }
-
-    // MARK: - POST /instructor/scan-notebook
-    //
-    // Scans a solution notebook for Python function definitions and returns
-    // one entry per public top-level function, along with pre-generated
-    // script templates.
-    //
-    // Body: raw .ipynb JSON bytes (Content-Type: application/json or application/octet-stream)
-
-    @Sendable
-    func scanNotebook(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        guard let buffer = req.body.data else {
-            throw Abort(.badRequest, reason: "Request body is empty")
-        }
-        let notebookData = Data(buffer.readableBytesView)
-        guard !notebookData.isEmpty else {
-            throw Abort(.badRequest, reason: "Notebook data is empty")
-        }
-
-        let functions = scanNotebookForFunctions(notebookData)
-
-        struct FunctionResult: Content {
-            var name: String
-            var paramNames: [String]
-            var paramCount: Int
-            var hasTypeHints: Bool
-            var hasDocstring: Bool
-            var templates: [TestTemplateInfo]
-        }
-
-        let results = functions.map { fn in
-            FunctionResult(
-                name: fn.name,
-                paramNames: fn.paramNames,
-                paramCount: fn.paramCount,
-                hasTypeHints: fn.hasTypeHints,
-                hasDocstring: fn.hasDocstring,
-                templates: allTemplateInfos(functionName: fn.name, paramNames: fn.paramNames)
-            )
-        }
-
-        return try await results.encodeResponse(for: req)
-    }
-}
-
-// MARK: - Route parameter helpers
-
-/// Extracts and validates the `:filename` route parameter.
-/// Rejects any value that contains path separators or traversal components.
-private func safeScriptFilename(from req: Request) throws -> String {
-    guard let raw = req.parameters.get("filename"), !raw.isEmpty else {
-        throw Abort(.badRequest, reason: "Missing filename parameter")
-    }
-    let cleaned = (raw as NSString).lastPathComponent
-    guard cleaned == raw, !cleaned.isEmpty, cleaned != ".", cleaned != ".." else {
-        throw Abort(.badRequest, reason: "Invalid filename '\(raw)'")
-    }
-    return cleaned
 }

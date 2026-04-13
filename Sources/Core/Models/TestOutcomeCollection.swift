@@ -40,6 +40,8 @@ public struct TestOutcomeCollection: Codable, Sendable {
     public let earnedPoints: Int
 
     // MARK: - Metadata
+    public let warnings: [String]
+    public let jobStartedAt: Date?
     public let runnerVersion: String      // e.g. "shell-runner/1.0"
     public let timestamp: Date
 
@@ -58,6 +60,8 @@ public struct TestOutcomeCollection: Codable, Sendable {
         executionTimeMs: Int,
         totalPoints: Int? = nil,
         earnedPoints: Int? = nil,
+        warnings: [String] = [],
+        jobStartedAt: Date? = nil,
         runnerVersion: String,
         timestamp: Date
     ) {
@@ -75,6 +79,8 @@ public struct TestOutcomeCollection: Codable, Sendable {
         self.executionTimeMs = executionTimeMs
         self.totalPoints     = totalPoints  ?? totalTests
         self.earnedPoints    = earnedPoints ?? passCount
+        self.warnings        = warnings
+        self.jobStartedAt    = jobStartedAt
         self.runnerVersion   = runnerVersion
         self.timestamp       = timestamp
     }
@@ -97,6 +103,8 @@ public struct TestOutcomeCollection: Codable, Sendable {
         executionTimeMs = try c.decode(Int.self,           forKey: .executionTimeMs)
         totalPoints     = try c.decodeIfPresent(Int.self,  forKey: .totalPoints)  ?? totalTests
         earnedPoints    = try c.decodeIfPresent(Int.self,  forKey: .earnedPoints) ?? passCount
+        warnings        = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
+        jobStartedAt    = try c.decodeIfPresent(Date.self, forKey: .jobStartedAt)
         runnerVersion   = try c.decode(String.self,        forKey: .runnerVersion)
         timestamp       = try c.decode(Date.self,          forKey: .timestamp)
     }

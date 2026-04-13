@@ -3,12 +3,13 @@
 // Unit tests for validateManifestDependencies — cycle detection,
 // unknown references, and self-references in test suite dependency graphs.
 
-import XCTest
+import Testing
 import Vapor
 @testable import chickadee_server
+import Fluent
 @testable import Core
 
-final class ManifestValidationTests: XCTestCase {
+@Suite struct ManifestValidationTests {
 
     // MARK: - Helpers
 
@@ -19,123 +20,105 @@ final class ManifestValidationTests: XCTestCase {
             if !deps.isEmpty { d["dependsOn"] = deps }
             return d
         }
-        let dict: [String: Any] = [
-            "schemaVersion": 1,
-            "testSuites": entries,
-        ]
+        let dict: [String: Any] = ["schemaVersion": 1, "testSuites": entries]
         let data = try JSONSerialization.data(withJSONObject: dict)
         return try JSONDecoder().decode(TestProperties.self, from: data)
     }
 
     // MARK: - Valid graphs
 
-    func testNoDependencies() throws {
+    @Test func noDependencies() throws {
         let m = try manifest([("a.sh", []), ("b.sh", []), ("c.sh", [])])
-        XCTAssertNoThrow(try validateManifestDependencies(m))
+        #expect(throws: Never.self) { try validateManifestDependencies(m) }
     }
 
-    func testLinearChain() throws {
+    @Test func linearChain() throws {
         let m = try manifest([
             ("build.sh", []),
             ("unit.sh", ["build.sh"]),
             ("integration.sh", ["unit.sh"]),
         ])
-        XCTAssertNoThrow(try validateManifestDependencies(m))
+        #expect(throws: Never.self) { try validateManifestDependencies(m) }
     }
 
-    func testDiamondDependency() throws {
+    @Test func diamondDependency() throws {
         let m = try manifest([
             ("a.sh", []),
             ("b.sh", ["a.sh"]),
             ("c.sh", ["a.sh"]),
             ("d.sh", ["b.sh", "c.sh"]),
         ])
-        XCTAssertNoThrow(try validateManifestDependencies(m))
+        #expect(throws: Never.self) { try validateManifestDependencies(m) }
     }
 
-    func testSingleSuiteNoDeps() throws {
+    @Test func singleSuiteNoDeps() throws {
         let m = try manifest([("only.sh", [])])
-        XCTAssertNoThrow(try validateManifestDependencies(m))
+        #expect(throws: Never.self) { try validateManifestDependencies(m) }
     }
 
-    func testEmptySuites() throws {
+    @Test func emptySuites() throws {
         let m = try manifest([])
-        XCTAssertNoThrow(try validateManifestDependencies(m))
+        #expect(throws: Never.self) { try validateManifestDependencies(m) }
     }
 
     // MARK: - Self-references
 
-    func testSelfReferenceThrows() throws {
+    @Test func selfReferenceThrows() throws {
         let m = try manifest([("a.sh", ["a.sh"])])
-        XCTAssertThrowsError(try validateManifestDependencies(m)) { error in
-            let abort = error as? Abort
-            XCTAssertEqual(abort?.status, .unprocessableEntity)
-            XCTAssertTrue(abort?.reason.contains("cannot depend on itself") ?? false,
-                "Expected self-reference error, got: \(abort?.reason ?? "")")
-        }
+        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        #expect(abort.status == .unprocessableEntity)
+        #expect(abort.reason.contains("cannot depend on itself"))
     }
 
     // MARK: - Unknown references
 
-    func testUnknownDependencyThrows() throws {
+    @Test func unknownDependencyThrows() throws {
         let m = try manifest([("a.sh", ["nonexistent.sh"])])
-        XCTAssertThrowsError(try validateManifestDependencies(m)) { error in
-            let abort = error as? Abort
-            XCTAssertEqual(abort?.status, .unprocessableEntity)
-            XCTAssertTrue(abort?.reason.contains("nonexistent.sh") ?? false,
-                "Expected unknown dep error, got: \(abort?.reason ?? "")")
-        }
+        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        #expect(abort.status == .unprocessableEntity)
+        #expect(abort.reason.contains("nonexistent.sh"))
     }
 
     // MARK: - Cycles
 
-    func testSimpleCycleThrows() throws {
+    @Test func simpleCycleThrows() throws {
         let m = try manifest([
             ("a.sh", ["b.sh"]),
             ("b.sh", ["a.sh"]),
         ])
-        XCTAssertThrowsError(try validateManifestDependencies(m)) { error in
-            let abort = error as? Abort
-            XCTAssertEqual(abort?.status, .unprocessableEntity)
-            XCTAssertTrue(abort?.reason.contains("cycle") ?? false,
-                "Expected cycle error, got: \(abort?.reason ?? "")")
-        }
+        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        #expect(abort.status == .unprocessableEntity)
+        #expect(abort.reason.contains("cycle"))
     }
 
-    func testThreeNodeCycleThrows() throws {
+    @Test func threeNodeCycleThrows() throws {
         let m = try manifest([
             ("a.sh", ["c.sh"]),
             ("b.sh", ["a.sh"]),
             ("c.sh", ["b.sh"]),
         ])
-        XCTAssertThrowsError(try validateManifestDependencies(m)) { error in
-            let abort = error as? Abort
-            XCTAssertTrue(abort?.reason.contains("cycle") ?? false)
-        }
+        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        #expect(abort.reason.contains("cycle"))
     }
 
-    func testCycleInSubgraphWithValidNode() throws {
-        // d is fine; a → b → c → a is a cycle
+    @Test func cycleInSubgraphWithValidNode() throws {
+        // d.sh is fine; a → b → c → a is a cycle
         let m = try manifest([
             ("d.sh", []),
             ("a.sh", ["c.sh"]),
             ("b.sh", ["a.sh"]),
             ("c.sh", ["b.sh"]),
         ])
-        XCTAssertThrowsError(try validateManifestDependencies(m)) { error in
-            let abort = error as? Abort
-            XCTAssertTrue(abort?.reason.contains("cycle") ?? false)
-        }
+        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        #expect(abort.reason.contains("cycle"))
     }
 
-    func testMultipleDepsOneUnknownThrows() throws {
+    @Test func multipleDepsOneUnknownThrows() throws {
         let m = try manifest([
             ("a.sh", []),
             ("b.sh", ["a.sh", "missing.sh"]),
         ])
-        XCTAssertThrowsError(try validateManifestDependencies(m)) { error in
-            let abort = error as? Abort
-            XCTAssertTrue(abort?.reason.contains("missing.sh") ?? false)
-        }
+        let abort = try #require(throws: Abort.self) { try validateManifestDependencies(m) }
+        #expect(abort.reason.contains("missing.sh"))
     }
 }

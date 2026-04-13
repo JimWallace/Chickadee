@@ -50,5 +50,6 @@ func routes(_ app: Application) throws {
 
     let admin = app.grouped(sessionAuth, RoleMiddleware(required: .admin), csrf)
     try admin.register(collection: AdminRoutes())
+    try admin.register(collection: InternalMetricsRoutes())
     try admin.register(collection: CourseBundleRoutes())
 }

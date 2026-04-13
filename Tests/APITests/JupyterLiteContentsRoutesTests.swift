@@ -1,6 +1,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
+import Fluent
 import Vapor
 import Foundation
 
@@ -20,7 +21,7 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
     private var instructorUser: APIUser!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-jlite-\(UUID().uuidString)/")
@@ -44,7 +45,7 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpRoot)
     }
 
@@ -55,7 +56,7 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
         """.data(using: .utf8)!
         try notebookData.write(to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName))
 
-        try await app.test(.GET, "/jupyterlite/lab/api/contents/all.json", afterResponse: { res in
+        try await app.asyncTest(.GET, "/jupyterlite/lab/api/contents/all.json", afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let bodyData = Data(res.body.string.utf8)
             let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
@@ -74,7 +75,7 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
             to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName)
         )
 
-        try await app.test(.GET, "/jupyterlite/lab/api/contents/\(notebookName)", afterResponse: { res in
+        try await app.asyncTest(.GET, "/jupyterlite/lab/api/contents/\(notebookName)", afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let bodyData = Data(res.body.string.utf8)
             let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
@@ -83,7 +84,7 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
             XCTAssertTrue(object["content"] is NSNull)
         })
 
-        try await app.test(.GET, "/jupyterlite/lab/api/contents/\(notebookName)?content=1", afterResponse: { res in
+        try await app.asyncTest(.GET, "/jupyterlite/lab/api/contents/\(notebookName)?content=1", afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let bodyData = Data(res.body.string.utf8)
             let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])

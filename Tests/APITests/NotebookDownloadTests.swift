@@ -10,7 +10,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 
 final class NotebookDownloadTests: XCTestCase {
@@ -29,7 +29,7 @@ final class NotebookDownloadTests: XCTestCase {
     """
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-dl-\(UUID().uuidString)/")
@@ -46,26 +46,14 @@ final class NotebookDownloadTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await configureTestDatabase(app)
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -115,7 +103,7 @@ final class NotebookDownloadTests: XCTestCase {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -132,7 +120,7 @@ final class NotebookDownloadTests: XCTestCase {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie  = try await loginAsInstructor()
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -151,7 +139,7 @@ final class NotebookDownloadTests: XCTestCase {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -167,7 +155,7 @@ final class NotebookDownloadTests: XCTestCase {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -186,7 +174,7 @@ final class NotebookDownloadTests: XCTestCase {
         let a = APIAssignment(testSetupID: setupID, title: "Lab 1 Warmup", dueAt: nil, isOpen: true, courseID: courseID)
         try await a.save(on: app.db)
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -202,7 +190,7 @@ final class NotebookDownloadTests: XCTestCase {
         let cookie  = try await loginAsStudent()
         // No assignment record — filename falls back to setupID.
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -216,7 +204,7 @@ final class NotebookDownloadTests: XCTestCase {
     func testUnauthenticatedCannotDownload() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
 
-        try await app.test(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/\(setupID)/assignment/download",
             afterResponse: { res in
                 // Should redirect to login or return 401.
                 XCTAssertTrue(res.status == .unauthorized || res.status == .seeOther,
@@ -237,7 +225,7 @@ final class NotebookDownloadTests: XCTestCase {
         body.writeString(csrf)
         body.writeString("\r\n--\(boundary)--\r\n")
 
-        try await app.test(.POST, "/api/v1/testsetups",
+        try await app.asyncTest(.POST, "/api/v1/testsetups",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.contentType = HTTPMediaType(
@@ -277,7 +265,7 @@ final class NotebookDownloadTests: XCTestCase {
 
         var savedSubID = ""
 
-        try await app.test(.POST, "/api/v1/submissions/browser-result",
+        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 // Build multipart body.
@@ -345,7 +333,7 @@ final class NotebookDownloadTests: XCTestCase {
 
         var savedSubID = ""
 
-        try await app.test(.POST, "/api/v1/submissions/browser-result",
+        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 var body = ByteBufferAllocator().buffer(capacity: 1024)
@@ -414,7 +402,7 @@ final class NotebookDownloadTests: XCTestCase {
 
         var savedSubID = ""
 
-        try await app.test(.POST, "/api/v1/submissions/file",
+        try await app.asyncTest(.POST, "/api/v1/submissions/file",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 var body = ByteBufferAllocator().buffer(capacity: 1024)

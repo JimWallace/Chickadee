@@ -374,6 +374,43 @@ textarea.form-input {
     font-size: .95rem;
 }
 
+.assignment-title-cell {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    flex-wrap: wrap;
+}
+
+.achievement-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+.achievement-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: .28rem .7rem;
+    border-radius: 9999px;
+    background: #fff4d6;
+    border: 1px solid #f1c96b;
+    color: #7a5200;
+    font-size: .78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.achievement-badges-compact {
+    gap: .3rem;
+}
+
+.achievement-badge-compact {
+    padding: .18rem .5rem;
+    font-size: .68rem;
+}
+
 .exec-time {
     font-size: .875rem;
     font-weight: 400;

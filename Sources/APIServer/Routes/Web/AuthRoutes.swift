@@ -16,6 +16,7 @@
 import Vapor
 import Fluent
 import Core
+import Foundation
 
 struct AuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -140,9 +141,99 @@ struct AuthRoutes: RouteCollection {
 
     @Sendable
     func logout(req: Request) async throws -> Response {
+        // Extract any SSO tokens stored at login time before clearing the session.
+        let accessToken = req.session.data["oidc_access_token"]
+        let refreshToken = req.session.data["oidc_refresh_token"]
+        let idToken     = req.session.data["oidc_id_token"]
+
+        req.session.data["oidc_access_token"] = nil
+        req.session.data["oidc_refresh_token"] = nil
+        req.session.data["oidc_id_token"] = nil
+
         req.auth.logout(APIUser.self)
         req.session.unauthenticate(APIUser.self)
+
+        let oidcConfig = req.application.oidcConfig
+
+        // Revoke any issued OAuth tokens at the IdP (fire-and-forget; never blocks logout).
+        if let endpoint = oidcConfig?.discovery.revocationEndpoint,
+           let config = oidcConfig
+        {
+            let app = req.application
+            let logger = req.logger
+            Task {
+                let tokensToRevoke: [(token: String, hint: String)] = [
+                    accessToken.map { ($0, "access_token") },
+                    refreshToken.map { ($0, "refresh_token") },
+                ].compactMap { $0 }
+
+                for entry in tokensToRevoke {
+                    do {
+                        try await revokeToken(
+                            token: entry.token,
+                            tokenTypeHint: entry.hint,
+                            endpoint: endpoint,
+                            config: config,
+                            app: app,
+                            logger: logger
+                        )
+                    } catch {
+                        logger.warning("Token revocation failed (non-fatal): \(error)")
+                    }
+                }
+            }
+        }
+
+        // Redirect to the IdP's end-session endpoint when available.
+        // This terminates the IdP SSO session so the user can't silently re-authenticate.
+        if let endpoint = oidcConfig?.discovery.endSessionEndpoint {
+            var components = URLComponents(string: endpoint)
+            var items: [URLQueryItem] = []
+            if let hint = idToken {
+                items.append(URLQueryItem(name: "id_token_hint", value: hint))
+            }
+            // post_logout_redirect_uri must be an absolute URL; only set it when we know the base.
+            if let base = req.application.securityConfiguration.publicBaseURL?.absoluteString
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+                items.append(URLQueryItem(name: "post_logout_redirect_uri", value: base + "/login"))
+            }
+            if !items.isEmpty {
+                components?.queryItems = items
+            }
+            if let url = components?.url?.absoluteString {
+                return req.redirect(to: url)
+            }
+        }
+
         return req.redirect(to: "/login")
+    }
+}
+
+// MARK: - Token revocation helper
+
+/// Calls the IdP's RFC 7009 revocation endpoint for the given token.
+/// Failures are non-fatal — the caller is responsible for logging them.
+private func revokeToken(
+    token: String,
+    tokenTypeHint: String,
+    endpoint: String,
+    config: OIDCConfiguration,
+    app: Application,
+    logger: Logger
+) async throws {
+    let response = try await app.client.post(URI(string: endpoint)) { tokenReq in
+        tokenReq.headers.contentType = .urlEncodedForm
+        tokenReq.headers.basicAuthorization = BasicAuthorization(
+            username: config.clientID,
+            password: config.clientSecret
+        )
+        try tokenReq.content.encode(
+            ["token": token, "token_type_hint": tokenTypeHint] as [String: String],
+            as: .urlEncodedForm
+        )
+    }
+    if response.status != .ok && response.status != .noContent {
+        logger.warning("Token revocation returned HTTP \(response.status.code)")
     }
 }
 
@@ -169,7 +260,7 @@ func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response
             .count()
         if existing == 0 {
             let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try? await enrollment.save(on: req.db)
+            try await enrollment.save(on: req.db)
         }
     }
 

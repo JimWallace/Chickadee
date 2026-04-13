@@ -6,10 +6,11 @@
     <meta name="color-scheme" content="light dark">
     <meta name="csrf-token" content="#csrfToken()">
     <title>#import("title") — Chickadee</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
-    <link rel="shortcut icon" href="/favicon.png" type="image/png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="stylesheet" href="/styles.css?v=0.4.4">
+    <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="32x32" type="image/png">
+    <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="16x16" type="image/png">
+    <link rel="shortcut icon" href="/favicon.png?v=#appVersion()" type="image/png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=#appVersion()">
+    <link rel="stylesheet" href="/styles.css?v=#appVersion()">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -61,7 +62,7 @@
 <main class="main" id="main-content">
     #import("content")
 </main>
-<script src="/app.js?v=0.4.4"></script>
+<script src="/app.js?v=#appVersion()"></script>
 <script>
 // All multipart/form-data uploads bypass the hidden _csrf body field because
 // the body stream is not collected before CSRF middleware runs.  Intercept
@@ -70,7 +71,9 @@
     document.addEventListener('submit', function (e) {
         var form = e.target;
         if (!form || form.enctype !== 'multipart/form-data') return;
+        if (e.defaultPrevented) return;
         e.preventDefault();
+        form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
         var meta = document.querySelector('meta[name="csrf-token"]');
         var csrfToken = meta ? meta.getAttribute('content') : '';
         var btn = form.querySelector('[type="submit"]');
@@ -84,7 +87,7 @@
         }).catch(function () {
             if (btn) btn.disabled = false;
         });
-    }, true);
+    });
 }());
 </script>
 </body>

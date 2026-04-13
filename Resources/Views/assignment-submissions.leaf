@@ -6,12 +6,24 @@
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
     <h1 style="margin:0">#(assignmentTitle)</h1>
     <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <input id="submissions-filter" class="form-input" type="search"
+        <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or ID…"
-               style="width:220px" aria-label="Filter students">
+               style="width:220px" aria-label="Filter students"
+               readonly onfocus="this.removeAttribute('readonly')">
         <a class="btn action-btn" href="/instructor">Back to Instructor</a>
     </div>
 </div>
+
+<section class="assignment-diagnostics">
+    <div class="diagnostics-cards">
+        #for(metric in metrics):
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">#(metric.label)</div>
+            <div class="diagnostic-value">#(metric.value)</div>
+        </article>
+        #endfor
+    </div>
+</section>
 
 #if(rows.isEmpty):
 <p class="empty">No student users found.</p>
@@ -65,6 +77,31 @@
 </table>
 #endif
 <style>
+.assignment-diagnostics {
+    margin-bottom: 1.25rem;
+}
+.diagnostics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+}
+.diagnostic-card {
+    padding: .75rem .9rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+}
+.diagnostic-label {
+    color: var(--gray-600);
+    font-size: .82rem;
+}
+.diagnostic-value {
+    margin-top: .2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--gray-900);
+}
 #assignment-submissions-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;

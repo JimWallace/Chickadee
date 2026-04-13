@@ -14,7 +14,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 
 final class BrowserRunnerRoutesTests: XCTestCase {
@@ -23,7 +23,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-br-\(UUID().uuidString)/")
@@ -40,26 +40,14 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await configureTestDatabase(app)
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -90,12 +78,34 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         return setupID
     }
 
+    @discardableResult
+    private func insertAssignment(
+        testSetupID: String,
+        isOpen: Bool,
+        dueAt: Date? = nil,
+        deadlineOverrideActive: Bool = false
+    ) async throws -> APIAssignment {
+        let setupOptional = try await APITestSetup.find(testSetupID, on: app.db)
+        XCTAssertNotNil(setupOptional)
+        let setup = setupOptional!
+        let assignment = APIAssignment(
+            testSetupID: testSetupID,
+            title: "Browser Assignment",
+            dueAt: dueAt,
+            isOpen: isOpen,
+            deadlineOverrideActive: deadlineOverrideActive,
+            courseID: setup.courseID
+        )
+        try await assignment.save(on: app.db)
+        return assignment
+    }
+
     // MARK: - Manifest endpoint
 
     func testManifestRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             afterResponse: { res in
                 XCTAssertTrue(
                     res.status == .unauthorized || res.status == .seeOther,
@@ -107,7 +117,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -122,7 +132,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -157,7 +167,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: manifest)
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -189,7 +199,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testManifestReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -202,7 +212,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testDownloadRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             afterResponse: { res in
                 XCTAssertTrue(
                     res.status == .unauthorized || res.status == .seeOther,
@@ -214,7 +224,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie  = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -226,7 +236,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testDownloadReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.test(.GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
+        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -242,6 +252,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     /// server without error.
     func testBrowserResultAcceptsDependencySkippedOutcomes() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
+        _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
         let cookie  = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         let nb      = minimalNotebook()
@@ -293,7 +304,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         """
 
         var submissionID = ""
-        try await app.test(.POST, "/api/v1/submissions/browser-result",
+        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.body = .init(buffer: multipartBody(
@@ -323,6 +334,117 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         XCTAssertTrue(
             result?.collectionJSON.contains("prerequisite") == true,
             "stored result JSON should contain the dependency-skip message")
+    }
+
+    func testRunnerSubmitRejectsBrowserGradedAssignments() async throws {
+        let setupID = try await insertSetup(manifest: simpleManifest())
+        _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+        let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let nb      = minimalNotebook()
+
+        try await app.asyncTest(.POST, "/api/v1/submissions/runner-submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.body = .init(buffer: multipartBody(
+                    boundary: "runner-submit-browser-boundary",
+                    fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
+                    file: ("notebook", "submission.ipynb", nb)
+                ))
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": "runner-submit-browser-boundary"])
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+                XCTAssertTrue(
+                    res.body.string.contains("Browser-graded assignments must be submitted through the browser runner."),
+                    "expected browser-mode runner-submit requests to be rejected with a clear error"
+                )
+            })
+
+        let allSubs = try await APISubmission.query(on: app.db).all()
+        XCTAssertTrue(allSubs.isEmpty, "runner-submit should not create queued submissions for browser-mode setups")
+    }
+
+    func testBrowserResultRejectsOverdueAssignmentsAndClosesThem() async throws {
+        let setupID = try await insertSetup(manifest: simpleManifest())
+        let assignment = try await insertAssignment(
+            testSetupID: setupID,
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+        let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let nb      = minimalNotebook()
+        let collection = """
+        {"submissionID":"","testSetupID":"\(setupID)","attemptNumber":1,"buildStatus":"passed","compilerOutput":null,"outcomes":[],"totalTests":0,"passCount":0,"failCount":0,"errorCount":0,"timeoutCount":0,"executionTimeMs":0,"runnerVersion":"browser-wasm-runner/1.0","timestamp":"2026-01-01T00:00:00Z"}
+        """
+
+        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.body = .init(buffer: multipartBody(
+                    boundary: "browser-result-overdue-boundary",
+                    fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                    file: ("notebook", "notebook.ipynb", nb)
+                ))
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": "browser-result-overdue-boundary"])
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+                XCTAssertTrue(res.body.string.contains("closed"))
+            })
+
+        let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(refreshedOptional)
+        let refreshed = refreshedOptional!
+        XCTAssertFalse(refreshed.isOpen)
+    }
+
+    func testRunnerSubmitRejectsOverdueAssignmentsAndClosesThem() async throws {
+        let manifest = """
+        {
+          "schemaVersion": 1,
+          "gradingMode": "worker",
+          "requiredFiles": [],
+          "testSuites": [
+            { "tier": "public", "script": "test_public.py" }
+          ],
+          "timeLimitSeconds": 10,
+          "makefile": null
+        }
+        """
+        let setupID = try await insertSetup(manifest: manifest)
+        let assignment = try await insertAssignment(
+            testSetupID: setupID,
+            isOpen: true,
+            dueAt: Date().addingTimeInterval(-60)
+        )
+        let cookie  = try await loginAsStudent()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let nb      = minimalNotebook()
+
+        try await app.asyncTest(.POST, "/api/v1/submissions/runner-submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.body = .init(buffer: multipartBody(
+                    boundary: "runner-submit-overdue-boundary",
+                    fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
+                    file: ("notebook", "submission.ipynb", nb)
+                ))
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": "runner-submit-overdue-boundary"])
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+                XCTAssertTrue(res.body.string.contains("closed"))
+            })
+
+        let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
+        XCTAssertNotNil(refreshedOptional)
+        let refreshed = refreshedOptional!
+        XCTAssertFalse(refreshed.isOpen)
     }
 
     // MARK: - Private fixtures

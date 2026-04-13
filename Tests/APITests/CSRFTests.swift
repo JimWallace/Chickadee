@@ -6,7 +6,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 
 final class CSRFTests: XCTestCase {
@@ -15,7 +15,7 @@ final class CSRFTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-csrf-\(UUID().uuidString)/")
@@ -32,33 +32,21 @@ final class CSRFTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await configureTestDatabase(app)
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
     // MARK: - URL-encoded form (login)
 
     func testLoginWithoutCSRFTokenIsForbidden() async throws {
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             try req.content.encode(["username": "anyone", "password": "whatever"],
                                    as: .urlEncodedForm)
         }, afterResponse: { res in
@@ -70,7 +58,7 @@ final class CSRFTests: XCTestCase {
         // Obtain a real session cookie (so the session exists server-side)
         // but supply a made-up token that doesn't match.
         let (_, sessionCookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(
                 ["username": "anyone", "password": "whatever", "_csrf": "not-a-real-token"],
@@ -87,7 +75,7 @@ final class CSRFTests: XCTestCase {
         try await user.save(on: app.db)
 
         let (token, sessionCookie) = try await csrfFields(for: "/login", on: app)
-        try await app.test(.POST, "/login", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
             try req.content.encode(
                 ["username": "csrfuser", "password": "pass1234", "_csrf": token],
@@ -151,7 +139,7 @@ final class CSRFTests: XCTestCase {
         let boundary = "Boundary-NoToken"
         let buf = multipartBody(boundary: boundary, csrfToken: nil)
 
-        try await app.test(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             req.headers.contentType = HTTPMediaType(
                 type: "multipart", subType: "form-data",
@@ -173,7 +161,7 @@ final class CSRFTests: XCTestCase {
         let boundary = "Boundary-BadToken"
         let buf = multipartBody(boundary: boundary, csrfToken: "completely-wrong-token")
 
-        try await app.test(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             req.headers.contentType = HTTPMediaType(
                 type: "multipart", subType: "form-data",
@@ -201,7 +189,7 @@ final class CSRFTests: XCTestCase {
         let boundary = "Boundary-GoodToken"
         let buf = multipartBody(boundary: boundary, csrfToken: token)
 
-        try await app.test(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
+        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
             req.headers.contentType = HTTPMediaType(
                 type: "multipart", subType: "form-data",

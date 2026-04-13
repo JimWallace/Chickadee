@@ -10,32 +10,8 @@ env:
   IMAGE: ghcr.io/jimwallace/chickadee
 
 jobs:
-  # ── Swift test suite ──────────────────────────────────────────────────────
-  # Runs swift test on Linux using the exact same Swift/Ubuntu version as the
-  # Dockerfile so we catch Linux-specific build and runtime failures early.
-  # The build-and-push job below will not run if this job fails.
-  test:
-    runs-on: ubuntu-latest
-    container:
-      image: swift:6.0-jammy
-      # --privileged lets unshare(1) create user namespaces inside the container,
-      # which is required by SandboxedScriptRunner's Linux implementation.
-      options: --privileged
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install system test dependencies
-        # zip/unzip are needed by CourseBundleRoutes (export/import).
-        # The swift:6.0-jammy image is a minimal build image that omits them.
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
-
-      - name: Run Swift tests
-        run: swift test --parallel
-
   # ── Build & push Docker image ─────────────────────────────────────────────
   build-and-push:
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,21 +37,44 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            # :latest on every push to main
-            type=raw,value=latest,enable={{is_default_branch}}
+            # :latest on pushes to main AND on version tags
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
             # :sha-<short-commit> on every push (immutable, good for rollback)
             type=sha,prefix=sha-
             # :v0.4.1 etc. on version tags
             type=semver,pattern={{version}}
 
       - name: Build (and push on main/tags)
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          # Always load locally so Trivy can scan it; push separately below.
+          load: true
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # BuildKit layer cache: dependency fetch is cached across runs
           # unless Package.swift or Package.resolved changes.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL
+
+      - name: Push image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

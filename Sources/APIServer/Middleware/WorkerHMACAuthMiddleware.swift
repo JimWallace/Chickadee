@@ -10,8 +10,9 @@ import Vapor
 /// Required request headers:
 ///   X-Worker-Timestamp  — Unix timestamp (seconds, Int64)
 ///   X-Worker-Nonce      — UUID or other unique string
-///   X-Worker-Signature  — HMAC-SHA256 hex of the signed payload
-///   X-Worker-Id         — Worker identifier (optional; logged and used for activity tracking)
+///   X-Worker-Body-SHA256 — hex-encoded SHA256 of the request body
+///   X-Worker-Signature   — HMAC-SHA256 hex of the signed payload
+///   X-Worker-Id          — Worker identifier (optional; logged and used for activity tracking)
 ///
 /// The shared secret is read from the application's WorkerSecretStore on every
 /// request so that admin-panel secret rotations take effect without a restart.
@@ -35,6 +36,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
 
         let timestampHeader = try request.requireWorkerHeader("X-Worker-Timestamp")
         let nonce           = try request.requireWorkerHeader("X-Worker-Nonce")
+        let bodyHashHeader  = try request.requireWorkerHeader("X-Worker-Body-SHA256")
         let signature       = try request.requireWorkerHeader("X-Worker-Signature")
         let workerID        = request.headers.first(name: "X-Worker-Id")
 
@@ -54,11 +56,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             throw Abort(.unauthorized, reason: "Replay detected.")
         }
 
-        let bodyHash = sha256Hex(bodyBytes(request))
         let signedPayload = [
             request.method.rawValue.uppercased(),
             request.url.path,
-            bodyHash,
+            bodyHashHeader.lowercased(),
             timestampHeader,
             nonce
         ].joined(separator: "\n")
@@ -69,7 +70,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         }
 
         if let workerID, !workerID.isEmpty {
-            await request.application.workerActivityStore.markActive(workerID: workerID)
+            // Pass hostname: "" here — the middleware doesn't have access to the
+            // request body, so we preserve whatever hostname was set by the
+            // job-request body handler rather than clobbering it with empty string.
+            await request.application.workerActivityStore.markActive(workerID: workerID, hostname: "")
         }
 
         return try await next.respond(to: request)
@@ -122,15 +126,6 @@ private extension Request {
         }
         return value
     }
-}
-
-private func bodyBytes(_ request: Request) -> [UInt8] {
-    guard var data = request.body.data else { return [] }
-    return data.readBytes(length: data.readableBytes) ?? []
-}
-
-private func sha256Hex(_ bytes: [UInt8]) -> String {
-    Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
 }
 
 private func hmacSHA256Hex(message: String, secret: String) -> String {

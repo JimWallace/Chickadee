@@ -40,9 +40,32 @@ Edit `.env`:
 
 | Variable | What to set |
 |---|---|
-| `RUNNER_SHARED_SECRET` | A strong random secret: `openssl rand -base64 32` |
+| `RUNNER_SHARED_SECRET` | Optional. Leave unset to use Chickadee's auto-generated three-word `.worker-secret`, or set a fixed secret explicitly (for example `openssl rand -base64 32`). |
+| `DATABASE_BACKEND` | Optional. Leave unset or set to `sqlite` to keep the current default backend. Set to `postgres` to use PostgreSQL. |
+| `SQLITE_PATH` | Optional. Path to the SQLite file. Defaults to `/data/chickadee.sqlite` in the containerized deployment. |
+| `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` / `DATABASE_PASSWORD` | Required only when `DATABASE_BACKEND=postgres`. |
 | `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
 | `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
+
+### Database backend selection
+
+SQLite remains the default backend for existing deployments. If you do nothing,
+Chickadee will continue to use the single-file SQLite database at
+`/data/chickadee.sqlite`.
+
+To opt into PostgreSQL, set:
+
+```env
+DATABASE_BACKEND=postgres
+DATABASE_HOST=db
+DATABASE_PORT=5432
+DATABASE_NAME=chickadee
+DATABASE_USER=chickadee
+DATABASE_PASSWORD=change-me
+```
+
+If `DATABASE_BACKEND=postgres` is selected and any required setting is missing,
+the server now fails fast at startup with a clear configuration error.
 
 ### 2. Pull and start
 
@@ -55,11 +78,39 @@ The image is built automatically by GitHub Actions on every push to `main` — n
 Swift toolchain is required on the server. The first pull downloads ~500 MB;
 subsequent pulls only fetch changed layers.
 
+By default, the Compose runner reads `/data/.worker-secret` from the shared
+named volume, so the server's auto-generated three-word secret works without
+copying it into `.env`. If you set `RUNNER_SHARED_SECRET`, that explicit value
+still overrides the generated file.
+
+### Optional PostgreSQL service example
+
+The default deployment path stays on SQLite. If you want to prepare a Postgres
+deployment without changing the default path, add a service like this to your
+Compose file and set the database env vars above on the `server` service:
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chickadee
+      POSTGRES_USER: chickadee
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - chickadee-postgres:/var/lib/postgresql/data
+```
+
+This PR only makes backend selection configurable. It does not migrate any
+existing SQLite data into PostgreSQL for you.
+
 Check status:
 
 ```bash
 docker compose ps
 docker compose logs -f server
+docker compose logs -f runner
 ```
 
 ### 3. Verify
@@ -105,7 +156,8 @@ docker compose up -d
 
 ### 5. Updating
 
-Use the deploy script from the repo root — it backs up the database, pulls the
+Use the deploy script from the repo root — it backs up the SQLite database when
+present, pulls the
 new image, restarts services, and confirms the health check passes:
 
 ```bash
@@ -115,6 +167,10 @@ scripts/server-deploy.sh
 The entrypoint script automatically syncs fresh templates and JupyterLite assets
 from the new image into the data volume on each restart. Fluent schema migrations
 also run automatically on startup.
+
+> **Note (v0.4.46+):** Sessions are now persisted in the database (`_fluent_sessions`
+> table). The migration runs automatically on startup. All existing users will be
+> logged out once when this version is first deployed.
 
 **Rollback** to a specific build (replace the SHA with one from the
 [GHCR package page](https://github.com/JimWallace/Chickadee/pkgs/container/chickadee)
@@ -147,13 +203,85 @@ https://github.com/JimWallace/Chickadee/pkgs/container/chickadee
 docker compose up -d --scale runner=4
 ```
 
+Scaled Docker runners should each have a unique worker ID. The bundled Compose
+file defaults to `runner-${HOSTNAME}` so replicas do not conflict with each
+other. For non-Docker deployments, assign a distinct `--worker-id` per runner.
+
 Each runner instance gets a unique worker ID derived from its container ID.
+
+During an upgrade or server restart, existing runner containers should reconnect
+on their own. If the API stays unavailable longer than the bounded retry window
+for downloads or result uploads, the active job can still fail cleanly and will
+be visible in the structured runner logs.
+
+### Observability and operations
+
+Backend-only observability is built in:
+
+- Structured server logs cover submission enqueue, runner polling/heartbeat,
+  assignment, result receipt, and job finalisation.
+- Structured runner logs cover startup, config, poll cycles, job acceptance,
+  per-test execution, result submission, errors, timeouts, and shutdown.
+- SQLite now stores `job_execution_metrics` and `runner_snapshots`.
+- Authenticated admins can query `GET /admin/metrics` for queue depth, in-flight
+  jobs, active runners, per-runner load, and recent timing/status summaries.
+
+Useful commands:
+
+```bash
+docker compose logs -f server | jq -R 'fromjson?'
+docker compose logs -f runner | jq -R 'fromjson?'
+curl -H "Cookie: <admin-session-cookie>" http://localhost:8080/admin/metrics | jq
+```
+
+Retention knobs:
+
+- `JOB_METRIC_RETENTION_DAYS` (default `30`)
+- `RUNNER_SNAPSHOT_RETENTION_DAYS` (default `14`)
+- `RUNNER_ACTIVE_WINDOW_SECONDS` (default `120`)
+- `METRICS_RECENT_WINDOW_HOURS` (default `24`)
+- `OBSERVABILITY_PRUNE_INTERVAL_HOURS` (default `24`)
+
+Runner capability matching is also available:
+
+- runners advertise platform, architecture, language versions, and named
+  capabilities on poll and heartbeat
+- assignments can declare optional backend-only requirement rows in
+  `assignment_requirements`
+- the server only assigns jobs to compatible runners
+
+Capability discovery knob:
+
+- `RUNNER_CAPABILITY_DISCOVERY_ENABLED` (default enabled)
+
+Runner interruption resilience knobs:
+
+- `RUNNER_NETWORK_RETRY_ENABLED` (default enabled)
+- `RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS` (default `6`)
+- `RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS` (default `8`)
+- `RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS` (default `4`)
+- `RUNNER_RETRY_BASE_DELAY_MS` (default `1000`)
+- `RUNNER_RETRY_MAX_DELAY_MS` (default `30000`)
+
+Short outage behavior:
+
+- poll requests keep retrying until the server is back
+- heartbeats retry within a bounded window, then resume on the next interval
+- submission downloads, test-setup downloads, and result uploads retry with
+  exponential backoff before failing the active job
+- runner logs emit `server_connection_lost`, `network_retry_scheduled`,
+  `heartbeat_retry_scheduled`, and `server_connection_restored`
+
+See `docs/runner-capability-profiles.md` for rollout notes and troubleshooting.
 
 ### Data persistence
 
 All persistent data lives in the `chickadee-data` named volume:
-- `chickadee.sqlite` — the database
+- `chickadee.sqlite` — the default SQLite database
 - `submissions/`, `testsetups/`, `results/` — uploaded files
+
+If you switch to PostgreSQL, the server data volume still stores uploaded files
+and secrets, but the database itself lives in the Postgres data volume instead.
 
 ```bash
 # Back up the data volume
@@ -247,11 +375,36 @@ Check status:
 sudo systemctl status chickadee-server
 sudo systemctl status chickadee-runner
 sudo journalctl -u chickadee-server -f   # live logs
+sudo journalctl -u chickadee-runner -f
 ```
 
 ---
 
 ## 5. Configure nginx
+
+## Operational checks
+
+Quick checks once the services are up:
+
+```bash
+curl http://127.0.0.1:8080/health
+curl -H "Cookie: <admin-session-cookie>" http://127.0.0.1:8080/admin/metrics | jq
+```
+
+Questions this data now answers:
+
+- Add more runners:
+  Watch for persistent queue depth, increasing queue wait, and runners at or
+  near zero available capacity.
+- Jobs timing out more than usual:
+  Check recent `timeout` counts in `/admin/metrics`, then confirm with
+  `job_finalised` and runner `timeout` logs.
+- Which runner is overloaded:
+  Compare each runner's `activeJobs`, `availableCapacity`, and recent heartbeat
+  cadence.
+- Mostly test failures or infrastructure errors:
+  Use `job_execution_metrics.final_status` for the broad split, then inspect
+  `test_result_summary` and `local_execution_error` logs for detail.
 
 ```bash
 sudo cp /opt/chickadee/deploy/nginx.conf /etc/nginx/sites-available/chickadee

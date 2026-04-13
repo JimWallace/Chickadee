@@ -48,6 +48,7 @@ struct WorkerRequestSigner: Sendable {
 
         request.setValue(tsString, forHTTPHeaderField: "X-Worker-Timestamp")
         request.setValue(nonce,    forHTTPHeaderField: "X-Worker-Nonce")
+        request.setValue(bodyHash, forHTTPHeaderField: "X-Worker-Body-SHA256")
         request.setValue(signature, forHTTPHeaderField: "X-Worker-Signature")
         if let workerID, !workerID.isEmpty {
             request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")

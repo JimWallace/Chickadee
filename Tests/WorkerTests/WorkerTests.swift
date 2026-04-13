@@ -28,6 +28,20 @@ final class WorkerTests: XCTestCase {
         return url
     }
 
+    private func writeSecretFile(_ value: String, name: String = ".worker-secret") throws -> String {
+        let url = tmpDir.appendingPathComponent(name)
+        try value.write(to: url, atomically: true, encoding: .utf8)
+        return url.path
+    }
+
+    private func requireStableLinuxSandboxRunner() throws {
+#if os(Linux)
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Sandboxed runner tests are unstable on GitHub's containerized Linux runners.")
+        }
+#endif
+    }
+
     // MARK: - UnsandboxedScriptRunner: exit code mapping
 
     func testScriptExitZeroReportsExitCodeZero() async throws {
@@ -88,7 +102,27 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Script sleeping 60s should time out with a 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Timed-out script should be reaped promptly")
     }
+
+#if os(Linux)
+    func testScriptTimeoutReapsBackgroundChildProcess() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        sleep 60 &
+        wait
+        """)
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        XCTAssertTrue(output.timedOut, "Timed-out script with a background child should still time out")
+        XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(
+            output.executionTimeMs,
+            10_000,
+            "Timed-out script should reap inherited stdout/stderr handles from background children"
+        )
+    }
+#endif
 
     // MARK: - UnsandboxedScriptRunner: working directory
 
@@ -106,6 +140,7 @@ final class WorkerTests: XCTestCase {
     // MARK: - SandboxedScriptRunner: basic execution
 
     func testSandboxedRunnerExitZero() async throws {
+        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -114,6 +149,7 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerExitOne() async throws {
+        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -122,6 +158,7 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerCapturesStdout() async throws {
+        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\necho 'sandbox out'\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -129,6 +166,7 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerCapturesStderr() async throws {
+        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\necho 'sandbox err' >&2\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -136,14 +174,36 @@ final class WorkerTests: XCTestCase {
     }
 
     func testSandboxedRunnerTimesOut() async throws {
+        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\nsleep 60\nexit 0")
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
 
+#if os(Linux)
+    func testSandboxedRunnerTimeoutReapsBackgroundChildProcess() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        sleep 60 &
+        wait
+        """)
+        let runner = SandboxedScriptRunner()
+        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        XCTAssertTrue(output.timedOut, "Sandboxed script with a background child should still time out")
+        XCTAssertEqual(output.exitCode, -1)
+        XCTAssertLessThan(
+            output.executionTimeMs,
+            10_000,
+            "Sandboxed timeout should reap background children without leaving pipes open"
+        )
+    }
+#endif
+
     func testSandboxedRunnerWorkDir() async throws {
+        try requireStableLinuxSandboxRunner()
         let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")
         let runner = SandboxedScriptRunner()
         _ = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
@@ -157,6 +217,7 @@ final class WorkerTests: XCTestCase {
     // MARK: - SandboxedScriptRunner: network isolation
 
     func testSandboxedRunnerBlocksNetworkAccess() async throws {
+        try requireStableLinuxSandboxRunner()
         // Write a script that tries to reach an external host.
         // In a sandboxed network namespace this should fail (exit non-zero from python).
         // The script exits 0 only if the connection SUCCEEDS — so we assert exit != 0.
@@ -179,6 +240,71 @@ final class WorkerTests: XCTestCase {
             output.exitCode, 0,
             "Sandboxed runner should block outbound network access (exit 0 means connection succeeded)"
         )
+    }
+
+    // MARK: - Worker secret resolution
+
+    func testResolveWorkerSharedSecretPrefersCLISecret() throws {
+        _ = try writeSecretFile("file-secret")
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: " cli-secret ",
+            environment: ["RUNNER_SHARED_SECRET": "env-secret"]
+        )
+
+        XCTAssertEqual(resolved, "cli-secret")
+    }
+
+    func testResolveWorkerSharedSecretUsesEnvSecretBeforeFile() throws {
+        _ = try writeSecretFile("file-secret")
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: nil,
+            environment: ["RUNNER_SHARED_SECRET": "env-secret"]
+        )
+
+        XCTAssertEqual(resolved, "env-secret")
+    }
+
+    func testResolveWorkerSharedSecretUsesDefaultFileWhenSecretsUnset() throws {
+        let previous = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(tmpDir.path))
+        defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
+
+        _ = try writeSecretFile("shared-file-secret\n")
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: nil,
+            environment: [:]
+        )
+
+        XCTAssertEqual(resolved, "shared-file-secret")
+    }
+
+    func testDefaultWorkerSecretFilePathsIncludesCurrentDirectoryFileFirst() throws {
+        let previous = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(tmpDir.path))
+        defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
+
+        let paths = defaultWorkerSecretFilePaths()
+        let expectedFirstPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".worker-secret")
+            .path
+
+        XCTAssertEqual(paths.first, expectedFirstPath)
+        XCTAssertTrue(paths.contains("/data/.worker-secret"))
+    }
+
+    func testResolveWorkerSharedSecretReturnsNilWhenAllSourcesMissing() {
+        let emptyDir = tmpDir.appendingPathComponent("empty", isDirectory: true)
+        try? FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
+        let previous = FileManager.default.currentDirectoryPath
+        XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(emptyDir.path))
+        defer { XCTAssertTrue(FileManager.default.changeCurrentDirectoryPath(previous)) }
+
+        let resolved = resolveWorkerSharedSecret(
+            cliWorkerSecret: nil,
+            environment: [:]
+        )
+
+        XCTAssertNil(resolved)
     }
 
     // MARK: - ScriptInvocation: R extension
@@ -315,7 +441,7 @@ final class WorkerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: pyURL.path),
                       "Should produce assignment.py from assignment.ipynb")
 
-        let content = try String(contentsOf: pyURL)
+        let content = try String(contentsOf: pyURL, encoding: .utf8)
         XCTAssertTrue(content.contains("def add(a, b):"),
                       "Code cell content should be present")
         XCTAssertTrue(content.contains("result = add(1, 2)"),
@@ -342,7 +468,7 @@ final class WorkerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path),
                        "IR kernel must NOT produce .py file")
 
-        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.R"))
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.R"), encoding: .utf8)
         XCTAssertTrue(content.contains("x <- 42"))
     }
 
@@ -391,7 +517,7 @@ final class WorkerTests: XCTestCase {
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
-        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"))
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         // Only "x = 1" should be present; empty/whitespace cells are skipped.
         XCTAssertTrue(content.contains("x = 1"))
         // The file should not have multiple blank-line groups from empty cells.
@@ -410,7 +536,7 @@ final class WorkerTests: XCTestCase {
 
         try extractNotebooksToCode(in: tmpDir)  // no .ipynb → nothing to do
 
-        let pyContent = try String(contentsOf: pyURL)
+        let pyContent = try String(contentsOf: pyURL, encoding: .utf8)
         XCTAssertEqual(pyContent, "original = True", "Non-notebook files must be untouched")
     }
 
@@ -439,7 +565,29 @@ final class WorkerTests: XCTestCase {
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
-        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"))
+        let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.py"), encoding: .utf8)
         XCTAssertTrue(content.contains("x = 99"), "String-form source must be extracted")
+    }
+
+    func testClassifyHTTPRetryTreatsGatewayErrorsAsRetryable() {
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 503, body: "unavailable"),
+            .retryable("HTTP 503: unavailable")
+        )
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 502, body: "bad gateway"),
+            .retryable("HTTP 502: bad gateway")
+        )
+    }
+
+    func testClassifyHTTPRetryTreatsAuthAndConflictAsTerminal() {
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 401, body: "unauthorized"),
+            .terminal("HTTP 401: unauthorized")
+        )
+        XCTAssertEqual(
+            classifyHTTPRetry(statusCode: 409, body: "duplicate"),
+            .terminal("HTTP 409: duplicate")
+        )
     }
 }

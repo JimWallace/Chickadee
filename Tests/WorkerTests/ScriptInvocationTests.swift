@@ -4,21 +4,22 @@
 // interpreter is selected for each file extension, shebang line, and
 // Python-heuristic fallback.
 
-import XCTest
+import Testing
 @testable import chickadee_runner
 import Foundation
 
-final class ScriptInvocationTests: XCTestCase {
+// final class so deinit can remove the per-test temp directory.
+final class ScriptInvocationTests {
 
-    private var tmpDir: URL!
+    private let tmpDir: URL
 
-    override func setUp() async throws {
+    init() throws {
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("script-inv-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
     }
 
-    override func tearDown() async throws {
+    deinit {
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
@@ -30,117 +31,76 @@ final class ScriptInvocationTests: XCTestCase {
         return url
     }
 
-    // MARK: - Extension-based dispatch
+    // MARK: - Extension-based dispatch: env-wrapper interpreters
 
-    func testShExtension_usesSh() {
+    @Test(arguments: zip(
+        ["test.bash", "test.zsh", "test.rb", "test.pl", "test.js"],
+        ["bash",      "zsh",      "ruby",    "perl",    "node"]
+    ))
+    func extensionUsesEnvWrapper(filename: String, interpreter: String) {
+        let inv = scriptInvocation(for: makeScript(name: filename))
+        #expect(inv.executableURL.path.hasSuffix("env"))
+        #expect(inv.arguments.first == interpreter)
+    }
+
+    // .sh is a direct /bin/sh invocation, not an env wrapper.
+    @Test func shExtensionUsesSh() {
         let script = makeScript(name: "test.sh")
         let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.executableURL.path, "/bin/sh")
-        XCTAssertEqual(inv.arguments, [script.path])
+        #expect(inv.executableURL.path == "/bin/sh")
+        #expect(inv.arguments == [script.path])
     }
 
-    func testBashExtension_usesBash() {
-        let script = makeScript(name: "test.bash")
-        let inv = scriptInvocation(for: script)
-        XCTAssertTrue(inv.executableURL.path.hasSuffix("env"),
-                      "Expected env wrapper, got \(inv.executableURL.path)")
-        XCTAssertEqual(inv.arguments.first, "bash")
-    }
-
-    func testZshExtension_usesZsh() {
-        let script = makeScript(name: "test.zsh")
-        let inv = scriptInvocation(for: script)
-        XCTAssertTrue(inv.executableURL.path.hasSuffix("env"))
-        XCTAssertEqual(inv.arguments.first, "zsh")
-    }
-
-    func testPyExtension_usesPython3() {
+    // .py passes a bootstrap via -c and appends the script path last.
+    @Test func pyExtensionUsesPython3() {
         let script = makeScript(name: "test.py")
         let inv = scriptInvocation(for: script)
-        XCTAssertTrue(inv.executableURL.path.hasSuffix("env"))
-        XCTAssertEqual(inv.arguments.first, "python3")
-        // Python invocation uses -c <bootstrap> <script>
-        XCTAssertTrue(inv.arguments.contains("-c"),
-                      "Python invocation should pass bootstrap via -c")
-        XCTAssertTrue(inv.arguments.last == script.path,
-                      "Script path should be last argument")
-    }
-
-    func testRbExtension_usesRuby() {
-        let script = makeScript(name: "test.rb")
-        let inv = scriptInvocation(for: script)
-        XCTAssertTrue(inv.executableURL.path.hasSuffix("env"))
-        XCTAssertEqual(inv.arguments.first, "ruby")
-    }
-
-    func testPlExtension_usesPe() {
-        let script = makeScript(name: "test.pl")
-        let inv = scriptInvocation(for: script)
-        XCTAssertTrue(inv.executableURL.path.hasSuffix("env"))
-        XCTAssertEqual(inv.arguments.first, "perl")
-    }
-
-    func testJsExtension_usesNode() {
-        let script = makeScript(name: "test.js")
-        let inv = scriptInvocation(for: script)
-        XCTAssertTrue(inv.executableURL.path.hasSuffix("env"))
-        XCTAssertEqual(inv.arguments.first, "node")
+        #expect(inv.executableURL.path.hasSuffix("env"))
+        #expect(inv.arguments.first == "python3")
+        #expect(inv.arguments.contains("-c"), "Python invocation should pass bootstrap via -c")
+        #expect(inv.arguments.last == script.path, "Script path should be last argument")
     }
 
     // MARK: - Shebang dispatch (extensionless files)
 
-    func testShebangPython_usesPython3() {
+    @Test(arguments: zip(
+        ["#!/bin/bash\necho hi",               "#!/usr/bin/env node\nconsole.log('hi')", "#!/usr/bin/env ruby\nputs 'hi'"],
+        ["bash",                               "node",                                    "ruby"]
+    ))
+    func shebangUsesEnvWrapper(content: String, interpreter: String) {
+        let inv = scriptInvocation(for: makeScript(name: "test_script", content: content))
+        #expect(inv.arguments.first == interpreter)
+    }
+
+    @Test func shebangPythonUsesPython3() {
         let script = makeScript(name: "test_nopy", content: "#!/usr/bin/env python3\nprint('hi')")
         let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.arguments.first, "python3")
-        XCTAssertTrue(inv.arguments.contains("-c"))
+        #expect(inv.arguments.first == "python3")
+        #expect(inv.arguments.contains("-c"))
     }
 
-    func testShebangBash_usesBash() {
-        let script = makeScript(name: "test_nobash", content: "#!/bin/bash\necho hi")
-        let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.arguments.first, "bash")
-    }
-
-    func testShebangSh_usesSh() {
+    @Test func shebangShUsesSh() {
         let script = makeScript(name: "test_nosh", content: "#!/bin/sh\necho hi")
         let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.executableURL.path, "/bin/sh")
-    }
-
-    func testShebangNode_usesNode() {
-        let script = makeScript(name: "test_nojs", content: "#!/usr/bin/env node\nconsole.log('hi')")
-        let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.arguments.first, "node")
-    }
-
-    func testShebangRuby_usesRuby() {
-        let script = makeScript(name: "test_norb", content: "#!/usr/bin/env ruby\nputs 'hi'")
-        let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.arguments.first, "ruby")
+        #expect(inv.executableURL.path == "/bin/sh")
     }
 
     // MARK: - Python heuristic (no extension, no shebang)
 
-    func testPythonImport_heuristicDetectsPython() {
-        let script = makeScript(name: "test_heuristic", content: "import os\nprint(os.getcwd())")
-        let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.arguments.first, "python3",
-                       "Script starting with 'import' should be detected as Python")
-    }
-
-    func testPythonDef_heuristicDetectsPython() {
-        let script = makeScript(name: "test_heuristic2", content: "def foo():\n    pass\n\nfoo()")
-        let inv = scriptInvocation(for: script)
-        XCTAssertEqual(inv.arguments.first, "python3")
+    @Test(arguments: [
+        "import os\nprint(os.getcwd())",
+        "def foo():\n    pass\n\nfoo()"
+    ])
+    func pythonHeuristic(content: String) {
+        let inv = scriptInvocation(for: makeScript(name: "test_heuristic", content: content))
+        #expect(inv.arguments.first == "python3", "Script starting with 'import' or 'def' should be detected as Python")
     }
 
     // MARK: - Fallback
 
-    func testUnknownExtension_fallsBackToSh() {
+    @Test func unknownExtensionFallsBackToSh() {
         let script = makeScript(name: "test.unknown", content: "echo hi")
         let inv = scriptInvocation(for: script)
-        // Non-executable file with unknown extension should fall back to /bin/sh
-        XCTAssertEqual(inv.executableURL.path, "/bin/sh")
+        #expect(inv.executableURL.path == "/bin/sh")
     }
 }

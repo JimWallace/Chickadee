@@ -19,6 +19,7 @@ struct AssignmentRow: Encodable {
     let validationSubmissionID: String?
     let suiteCount:   Int
     let createdAt:    String
+    let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
 }
 
 /// A course section with its grouped assignment rows, used in instructor and student views.
@@ -32,6 +33,7 @@ struct CourseSectionRow: Encodable {
 
 struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
+    let metrics: [InstructorDashboardMetric]
     let sections: [CourseSectionRow]    // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
@@ -43,17 +45,26 @@ struct AssignmentsContext: Encodable {
     let courseIsArchived: Bool
 }
 
+struct InstructorDashboardMetric: Encodable {
+    let label: String
+    let value: String
+}
+
 struct EnrolledStudentRow: Encodable {
     let id: String
     let username: String
     let displayName: String
     let role: String        // "student" | "instructor" | "admin"
+    let lastLoginAtText: String
+    let lastLoginAtISO: String?
+    let submissionsURL: String
 }
 
 struct AssignmentSubmissionsContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
     let assignmentTitle: String
+    let metrics: [InstructorDashboardMetric]
     let rows: [AssignmentStudentRow]
 }
 
@@ -68,6 +79,7 @@ struct AssignmentStudentRow: Encodable {
     let latestSubmittedAtText: String
     let additionalSubmissionCount: Int
     let fullHistoryURL: String
+    let bestGradePercent: Int?
 }
 
 struct ValidateContext: Encodable {
@@ -85,19 +97,40 @@ struct NewAssignmentContext: Encodable {
     let dueAt: String
     let sections: [CourseSectionRow]    // available sections for the section picker
     let preselectedSectionID: String    // from ?sectionID= query param
+    let draftID: String?
+    let assignmentNotebook: NewAssignmentNotebookContext?
+    let solutionNotebook: NewAssignmentNotebookContext?
+    let suiteRows: [EditableSuiteRow]
+    let hasSuiteRows: Bool
+    let requiredPlatform: String
+    let requiredArchitecture: String
+    let requiredLanguagesCSV: String
+    let requiredCapabilitiesCSV: String
+    let detectedLanguages: [String]
+    let detectedCapabilities: [String]
+    let detectedLanguagesCSV: String
+    let detectedCapabilitiesCSV: String
     let notice: String?
     let error: String?
+}
+
+struct NewAssignmentNotebookContext: Encodable {
+    let name: String
+    let editURL: String
 }
 
 struct EditAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
+    let testSetupID: String
     let assignmentName: String
     let dueAt: String
     let currentAssignmentFile: String
     let currentAssignmentURL: String
+    let assignmentNotebookEditURL: String
     let currentSolutionFile: String?
     let currentSolutionURL: String?
+    let solutionNotebookEditURL: String?
     let existingSuiteRows: [EditableSuiteRow]
     let notice: String?
     let error: String?
@@ -134,6 +167,35 @@ struct EditableSuiteRow: Encodable {
         let data = (try? JSONEncoder().encode(dependsOn)) ?? Data("[]".utf8)
         return String(data: data, encoding: .utf8) ?? "[]"
     }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case url
+        case isTest
+        case tier
+        case order
+        case dependsOn
+        case points
+        case displayName
+        case displayNameOrEmpty
+        case displayNameOrStem
+        case dependsOnJSON
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(url, forKey: .url)
+        try container.encode(isTest, forKey: .isTest)
+        try container.encode(tier, forKey: .tier)
+        try container.encode(order, forKey: .order)
+        try container.encode(dependsOn, forKey: .dependsOn)
+        try container.encode(points, forKey: .points)
+        try container.encodeIfPresent(displayName, forKey: .displayName)
+        try container.encode(displayNameOrEmpty, forKey: .displayNameOrEmpty)
+        try container.encode(displayNameOrStem, forKey: .displayNameOrStem)
+        try container.encode(dependsOnJSON, forKey: .dependsOnJSON)
+    }
 }
 
 struct AssignmentStudentHistoryContext: Encodable {
@@ -151,4 +213,26 @@ struct AssignmentSubmissionHistoryRow: Encodable {
     let status: String
     let submittedAt: String
     let gradeText: String
+}
+
+struct CourseStudentSubmissionsContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let studentName: String
+    let studentUsername: String
+    let courseName: String
+    let backURL: String
+    let rows: [CourseStudentSubmissionRow]
+}
+
+struct CourseStudentSubmissionRow: Encodable {
+    let assignmentTitle: String
+    let assignmentSubmissionsURL: String?
+    let submissionID: String
+    let attemptNumber: Int
+    let status: String
+    let submittedAt: String
+    let gradeText: String
+    let submissionFilename: String?
+    let canOpenInNotebook: Bool
+    let openInNotebookURL: String?
 }

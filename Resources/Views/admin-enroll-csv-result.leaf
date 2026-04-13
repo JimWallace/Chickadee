@@ -27,9 +27,9 @@ CSV Enrollment Result
     <p style="font-size:.875rem;color:var(--gray-600);margin-top:0">
         These usernames from the CSV did not match any account in the system:
     </p>
-    <ul style="font-family:monospace;margin:.25rem 0 0 1.25rem;padding:0">
+    <ul style="margin:.25rem 0 0 1.25rem;padding:0">
     #for(name in notFoundUsernames):
-        <li>#(name)</li>
+        <li><code>#(name)</code></li>
     #endfor
     </ul>
 </section>

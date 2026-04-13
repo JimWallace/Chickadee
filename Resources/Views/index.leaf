@@ -40,7 +40,16 @@
         <tr>
             <td>
                 #if(setup.title):
-                    <strong>#(setup.title)</strong>
+                    <div class="assignment-title-cell">
+                        <strong>#(setup.title)</strong>
+                        #if(!setup.badges.isEmpty):
+                        <span class="achievement-badges achievement-badges-compact">
+                            #for(badge in setup.badges):
+                            <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                            #endfor
+                        </span>
+                        #endif
+                    </div>
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -77,10 +86,17 @@
             <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
+                    #if(setup.gradingMode == "browser"):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    #else:
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
                        style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
+                    #endif
                     #endif
                 </div>
             </td>
@@ -109,7 +125,16 @@
         <tr>
             <td>
                 #if(setup.title):
-                    <strong>#(setup.title)</strong>
+                    <div class="assignment-title-cell">
+                        <strong>#(setup.title)</strong>
+                        #if(!setup.badges.isEmpty):
+                        <span class="achievement-badges achievement-badges-compact">
+                            #for(badge in setup.badges):
+                            <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                            #endfor
+                        </span>
+                        #endif
+                    </div>
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -146,10 +171,17 @@
             <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
+                    #if(setup.gradingMode == "browser"):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    #else:
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
                        style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
+                    #endif
                     #endif
                 </div>
             </td>
@@ -178,7 +210,16 @@
         <tr>
             <td>
                 #if(setup.title):
-                    <strong>#(setup.title)</strong>
+                    <div class="assignment-title-cell">
+                        <strong>#(setup.title)</strong>
+                        #if(!setup.badges.isEmpty):
+                        <span class="achievement-badges achievement-badges-compact">
+                            #for(badge in setup.badges):
+                            <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                            #endfor
+                        </span>
+                        #endif
+                    </div>
                 #else:
                 <span style="color:var(--gray-600)">Unpublished</span>
                 #endif
@@ -215,10 +256,17 @@
             <td>
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
+                    #if(setup.gradingMode == "browser"):
+                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    #else:
                     <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
                        style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
+                    #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
                        style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                    #endif
+                    #endif
                     #endif
                 </div>
             </td>

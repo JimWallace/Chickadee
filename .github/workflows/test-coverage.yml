@@ -1,22 +1,36 @@
 name: Test Coverage
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # 06:00 UTC is 2:00 AM in Toronto during daylight saving time.
+    - cron: "0 6 * * *"
 
 jobs:
   coverage:
     runs-on: ubuntu-latest
     container:
-      image: swift:6.0-jammy
+      image: swift:6.3-jammy
       options: --privileged
+    env:
+      MIN_COVERAGE_PERCENT: "60.0"
 
     steps:
       - uses: actions/checkout@v6
 
+      - name: Compute SPM cache key
+        id: spm-cache-key
+        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
+          restore-keys: ${{ runner.os }}-spm-
+
       - name: Install system dependencies
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file
 
       - name: Run tests with coverage
         run: swift test --enable-code-coverage
@@ -32,6 +46,49 @@ jobs:
             "$XCTEST" \
             -ignore-filename-regex='.build/|Tests/' \
             > coverage.lcov
+
+      - name: Enforce coverage floor
+        id: enforce_coverage_floor
+        run: |
+          COVERAGE_PERCENT=$(awk '
+            BEGIN { hit = 0; found = 0 }
+            /^DA:/ {
+              split($0, parts, ",")
+              found += 1
+              if ((parts[2] + 0) > 0) {
+                hit += 1
+              }
+            }
+            END {
+              if (found == 0) {
+                print "0.00"
+              } else {
+                printf "%.2f", (hit / found) * 100
+              }
+            }
+          ' coverage.lcov)
+
+          echo "Coverage: ${COVERAGE_PERCENT}%"
+          echo "Minimum required: ${MIN_COVERAGE_PERCENT}%"
+          echo "coverage_percent=${COVERAGE_PERCENT}" >> "$GITHUB_OUTPUT"
+
+          awk -v actual="$COVERAGE_PERCENT" -v minimum="$MIN_COVERAGE_PERCENT" '
+            BEGIN {
+              if (actual + 0 < minimum + 0) {
+                printf "Coverage %.2f%% is below required floor %.2f%%\n", actual + 0, minimum + 0
+                exit 1
+              }
+            }
+          '
+
+      - name: Write coverage summary
+        run: |
+          {
+            echo "## Coverage"
+            echo
+            echo "- Total line coverage: ${{ steps.enforce_coverage_floor.outputs.coverage_percent }}%"
+            echo "- Required floor: ${MIN_COVERAGE_PERCENT}%"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5

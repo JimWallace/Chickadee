@@ -274,9 +274,12 @@ private func extractFileFromZip(zipPath: String, filename: String) throws -> Dat
     guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
         throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
     }
+    let entryName = try listZipContents(zipPath: zipPath).first(where: { entry in
+        entry == filename || (entry as NSString).lastPathComponent == filename
+    }) ?? filename
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-p", zipPath, filename]
+    proc.arguments = ["-p", zipPath, entryName]
     let outPipe = Pipe()
     let errPipe = Pipe()
     proc.standardOutput = outPipe

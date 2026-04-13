@@ -1,46 +1,18 @@
-import XCTest
+import Testing
 @testable import chickadee_server
+import Fluent
 
-final class AuthModeResolutionTests: XCTestCase {
-    func testDefaultsToSSOWhenUnset() {
-        XCTAssertEqual(
-            resolvedAuthMode(requestedMode: nil, nonSSOModesEnabled: false),
-            .sso
-        )
+@Suite struct AuthModeResolutionTests {
+
+    // All requested modes resolve to .sso when non-SSO modes are disabled.
+    @Test(arguments: [nil, AuthMode.sso, .local, .dual] as [AuthMode?])
+    func allModesMapToSSOWhenFlagDisabled(requested: AuthMode?) {
+        #expect(resolvedAuthMode(requestedMode: requested, nonSSOModesEnabled: false) == .sso)
     }
 
-    func testKeepsSSOWhenRequested() {
-        XCTAssertEqual(
-            resolvedAuthMode(requestedMode: .sso, nonSSOModesEnabled: false),
-            .sso
-        )
-    }
-
-    func testHidesLocalWhenFlagDisabled() {
-        XCTAssertEqual(
-            resolvedAuthMode(requestedMode: .local, nonSSOModesEnabled: false),
-            .sso
-        )
-    }
-
-    func testHidesDualWhenFlagDisabled() {
-        XCTAssertEqual(
-            resolvedAuthMode(requestedMode: .dual, nonSSOModesEnabled: false),
-            .sso
-        )
-    }
-
-    func testAllowsLocalWhenFlagEnabled() {
-        XCTAssertEqual(
-            resolvedAuthMode(requestedMode: .local, nonSSOModesEnabled: true),
-            .local
-        )
-    }
-
-    func testAllowsDualWhenFlagEnabled() {
-        XCTAssertEqual(
-            resolvedAuthMode(requestedMode: .dual, nonSSOModesEnabled: true),
-            .dual
-        )
+    // Non-SSO modes (.local, .dual) are honoured when the flag is enabled.
+    @Test(arguments: [AuthMode.local, .dual])
+    func nonSSOModesAllowedWhenFlagEnabled(mode: AuthMode) {
+        #expect(resolvedAuthMode(requestedMode: mode, nonSSOModesEnabled: true) == mode)
     }
 }

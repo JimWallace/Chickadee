@@ -2,7 +2,7 @@
 #
 # Quick start (local / dev):
 #   cp .env.example .env
-#   # Edit .env: set RUNNER_SHARED_SECRET and any other vars you need
+#   # Edit .env for auth / URL settings as needed
 #   docker compose up -d
 #   open http://localhost:8080
 #
@@ -33,9 +33,22 @@ services:
       AUTH_MODE:                    ${AUTH_MODE:-local}
       ENABLE_NON_SSO_AUTH_MODES:    ${ENABLE_NON_SSO_AUTH_MODES:-true}
 
-      # Required: shared secret between server and runner.
-      # Generate one with: openssl rand -base64 32
-      RUNNER_SHARED_SECRET:         ${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET must be set in .env}
+      # Database backend:
+      #   - Leave unset (or set DATABASE_BACKEND=sqlite) to keep the default SQLite path.
+      #   - To use PostgreSQL, uncomment the optional db service below and set:
+      #       DATABASE_BACKEND=postgres
+      #       DATABASE_HOST=db
+      #       DATABASE_PORT=5432
+      #       DATABASE_NAME=chickadee
+      #       DATABASE_USER=chickadee
+      #       DATABASE_PASSWORD=change-me
+      DATABASE_BACKEND:             ${DATABASE_BACKEND:-sqlite}
+      SQLITE_PATH:                  ${SQLITE_PATH:-}
+      DATABASE_HOST:                ${DATABASE_HOST:-}
+      DATABASE_PORT:                ${DATABASE_PORT:-}
+      DATABASE_NAME:                ${DATABASE_NAME:-}
+      DATABASE_USER:                ${DATABASE_USER:-}
+      DATABASE_PASSWORD:            ${DATABASE_PASSWORD:-}
 
       # Public URL — set to your domain in production (e.g. https://chickadee.example.com)
       PUBLIC_BASE_URL:              ${PUBLIC_BASE_URL:-}
@@ -47,6 +60,8 @@ services:
       OIDC_CLIENT_ID:               ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET:           ${OIDC_CLIENT_SECRET:-}
       OIDC_CALLBACK:                ${OIDC_CALLBACK:-}
+      OIDC_USERNAME_CLAIM:          ${OIDC_USERNAME_CLAIM:-}
+      OIDC_EMAIL_CLAIM:             ${OIDC_EMAIL_CLAIM:-}
       SSO_ADMIN_USERS:              ${SSO_ADMIN_USERS:-}
       SSO_INSTRUCTOR_USERS:         ${SSO_INSTRUCTOR_USERS:-}
 
@@ -65,26 +80,52 @@ services:
   # ----------------------------------------------------------------
   runner:
     image: ghcr.io/jimwallace/chickadee:latest
-    entrypoint: ["/app/chickadee-runner"]
+    entrypoint: ["/bin/sh", "-lc"]
+    volumes:
+      - chickadee-data:/data:ro
     command:
-      - --api-base-url
-      - http://server:8080
-      - --worker-id
-      - runner-01
-      - --max-jobs
-      - "4"
+      - >
+        exec /app/chickadee-runner
+        --api-base-url http://server:8080
+        --worker-id "${RUNNER_WORKER_ID:-runner-${HOSTNAME}}"
+        --max-jobs "${RUNNER_MAX_JOBS:-4}"
       # Note: --sandbox is intentionally omitted here.
       # Docker already provides container-level process isolation.
       # To enable OS-level sandboxing (Linux unshare namespaces),
       # add "--sandbox" here and "cap_add: [SYS_ADMIN]" to this service.
     environment:
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET must be set in .env}
     networks:
       - chickadee
     depends_on:
       server:
         condition: service_healthy
     restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # db — optional PostgreSQL service
+  #
+  # Leave this commented out to keep the default SQLite deployment path.
+  # To enable PostgreSQL:
+  #   1. Uncomment this service.
+  #   2. Set DATABASE_BACKEND=postgres on the server service.
+  #   3. Set DATABASE_HOST=db and the matching DATABASE_* credentials.
+  # ----------------------------------------------------------------
+  # db:
+  #   image: postgres:16
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: chickadee
+  #     POSTGRES_USER: chickadee
+  #     POSTGRES_PASSWORD: change-me
+  #   volumes:
+  #     - chickadee-postgres:/var/lib/postgresql/data
+  #   networks:
+  #     - chickadee
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U chickadee -d chickadee"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   # ----------------------------------------------------------------
   # nginx — reverse proxy with JupyterLite headers
@@ -109,6 +150,7 @@ services:
 
 volumes:
   chickadee-data:   # SQLite database, submissions, test setups, results
+  chickadee-postgres: # PostgreSQL data directory when using the optional db service
   certbot-certs:    # TLS certificates (populated by certbot — see deploy/README.md)
   certbot-www:      # ACME HTTP-01 challenge webroot
 

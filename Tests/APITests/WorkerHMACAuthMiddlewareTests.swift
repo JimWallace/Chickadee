@@ -2,13 +2,15 @@ import XCTest
 import XCTVapor
 import Crypto
 @testable import chickadee_server
+import Fluent
 
 final class WorkerHMACAuthMiddlewareTests: XCTestCase {
     private let sharedSecret = "test-shared-secret"
     private let workerID = "worker-a"
 
-    private func makeApp() throws -> Application {
-        let app = Application(.testing)
+    private func makeApp() async throws -> Application {
+        let app = try await Application.make(.testing)
+        app.routes.defaultMaxBodySize = "10mb"
         app.workerSecretStore = WorkerSecretStore(initialOverride: sharedSecret)
         let middleware = WorkerHMACAuthMiddleware(maxClockSkewSeconds: 60, nonceTTLSeconds: 300)
         app.grouped(middleware).post("internal", "worker", "ping") { _ in
@@ -40,15 +42,13 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         headers.replaceOrAdd(name: "X-Worker-Id", value: workerID)
         headers.replaceOrAdd(name: "X-Worker-Timestamp", value: String(timestamp))
         headers.replaceOrAdd(name: "X-Worker-Nonce", value: nonce)
+        headers.replaceOrAdd(name: "X-Worker-Body-SHA256", value: bodyHash)
         headers.replaceOrAdd(name: "X-Worker-Signature", value: signature)
         headers.contentType = .json
         return headers
     }
 
-    func testAcceptsValidSignature() throws {
-        let app = try makeApp()
-        defer { app.shutdown() }
-
+    func testAcceptsValidSignature() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let body = ByteBuffer(string: #"{"ok":true}"#)
@@ -60,30 +60,28 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
             nonce: UUID().uuidString
         )
 
-        try app.test(.POST, path, beforeRequest: { req in
-            req.headers = headers
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.POST, path, beforeRequest: { req async in
+                req.headers = headers
+                req.body = body
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .ok)
+            })
+        }
     }
 
-    func testRejectsMissingHeaders() throws {
-        let app = try makeApp()
-        defer { app.shutdown() }
-
-        try app.test(.POST, "/internal/worker/ping", beforeRequest: { req in
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: #"{"ok":true}"#)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unauthorized)
-        })
+    func testRejectsMissingHeaders() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.POST, "/internal/worker/ping", beforeRequest: { req async in
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: #"{"ok":true}"#)
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .unauthorized)
+            })
+        }
     }
 
-    func testRejectsStaleTimestamp() throws {
-        let app = try makeApp()
-        defer { app.shutdown() }
-
+    func testRejectsStaleTimestamp() async throws {
         let path = "/internal/worker/ping"
         let old = Int64(Date().timeIntervalSince1970) - 10_000
         let body = ByteBuffer(string: #"{"ok":true}"#)
@@ -95,18 +93,17 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
             nonce: UUID().uuidString
         )
 
-        try app.test(.POST, path, beforeRequest: { req in
-            req.headers = headers
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unauthorized)
-        })
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.POST, path, beforeRequest: { req async in
+                req.headers = headers
+                req.body = body
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .unauthorized)
+            })
+        }
     }
 
-    func testRejectsReplayNonce() throws {
-        let app = try makeApp()
-        defer { app.shutdown() }
-
+    func testRejectsReplayNonce() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let nonce = UUID().uuidString
@@ -119,25 +116,24 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
             nonce: nonce
         )
 
-        try app.test(.POST, path, beforeRequest: { req in
-            req.headers = headers
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.POST, path, beforeRequest: { req async in
+                req.headers = headers
+                req.body = body
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .ok)
+            })
 
-        try app.test(.POST, path, beforeRequest: { req in
-            req.headers = headers
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unauthorized)
-        })
+            try await app.testable().test(.POST, path, beforeRequest: { req async in
+                req.headers = headers
+                req.body = body
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .unauthorized)
+            })
+        }
     }
 
-    func testRejectsBadSignature() throws {
-        let app = try makeApp()
-        defer { app.shutdown() }
-
+    func testRejectsBadSignature() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let body = ByteBuffer(string: #"{"ok":true}"#)
@@ -150,12 +146,71 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         )
         headers.replaceOrAdd(name: "X-Worker-Signature", value: "deadbeef")
 
-        try app.test(.POST, path, beforeRequest: { req in
-            req.headers = headers
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unauthorized)
-        })
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.POST, path, beforeRequest: { req async in
+                req.headers = headers
+                req.body = body
+            }, afterResponse: { res async in
+                XCTAssertEqual(res.status, .unauthorized)
+            })
+        }
+    }
+
+    /// Regression test: sends a real HTTP request through Vapor's HTTP server
+    /// to verify the middleware accepts signed requests without touching the
+    /// streamed body.
+    func testAcceptsValidSignatureOverRealHTTP() async throws {
+        let path = "/internal/worker/ping"
+        let now = Int64(Date().timeIntervalSince1970)
+        let body = ByteBuffer(string: #"{"workerID":"test","hostname":"localhost"}"#)
+        let headers = signedHeaders(
+            method: .POST,
+            path: path,
+            body: body,
+            timestamp: now,
+            nonce: UUID().uuidString
+        )
+
+        try await withApp(try await makeApp()) { app in
+            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+                .POST,
+                path,
+                headers: headers,
+                body: body
+            ) { res async in
+                XCTAssertEqual(res.status, .ok,
+                    "HMAC with non-empty body must succeed over real HTTP")
+            }
+        }
+    }
+
+    func testAcceptsLargeValidSignatureOverRealHTTP() async throws {
+        let path = "/internal/worker/ping"
+        let now = Int64(Date().timeIntervalSince1970)
+        let largeValue = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
+        let body = ByteBuffer(string: #"{"workerID":"test","details":"\#(largeValue)"}"#)
+        let headers = signedHeaders(
+            method: .POST,
+            path: path,
+            body: body,
+            timestamp: now,
+            nonce: UUID().uuidString
+        )
+
+        try await withApp(try await makeApp()) { app in
+            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+                .POST,
+                path,
+                headers: headers,
+                body: body
+            ) { res async in
+                XCTAssertEqual(
+                    res.status,
+                    .ok,
+                    "HMAC with a large streamed body must succeed over real HTTP"
+                )
+            }
+        }
     }
 
     private func hmacSHA256Hex(message: String, secret: String) -> String {

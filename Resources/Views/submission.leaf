@@ -21,7 +21,16 @@ Submission #(submissionID)
     #else:
     #if(buildFailed):
     #else:
-    <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+    <div class="submission-score-row">
+        <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        #if(!badges.isEmpty):
+        <div class="achievement-badges achievement-badges-full">
+            #for(badge in badges):
+            <span class="achievement-badge" title="#(badge.tooltip)">#(badge.label)</span>
+            #endfor
+        </div>
+        #endif
+    </div>
     #endif
     #endif
 </div>
@@ -33,6 +42,17 @@ Submission #(submissionID)
 </div>
 
 #else:
+
+#if(hasWarnings):
+<div class="warning-box">
+    <h2>Warnings</h2>
+    <ul class="warning-list">
+    #for(warning in warnings):
+        <li>#(warning)</li>
+    #endfor
+    </ul>
+</div>
+#endif
 
 #if(buildFailed):
 <div class="error-box">
@@ -48,7 +68,6 @@ Submission #(submissionID)
         <tr>
             <th>Test</th>
             <th>Tier</th>
-            <th>Output</th>
             #if(hasDelta):<th class="delta-col" title="Change vs previous attempt">Δ</th>#endif
             <th>Mark</th>
         </tr>
@@ -57,22 +76,22 @@ Submission #(submissionID)
     #for(outcome in outcomes):
         <tr class="#if(outcome.isSkipped):status-skipped#else:status-#(outcome.status)#endif">
             <td>
-                <code>#(outcome.testName)</code>
+                <div class="test-cell-main">
+                    <code>#(outcome.testName)</code>
+                    #if(outcome.isSkipped):
+                    <div class="skip-reason">#(outcome.shortResult)</div>
+                    #else:
+                    <div class="test-short-result">#(outcome.shortResult)</div>
+                    #endif
+                    #if(outcome.status == "pass" && outcome.longResult):
+                    <details class="test-output-details"><summary>Show output ▸</summary><pre class="test-output-pre">#(outcome.longResult)</pre></details>
+                    #endif
+                </div>
                 #if(outcome.blockerName):
                 <div class="skip-blocker">↳ blocked by <code>#(outcome.blockerName)</code></div>
                 #endif
             </td>
             <td><span class="tier">#(outcome.tier)</span></td>
-            <td>
-                #if(outcome.isSkipped):
-                <span class="skip-reason">#(outcome.shortResult)</span>
-                #else:
-                #(outcome.shortResult)
-                #if(outcome.longResult):
-                <details><summary>Show output ▸</summary><pre>#(outcome.longResult)</pre></details>
-                #endif
-                #endif
-            </td>
             #if(hasDelta):
             <td class="delta-cell">
                 #if(outcome.deltaImproved):<span class="delta-improved" title="Was failing, now passing">↑</span>#endif
@@ -84,6 +103,16 @@ Submission #(submissionID)
                 #if(outcome.pointsLabel):<span class="points-label">#(outcome.pointsLabel)</span>#endif
             </td>
         </tr>
+        #if(outcome.status != "pass" && outcome.longResult):
+        <tr class="test-output-row test-output-row-#(outcome.status)">
+            <td colspan="#if(hasDelta):4#else:3#endif">
+                <div class="test-output-panel">
+                    <div class="test-output-heading">Output</div>
+                    <pre class="test-output-pre test-output-pre-wide">#(outcome.longResult)</pre>
+                </div>
+            </td>
+        </tr>
+        #endif
     #endfor
     </tbody>
 </table>
@@ -113,5 +142,97 @@ Submission #(submissionID)
 #endif
 
 </div>
+<style>
+.submission-score-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+.achievement-badges {
+    display: flex;
+    gap: .45rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.achievement-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: .3rem .7rem;
+    border-radius: 9999px;
+    background: #fff4d6;
+    border: 1px solid #f1c96b;
+    color: #7a5200;
+    font-size: .78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.achievement-badges-full .achievement-badge {
+    font-size: .82rem;
+}
+.test-cell-main {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+.test-short-result {
+    color: var(--gray-600, #4b5563);
+    font-size: .88rem;
+    line-height: 1.4;
+}
+.test-output-details {
+    margin-top: .4rem;
+}
+.test-output-details summary {
+    cursor: pointer;
+    color: var(--blue, #0b63ce);
+    font-size: .9rem;
+}
+.test-output-pre {
+    margin-top: .5rem;
+    padding: .85rem 1rem;
+    border-radius: .5rem;
+    background: var(--gray-50, #f7f8fa);
+    border: 1px solid var(--border, #d9dce1);
+    color: var(--gray-900, #1f2937);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+    line-height: 1.45;
+}
+.test-output-row td {
+    padding-top: 0;
+}
+.test-output-panel {
+    padding: .35rem 0 .2rem;
+}
+.test-output-heading {
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--gray-500, #6b7280);
+    font-weight: 700;
+}
+.test-output-pre-wide {
+    margin-top: .35rem;
+}
+.warning-box {
+    margin-bottom: 1rem;
+    padding: .85rem 1rem;
+    border-radius: .5rem;
+    background: #fff8e1;
+    border: 1px solid #f1c96b;
+}
+.warning-box h2 {
+    margin: 0 0 .5rem 0;
+    font-size: 1rem;
+}
+.warning-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+</style>
 #endexport
 #endextend

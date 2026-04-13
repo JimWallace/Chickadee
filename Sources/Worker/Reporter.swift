@@ -8,15 +8,30 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import Core
 
+protocol Reporting: Sendable {
+    func report(_ report: WorkerExecutionReport) async throws(ReporterError)
+    func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError)
+}
+
 struct Reporter: Sendable {
     let apiBaseURL: URL
     let workerID: String
     private let signer: WorkerRequestSigner
+    private let heartbeatRetryPolicy: RunnerRetryPolicy
+    private let resultUploadRetryPolicy: RunnerRetryPolicy
 
-    init(apiBaseURL: URL, workerID: String, workerSecret: String) {
+    init(
+        apiBaseURL: URL,
+        workerID: String,
+        workerSecret: String,
+        heartbeatRetryPolicy: RunnerRetryPolicy = .heartbeat(),
+        resultUploadRetryPolicy: RunnerRetryPolicy = .resultUpload()
+    ) {
         self.apiBaseURL = apiBaseURL
         self.workerID   = workerID
         self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+        self.heartbeatRetryPolicy = heartbeatRetryPolicy
+        self.resultUploadRetryPolicy = resultUploadRetryPolicy
     }
 
     private static let session: URLSession = {
@@ -26,7 +41,7 @@ struct Reporter: Sendable {
         return URLSession(configuration: cfg)
     }()
 
-    func report(_ collection: TestOutcomeCollection) async throws {
+    func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/results")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -34,24 +49,110 @@ struct Reporter: Sendable {
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        request.httpBody = try encoder.encode(collection)
+        do { request.httpBody = try encoder.encode(report) } catch { throw .transportError(error) }
         signer.sign(&request)
 
-        let (data, response) = try await Self.session.data(for: request)
+        try await sendWithRetry(
+            request,
+            stage: .resultUpload,
+            policy: resultUploadRetryPolicy
+        )
+    }
 
-        guard let http = response as? HTTPURLResponse else {
-            throw ReporterError.unexpectedResponse
+    func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
+        let url = apiBaseURL.appendingPathComponent("api/v1/worker/heartbeat")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do { request.httpBody = try JSONEncoder().encode(payload) } catch { throw .transportError(error) }
+        signer.sign(&request)
+
+        try await sendWithRetry(
+            request,
+            stage: .heartbeat,
+            policy: heartbeatRetryPolicy
+        )
+    }
+
+    private func sendWithRetry(
+        _ request: URLRequest,
+        stage: RunnerRetryStage,
+        policy: RunnerRetryPolicy
+    ) async throws(ReporterError) {
+        do {
+            try await withRunnerRetry(
+            stage: stage,
+            policy: policy,
+            shouldRetry: { error in
+                guard let reporterError = error as? ReporterError else {
+                    return .terminal(String(describing: error))
+                }
+                switch reporterError {
+                case .transportError(let underlying):
+                    return .retryable(underlying.localizedDescription)
+                case .httpError(let statusCode, let body):
+                    return classifyHTTPRetry(statusCode: statusCode, body: body)
+                case .unexpectedResponse:
+                    return .terminal("unexpected response")
+                }
+            },
+            onRetry: { context in
+                let event = context.stage == .heartbeat ? "heartbeat_retry_scheduled" : "network_retry_scheduled"
+                writeStructuredRunnerLog(event: event, fields: [
+                    "runner_id": self.workerID,
+                    "failure_stage": context.stage.rawValue,
+                    "attempt": context.attempt,
+                    "max_attempts": context.maxAttempts,
+                    "retry_in_seconds": context.retryInSeconds ?? 0,
+                    "retryable": context.retryable,
+                    "error_message_summary": context.message,
+                ])
+            }
+        ) {
+            let result = await Self.attemptReport(request: request, expectedStatus: 200)
+            switch result {
+            case .success:
+                return ()
+            case .failure(let error):
+                throw error
+            }
         }
-        guard http.statusCode == 200 else {
+        } catch let reporterError as ReporterError {
+            throw reporterError
+        } catch {
+            throw .transportError(error)
+        }
+    }
+}
+
+extension Reporter: Reporting {}
+
+extension Reporting {
+    func report(_ collection: TestOutcomeCollection) async throws(ReporterError) {
+        try await report(WorkerExecutionReport(collection: collection, diagnostics: nil))
+    }
+}
+
+private extension Reporter {
+    static func attemptReport(request: URLRequest, expectedStatus: Int) async -> Result<Void, ReporterError> {
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await Self.session.data(for: request) }
+        catch { return .failure(.transportError(error)) }
+        guard let http = response as? HTTPURLResponse else { return .failure(.unexpectedResponse) }
+        guard http.statusCode == expectedStatus else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw ReporterError.httpError(http.statusCode, body)
+            return .failure(.httpError(http.statusCode, body))
         }
+        return .success(())
     }
 }
 
 enum ReporterError: Error, LocalizedError {
     case unexpectedResponse
     case httpError(Int, String)
+    case transportError(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -59,6 +160,8 @@ enum ReporterError: Error, LocalizedError {
             return "Non-HTTP response from API server"
         case .httpError(let code, let body):
             return "API server returned HTTP \(code): \(body)"
+        case .transportError(let error):
+            return "Transport error: \(error.localizedDescription)"
         }
     }
 }

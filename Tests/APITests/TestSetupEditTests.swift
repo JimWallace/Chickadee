@@ -9,7 +9,7 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
 import Foundation
 
 final class TestSetupEditTests: XCTestCase {
@@ -18,7 +18,7 @@ final class TestSetupEditTests: XCTestCase {
     private var tmpDir: String!
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-edit-\(UUID().uuidString)/")
@@ -35,26 +35,14 @@ final class TestSetupEditTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await configureTestDatabase(app)
 
         configureLeaf(app)
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpDir)
     }
 
@@ -178,7 +166,7 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put1")
 
-        try await app.test(.PUT, "/api/v1/testsetups/setup_put1/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put1/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -200,7 +188,7 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put2")
 
-        try await app.test(.PUT, "/api/v1/testsetups/setup_put2/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put2/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -221,7 +209,7 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_kernel")
 
-        try await app.test(.PUT, "/api/v1/testsetups/setup_put_kernel/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put_kernel/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -258,7 +246,7 @@ final class TestSetupEditTests: XCTestCase {
         try await setup.save(on: app.db)
 
         // GET should return the flat file's content.
-        try await app.test(.GET, "/api/v1/testsetups/setup_flat/assignment",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/setup_flat/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -281,7 +269,7 @@ final class TestSetupEditTests: XCTestCase {
         setup.notebookPath = flatPath
         try await setup.save(on: app.db)
 
-        try await app.test(.GET, "/api/v1/testsetups/setup_flat_kernel/assignment",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/setup_flat_kernel/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -301,7 +289,7 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_bad")
 
-        try await app.test(.PUT, "/api/v1/testsetups/setup_bad/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_bad/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -317,7 +305,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.test(.PUT, "/api/v1/testsetups/does_not_exist/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/does_not_exist/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -336,7 +324,7 @@ final class TestSetupEditTests: XCTestCase {
         try await insertSetup(id: "setup_student_put")
 
         // Students are not on the instructor route group — middleware rejects them.
-        try await app.test(.PUT, "/api/v1/testsetups/setup_student_put/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_student_put/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
@@ -355,7 +343,7 @@ final class TestSetupEditTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_ep1", title: "Lab")
         let id = a.publicID
 
-        try await app.test(.GET, "/instructor/\(id)/edit",
+        try await app.asyncTest(.GET, "/instructor/\(id)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -368,7 +356,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let fakeID = "zzzzzz"
 
-        try await app.test(.GET, "/instructor/\(fakeID)/edit",
+        try await app.asyncTest(.GET, "/instructor/\(fakeID)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -383,7 +371,7 @@ final class TestSetupEditTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_ep2", title: "My Lab")
         let id = a.publicID
 
-        try await app.test(.GET, "/instructor/\(id)/edit",
+        try await app.asyncTest(.GET, "/instructor/\(id)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -402,7 +390,7 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_ir")
 
-        try await app.test(.PUT, "/api/v1/testsetups/setup_put_ir/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put_ir/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
@@ -433,7 +421,7 @@ final class TestSetupEditTests: XCTestCase {
         setup.notebookPath = flatPath
         try await setup.save(on: app.db)
 
-        try await app.test(.GET, "/api/v1/testsetups/setup_flat_ir/assignment",
+        try await app.asyncTest(.GET, "/api/v1/testsetups/setup_flat_ir/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             }, afterResponse: { res in
@@ -454,7 +442,7 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_py_check")
 
-        try await app.test(.PUT, "/api/v1/testsetups/setup_put_py_check/assignment",
+        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put_py_check/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)

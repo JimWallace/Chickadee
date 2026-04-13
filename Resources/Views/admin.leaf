@@ -3,6 +3,31 @@
 Admin
 #endexport
 #export("content"):
+<section class="admin-section admin-diagnostics">
+    <div class="diagnostics-cards" id="diagnostics-cards">
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">24h Max Queue</div>
+            <div class="diagnostic-value" id="diag-queue-depth">—</div>
+        </article>
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">24h Jobs Processed</div>
+            <div class="diagnostic-value" id="diag-jobs-processed">—</div>
+        </article>
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">24h Max Load</div>
+            <div class="diagnostic-value" id="diag-max-load">—</div>
+        </article>
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">P95 Wait Time</div>
+            <div class="diagnostic-value" id="diag-queue-p95">—</div>
+        </article>
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">P95 Execution Time</div>
+            <div class="diagnostic-value" id="diag-exec-p95">—</div>
+        </article>
+    </div>
+</section>
+
 <section class="admin-section">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
         <div style="display:flex;align-items:center;gap:.75rem">
@@ -24,7 +49,7 @@ Admin
                    type="text"
                    name="secret"
                    value="#(workerSecret)"
-                   autocomplete="off"
+                   autocomplete="new-password"
                    placeholder="Worker shared secret"
                    style="width:16rem">
             <button class="btn" type="submit">Save secret</button>
@@ -34,20 +59,42 @@ Admin
     <table id="workers-table" class="results-table">
             <thead>
                 <tr>
-                    <th>Runner</th>
-                    <th>Status</th>
-                    <th class="time">Assigned Jobs</th>
-                    <th class="time">Jobs Processed</th>
-                    <th class="time">Last Active</th>
+                    <th data-sort-key="runner" data-sort-type="text" tabindex="0" aria-sort="none">Runner</th>
+                    <th data-sort-key="version" data-sort-type="text" tabindex="0" aria-sort="none">Version</th>
+                    <th class="time" data-sort-key="load" data-sort-type="number" tabindex="0" aria-sort="none">Load</th>
+                    <th class="time" data-sort-key="jobs-processed" data-sort-type="number" tabindex="0" aria-sort="none">Jobs Processed</th>
+                    <th class="time" data-sort-key="avg-run" data-sort-type="duration" tabindex="0" aria-sort="none">Avg Run</th>
+                    <th class="time" data-sort-key="avg-wait" data-sort-type="duration" tabindex="0" aria-sort="none">Avg Wait</th>
+                    <th class="time" data-sort-key="last-active" data-sort-type="date" tabindex="0" aria-sort="none">Last Active</th>
                 </tr>
             </thead>
             <tbody id="workers-body">
             #for(worker in workers):
-                <tr>
-                    <td><code>#(worker.workerID)</code></td>
-                    <td>#(worker.status)</td>
-                    <td class="time">#(worker.assignedJobs)</td>
+                <tr data-runner="#(worker.workerID)"
+                    data-version="#(worker.runnerVersion)"
+                    data-load="#(worker.assignedJobs)"
+                    data-max-jobs="#(worker.maxConcurrentJobs)"
+                    data-jobs-processed="#(worker.jobsProcessed)"
+                    data-avg-run="#if(worker.avgExecutionMs):#(worker.avgExecutionMs)#else:-1#endif"
+                    data-avg-wait="#if(worker.avgQueueWaitMs):#(worker.avgQueueWaitMs)#else:-1#endif"
+                    data-last-active="#(worker.lastActive)">
+                    <td>
+                        <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
+                        #if(worker.hostname != ""):
+                            <br><span style="font-size:.8em;color:var(--muted)">#(worker.hostname)</span>
+                        #endif
+                    </td>
+                    <td>#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
+                    <td class="time" #if(worker.assignedJobs > 0):style="font-weight:600"#endif>
+                        #if(worker.maxConcurrentJobs > 0):
+                            #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
+                        #else:
+                            #(worker.assignedJobs)
+                        #endif
+                    </td>
                     <td class="time">#(worker.jobsProcessed)</td>
+                    <td class="time">#if(worker.avgExecutionFormatted):#(worker.avgExecutionFormatted)#else:—#endif</td>
+                    <td class="time">#if(worker.avgQueueWaitFormatted):#(worker.avgQueueWaitFormatted)#else:—#endif</td>
                     <td class="time js-relative-time" data-iso="#(worker.lastActive)">#(worker.lastActive)</td>
                 </tr>
             #endfor
@@ -136,9 +183,10 @@ Admin
 <section class="admin-section">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
         <h2 style="margin:0">Users</h2>
-        <input id="users-filter" class="form-input" type="search"
+        <input id="users-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name, username or role…"
-               style="width:280px" aria-label="Filter users">
+               style="width:280px" aria-label="Filter users"
+               readonly onfocus="this.removeAttribute('readonly')">
     </div>
     <table class="results-table" id="users-table">
         <thead>
@@ -193,25 +241,70 @@ Admin
     </table>
 </section>
 <style>
+.admin-diagnostics {
+    padding-bottom: 1rem;
+}
+.diagnostics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+}
+.diagnostic-card {
+    padding: .75rem .9rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+}
+.diagnostic-label {
+    color: var(--gray-600);
+    font-size: .82rem;
+}
+.diagnostic-value {
+    margin-top: .2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--gray-900);
+}
+#workers-table th[data-sort-key],
 #users-table th[data-sort-key],
 #courses-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
 }
+#workers-table th[data-sort-key]::after,
 #users-table th[data-sort-key]::after,
 #courses-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
     font-size: .75rem;
 }
+#workers-table th[data-sort-key].sort-asc::after,
 #users-table th[data-sort-key].sort-asc::after,
 #courses-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
 }
+#workers-table th[data-sort-key].sort-desc::after,
 #users-table th[data-sort-key].sort-desc::after,
 #courses-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
+}
+tr.runner-row-offline {
+    opacity: .5;
+}
+.runner-badge-offline {
+    display: inline-block;
+    font-size: .7rem;
+    font-weight: 600;
+    padding: .1rem .4rem;
+    border-radius: 999px;
+    background: var(--gray-200);
+    color: var(--gray-600);
+    vertical-align: middle;
+    margin-left: .3rem;
+    letter-spacing: .03em;
+    text-transform: uppercase;
 }
 </style>
 <script>
@@ -267,27 +360,224 @@ Admin
         });
     }
 
+    var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+    var diagQueueDepth = document.getElementById('diag-queue-depth');
+    var diagJobsProcessed = document.getElementById('diag-jobs-processed');
+    var diagMaxLoad = document.getElementById('diag-max-load');
+    var diagQueueP95 = document.getElementById('diag-queue-p95');
+    var diagExecP95 = document.getElementById('diag-exec-p95');
+    var totalRunnerCount = workersBody.querySelectorAll('tr').length;
+    var totalRunnerCapacity = 0;
+    var totalAssignedJobs = 0;
+    var latestDiagnostics = null;
+
+    function formatDuration(ms) {
+        if (ms == null || ms < 0) return '—';
+        if (ms < 1000) return ms + 'ms';
+        if (ms < 60000) return (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + 's';
+        var minutes = Math.floor(ms / 60000);
+        var seconds = Math.round((ms % 60000) / 1000);
+        return minutes + 'm ' + seconds + 's';
+    }
+
+    function setText(el, value) {
+        if (el) el.textContent = value;
+    }
+
+    function recomputeLoadSummaryFromTable() {
+        totalRunnerCount = 0;
+        totalRunnerCapacity = 0;
+        totalAssignedJobs = 0;
+
+        Array.from(workersBody.querySelectorAll('tr')).forEach(function (row) {
+            totalRunnerCount += 1;
+            totalAssignedJobs += Number(row.getAttribute('data-load') || 0);
+            totalRunnerCapacity += Number(row.getAttribute('data-max-jobs') || 0);
+        });
+    }
+
+    function renderMaxLoadSummary() {
+        if (!diagMaxLoad) return;
+        if (latestDiagnostics && latestDiagnostics.maxLoadActiveJobs != null && latestDiagnostics.maxLoadCapacity != null) {
+            setText(diagMaxLoad, String(latestDiagnostics.maxLoadActiveJobs) + '/' + String(latestDiagnostics.maxLoadCapacity));
+            return;
+        }
+        if (totalRunnerCapacity > 0) {
+            setText(diagMaxLoad, String(totalAssignedJobs) + '/' + String(totalRunnerCapacity));
+            return;
+        }
+        setText(diagMaxLoad, '—');
+    }
+
+    function updateDiagnosticsCards(metrics) {
+        if (!metrics) return;
+        latestDiagnostics = metrics;
+        setText(diagQueueDepth, String(metrics.maxQueueDepth == null ? '—' : metrics.maxQueueDepth));
+        setText(diagJobsProcessed, String(metrics.jobsProcessed24h == null ? '—' : metrics.jobsProcessed24h));
+        renderMaxLoadSummary();
+        setText(diagQueueP95, formatDuration(metrics.queueWait && metrics.queueWait.p95Ms));
+        setText(diagExecP95, formatDuration(metrics.execution && metrics.execution.p95Ms));
+    }
+
     function renderWorkers(workers) {
+        workers = sortWorkersArray(Array.isArray(workers) ? workers.slice() : []);
+        totalRunnerCount = workers.length;
+        totalRunnerCapacity = workers.reduce(function (sum, worker) {
+            return sum + Number(worker.maxConcurrentJobs || 0);
+        }, 0);
+        totalAssignedJobs = workers.reduce(function (sum, worker) {
+            return sum + Number(worker.assignedJobs || 0);
+        }, 0);
         if (!Array.isArray(workers) || workers.length === 0) {
             workersBody.innerHTML = '';
+            renderMaxLoadSummary();
             return;
         }
 
         workersBody.innerHTML = workers.map(function (worker) {
             var id = escapeHtml(worker.workerID || '');
-            var status = escapeHtml(worker.status || '');
-            var assignedJobs = escapeHtml(worker.assignedJobs == null ? '' : worker.assignedJobs);
-            var jobsProcessed = escapeHtml(worker.jobsProcessed == null ? '' : worker.jobsProcessed);
+            var hostname = escapeHtml(worker.hostname || '');
+            var version = escapeHtml(worker.runnerVersion || '');
+            var assignedJobs = worker.assignedJobs == null ? 0 : worker.assignedJobs;
+            var maxJobs = worker.maxConcurrentJobs == null ? 0 : worker.maxConcurrentJobs;
+            var jobsProcessed = worker.jobsProcessed == null ? 0 : worker.jobsProcessed;
+            var avgRun = escapeHtml(worker.avgExecutionFormatted || '');
+            var avgWait = escapeHtml(worker.avgQueueWaitFormatted || '');
             var lastActive = escapeHtml(worker.lastActive || '');
-            return '<tr>'
-                + '<td><code>' + id + '</code></td>'
-                + '<td>' + status + '</td>'
-                + '<td class="time">' + assignedJobs + '</td>'
+            var detailURL = '/admin/runners/' + encodeURIComponent(worker.workerID || '');
+
+            // Runners not seen in the last 5 minutes are considered offline.
+            var lastActiveMs = lastActive ? new Date(lastActive).getTime() : 0;
+            var isOffline = lastActiveMs > 0 && (Date.now() - lastActiveMs) > 5 * 60 * 1000;
+
+            var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
+                + (isOffline ? ' <span class="runner-badge-offline">Offline</span>' : '')
+                + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
+            var loadCell = maxJobs > 0
+                ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
+                : String(assignedJobs);
+            var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
+
+            return '<tr'
+                + (isOffline ? ' class="runner-row-offline"' : '')
+                + ' data-runner="' + id + '"'
+                + ' data-version="' + version + '"'
+                + ' data-load="' + assignedJobs + '"'
+                + ' data-max-jobs="' + maxJobs + '"'
+                + ' data-jobs-processed="' + jobsProcessed + '"'
+                + ' data-avg-run="' + (worker.avgExecutionMs == null ? -1 : worker.avgExecutionMs) + '"'
+                + ' data-avg-wait="' + (worker.avgQueueWaitMs == null ? -1 : worker.avgQueueWaitMs) + '"'
+                + ' data-last-active="' + lastActive + '"'
+                + '>'
+                + '<td>' + idCell + '</td>'
+                + '<td>' + (version || '—') + '</td>'
+                + '<td class="time"' + loadStyle + '>' + loadCell + '</td>'
                 + '<td class="time">' + jobsProcessed + '</td>'
+                + '<td class="time">' + (avgRun || '—') + '</td>'
+                + '<td class="time">' + (avgWait || '—') + '</td>'
                 + '<td class="time js-relative-time" data-iso="' + lastActive + '">' + lastActive + '</td>'
                 + '</tr>';
         }).join('');
         applyRelativeTimes(workersBody);
+        renderMaxLoadSummary();
+    }
+
+    var workersTable = document.getElementById('workers-table');
+    var workerHeaders = workersTable ? Array.from(workersTable.querySelectorAll('th[data-sort-key]')) : [];
+    var activeWorkerHeader = null;
+    var activeWorkerDirection = 'asc';
+
+    function clearWorkerSortIndicators() {
+        workerHeaders.forEach(function (header) {
+            header.classList.remove('sort-asc', 'sort-desc');
+            header.setAttribute('aria-sort', 'none');
+        });
+    }
+
+    function parseDurationValue(value) {
+        var n = Number(value);
+        return Number.isFinite(n) ? n : -1;
+    }
+
+    function readWorkerValue(row, header) {
+        var key = header.getAttribute('data-sort-key') || '';
+        var type = header.getAttribute('data-sort-type') || 'text';
+        var value = row.getAttribute('data-' + key);
+        if (type === 'number') return Number(value || 0);
+        if (type === 'duration') return parseDurationValue(value);
+        if (type === 'date') {
+            var date = new Date(value || '');
+            return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+        }
+        return (value || '').trim();
+    }
+
+    function sortWorkersArray(workers) {
+        if (!workerHeaders.length) return workers;
+        var sortHeader = activeWorkerHeader || workerHeaders[0];
+        var direction = activeWorkerDirection || 'asc';
+        var key = sortHeader.getAttribute('data-sort-key') || 'runner';
+        var type = sortHeader.getAttribute('data-sort-type') || 'text';
+
+        workers.sort(function (lhs, rhs) {
+            var lv;
+            var rv;
+            if (type === 'number') {
+                if (key === 'jobs-processed') {
+                    lv = Number(lhs.jobsProcessed || 0);
+                    rv = Number(rhs.jobsProcessed || 0);
+                } else {
+                    lv = Number(lhs.assignedJobs || 0);
+                    rv = Number(rhs.assignedJobs || 0);
+                }
+            } else if (type === 'duration') {
+                lv = key === 'avg-run' ? parseDurationValue(lhs.avgExecutionMs) : parseDurationValue(lhs.avgQueueWaitMs);
+                rv = key === 'avg-run' ? parseDurationValue(rhs.avgExecutionMs) : parseDurationValue(rhs.avgQueueWaitMs);
+            } else if (type === 'date') {
+                lv = new Date(lhs.lastActive || '').getTime() || 0;
+                rv = new Date(rhs.lastActive || '').getTime() || 0;
+            } else {
+                lv = key === 'version' ? String(lhs.runnerVersion || '') : String(lhs.workerID || '');
+                rv = key === 'version' ? String(rhs.runnerVersion || '') : String(rhs.workerID || '');
+            }
+
+            var result = 0;
+            if (type === 'text') {
+                result = collator.compare(String(lv), String(rv));
+            } else {
+                result = lv - rv;
+            }
+            if (result === 0) {
+                result = collator.compare(String(lhs.workerID || ''), String(rhs.workerID || ''));
+            }
+            return direction === 'asc' ? result : -result;
+        });
+        return workers;
+    }
+
+    function sortWorkersByHeader(header, direction) {
+        var rows = Array.from(workersBody.querySelectorAll('tr'));
+        rows.sort(function (lhs, rhs) {
+            var lv = readWorkerValue(lhs, header);
+            var rv = readWorkerValue(rhs, header);
+            var type = header.getAttribute('data-sort-type') || 'text';
+            var result = 0;
+            if (type === 'text') {
+                result = collator.compare(String(lv), String(rv));
+            } else {
+                result = lv - rv;
+            }
+            if (result === 0) {
+                result = collator.compare(lhs.getAttribute('data-runner') || '', rhs.getAttribute('data-runner') || '');
+            }
+            return direction === 'asc' ? result : -result;
+        });
+        rows.forEach(function (row) { workersBody.appendChild(row); });
+        clearWorkerSortIndicators();
+        header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+        activeWorkerHeader = header;
+        activeWorkerDirection = direction;
     }
 
     async function refreshWorkers() {
@@ -304,14 +594,46 @@ Admin
         }
     }
 
+    async function refreshDiagnostics() {
+        try {
+            var response = await fetch('/admin/metrics', {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+            if (!response.ok) return;
+            var metrics = await response.json();
+            updateDiagnosticsCards(metrics);
+        } catch (_) {
+            // Keep current diagnostics values on transient polling errors.
+        }
+    }
+
     applyRelativeTimes(document);
+    recomputeLoadSummaryFromTable();
+    refreshWorkers();
+    refreshDiagnostics();
+
+    if (workersTable && workersBody && workerHeaders.length) {
+        workerHeaders.forEach(function (header) {
+            header.addEventListener('click', function () {
+                var nextDirection = (activeWorkerHeader === header && activeWorkerDirection === 'asc') ? 'desc' : 'asc';
+                sortWorkersByHeader(header, nextDirection);
+            });
+            header.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                var nextDirection = (activeWorkerHeader === header && activeWorkerDirection === 'asc') ? 'desc' : 'asc';
+                sortWorkersByHeader(header, nextDirection);
+            });
+        });
+        sortWorkersByHeader(workerHeaders[0], 'asc');
+    }
 
     var usersTable = document.getElementById('users-table');
     if (usersTable) {
         var usersBody = usersTable.querySelector('tbody');
         var userHeaders = Array.from(usersTable.querySelectorAll('th[data-sort-key]'));
         if (usersBody && userHeaders.length) {
-            var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
             var activeUserHeader = null;
             var activeUserDirection = 'asc';
 
@@ -385,7 +707,10 @@ Admin
                 });
             });
 
-            sortUsersByHeader(userHeaders[0], 'asc');
+            var defaultUserHeader = userHeaders.find(function (header) {
+                return header.getAttribute('data-sort-key') === 'last-login';
+            }) || userHeaders[0];
+            sortUsersByHeader(defaultUserHeader, 'desc');
         }
     }
 
@@ -465,6 +790,7 @@ Admin
         applyRelativeTimes(document);
         refreshWorkers();
     }, 5000);
+    setInterval(refreshDiagnostics, 15000);
 
     // ── Import course ────────────────────────────────────────────────
     var importFile = document.getElementById('importCourseFile');

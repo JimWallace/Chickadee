@@ -20,26 +20,38 @@ struct ResultRoutes: RouteCollection {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let collection: TestOutcomeCollection
+        let report: WorkerExecutionReport
         do {
-            var buffer = try await req.body.collect(upTo: req.application.routes.defaultMaxBodySize.value)
-            guard let data = buffer.readData(length: buffer.readableBytes) else {
+            let collectedBuffer = try await req.body.collect(
+                upTo: req.application.routes.defaultMaxBodySize.value
+            )
+            var readableBuffer = collectedBuffer
+            guard let data = readableBuffer.readData(length: readableBuffer.readableBytes) else {
                 throw Abort(.badRequest, reason: "Empty request body")
             }
-            collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            report = try decodeWorkerReport(from: data, using: decoder)
         } catch let decodingError as DecodingError {
-            throw Abort(.unprocessableEntity, reason: "Invalid TestOutcomeCollection: \(decodingError)")
+            throw Abort(.unprocessableEntity, reason: "Invalid worker result payload: \(decodingError)")
         }
+        let collection = report.collection
 
-        // Persist to DB and disk concurrently.
-        async let db: Void   = persistToDB(collection, on: req)
-        async let disk: Void = persistToDisk(collection, on: req)
-        _ = try await (db, disk)
+        async let dbPersist: Void   = persistToDB(collection, on: req)
+        async let diskPersist: Void = persistToDisk(collection, on: req)
+        try await dbPersist
+        try await diskPersist
 
         // Advance the submission's state machine to "complete".
         if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {
             submission.status = "complete"
             try await submission.save(on: req.db)
+
+            // Record execution diagnostics (execution time + queue wait).
+            await req.application.diagnostics.recordWorkerExecutionReport(
+                collection: collection,
+                diagnostics: report.diagnostics,
+                on: req.db,
+                logger: req.logger
+            )
 
             // If this is a validation submission, update the assignment's validationStatus
             // so the instructor sees pass/fail without needing to poll.
@@ -56,6 +68,25 @@ struct ResultRoutes: RouteCollection {
                     assignment.validationStatus = status
                     try await assignment.save(on: req.db)
                     req.logger.info("Validation \(status) for assignment '\(assignment.title)' (submission \(submission.id!))")
+                }
+            }
+
+            // Award class-wide badges when a student submission earns 100%.
+            if submission.kind == APISubmission.Kind.student,
+               collection.buildStatus == .passed,
+               let userID = submission.userID,
+               let subID  = submission.id
+            {
+                let grade = gradePercent(from: collection) ?? 0
+                if grade == 100 {
+                    try await awardClassBadgesFor100Percent(
+                        testSetupID:     submission.testSetupID,
+                        userID:          userID,
+                        submissionID:    subID,
+                        executionTimeMs: collection.executionTimeMs,
+                        attemptNumber:   submission.attemptNumber ?? 1,
+                        on: req.db
+                    )
                 }
             }
         }
@@ -94,6 +125,36 @@ struct ResultRoutes: RouteCollection {
         try await req.fileio.writeFile(.init(data: data), at: filePath)
         req.logger.info("Stored result for submission \(collection.submissionID) at \(filePath)")
     }
+}
+
+private func decodeWorkerReport(
+    from data: Data,
+    using decoder: JSONDecoder
+) throws -> WorkerExecutionReport {
+    if
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let collectionObject = json["collection"]
+    {
+        let collectionData = try JSONSerialization.data(withJSONObject: collectionObject)
+        let collection = try decoder.decode(TestOutcomeCollection.self, from: collectionData)
+
+        let diagnostics: WorkerExecutionDiagnostics?
+        if let diagnosticsObject = json["diagnostics"], !(diagnosticsObject is NSNull) {
+            let diagnosticsData = try JSONSerialization.data(withJSONObject: diagnosticsObject)
+            diagnostics = try decoder.decode(WorkerExecutionDiagnostics.self, from: diagnosticsData)
+        } else {
+            diagnostics = nil
+        }
+
+        return WorkerExecutionReport(collection: collection, diagnostics: diagnostics)
+    }
+
+    if let report = try? decoder.decode(WorkerExecutionReport.self, from: data) {
+        return report
+    }
+
+    let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+    return WorkerExecutionReport(collection: collection, diagnostics: nil)
 }
 
 // MARK: - Response

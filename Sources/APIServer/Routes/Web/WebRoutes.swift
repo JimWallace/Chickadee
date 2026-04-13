@@ -109,6 +109,7 @@ struct WebRoutes: RouteCollection {
         var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
         var submissionCountBySetupID: [String: Int] = [:]
         var bestGradePercentBySetupID: [String: Int] = [:]
+        var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
         if let userID = user.id {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
@@ -171,6 +172,44 @@ struct WebRoutes: RouteCollection {
                             bestGradePercentBySetupID[setupID] = gradePercent
                         }
                     }
+
+                    for (setupID, latest) in latestSubmissionBySetupID {
+                        guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
+                              let result = preferredResultBySubmissionID[latest.submissionID],
+                              let assignment = assignmentBySetup[setupID],
+                              let collection = visibleCollection(
+                                  from: result.collectionJSON,
+                                  for: user,
+                                  assignment: assignment
+                              ),
+                              let gradePercent = gradePercent(from: collection) else {
+                            continue
+                        }
+                        let latestAttempt = latestSubmission.attemptNumber ?? 1
+                        let priorSub = grouped[setupID]?.first(where: { $0.attemptNumber == latestAttempt - 1 })
+                        let priorGradePercent: Int? = priorSub.flatMap { ps in
+                            guard let psID = ps.id,
+                                  let pr = preferredResultBySubmissionID[psID] else { return nil }
+                            return gradePercentFromCollectionJSON(pr.collectionJSON)
+                        }
+                        latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(BadgeContext(
+                            attemptNumber:     latestAttempt,
+                            gradePercent:      gradePercent,
+                            executionTimeMs:   collection.executionTimeMs,
+                            priorGradePercent: priorGradePercent
+                        ))
+                    }
+
+                    // Batch-query class-wide badges this user currently holds across all setups.
+                    let classAchievements = try await APIClassAchievement.query(on: req.db)
+                        .filter(\.$userID == userID)
+                        .filter(\.$testSetupID ~~ setupIDs)
+                        .all()
+                    for ach in classAchievements {
+                        if let badge = AchievementBadge.forClassAchievement(ach.achievementID) {
+                            latestBadgesBySetupID[ach.testSetupID, default: []].append(badge)
+                        }
+                    }
                 }
             }
         }
@@ -205,6 +244,14 @@ struct WebRoutes: RouteCollection {
             } else {
                 status = "unpublished"
             }
+            let hasNotebook: Bool = {
+                // True when the setup has a flat notebook file on disk, or the zip
+                // contains at least one .ipynb entry.
+                if let path = setup.notebookPath, !path.isEmpty,
+                   FileManager.default.fileExists(atPath: path) { return true }
+                return listZipEntries(zipPath: setup.zipPath)
+                    .contains { $0.hasSuffix(".ipynb") }
+            }()
             return TestSetupRow(
                 id:         setupID,
                 title:      assignment?.title,
@@ -213,12 +260,15 @@ struct WebRoutes: RouteCollection {
                 dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },
                 status:     status,
                 isOpen:     assignment?.isOpen ?? false,
+                gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,
+                hasNotebook: hasNotebook,
                 submissionCount: submissionCount,
                 hasLatestSubmission: latestSubmission != nil,
                 latestSubmissionID: latestSubmission?.submissionID ?? "",
                 latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
                 additionalSubmissionCount: max(submissionCount - 1, 0),
-                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" }
+                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" },
+                badges: latestBadgesBySetupID[setupID] ?? []
             )
         }
 
@@ -322,4 +372,3 @@ struct WebRoutes: RouteCollection {
     }
 
 }
-

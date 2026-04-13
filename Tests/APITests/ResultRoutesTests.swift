@@ -1,9 +1,9 @@
 import XCTest
 import XCTVapor
 @testable import chickadee_server
+import Fluent
 @testable import Core
 import Foundation
-import FluentSQLiteDriver
 
 final class ResultRoutesTests: XCTestCase {
 
@@ -12,7 +12,7 @@ final class ResultRoutesTests: XCTestCase {
     private let workerSecret = "test-worker-secret"
 
     override func setUp() async throws {
-        app = Application(.testing)
+        app = try await Application.make(.testing)
 
         // Use a temp directory so tests don't pollute the project directory
         tmpResultsDir = FileManager.default.temporaryDirectory
@@ -24,31 +24,20 @@ final class ResultRoutesTests: XCTestCase {
         )
 
         app.resultsDirectory = tmpResultsDir
+        app.routes.defaultMaxBodySize = "10mb"
 
         // Sessions are required because routes.swift now registers UserSessionAuthenticator.
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
 
-        app.databases.use(.sqlite(.memory), as: .sqlite)
-        app.migrations.add(CreateUsers())
-        app.migrations.add(CreateCourses())
-        app.migrations.add(CreateCourseEnrollments())
-        app.migrations.add(CreateTestSetups())
-        app.migrations.add(CreateSubmissions())
-        app.migrations.add(CreateResults())
-        app.migrations.add(CreateAssignments())
-        app.migrations.add(CreatePerformanceIndexes())
-        app.migrations.add(AddCourseSections())
-        app.migrations.add(AddCourseOpenEnrollment())
-        app.migrations.add(AddCourseEnrollmentMode())
-        try await app.autoMigrate().get()
+        try await configureTestDatabase(app, options: .observability)
 
         try routes(app)
     }
 
     override func tearDown() async throws {
-        app.shutdown()
+        try await app.asyncShutdown()
         try? FileManager.default.removeItem(atPath: tmpResultsDir)
     }
 
@@ -81,6 +70,13 @@ final class ResultRoutesTests: XCTestCase {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(collection)
+        return ByteBuffer(data: data)
+    }
+
+    private func bodyData(for report: WorkerExecutionReport) throws -> ByteBuffer {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(report)
         return ByteBuffer(data: data)
     }
 
@@ -152,6 +148,48 @@ final class ResultRoutesTests: XCTestCase {
         XCTAssertNotNil(resultFile, "Expected a result file for sub_disktest to be written")
     }
 
+    func testReportResultsAcceptsWrappedExecutionReportPayload() async throws {
+        let collection = makeCollection(submissionID: "sub_wrapped_report")
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+        let report = WorkerExecutionReport(
+            collection: collection,
+            diagnostics: WorkerExecutionDiagnostics(
+                runnerID: "runner-stage",
+                startedAt: Date(timeIntervalSince1970: 100),
+                finishedAt: Date(timeIntervalSince1970: 101),
+                finalStatus: "passed",
+                timedOut: false,
+                exitCode: 0,
+                terminationReason: nil,
+                peakRSSBytes: nil,
+                wallClockMs: 100,
+                childProcessCount: nil,
+                stdoutBytes: nil,
+                stderrBytes: nil,
+                stageTimings: WorkerExecutionStageTimings(
+                    workdirSetupMs: 12,
+                    submissionDownloadMs: 45,
+                    testSetupAcquireMs: 67,
+                    submissionPrepareMs: 89,
+                    testExecutionMs: 100
+                )
+            )
+        )
+        let body = try bodyData(for: report)
+
+        try await app.asyncTest(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
+            req.body = body
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+        })
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
+        let resultFile = files.first { $0.hasPrefix(collection.submissionID) }
+        XCTAssertNotNil(resultFile, "Expected a result file for wrapped reports to be written")
+    }
+
     func testReportResultsWithFailedBuild() throws {
         let collection = makeCollection(buildStatus: .failed, outcomes: [])
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
@@ -190,5 +228,91 @@ final class ResultRoutesTests: XCTestCase {
                 "Expected 400 or 422, got \(res.status)"
             )
         })
+    }
+
+    func testDuplicateResultSubmissionIsIdempotent() throws {
+        // Simulates a worker retry: the same TestOutcomeCollection is submitted
+        // twice (e.g. the first POST timed out from the worker's perspective but
+        // actually succeeded on the server). The second POST must succeed and must
+        // not corrupt the submission's state.
+        let collection = makeCollection(submissionID: "sub_dup_result")
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+        let body = try bodyData(for: collection)
+
+        // First submission
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body, workerSecret: self.workerSecret)
+            req.body = body
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
+        })
+
+        // Second submission (worker retry)
+        let body2 = try bodyData(for: collection)
+        try app.test(.POST, resultsPath, beforeRequest: { req in
+            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
+                                            body: body2, workerSecret: self.workerSecret)
+            req.body = body2
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, "Second (retry) POST must also succeed")
+            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
+        })
+
+        // Submission must still be "complete" (not rolled back or errored)
+        let submission = try APISubmission.find(collection.submissionID, on: app.db).wait()
+        XCTAssertEqual(submission?.status, "complete", "Submission must remain complete after duplicate result")
+
+        // Two result records should exist — duplicates are appended, not rejected.
+        // The view layer picks the latest, so both records are harmless.
+        let resultCount = try APIResult.query(on: app.db)
+            .filter(\.$submissionID == collection.submissionID)
+            .count()
+            .wait()
+        XCTAssertEqual(resultCount, 2, "Each POST should persist one result record")
+    }
+
+    func testReportResultsAcceptsLargeSignedBodyOverRealHTTP() async throws {
+        let largeMessage = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
+        let outcome = TestOutcome(
+            testName: "large_payload_test",
+            testClass: nil,
+            tier: .pub,
+            status: .fail,
+            shortResult: largeMessage,
+            longResult: largeMessage,
+            executionTimeMs: 100,
+            memoryUsageBytes: nil,
+            attemptNumber: 1,
+            isFirstPassSuccess: false
+        )
+        let collection = makeCollection(
+            submissionID: "sub_large_http",
+            buildStatus: .failed,
+            outcomes: [outcome]
+        )
+        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+        let body = try bodyData(for: collection)
+
+        try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            .POST,
+            self.resultsPath,
+            headers: workerHMACHeaders(
+                method: .POST,
+                path: self.resultsPath,
+                body: body,
+                workerSecret: self.workerSecret
+            ),
+            body: body
+        ) { res async in
+            XCTAssertEqual(res.status, .ok)
+            do {
+                let response = try res.content.decode(ReportResponse.self)
+                XCTAssertTrue(response.received)
+            } catch {
+                XCTFail("Failed to decode ReportResponse: \(error)")
+            }
+        }
     }
 }

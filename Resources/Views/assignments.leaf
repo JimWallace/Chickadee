@@ -4,12 +4,27 @@
 #endexport
 #export("content"):
 #if(currentUser.activeCourse):
-<h1 style="margin-bottom:1.25rem">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
-#else:
-<h1 style="margin-bottom:1.25rem">Assignments</h1>
-#endif
-<div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <h1 style="margin:0">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
     <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+</div>
+#else:
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <h1 style="margin:0">Assignments</h1>
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+</div>
+#endif
+<section class="instructor-diagnostics">
+    <div class="diagnostics-cards">
+        #for(metric in metrics):
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">#(metric.label)</div>
+            <div class="diagnostic-value">#(metric.value)</div>
+        </article>
+        #endfor
+    </div>
+</section>
+<div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
     <!-- Add Section inline form -->
     <details class="add-section-details" id="add-section-details" style="position:relative">
         <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
@@ -95,13 +110,14 @@
                 <th>Status</th>
                 <th>Validation</th>
                 <th class="due-col">Due</th>
+                <th>Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody class="assignments-body" data-section-id="#(section.sectionID)">
         #if(section.rows.isEmpty):
         <tr class="section-empty-row">
-            <td colspan="5" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
+            <td colspan="6" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
                 Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
             </td>
         </tr>
@@ -111,11 +127,8 @@
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
                 <td>
                     #if(row.assignmentID):
-                    <span class="reorder-controls">
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
-                    </span>
-                    <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
+                    <span class="assignment-name-cell">
+                        <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
@@ -126,18 +139,21 @@
                     #else:
                     <span style="color:var(--gray-600)">Unpublished</span>
                     #endif
+                    #if(row.assignmentID):
+                    </span>
+                    #endif
                 </td>
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/instructor/#(row.assignmentID)/status">
+                    <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="status-s-#(row.assignmentID)">Status for #(row.title)</label>
                         <select id="status-s-#(row.assignmentID)" class="form-input" name="status"
-                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
+                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem"
+                                onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
-                        <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                     </form>
                     #elseif(row.assignmentID):
                     <span class="tier tier-closed">closed</span>
@@ -171,6 +187,11 @@
                     #endif
                 </td>
                 <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td style="white-space:nowrap">
+                    #if(row.assignmentID):
+                    <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
+                    #else:—#endif
+                </td>
                 <td>
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
@@ -197,7 +218,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -207,7 +228,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -217,7 +238,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
@@ -247,6 +268,7 @@
                 <th>Status</th>
                 <th>Validation</th>
                 <th class="due-col">Due</th>
+                <th>Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -256,11 +278,8 @@
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
                 <td>
                     #if(row.assignmentID):
-                    <span class="reorder-controls">
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="up" aria-label="Move assignment up">↑</button>
-                        <button class="btn-link reorder-btn" type="button" draggable="false" data-reorder="down" aria-label="Move assignment down">↓</button>
-                    </span>
-                    <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
+                    <span class="assignment-name-cell">
+                        <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
                     #if(row.title):
                     #if(row.assignmentID):
@@ -271,18 +290,21 @@
                     #else:
                     <span style="color:var(--gray-600)">Unpublished</span>
                     #endif
+                    #if(row.assignmentID):
+                    </span>
+                    #endif
                 </td>
                 <td>
                     #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/instructor/#(row.assignmentID)/status">
+                    <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="status-u-#(row.assignmentID)">Status for #(row.title)</label>
                         <select id="status-u-#(row.assignmentID)" class="form-input" name="status"
-                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem">
+                                style="font-size:.8rem;padding:.25rem .45rem;min-width:7.5rem"
+                                onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
-                        <button class="btn action-btn" type="submit" style="margin-left:.35rem">Save</button>
                     </form>
                     #elseif(row.assignmentID):
                     <span class="tier tier-closed">closed</span>
@@ -316,6 +338,11 @@
                     #endif
                 </td>
                 <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td style="white-space:nowrap">
+                    #if(row.assignmentID):
+                    <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
+                    #else:—#endif
+                </td>
                 <td>
                     #if(row.status == "unpublished"):
                     <details class="publish-details">
@@ -342,7 +369,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
                         </form>
@@ -351,7 +378,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
                         </form>
@@ -360,7 +387,7 @@
                     <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
-                              onsubmit="return confirm('Remove this assignment? Students will no longer see it.')">
+                              onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment">Delete</button>
                         </form>
@@ -378,14 +405,13 @@
 
 <!-- ── Enrolled students ──────────────────────────────────────────────── -->
 <div style="margin-top:2.5rem">
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
         <h2 style="font-size:1.05rem;font-weight:600;margin:0">Enrolled students (#(enrolledStudentCount))</h2>
         #if(currentUser.activeCourse):
         #if(!courseIsArchived):
         <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" style="margin:0">
             #csrfFormField()
             <label class="form-label" style="font-size:.875rem;margin:0">
-                Enrolment
                 <select name="enrollmentMode" class="form-input"
                         style="display:block;font-size:.875rem"
                         onchange="this.form.submit()">
@@ -395,19 +421,13 @@
                 </select>
             </label>
         </form>
-        <form method="post" action="/courses/#(currentUser.activeCourse.id)/enroll-csv"
-              enctype="multipart/form-data" style="margin:0;margin-left:auto">
-            #csrfFormField()
-            <label class="visually-hidden" for="enroll-csv-file">CSV file</label>
-            <input id="enroll-csv-file" type="file" name="file" accept=".csv,.txt" required
-                   style="font-size:.8rem;max-width:12rem">
-            <button class="btn btn-primary" type="submit" style="margin:0">Enrol</button>
-        </form>
+        <a class="btn btn-primary" href="/instructor/enroll-csv">Enrol</a>
         #endif
         #endif
-        <input id="enrolled-filter" class="form-input" type="search"
+        <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
                placeholder="Filter by name or username…"
-               style="width:220px;margin-left:auto" aria-label="Filter enrolled students">
+               style="width:220px;flex:1 1 220px;min-width:220px" aria-label="Filter enrolled students"
+               readonly onfocus="this.removeAttribute('readonly')">
     </div>
     #if(hasEnrolledStudents):
     <table class="results-table" id="enrolled-students-table">
@@ -416,14 +436,19 @@
                 <th class="sortable" data-col="0" style="cursor:pointer;user-select:none">Name <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
+                <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇕</span></th>
             </tr>
         </thead>
         <tbody>
         #for(student in enrolledStudents):
-            <tr>
-                <td>#(student.displayName)</td>
-                <td><code>#(student.username)</code></td>
+            <tr class="student-row-link" data-href="#(student.submissionsURL)">
+                <td><a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a></td>
+                <td><a href="#(student.submissionsURL)"><code>#(student.username)</code></a></td>
                 <td>#(student.role)</td>
+                <td class="js-relative-time"
+                    #if(student.lastLoginAtISO):data-iso="#(student.lastLoginAtISO)"#endif>
+                    #(student.lastLoginAtText)
+                </td>
             </tr>
         #endfor
         </tbody>
@@ -434,13 +459,63 @@
 </div>
 
 <style>
+.instructor-diagnostics {
+    margin-bottom: 1.25rem;
+}
+.diagnostics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+}
+.diagnostic-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 5.5rem;
+    padding: .75rem .9rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+}
+.diagnostic-label {
+    color: var(--gray-600);
+    font-size: .82rem;
+    line-height: 1.25;
+}
+.diagnostic-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--gray-900);
+}
+.assignment-name-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+}
 .assignment-drag-handle {
-    display: inline-block;
-    margin-right: .45rem;
+    display: inline-flex;
+    align-items: center;
     color: var(--gray-500);
     font-weight: 700;
     cursor: grab;
     user-select: none;
+    flex: 0 0 auto;
+}
+.status-form {
+    display: inline-flex;
+    align-items: center;
+}
+.student-row-link {
+    cursor: pointer;
+}
+.student-row-link td a {
+    color: inherit;
+    text-decoration: none;
+}
+.student-row-link:hover td a strong,
+.student-row-link:hover td a code {
+    text-decoration: underline;
 }
 tr.assignment-draggable.dragging {
     opacity: .55;
@@ -475,11 +550,53 @@ tr.assignment-draggable td {
 (function () {
     'use strict';
 
+    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+    function formatRelative(isoString) {
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) return isoString;
+
+        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
+        var abs = Math.abs(seconds);
+
+        if (abs < 60) return relativeFormatter.format(seconds, 'second');
+        var minutes = Math.round(seconds / 60);
+        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
+        var hours = Math.round(minutes / 60);
+        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
+        var days = Math.round(hours / 24);
+        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
+        var weeks = Math.round(days / 7);
+        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
+        var months = Math.round(days / 30);
+        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
+        var years = Math.round(days / 365);
+        return relativeFormatter.format(years, 'year');
+    }
+
+    function applyRelativeTimes(root) {
+        var scope = root || document;
+        var nodes = scope.querySelectorAll('.js-relative-time[data-iso]');
+        nodes.forEach(function (el) {
+            var iso = el.getAttribute('data-iso');
+            if (!iso) return;
+            var date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return;
+            el.textContent = formatRelative(iso);
+            el.title = date.toLocaleString();
+        });
+    }
+
+    applyRelativeTimes();
+
     // ── Assignment drag-and-drop (within and across sections) ─────────────────
     //
     // All assignment tbodies carry data-section-id (empty string = ungrouped).
     // Dragging to a different tbody triggers a section-move API call + reload.
     // Dragging within the same tbody triggers a reorder API call.
+
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
 
     var assignDragged = null;
     var assignStartTbody = null;
@@ -494,7 +611,7 @@ tr.assignment-draggable td {
     async function persistReorder(tbody) {
         var res = await fetch('/instructor/reorder', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
             body: JSON.stringify({ assignmentIDs: currentOrder(tbody) })
         });
         if (!res.ok) window.location.reload();
@@ -515,7 +632,6 @@ tr.assignment-draggable td {
     document.addEventListener('dragstart', function (event) {
         var target = event.target;
         if (!(target instanceof Element)) return;
-        if (target.closest('.reorder-btn')) { event.preventDefault(); return; }
         var row = target.closest('tr[data-assignment-id]');
         if (!row) return;
         assignDragged = row;
@@ -598,7 +714,7 @@ tr.assignment-draggable td {
             var assignmentID = row.getAttribute('data-assignment-id');
             fetch('/instructor/' + assignmentID + '/section', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                 body: JSON.stringify({ sectionID: newSectionID })
             }).then(function () {
                 window.location.reload();
@@ -611,28 +727,6 @@ tr.assignment-draggable td {
             if (newOrder !== startOrder) {
                 persistReorder(currentTbody).catch(function () { window.location.reload(); });
             }
-        }
-    });
-
-    // ↑↓ button reorder (within the same section only).
-    document.addEventListener('click', function (event) {
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        if (!target.classList.contains('reorder-btn')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        var row = target.closest('tr[data-assignment-id]');
-        if (!row) return;
-        var body = row.parentElement;
-        var before = currentOrder(body).join(',');
-        var dir = target.getAttribute('data-reorder');
-        if (dir === 'up' && row.previousElementSibling && row.previousElementSibling.hasAttribute('data-assignment-id')) {
-            body.insertBefore(row, row.previousElementSibling);
-        } else if (dir === 'down' && row.nextElementSibling && row.nextElementSibling.hasAttribute('data-assignment-id')) {
-            body.insertBefore(row.nextElementSibling, row);
-        }
-        if (currentOrder(body).join(',') !== before) {
-            persistReorder(body).catch(function () { window.location.reload(); });
         }
     });
 
@@ -654,7 +748,7 @@ tr.assignment-draggable td {
             try {
                 var res = await fetch('/instructor/sections/reorder', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                     body: JSON.stringify({ sectionIDs: order })
                 });
                 if (!res.ok) window.location.reload();
@@ -787,8 +881,16 @@ tr.assignment-draggable td {
     // ── Enrolled students table sort ──────────────────────────────────────────
     var enrolledTable = document.getElementById('enrolled-students-table');
     if (enrolledTable) {
-        var sortCol = -1;
-        var sortAsc = true;
+        var sortCol = 3;
+        var sortAsc = false;
+        enrolledTable.querySelectorAll('tbody tr.student-row-link').forEach(function (row) {
+            row.addEventListener('click', function (event) {
+                var target = event.target;
+                if (target instanceof Element && target.closest('a')) return;
+                var href = row.getAttribute('data-href');
+                if (href) window.location.href = href;
+            });
+        });
         enrolledTable.querySelectorAll('th.sortable').forEach(function (th) {
             th.addEventListener('click', function () {
                 var col = parseInt(th.getAttribute('data-col'), 10);
@@ -805,13 +907,49 @@ tr.assignment-draggable td {
                 var tbody = enrolledTable.querySelector('tbody');
                 var rows = Array.from(tbody.querySelectorAll('tr'));
                 rows.sort(function (a, b) {
-                    var aText = (a.cells[col] ? a.cells[col].textContent : '').trim().toLowerCase();
-                    var bText = (b.cells[col] ? b.cells[col].textContent : '').trim().toLowerCase();
-                    return sortAsc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+                    var result;
+                    if (col === 3) {
+                        var aISO = a.cells[col] ? a.cells[col].getAttribute('data-iso') : '';
+                        var bISO = b.cells[col] ? b.cells[col].getAttribute('data-iso') : '';
+                        var aDate = aISO ? new Date(aISO).getTime() : 0;
+                        var bDate = bISO ? new Date(bISO).getTime() : 0;
+                        result = aDate - bDate;
+                    } else {
+                        var aText = (a.cells[col] ? a.cells[col].textContent : '').trim().toLowerCase();
+                        var bText = (b.cells[col] ? b.cells[col].textContent : '').trim().toLowerCase();
+                        result = aText.localeCompare(bText);
+                    }
+                    if (result === 0) {
+                        var aUsername = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
+                        var bUsername = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
+                        result = aUsername.localeCompare(bUsername);
+                    }
+                    return sortAsc ? result : -result;
                 });
                 rows.forEach(function (row) { tbody.appendChild(row); });
             });
         });
+
+        var defaultEnrolledSortHeader = enrolledTable.querySelector('th.sortable[data-col="3"]');
+        if (defaultEnrolledSortHeader) {
+            defaultEnrolledSortHeader.querySelector('.sort-icon').textContent = '↓';
+            var defaultEnrolledBody = enrolledTable.querySelector('tbody');
+            var defaultEnrolledRows = Array.from(defaultEnrolledBody.querySelectorAll('tr'));
+            defaultEnrolledRows.sort(function (a, b) {
+                var aISO = a.cells[3] ? a.cells[3].getAttribute('data-iso') : '';
+                var bISO = b.cells[3] ? b.cells[3].getAttribute('data-iso') : '';
+                var aDate = aISO ? new Date(aISO).getTime() : 0;
+                var bDate = bISO ? new Date(bISO).getTime() : 0;
+                var result = aDate - bDate;
+                if (result === 0) {
+                    var aUsername = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
+                    var bUsername = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
+                    result = aUsername.localeCompare(bUsername);
+                }
+                return sortAsc ? result : -result;
+            });
+            defaultEnrolledRows.forEach(function (row) { defaultEnrolledBody.appendChild(row); });
+        }
 
         var enrolledFilter = document.getElementById('enrolled-filter');
         if (enrolledFilter) {

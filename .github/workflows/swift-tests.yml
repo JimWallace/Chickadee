@@ -1,0 +1,122 @@
+name: Swift Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute SPM cache key
+        id: spm-cache-key
+        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Run CoreTests
+        run: swift test --parallel --filter CoreTests
+
+  api-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute SPM cache key
+        id: spm-cache-key
+        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Install system test dependencies
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
+
+      - name: Run APITests
+        run: swift test --filter APITests
+
+  api-tests-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: swift:6.3-jammy
+      options: --privileged
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chickadee_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chickadee_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_BACKEND: postgres
+      TEST_DATABASE_HOST: postgres
+      TEST_DATABASE_PORT: "5432"
+      TEST_DATABASE_NAME: chickadee_test
+      TEST_DATABASE_USER: postgres
+      TEST_DATABASE_PASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute SPM cache key
+        id: spm-cache-key
+        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Install system test dependencies
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
+
+      - name: Run APITests against PostgreSQL
+        run: swift test --filter APITests
+
+  browser-runner-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run browser runner execution tests
+        run: node --test Tests/BrowserRunnerJSTests/*.mjs
+
+  worker-tests:
+    uses: ./.github/workflows/worker-tests-reusable.yml

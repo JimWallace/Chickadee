@@ -9,8 +9,224 @@ import Crypto
 import Leaf
 import LeafKit
 @testable import chickadee_server
-import FluentSQLiteDriver
+import Fluent
+import FluentPostgresDriver
 import Foundation
+import SQLKit
+
+struct TestDatabaseOptions: Sendable {
+    let includeObservability: Bool
+    let includeRunnerCompatibility: Bool
+
+    static let `default` = TestDatabaseOptions(
+        includeObservability: false,
+        includeRunnerCompatibility: false
+    )
+
+    static let observability = TestDatabaseOptions(
+        includeObservability: true,
+        includeRunnerCompatibility: false
+    )
+
+    static let runnerCompatibility = TestDatabaseOptions(
+        includeObservability: true,
+        includeRunnerCompatibility: true
+    )
+}
+
+func configureTestDatabase(
+    _ app: Application,
+    options: TestDatabaseOptions = .default
+) async throws {
+    let settings = try testDatabaseSettingsFromEnvironment()
+    try configureDatabase(app, settings: settings)
+
+    if settings.backend == .postgres {
+        try await resetPostgresTestSchema(app)
+    }
+
+    registerBaseTestMigrations(on: app)
+    if options.includeObservability {
+        registerObservabilityTestMigrations(on: app)
+    }
+    if options.includeRunnerCompatibility {
+        registerRunnerCompatibilityTestMigrations(on: app)
+    }
+
+    try await app.autoMigrate()
+}
+
+private func resetPostgresTestSchema(_ app: Application) async throws {
+    guard let sql = app.db as? SQLDatabase else { return }
+
+    try await sql.raw("DROP SCHEMA IF EXISTS public CASCADE").run()
+    try await sql.raw("CREATE SCHEMA public").run()
+}
+
+func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
+    let backend = Environment.get("TEST_DATABASE_BACKEND")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        .flatMap(DatabaseBackend.init(rawValue:))
+        ?? .sqlite
+
+    switch backend {
+    case .sqlite:
+        return .sqliteInMemory()
+    case .postgres:
+        let host = Environment.get("TEST_DATABASE_HOST")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let database = Environment.get("TEST_DATABASE_NAME")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = Environment.get("TEST_DATABASE_USER")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let password = Environment.get("TEST_DATABASE_PASSWORD")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let port = Environment.get("TEST_DATABASE_PORT")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap { $0.isEmpty ? nil : Int($0) }
+
+        guard
+            let host, !host.isEmpty,
+            let database, !database.isEmpty,
+            let username, !username.isEmpty,
+            let password, !password.isEmpty,
+            let port
+        else {
+            var missing: [String] = []
+            if host?.isEmpty != false { missing.append("TEST_DATABASE_HOST") }
+            if port == nil { missing.append("TEST_DATABASE_PORT") }
+            if database?.isEmpty != false { missing.append("TEST_DATABASE_NAME") }
+            if username?.isEmpty != false { missing.append("TEST_DATABASE_USER") }
+            if password?.isEmpty != false { missing.append("TEST_DATABASE_PASSWORD") }
+
+            throw DatabaseConfigurationError.invalidSettings(
+                "TEST_DATABASE_BACKEND=postgres requires: \(missing.joined(separator: ", "))"
+            )
+        }
+
+        return .postgres(
+            host: host,
+            port: port,
+            database: database,
+            username: username,
+            password: password
+        )
+    }
+}
+
+private func registerBaseTestMigrations(on app: Application) {
+    app.migrations.add(CreateUsers())
+    app.migrations.add(CreateCourses())
+    app.migrations.add(CreateCourseEnrollments())
+    app.migrations.add(CreateTestSetups())
+    app.migrations.add(CreateSubmissions())
+    app.migrations.add(CreateResults())
+    app.migrations.add(CreateAssignments())
+    app.migrations.add(CreatePerformanceIndexes())
+    app.migrations.add(AddCourseSections())
+    app.migrations.add(AddCourseOpenEnrollment())
+    app.migrations.add(AddCourseEnrollmentMode())
+    app.migrations.add(AddSubmissionRetestedAt())
+    app.migrations.add(AddAssignmentDeadlineOverrideActive())
+    app.migrations.add(CreateClassAchievements())
+}
+
+private func registerObservabilityTestMigrations(on app: Application) {
+    app.migrations.add(CreateSubmissionDiagnostics())
+    app.migrations.add(CreateRequestMetrics())
+    app.migrations.add(CreateJobExecutionMetrics())
+    app.migrations.add(AddJobExecutionStageTimings())
+    app.migrations.add(CreateRunnerSnapshots())
+    app.migrations.add(CreateRunnerProfiles())
+}
+
+private func registerRunnerCompatibilityTestMigrations(on app: Application) {
+    app.migrations.add(CreateAssignmentRequirements())
+}
+
+// MARK: - Async app lifecycle
+
+/// Runs an async test body with a Vapor application and always shuts it down.
+func withApp(_ app: Application, _ body: (Application) async throws -> Void) async throws {
+    do {
+        try await body(app)
+        try await app.asyncShutdown()
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
+    }
+}
+
+extension Application {
+    @discardableResult
+    func asyncTest(
+        method runnerMethod: Method = .inMemory,
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        afterResponse: (XCTHTTPResponse) throws -> Void
+    ) async throws -> XCTApplicationTester {
+        try await self.asyncTest(
+            method: runnerMethod,
+            method,
+            path,
+            headers: headers,
+            body: body,
+            file: file,
+            line: line,
+            beforeRequest: { _ in },
+            afterResponse: afterResponse
+        )
+    }
+
+    @discardableResult
+    func asyncTest(
+        method runnerMethod: Method = .inMemory,
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in },
+        afterResponse: (XCTHTTPResponse) throws -> Void = { _ in }
+    ) async throws -> XCTApplicationTester {
+        let tester = try self.testable(method: runnerMethod)
+        return try await tester.test(
+            method,
+            path,
+            headers: headers,
+            body: body,
+            file: file,
+            line: line,
+            beforeRequest: { request async throws in
+                try beforeRequest(&request)
+            },
+            afterResponse: { response async throws in
+                try afterResponse(response)
+            }
+        )
+    }
+
+    /// Fire a request and return the response directly, without a callback.
+    /// Useful for concurrent tests where multiple responses must be collected.
+    func asyncSendRequest(
+        _ method: HTTPMethod,
+        _ path: String,
+        headers: HTTPHeaders = [:],
+        body: ByteBuffer? = nil,
+        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in }
+    ) async throws -> XCTHTTPResponse {
+        var captured: XCTHTTPResponse?
+        try await self.asyncTest(
+            method, path,
+            headers: headers,
+            body: body,
+            beforeRequest: beforeRequest,
+            afterResponse: { captured = $0 }
+        )
+        return captured!
+    }
+}
 
 // MARK: - Leaf / CSRF setup
 
@@ -55,7 +271,7 @@ func csrfFields(
 ) async throws -> (token: String, cookie: String) {
     var outToken = ""
     var outCookie = cookie
-    try await app.test(.GET, path, beforeRequest: { req in
+    try await app.asyncTest(.GET, path, beforeRequest: { req in
         if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
     }, afterResponse: { res in
         if let c = res.headers.first(name: .setCookie) { outCookie = c }
@@ -97,6 +313,7 @@ func workerHMACHeaders(
     var headers = HTTPHeaders()
     headers.add(name: "X-Worker-Timestamp", value: String(timestamp))
     headers.add(name: "X-Worker-Nonce",     value: nonce)
+    headers.add(name: "X-Worker-Body-SHA256", value: bodyHash)
     headers.add(name: "X-Worker-Signature", value: signature)
     headers.add(name: "X-Worker-Id",        value: workerID)
     headers.contentType = .json
@@ -132,7 +349,7 @@ func loginUser(
 
     // Step 2: POST /login with the CSRF token bound to that session.
     var authCookie = sessionCookie
-    try await app.test(.POST, "/login", beforeRequest: { req in
+    try await app.asyncTest(.POST, "/login", beforeRequest: { req in
         req.headers.add(name: .cookie, value: sessionCookie)
         try req.content.encode(
             ["username": username, "password": password, "_csrf": token],
