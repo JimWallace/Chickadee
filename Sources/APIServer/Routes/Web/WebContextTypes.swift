@@ -109,20 +109,96 @@ struct OutcomeRow: Encodable {
     let pointsLabel: String?     // e.g. "2 pts" when assignment is weighted; nil otherwise
 }
 
+/// Input data used to compute per-submission achievement badges.
+struct BadgeContext {
+    let attemptNumber: Int
+    let gradePercent: Int
+    let executionTimeMs: Int
+    /// Grade percent of the immediately preceding attempt; nil on the first attempt.
+    let priorGradePercent: Int?
+}
+
 struct AchievementBadge: Encodable {
     let id: String
     let label: String
     let tooltip: String
+
+    // MARK: Per-submission badges
 
     static let firstTryPerfect = AchievementBadge(
         id: "first_try_perfect",
         label: "First-Try Perfect",
         tooltip: "Earned 100% on the first submission."
     )
+    static let comebackKid = AchievementBadge(
+        id: "comeback_kid",
+        label: "Comeback Kid",
+        tooltip: "Jumped 50+ percentage points over the previous attempt."
+    )
+    static let tenacious = AchievementBadge(
+        id: "tenacious",
+        label: "Tenacious",
+        tooltip: "Reached 100% after 5 or more attempts — persistence pays off."
+    )
+    static let speedDemon = AchievementBadge(
+        id: "speed_demon",
+        label: "Speed Demon",
+        tooltip: "100% score with all tests finishing in under 2 seconds."
+    )
 
-    static func forSubmission(attemptNumber: Int, gradePercent: Int) -> [AchievementBadge] {
-        guard attemptNumber == 1, gradePercent == 100 else { return [] }
-        return [.firstTryPerfect]
+    // MARK: Class-wide badges
+
+    static let pathfinder = AchievementBadge(
+        id: "pathfinder",
+        label: "Pathfinder",
+        tooltip: "First in the class to submit to this assignment."
+    )
+    static let trailblazer = AchievementBadge(
+        id: "trailblazer",
+        label: "Trailblazer",
+        tooltip: "First in the class to reach 100%."
+    )
+    static let speedChampion = AchievementBadge(
+        id: "speed_champion",
+        label: "Speed Champion",
+        tooltip: "Fastest 100% execution time in the class."
+    )
+    static let minimalist = AchievementBadge(
+        id: "minimalist",
+        label: "Minimalist",
+        tooltip: "Reached 100% in fewer attempts than anyone else in the class."
+    )
+
+    // MARK: Computation
+
+    /// Returns all per-submission badges earned for the given context.
+    /// Class-wide badges are appended separately after a DB query.
+    static func forSubmission(_ ctx: BadgeContext) -> [AchievementBadge] {
+        var badges: [AchievementBadge] = []
+        if ctx.attemptNumber == 1, ctx.gradePercent == 100 {
+            badges.append(.firstTryPerfect)
+        }
+        if let prior = ctx.priorGradePercent, ctx.gradePercent - prior >= 50 {
+            badges.append(.comebackKid)
+        }
+        if ctx.attemptNumber >= 5, ctx.gradePercent == 100 {
+            badges.append(.tenacious)
+        }
+        if ctx.gradePercent == 100, ctx.executionTimeMs < 2_000 {
+            badges.append(.speedDemon)
+        }
+        return badges
+    }
+
+    /// Maps a class-achievement ID string to its badge, returning nil for unknown IDs.
+    static func forClassAchievement(_ achievementID: String) -> AchievementBadge? {
+        switch achievementID {
+        case "pathfinder":     return .pathfinder
+        case "trailblazer":    return .trailblazer
+        case "speed_champion": return .speedChampion
+        case "minimalist":     return .minimalist
+        default:               return nil
+        }
     }
 }
 

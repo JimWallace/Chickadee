@@ -92,6 +92,19 @@ extension WebRoutes {
         await req.application.diagnostics.recordSubmissionCreated(
             submission: submission, on: req.db, logger: req.logger
         )
+
+        // Award Pathfinder to the first student in the class who submits.
+        let classCount = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .count()
+        if classCount == 1, let uid = user.id {
+            let badge = APIClassAchievement(
+                testSetupID: setupID, achievementID: "pathfinder",
+                userID: uid, submissionID: subID)
+            try? await badge.save(on: req.db)
+        }
+
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
 
         return req.redirect(to: "/submissions/\(subID)")
@@ -244,9 +257,10 @@ extension WebRoutes {
         let browserResult = allResults.first { $0.source == "browser" }
         let displayResult = workerResult ?? browserResult
 
-        // Fetch the immediately-prior attempt for per-test delta display.
+        // Fetch the immediately-prior attempt for per-test delta display and Comeback Kid badge.
         let currentAttempt = submission.attemptNumber ?? 1
         var priorOutcomeMap: [String: TestStatus] = [:]
+        var priorGradePercent: Int? = nil
         if currentAttempt > 1, let userID = submission.userID {
             if let priorSub = try await APISubmission.query(on: req.db)
                 .filter(\.$testSetupID == submission.testSetupID)
@@ -267,6 +281,9 @@ extension WebRoutes {
                     for o in priorCollection.outcomes {
                         priorOutcomeMap[o.testName] = o.status
                     }
+                    priorGradePercent = priorCollection.totalPoints > 0
+                        ? Int((Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded())
+                        : nil
                 }
             }
         }
@@ -323,10 +340,12 @@ extension WebRoutes {
                 gradePercent = totalPoints > 0
                     ? Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
                     : 0
-                badges = AchievementBadge.forSubmission(
-                    attemptNumber: submission.attemptNumber ?? 1,
-                    gradePercent: gradePercent
-                )
+                badges = AchievementBadge.forSubmission(BadgeContext(
+                    attemptNumber:    submission.attemptNumber ?? 1,
+                    gradePercent:     gradePercent,
+                    executionTimeMs:  collection.executionTimeMs,
+                    priorGradePercent: priorGradePercent
+                ))
                 let weighted = totalPoints != visible.totalTests
                 outcomes = visible.outcomes.map { o in
                     let skip = parseSkip(shortResult: o.shortResult)
@@ -371,6 +390,12 @@ extension WebRoutes {
                 }
             }
         }
+
+        // Append class-wide achievement badges held by this specific submission.
+        let classAchievements = try await APIClassAchievement.query(on: req.db)
+            .filter(\.$submissionID == subID)
+            .all()
+        badges += classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
 
         let hasDelta = !priorOutcomeMap.isEmpty
         let deltaHeaderText: String? = {
