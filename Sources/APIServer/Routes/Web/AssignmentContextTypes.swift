@@ -77,6 +77,7 @@ struct AssignmentStudentRow: Encodable {
     let hasLatestSubmission: Bool
     let latestSubmissionID: String
     let latestSubmittedAtText: String
+    let latestSubmittedAtEpoch: Int   // Unix timestamp (0 if no submission) for chronological sort
     let additionalSubmissionCount: Int
     let fullHistoryURL: String
     let bestGradePercent: Int?

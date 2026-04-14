@@ -3,15 +3,8 @@
 #(assignmentTitle) — Submissions
 #endexport
 #export("content"):
-<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+<div style="margin-bottom:1rem">
     <h1 style="margin:0">#(assignmentTitle)</h1>
-    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
-               placeholder="Filter by name or ID…"
-               style="width:220px" aria-label="Filter students"
-               readonly onfocus="this.removeAttribute('readonly')">
-        <a class="btn action-btn" href="/instructor">Back to Instructor</a>
-    </div>
 </div>
 
 <section class="assignment-diagnostics">
@@ -28,25 +21,31 @@
 #if(rows.isEmpty):
 <p class="empty">No student users found.</p>
 #else:
+<div style="margin-bottom:.5rem">
+    <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
+           placeholder="Filter by name or ID…"
+           style="width:220px" aria-label="Filter students"
+           readonly onfocus="this.removeAttribute('readonly')">
+</div>
 <table class="results-table" id="assignment-submissions-table">
     <thead>
         <tr>
-            <th data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
             <th data-sort-key="surname" data-sort-type="text" tabindex="0" aria-sort="none">Surname</th>
             <th data-sort-key="given_names" data-sort-type="text" tabindex="0" aria-sort="none">Given Names</th>
+            <th data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
             <th data-sort-key="grade" data-sort-type="number" tabindex="0" aria-sort="none">Grade</th>
-            <th data-sort-key="history" data-sort-type="text" tabindex="0" aria-sort="none">History</th>
+            <th data-sort-key="history" data-sort-type="datetime" tabindex="0" aria-sort="none">History</th>
             <th>Action</th>
         </tr>
     </thead>
     <tbody>
     #for(row in rows):
         <tr>
-            <td><strong>#(row.studentID)</strong></td>
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
+            <td><strong>#(row.studentID)</strong></td>
             <td>#(row.gradeText)</td>
-            <td>
+            <td data-ts="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(row.hasLatestSubmission):
@@ -138,7 +137,11 @@
 
     function readCellValue(row, index, type) {
         var cell = row.children[index];
-        if (!cell) return '';
+        if (!cell) return type === 'number' || type === 'datetime' ? Number.NEGATIVE_INFINITY : '';
+        if (type === 'datetime') {
+            var ts = parseInt(cell.getAttribute('data-ts') || '0', 10);
+            return isNaN(ts) ? 0 : ts;
+        }
         var text = (cell.textContent || '').trim();
         if (type === 'number') {
             return normalizeNumber(text);
@@ -162,15 +165,21 @@
             var lv = readCellValue(lhs, index, type);
             var rv = readCellValue(rhs, index, type);
             var result = 0;
-            if (type === 'number') {
+            if (type === 'number' || type === 'datetime') {
                 result = lv - rv;
             } else {
                 result = collator.compare(String(lv), String(rv));
             }
             if (result === 0) {
-                var lhsID = (lhs.children[0] && lhs.children[0].textContent || '').trim();
-                var rhsID = (rhs.children[0] && rhs.children[0].textContent || '').trim();
-                result = collator.compare(lhsID, rhsID);
+                // tie-break: surname (col 0), then given names (col 1)
+                var ls = (lhs.children[0] && lhs.children[0].textContent || '').trim();
+                var rs = (rhs.children[0] && rhs.children[0].textContent || '').trim();
+                result = collator.compare(ls, rs);
+                if (result === 0) {
+                    var lg = (lhs.children[1] && lhs.children[1].textContent || '').trim();
+                    var rg = (rhs.children[1] && rhs.children[1].textContent || '').trim();
+                    result = collator.compare(lg, rg);
+                }
             }
             return direction === 'asc' ? result : -result;
         });
@@ -195,7 +204,11 @@
         });
     });
 
-    sortByHeader(headers[0], 'asc');
+    // Default: most recent submissions at top (History column, descending)
+    var historyHeader = headers.find(function (h) { return h.getAttribute('data-sort-key') === 'history'; });
+    if (historyHeader) {
+        sortByHeader(historyHeader, 'desc');
+    }
 
     var filter = document.getElementById('submissions-filter');
     if (filter && tbody) {

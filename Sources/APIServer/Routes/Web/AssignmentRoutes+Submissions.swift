@@ -318,6 +318,7 @@ extension AssignmentRoutes {
                 hasLatestSubmission: latest != nil,
                 latestSubmissionID: latest?.id ?? "",
                 latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
+                latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
                 additionalSubmissionCount: max(history.count - 1, 0),
                 fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
                 bestGradePercent: bestGradePercent
@@ -325,7 +326,6 @@ extension AssignmentRoutes {
         }
 
         let submittedCount = rows.filter { $0.submissionCount > 0 }.count
-        let neverSubmittedCount = max(rows.count - submittedCount, 0)
         let submissions24h = submissions.filter { submission in
             guard let submittedAt = submission.submittedAt else { return false }
             return submittedAt >= windowStart
@@ -337,15 +337,30 @@ extension AssignmentRoutes {
             count += 1
         }
         let gradedRows = rows.compactMap(\.bestGradePercent)
-        let averageBestGrade = gradedRows.isEmpty
-            ? "—"
-            : "\(Int((Double(gradedRows.reduce(0, +)) / Double(gradedRows.count)).rounded()))%"
+        let medianBestGrade: String
+        if gradedRows.isEmpty {
+            medianBestGrade = "—"
+        } else {
+            let sorted = gradedRows.sorted()
+            let mid = sorted.count / 2
+            let median = sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+            medianBestGrade = "\(median)%"
+        }
+        let submittedRows = rows.filter { $0.submissionCount > 0 }
+        let avgAttempts: String
+        if submittedRows.isEmpty {
+            avgAttempts = "—"
+        } else {
+            let total = submittedRows.reduce(0) { $0 + $1.submissionCount }
+            let avg = Double(total) / Double(submittedRows.count)
+            avgAttempts = String(format: "%.1f", avg)
+        }
         let metrics = [
-            InstructorDashboardMetric(label: "Submitted At Least Once", value: "\(submittedCount)/\(rows.count)"),
-            InstructorDashboardMetric(label: "No Submission Yet", value: "\(neverSubmittedCount)"),
+            InstructorDashboardMetric(label: "Students Submitted", value: "\(submittedCount)/\(rows.count)"),
+            InstructorDashboardMetric(label: "Avg Attempts/Student", value: avgAttempts),
             InstructorDashboardMetric(label: "Submissions (24h)", value: "\(submissions24h)"),
-            InstructorDashboardMetric(label: "Pending Latest Attempts", value: "\(pendingLatestCount)"),
-            InstructorDashboardMetric(label: "Average Best Grade", value: averageBestGrade)
+            InstructorDashboardMetric(label: "Queued Jobs", value: "\(pendingLatestCount)"),
+            InstructorDashboardMetric(label: "Median Grade", value: medianBestGrade)
         ]
 
         return try await req.view.render(
