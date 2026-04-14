@@ -196,10 +196,8 @@ def require_function(name: str):
         errors = student_module_errors()
         if errors:
             first_name = next(iter(errors.keys()))
-            errored(
-                "Could not load any student Python module from submission. "
-                f"First load failure came from '{first_name}'."
-            )
+            print(errors[first_name], end="")
+            errored("SyntaxError in submission")
         errored("Could not load a student Python module from submission.")
 
     errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
