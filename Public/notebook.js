@@ -26,6 +26,17 @@
 
     if (!frame || !setupID) return;
 
+    // Disable Submit until the student's notebook has been synced into the
+    // JupyterLite editor. This prevents a race condition where students click
+    // Submit before their work is loaded, causing a blank notebook to be
+    // submitted (the fallback path reads the starter template instead of
+    // their saved cells).
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.title = 'Loading notebook\u2026';
+    }
+    setStatus('loading', 'Loading notebook\u2026');
+
     // -------------------------------------------------------------------------
     // 1. Load JupyterLite in the iframe
     // -------------------------------------------------------------------------
@@ -74,6 +85,18 @@
             frameError.style.display = '';
         }
     }, 5000);
+
+    // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
+    // iframe never loaded) re-enable Submit so the student isn't stuck. The
+    // fallback submit path (server snapshot → DOM → contents API) will still
+    // attempt to find their work.
+    setTimeout(() => {
+        if (submitBtn && submitBtn.disabled) {
+            submitBtn.disabled = false;
+            submitBtn.title = '';
+            if (!serverSyncComplete) setStatus('', '');
+        }
+    }, 15000);
 
     // -------------------------------------------------------------------------
     // 2. Submit button — queue runner grading
@@ -336,19 +359,37 @@
             if (!app) return;
 
             const contents = app.serviceManager && app.serviceManager.contents;
-            if (!contents || typeof contents.save !== 'function') return;
 
-            await contents.save(lockedNotebookPath, {
-                type: 'notebook',
-                format: 'json',
-                content: snapshotNotebook
-            });
+            // Before writing the server snapshot into JupyterLite, check whether
+            // this browser already has a copy of the notebook in local storage
+            // (IndexedDB). If it does, preserve it — the local version is the
+            // student's most-recent in-progress work and must not be clobbered
+            // with the (potentially older) server copy. The server copy is only
+            // authoritative for seeding a fresh browser or a different device;
+            // in both of those cases local storage will be empty.
+            let hasLocalContent = false;
+            if (contents && typeof contents.get === 'function') {
+                try {
+                    const localModel = await contents.get(lockedNotebookPath, { content: true });
+                    hasLocalContent = looksLikeNotebook(localModel && localModel.content);
+                } catch (_) {
+                    // Not found in local storage — will seed from server below.
+                }
+            }
+
+            if (!hasLocalContent && contents && typeof contents.save === 'function') {
+                await contents.save(lockedNotebookPath, {
+                    type: 'notebook',
+                    format: 'json',
+                    content: snapshotNotebook
+                });
+            }
 
             if (app.commands && typeof app.commands.execute === 'function') {
                 try {
                     await app.commands.execute('docmanager:open', { path: lockedNotebookPath });
                 } catch (_) {
-                    // Best-effort open only; save above is the critical sync step.
+                    // Best-effort open only.
                 }
             }
 
@@ -357,6 +398,13 @@
             // Retry on the next load tick if synchronization fails.
         } finally {
             serverSyncInFlight = false;
+            // Always re-enable Submit — either the sync loaded the student's
+            // saved work, or the fallback submit path will handle it.
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.title = '';
+            }
+            setStatus('', '');
         }
     }
 
