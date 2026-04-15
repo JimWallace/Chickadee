@@ -29,6 +29,7 @@
     --danger-border: #FECACA;
     --accent-bg: #FEF9DB;   /* gold tint — grade pills / score badges */
     --accent-fg: #7A5000;   /* dark gold — readable on gold tint */
+    --accent-border: #F1C96B; /* gold border — achievement badge outline */
     --hover-bg: #E0F7FA;    /* teal-light tint — drag-over, hover fills */
     --open-bg:  #DCF3F6;    /* teal tint — active/open state */
     --open-fg:  #005963;    /* health-teal-dark */
@@ -63,6 +64,7 @@
         --danger-border: #7F1D1D;
         --accent-bg: #3D2800;   /* dark gold tint */
         --accent-fg: #FED34C;   /* soft gold — readable on dark gold tint */
+        --accent-border: #7A4800; /* muted gold border — readable on dark */
         --hover-bg: #072D35;    /* dark teal tint */
         --open-bg:  #072D35;    /* dark teal — active/open state */
         --open-fg:  #67E8F9;    /* bright cyan-teal — readable on dark teal */
@@ -393,9 +395,9 @@ textarea.form-input {
     align-items: center;
     padding: .28rem .7rem;
     border-radius: 9999px;
-    background: #fff4d6;
-    border: 1px solid #f1c96b;
-    color: #7a5200;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    color: var(--accent-fg);
     font-size: .78rem;
     font-weight: 600;
     line-height: 1.2;
