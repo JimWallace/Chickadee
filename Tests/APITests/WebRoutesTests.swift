@@ -363,7 +363,7 @@ final class WebRoutesTests: XCTestCase {
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue(res.body.string.contains("First-Try Perfect"))
+            XCTAssertTrue(res.body.string.contains("Ace"))
         })
     }
 
@@ -672,7 +672,7 @@ final class WebRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
-            XCTAssertTrue(html.contains("First-Try Perfect"))
+            XCTAssertTrue(html.contains("Ace"))
             XCTAssertTrue(html.contains("achievement-badge"))
         })
     }
