@@ -127,13 +127,13 @@ struct AchievementBadge: Encodable {
 
     static let firstTryPerfect = AchievementBadge(
         id: "first_try_perfect",
-        label: "First-Try Perfect",
-        tooltip: "Earned 100% on the first submission."
+        label: "Ace",
+        tooltip: "Scored 100% on your very first submission — no warm-up needed."
     )
     static let comebackKid = AchievementBadge(
         id: "comeback_kid",
-        label: "Comeback Kid",
-        tooltip: "Jumped 50+ percentage points over the previous attempt."
+        label: "Rally",
+        tooltip: "Jumped 50 or more percentage points in a single submission."
     )
     static let tenacious = AchievementBadge(
         id: "tenacious",
@@ -142,8 +142,8 @@ struct AchievementBadge: Encodable {
     )
     static let speedDemon = AchievementBadge(
         id: "speed_demon",
-        label: "Speed Demon",
-        tooltip: "100% score with all tests finishing in under 2 seconds."
+        label: "Swift",
+        tooltip: "Scored 100% with every test completing in under 2 seconds total."
     )
 
     // MARK: Class-wide badges
@@ -151,22 +151,22 @@ struct AchievementBadge: Encodable {
     static let pathfinder = AchievementBadge(
         id: "pathfinder",
         label: "Pathfinder",
-        tooltip: "First in the class to submit to this assignment."
+        tooltip: "Submitted before anyone else in the class."
     )
     static let trailblazer = AchievementBadge(
         id: "trailblazer",
         label: "Trailblazer",
-        tooltip: "First in the class to reach 100%."
+        tooltip: "First student in the class to reach 100% on this assignment."
     )
     static let speedChampion = AchievementBadge(
         id: "speed_champion",
-        label: "Speed Champion",
-        tooltip: "Fastest 100% execution time in the class."
+        label: "Fastest",
+        tooltip: "Holds the class record for fastest 100% execution time."
     )
     static let minimalist = AchievementBadge(
         id: "minimalist",
         label: "Minimalist",
-        tooltip: "Reached 100% in fewer attempts than anyone else in the class."
+        tooltip: "Reached 100% in fewer attempts than any other student in the class."
     )
 
     // MARK: Computation
