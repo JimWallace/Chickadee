@@ -48,7 +48,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 #
 # For additional R packages:
 #   RUN Rscript -e "install.packages(c('tidyverse', ...), repos='https://cloud.r-project.org')"
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         file \
