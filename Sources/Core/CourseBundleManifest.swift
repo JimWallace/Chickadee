@@ -31,6 +31,8 @@ public struct CourseBundleManifest: Codable, Sendable {
     public let users: [BundledUser]
     /// bundleIDs of users enrolled in the course.
     public let enrolledUserBundleIDs: [String]
+    /// Course sections (nil in bundles exported before this field was added).
+    public let sections: [BundledSection]?
     public let assignments: [BundledAssignment]
     public let testSetups: [BundledTestSetup]
     /// Student submissions only (kind == "student"); validation runs excluded.
@@ -46,6 +48,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         course: BundledCourse,
         users: [BundledUser],
         enrolledUserBundleIDs: [String],
+        sections: [BundledSection] = [],
         assignments: [BundledAssignment],
         testSetups: [BundledTestSetup],
         submissions: [BundledSubmission],
@@ -58,6 +61,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         self.course               = course
         self.users                = users
         self.enrolledUserBundleIDs = enrolledUserBundleIDs
+        self.sections             = sections
         self.assignments          = assignments
         self.testSetups           = testSetups
         self.submissions          = submissions
@@ -106,6 +110,21 @@ public struct BundledUser: Codable, Sendable {
     }
 }
 
+public struct BundledSection: Codable, Sendable {
+    public let bundleID: String
+    public let name: String
+    /// "browser" | "worker"
+    public let defaultGradingMode: String
+    public let sortOrder: Int
+
+    public init(bundleID: String, name: String, defaultGradingMode: String, sortOrder: Int) {
+        self.bundleID            = bundleID
+        self.name                = name
+        self.defaultGradingMode  = defaultGradingMode
+        self.sortOrder           = sortOrder
+    }
+}
+
 public struct BundledAssignment: Codable, Sendable {
     public let bundleID: String
     public let title: String
@@ -114,15 +133,18 @@ public struct BundledAssignment: Codable, Sendable {
     public let sortOrder: Int?
     /// References BundledTestSetup.bundleID.
     public let testSetupBundleID: String
+    /// References BundledSection.bundleID; nil when assignment is ungrouped.
+    public let sectionBundleID: String?
 
     public init(bundleID: String, title: String, dueAt: Date?, isOpen: Bool,
-                sortOrder: Int?, testSetupBundleID: String) {
+                sortOrder: Int?, testSetupBundleID: String, sectionBundleID: String? = nil) {
         self.bundleID           = bundleID
         self.title              = title
         self.dueAt              = dueAt
         self.isOpen             = isOpen
         self.sortOrder          = sortOrder
         self.testSetupBundleID  = testSetupBundleID
+        self.sectionBundleID    = sectionBundleID
     }
 }
 

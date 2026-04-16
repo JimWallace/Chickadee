@@ -54,6 +54,11 @@ struct CourseBundleRoutes: RouteCollection {
             .filter(\.$courseID == courseUUID)
             .all()
 
+        let sections     = try await APICourseSection.query(on: req.db)
+            .filter(\.$courseID == courseUUID)
+            .sort(\.$sortOrder)
+            .all()
+
         let enrollments  = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseUUID)
             .all()
@@ -100,10 +105,11 @@ struct CourseBundleRoutes: RouteCollection {
 
         // ── 2. Assign bundleIDs ────────────────────────────────────────────
 
-        var userBundleIDByUUID:  [UUID:   String] = [:]
-        var setupBundleIDByID:   [String: String] = [:]
-        var assignBundleIDByID:  [UUID:   String] = [:]
-        var subBundleIDByID:     [String: String] = [:]
+        var userBundleIDByUUID:    [UUID:   String] = [:]
+        var setupBundleIDByID:     [String: String] = [:]
+        var assignBundleIDByID:    [UUID:   String] = [:]
+        var subBundleIDByID:       [String: String] = [:]
+        var sectionBundleIDByUUID: [UUID:   String] = [:]
 
         for (i, u) in allUsers.enumerated() {
             guard let uid = u.id else { continue }
@@ -120,6 +126,10 @@ struct CourseBundleRoutes: RouteCollection {
         for (i, s) in submissions.enumerated() {
             guard let sid = s.id else { continue }
             subBundleIDByID[sid] = "sub_\(i + 1)"
+        }
+        for (i, sec) in sections.enumerated() {
+            guard let secID = sec.id else { continue }
+            sectionBundleIDByUUID[secID] = "section_\(i + 1)"
         }
 
         // ── 3. Build manifest ──────────────────────────────────────────────
@@ -143,17 +153,29 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
+        let bundledSections = sections.compactMap { sec -> BundledSection? in
+            guard let secID = sec.id, let bid = sectionBundleIDByUUID[secID] else { return nil }
+            return BundledSection(
+                bundleID:           bid,
+                name:               sec.name,
+                defaultGradingMode: sec.defaultGradingMode,
+                sortOrder:          sec.sortOrder
+            )
+        }
+
         let bundledAssignments = assignments.compactMap { a -> BundledAssignment? in
             guard let aid = a.id, let bid = assignBundleIDByID[aid],
                   let setupBid = setupBundleIDByID[a.testSetupID]
             else { return nil }
+            let sectionBid = a.sectionID.flatMap { sectionBundleIDByUUID[$0] }
             return BundledAssignment(
                 bundleID:          bid,
                 title:             a.title,
                 dueAt:             a.dueAt,
                 isOpen:            a.isOpen,
                 sortOrder:         a.sortOrder,
-                testSetupBundleID: setupBid
+                testSetupBundleID: setupBid,
+                sectionBundleID:   sectionBid
             )
         }
 
@@ -192,6 +214,7 @@ struct CourseBundleRoutes: RouteCollection {
                                                enrollmentMode: course.enrollmentMode),
             users:                bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
+            sections:             bundledSections,
             assignments:          bundledAssignments,
             testSetups:           bundledSetups,
             submissions:          bundledSubmissions,
@@ -435,7 +458,20 @@ struct CourseBundleRoutes: RouteCollection {
                 }
             }
 
-            // 6e. Create test setups → setupIDMap[bundleID] = new live ID
+            // 6e. Create sections → sectionIDMap[bundleID] = new live UUID
+            var sectionIDMap: [String: UUID] = [:]
+            for bundledSection in manifest.sections ?? [] {
+                let newSection = APICourseSection(
+                    name:               bundledSection.name,
+                    defaultGradingMode: bundledSection.defaultGradingMode,
+                    sortOrder:          bundledSection.sortOrder,
+                    courseID:           t.courseID
+                )
+                try await newSection.save(on: db)
+                sectionIDMap[bundledSection.bundleID] = try newSection.requireID()
+            }
+
+            // 6f. Create test setups → setupIDMap[bundleID] = new live ID
             var setupIDMap: [String: String] = [:]
             for bundledSetup in manifest.testSetups {
                 let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
@@ -466,9 +502,10 @@ struct CourseBundleRoutes: RouteCollection {
                 t.testSetupsImported += 1
             }
 
-            // 6f. Create assignments
+            // 6g. Create assignments
             for bundledAssign in manifest.assignments {
                 guard let setupID = setupIDMap[bundledAssign.testSetupBundleID] else { continue }
+                let sectionID = bundledAssign.sectionBundleID.flatMap { sectionIDMap[$0] }
                 let newAssign = APIAssignment(
                     testSetupID:      setupID,
                     title:            bundledAssign.title,
@@ -476,13 +513,14 @@ struct CourseBundleRoutes: RouteCollection {
                     isOpen:           bundledAssign.isOpen,
                     sortOrder:        bundledAssign.sortOrder,
                     validationStatus: nil, // not imported — requires re-validation
+                    sectionID:        sectionID,
                     courseID:         t.courseID
                 )
                 try await newAssign.save(on: db)
                 t.assignmentsImported += 1
             }
 
-            // 6g. Create submissions → subIDMap[bundleID] = new live ID
+            // 6h. Create submissions → subIDMap[bundleID] = new live ID
             var subIDMap: [String: String] = [:]
             for bundledSub in manifest.submissions {
                 guard let setupID = setupIDMap[bundledSub.testSetupBundleID] else { continue }
@@ -511,7 +549,7 @@ struct CourseBundleRoutes: RouteCollection {
                 t.submissionsImported += 1
             }
 
-            // 6h. Create results
+            // 6i. Create results
             for bundledResult in manifest.results {
                 guard let subID = subIDMap[bundledResult.submissionBundleID] else { continue }
                 let newResultID = "res_\(UUID().uuidString.lowercased().prefix(8))"

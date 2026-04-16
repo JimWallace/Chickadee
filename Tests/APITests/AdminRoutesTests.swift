@@ -530,4 +530,128 @@ final class AdminRoutesTests: XCTestCase {
             XCTAssertFalse(body.contains(">Available<"))
         })
     }
+
+    // MARK: - POST /admin/courses/:courseID/copy
+
+    func testCourseCopySectionsArePreserved() async throws {
+        let cookie = try await loginAsAdmin()
+        let course = try await makeCourse(code: "CPSECT")
+        let courseID = try course.requireID()
+
+        // Two sections with distinct grading modes
+        let browserSec = APICourseSection(name: "Browser Labs", defaultGradingMode: "browser",
+                                          sortOrder: 1, courseID: courseID)
+        try await browserSec.save(on: app.db)
+        let workerSec = APICourseSection(name: "Worker Labs", defaultGradingMode: "worker",
+                                         sortOrder: 2, courseID: courseID)
+        try await workerSec.save(on: app.db)
+
+        let setup1 = try await makeSetup(id: "cpsect_s1", courseID: courseID, withNotebook: false)
+        let setup2 = try await makeSetup(id: "cpsect_s2", courseID: courseID, withNotebook: false)
+
+        let a1 = APIAssignment(testSetupID: setup1.id!, title: "Browser Lab",
+                               isOpen: false, sectionID: try browserSec.requireID(),
+                               courseID: courseID)
+        try await a1.save(on: app.db)
+        let a2 = APIAssignment(testSetupID: setup2.id!, title: "Worker Lab",
+                               isOpen: false, sectionID: try workerSec.requireID(),
+                               courseID: courseID)
+        try await a2.save(on: app.db)
+
+        let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+        try await app.asyncTest(.POST, "/admin/courses/\(courseID.uuidString)/copy",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: boundCookie)
+                try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            }
+        )
+
+        guard let copied = try await APICourse.query(on: app.db)
+            .filter(\.$code == "CPSECT-COPY").first()
+        else { XCTFail("Copied course not found"); return }
+        let copiedID = try copied.requireID()
+
+        // Sections should be recreated with matching names and modes
+        let copiedSections = try await APICourseSection.query(on: app.db)
+            .filter(\.$courseID == copiedID)
+            .sort(\.$sortOrder)
+            .all()
+        XCTAssertEqual(copiedSections.count, 2, "Copy should have 2 sections")
+        XCTAssertEqual(copiedSections.first?.name, "Browser Labs")
+        XCTAssertEqual(copiedSections.first?.defaultGradingMode, "browser")
+        XCTAssertEqual(copiedSections.last?.name, "Worker Labs")
+        XCTAssertEqual(copiedSections.last?.defaultGradingMode, "worker")
+
+        // Every copied assignment should be placed in a section, not ungrouped
+        let copiedAssignments = try await APIAssignment.query(on: app.db)
+            .filter(\.$courseID == copiedID)
+            .all()
+        XCTAssertEqual(copiedAssignments.count, 2)
+        XCTAssertTrue(copiedAssignments.allSatisfy { $0.sectionID != nil },
+                      "All copied assignments should have a sectionID")
+
+        // Each assignment should land in the correct new section
+        let copiedBrowserSec = copiedSections.first(where: { $0.defaultGradingMode == "browser" })
+        let copiedWorkerSec  = copiedSections.first(where: { $0.defaultGradingMode == "worker" })
+        XCTAssertEqual(
+            copiedAssignments.first(where: { $0.title == "Browser Lab" })?.sectionID,
+            try copiedBrowserSec?.requireID()
+        )
+        XCTAssertEqual(
+            copiedAssignments.first(where: { $0.title == "Worker Lab" })?.sectionID,
+            try copiedWorkerSec?.requireID()
+        )
+    }
+
+    func testCourseCopyNotebookPathIsPreserved() async throws {
+        let cookie = try await loginAsAdmin()
+        let course = try await makeCourse(code: "CPNB")
+        let courseID = try course.requireID()
+
+        // Store notebook in the new-style subdirectory (notebooks/<id>/filename.ipynb),
+        // not the legacy flat path — this was the path the old copy code couldn't find.
+        let setupID = "cpnb_s1"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
+        let nbDir   = app.testSetupsDirectory + "notebooks/\(setupID)/"
+        let nbPath  = nbDir + "assignment.ipynb"
+        try FileManager.default.createDirectory(atPath: nbDir, withIntermediateDirectories: true)
+        try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
+            .write(to: URL(fileURLWithPath: zipPath))
+        try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+            .write(to: URL(fileURLWithPath: nbPath), atomically: true, encoding: .utf8)
+
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+        """
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath,
+                                 notebookPath: nbPath, courseID: courseID)
+        try await setup.save(on: app.db)
+        try await makeAssignment(testSetupID: setupID, courseID: courseID)
+
+        let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+        try await app.asyncTest(.POST, "/admin/courses/\(courseID.uuidString)/copy",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: boundCookie)
+                try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            }
+        )
+
+        guard let copied = try await APICourse.query(on: app.db)
+            .filter(\.$code == "CPNB-COPY").first()
+        else { XCTFail("Copied course not found"); return }
+
+        let copiedSetup = try await APITestSetup.query(on: app.db)
+            .filter(\.$courseID == try copied.requireID())
+            .first()
+        XCTAssertNotNil(copiedSetup?.notebookPath,
+                        "Copied setup should have a notebookPath set")
+        if let path = copiedSetup?.notebookPath {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: path),
+                          "Notebook file should exist on disk at the copied path")
+        }
+    }
 }
