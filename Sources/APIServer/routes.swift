@@ -36,6 +36,8 @@ func routes(_ app: Application) throws {
     // TestSetupRoutes is in the auth group so students can fetch/download notebooks.
     // Instructor-only handlers (upload, zip-download, save) guard themselves inline.
     try auth.register(collection: TestSetupRoutes())
+    // Registered last so fixed-path routes always take precedence.
+    try auth.register(collection: VanityURLRoutes())
 
     // MARK: - Instructor or admin only
 
