@@ -215,33 +215,62 @@
                         </form>
                     </details>
                     #elseif(row.status == "closed"):
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                        <button class="btn action-btn" type="button"
+                                title="Copy student link" aria-label="Copy student link"
+                                style="padding:.3rem .45rem"
+                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                           style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
-                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                                    aria-label="Delete assignment" title="Delete assignment"
+                                    style="padding:.3rem .45rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
                         </form>
                     </div>
                     #elseif(row.status == "open"):
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                        <button class="btn action-btn" type="button"
+                                title="Copy student link" aria-label="Copy student link"
+                                style="padding:.3rem .45rem"
+                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                           style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
-                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                                    aria-label="Delete assignment" title="Delete assignment"
+                                    style="padding:.3rem .45rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
                         </form>
                     </div>
                     #else:
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
-                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                                    aria-label="Delete assignment" title="Delete assignment"
+                                    style="padding:.3rem .45rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
                         </form>
                     </div>
                     #endif
@@ -366,30 +395,59 @@
                         </form>
                     </details>
                     #elseif(row.status == "closed"):
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                        <button class="btn action-btn" type="button"
+                                title="Copy student link" aria-label="Copy student link"
+                                style="padding:.3rem .45rem"
+                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                           style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
-                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                                    aria-label="Delete assignment" title="Delete assignment"
+                                    style="padding:.3rem .45rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
                         </form>
                     </div>
                     #elseif(row.status == "open"):
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit">Edit</a>
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                        <button class="btn action-btn" type="button"
+                                title="Copy student link" aria-label="Copy student link"
+                                style="padding:.3rem .45rem"
+                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                           style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
-                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                                    aria-label="Delete assignment" title="Delete assignment"
+                                    style="padding:.3rem .45rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
                         </form>
                     </div>
                     #else:
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
-                                    aria-label="Delete assignment" title="Delete assignment">Delete</button>
+                                    aria-label="Delete assignment" title="Delete assignment"
+                                    style="padding:.3rem .45rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
                         </form>
                     </div>
                     #endif
@@ -964,6 +1022,16 @@ tr.assignment-draggable td {
         }
     }
 })();
+
+function copyAssignmentURL(btn, setupID) {
+    var url = window.location.origin + '/testsetups/' + setupID + '/submit';
+    navigator.clipboard.writeText(url).then(function () {
+        var prev = btn.title;
+        btn.title = 'Copied!';
+        btn.style.color = 'var(--green)';
+        setTimeout(function () { btn.title = prev; btn.style.color = ''; }, 2000);
+    });
+}
 </script>
 #endexport
 #endextend
