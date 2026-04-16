@@ -593,16 +593,18 @@ final class AdminRoutesTests: XCTestCase {
                       "All copied assignments should have a sectionID")
 
         // Each assignment should land in the correct new section
-        let copiedBrowserSec = copiedSections.first(where: { $0.defaultGradingMode == "browser" })
-        let copiedWorkerSec  = copiedSections.first(where: { $0.defaultGradingMode == "worker" })
-        XCTAssertEqual(
-            copiedAssignments.first(where: { $0.title == "Browser Lab" })?.sectionID,
-            try copiedBrowserSec?.requireID()
-        )
-        XCTAssertEqual(
-            copiedAssignments.first(where: { $0.title == "Worker Lab" })?.sectionID,
-            try copiedWorkerSec?.requireID()
-        )
+        if let copiedBrowserSec = copiedSections.first(where: { $0.defaultGradingMode == "browser" }),
+           let browserLab = copiedAssignments.first(where: { $0.title == "Browser Lab" }) {
+            XCTAssertEqual(browserLab.sectionID, try copiedBrowserSec.requireID())
+        } else {
+            XCTFail("Missing browser section or Browser Lab assignment in copied course")
+        }
+        if let copiedWorkerSec = copiedSections.first(where: { $0.defaultGradingMode == "worker" }),
+           let workerLab = copiedAssignments.first(where: { $0.title == "Worker Lab" }) {
+            XCTAssertEqual(workerLab.sectionID, try copiedWorkerSec.requireID())
+        } else {
+            XCTFail("Missing worker section or Worker Lab assignment in copied course")
+        }
     }
 
     func testCourseCopyNotebookPathIsPreserved() async throws {
@@ -643,9 +645,10 @@ final class AdminRoutesTests: XCTestCase {
         guard let copied = try await APICourse.query(on: app.db)
             .filter(\.$code == "CPNB-COPY").first()
         else { XCTFail("Copied course not found"); return }
+        let copiedCourseID = try copied.requireID()
 
         let copiedSetup = try await APITestSetup.query(on: app.db)
-            .filter(\.$courseID == try copied.requireID())
+            .filter(\.$courseID == copiedCourseID)
             .first()
         XCTAssertNotNil(copiedSetup?.notebookPath,
                         "Copied setup should have a notebookPath set")
