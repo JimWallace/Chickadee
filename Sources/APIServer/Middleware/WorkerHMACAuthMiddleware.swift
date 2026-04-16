@@ -69,14 +69,25 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             throw Abort(.unauthorized, reason: "Invalid worker signature.")
         }
 
-        if let workerID, !workerID.isEmpty {
-            // Pass hostname: "" here — the middleware doesn't have access to the
-            // request body, so we preserve whatever hostname was set by the
-            // job-request body handler rather than clobbering it with empty string.
+        let response = try await next.respond(to: request)
+
+        // Update last-seen AFTER the handler responds so that a 409 conflict
+        // response does NOT refresh lastSeen.  If we updated before the handler,
+        // the conflict TTL would be reset on every poll attempt and would never
+        // expire, permanently locking out a runner whose container hostname
+        // changed on restart (e.g. docker compose down/up with a fixed
+        // RUNNER_WORKER_ID).  Skipping the touch on 409 lets lastSeen go stale
+        // naturally so the TTL expires and the runner can re-register with its
+        // new hostname and updated version.
+        //
+        // Pass hostname: "" — the middleware has no access to the request body,
+        // so we preserve whatever hostname the handler already wrote rather than
+        // clobbering it with an empty string.
+        if let workerID, !workerID.isEmpty, response.status != .conflict {
             await request.application.workerActivityStore.markActive(workerID: workerID, hostname: "")
         }
 
-        return try await next.respond(to: request)
+        return response
     }
 }
 
