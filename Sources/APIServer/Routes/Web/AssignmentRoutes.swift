@@ -64,6 +64,7 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "create-solution", use: createSolutionFromAssignment)
 
         // Script editor — inline CRUD for individual test/support files in the setup zip.
+        r.get("script-templates", use: getScriptTemplates)
         r.post("scan-notebook", use: scanNotebook)
         r.get(":assignmentID",  "scripts", ":filename", use: getScript)
         r.put(":assignmentID",  "scripts", ":filename", use: updateScript)
@@ -785,25 +786,13 @@ struct AssignmentRoutes: RouteCollection {
 
         saveDraftFormState(req: req, draftID: setup.id!, state: formState)
 
-        let notice = switch action {
-        case "create-assignment-notebook": "Assignment notebook draft created"
-        case "upload-assignment-notebook": "Assignment notebook saved to draft"
-        case "clear-assignment-notebook": "Assignment notebook cleared"
-        case "create-solution-notebook": "Solution notebook draft created"
-        case "upload-solution-notebook": "Solution notebook saved to draft"
-        case "clear-solution-notebook": "Solution notebook cleared"
-        case "replace-suite-files": "Suite files saved to draft"
-        case "clear-suite-files": "Suite files cleared"
-        default: "Draft updated"
-        }
-
         return redirectToNewAssignmentDraft(
             req: req,
             draftID: setup.id!,
             assignmentName: assignmentName,
             dueAt: dueAt,
             sectionID: sectionIDRaw,
-            notice: notice,
+            notice: nil,
             error: nil
         )
     }

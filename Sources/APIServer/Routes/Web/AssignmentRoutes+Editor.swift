@@ -492,6 +492,23 @@ extension AssignmentRoutes {
         return .noContent
     }
 
+    // MARK: - GET /instructor/script-templates
+    //
+    // Returns a JSON dict of generic (non-function-specific) script templates
+    // keyed by the same identifiers used in the template <select> dropdown.
+
+    @Sendable
+    func getScriptTemplates(req: Request) async throws -> Response {
+        var templates: [String: String] = [:]
+        for type in PythonTestTemplateType.allCases {
+            templates["py:\(type.rawValue)"] = pythonTestScript(type: type)
+        }
+        for type in ShellTestTemplateType.allCases {
+            templates["sh:\(type.rawValue)"] = shellTestScript(type: type)
+        }
+        return try await templates.encodeResponse(for: req)
+    }
+
     // MARK: - POST /instructor/scan-notebook
     //
     // Scans a solution notebook for Python function definitions and returns
