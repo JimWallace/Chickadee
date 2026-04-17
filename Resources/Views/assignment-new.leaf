@@ -667,7 +667,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             // After a draft save the solution file input is empty; fetch from draft
             #if(solutionNotebook):
             if (!solInput || solInput.files.length === 0) {
-                fetch('/instructor/new/draft/solution-notebook', { headers: { 'x-csrf-token': csrfToken } })
+                fetch('/instructor/new/draft/solution-notebook?draftID=#(draftID)', { headers: { 'x-csrf-token': csrfToken } })
                     .then(function (r) { return r.ok ? r.text() : Promise.reject(r.statusText); })
                     .then(function (text) { runScan(text); })
                     .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });

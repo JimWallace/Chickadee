@@ -43,6 +43,7 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.get("new", use: newAssignmentPage)
         r.post("new", "draft", use: updateNewAssignmentDraft)
+        r.get("new", "draft", "solution-notebook", use: draftSolutionNotebook)
         r.post("new", "save", use: saveNewAssignment)
         r.post("reorder", use: reorderAssignments)
         r.post("sections", use: createSection)
