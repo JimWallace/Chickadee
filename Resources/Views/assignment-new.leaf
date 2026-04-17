@@ -600,7 +600,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             inp.value = draftActionValue;
             form.appendChild(inp);
             form.action = '/instructor/new/draft';
-            form.submit();
+            form.requestSubmit();
         });
     }
     wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'upload-assignment-notebook');
