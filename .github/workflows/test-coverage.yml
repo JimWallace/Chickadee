@@ -30,7 +30,12 @@ jobs:
           restore-keys: ${{ runner.os }}-spm-
 
       - name: Install system dependencies
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file
+        run: |
+          for i in 1 2 3; do
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file && break
+            echo "apt-get failed (attempt $i), retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run tests with coverage
         run: swift test --enable-code-coverage

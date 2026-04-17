@@ -52,7 +52,12 @@ jobs:
           restore-keys: ${{ runner.os }}-spm-
 
       - name: Install system test dependencies
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
+        run: |
+          for i in 1 2 3; do
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip && break
+            echo "apt-get failed (attempt $i), retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run APITests
         run: swift test --filter APITests
@@ -99,7 +104,12 @@ jobs:
           restore-keys: ${{ runner.os }}-spm-
 
       - name: Install system test dependencies
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip
+        run: |
+          for i in 1 2 3; do
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip && break
+            echo "apt-get failed (attempt $i), retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run APITests against PostgreSQL
         run: swift test --filter APITests
