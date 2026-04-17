@@ -36,6 +36,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.get("users", ":userID", use: userDetail)
+        admin.post("users", ":userID", "identity", use: updateUserIdentity)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)
         admin.post("users", ":userID", "unenroll", ":courseID", use: adminUnenrollUser)
     }
@@ -394,9 +395,51 @@ struct AdminRoutes: RouteCollection {
             displayName:      user.displayName,
             username:         user.username,
             role:             user.role,
+            authProvider:     user.authProvider    ?? "",
+            externalSubject:  user.externalSubject ?? "",
+            userIdentifier:   user.userIdentifier  ?? "",
+            studentID:        user.studentID       ?? "",
+            email:            user.email           ?? "",
             enrolledCourses:  enrolledRows,
             availableCourses: availableRows
         ))
+    }
+
+    // MARK: - POST /admin/users/:userID/identity
+
+    @Sendable
+    func updateUserIdentity(req: Request) async throws -> Response {
+        struct IdentityBody: Content {
+            var externalSubject: String?
+            var userIdentifier: String?
+            var studentID: String?
+            var email: String?
+        }
+
+        guard
+            let idString = req.parameters.get("userID"),
+            let uuid     = UUID(uuidString: idString),
+            let user     = try await APIUser.find(uuid, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let body = try req.content.decode(IdentityBody.self)
+
+        let sub = (body.externalSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        user.externalSubject = sub.isEmpty ? nil : sub
+
+        let uid = (body.userIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        user.userIdentifier = uid.isEmpty ? nil : uid
+
+        let sid = (body.studentID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        user.studentID = sid.isEmpty ? nil : sid
+
+        let em = (body.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        user.email = em.isEmpty ? nil : em
+
+        try await user.save(on: req.db)
+        return req.redirect(to: "/admin/users/\(idString)")
     }
 
 }
