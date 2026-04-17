@@ -586,19 +586,29 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     }
     filesInput.addEventListener('change', addUploadedFiles);
 
-    // Notebook upload buttons: open picker, auto-submit draft action on selection
-    function wireNotebookUpload(btnID, inputID, draftBtnID) {
+    // Notebook upload buttons: open picker, submit to draft endpoint on selection.
+    // Uses explicit form.action override instead of formaction on hidden buttons to
+    // avoid browser inconsistencies with programmatic clicks on hidden submit elements.
+    function wireNotebookUpload(btnID, inputID, draftActionValue) {
         var btn       = document.getElementById(btnID);
         var fileInput = document.getElementById(inputID);
-        var draftBtn  = document.getElementById(draftBtnID);
-        if (!btn || !fileInput || !draftBtn) return;
+        if (!btn || !fileInput) return;
         btn.addEventListener('click', function () { fileInput.value = ''; fileInput.click(); });
         fileInput.addEventListener('change', function () {
-            if (fileInput.files.length > 0) draftBtn.click();
+            if (fileInput.files.length === 0) return;
+            syncConfig();
+            var form = document.getElementById('new-assignment-form');
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'draftAction';
+            inp.value = draftActionValue;
+            form.appendChild(inp);
+            form.action = '/instructor/new/draft';
+            form.submit();
         });
     }
-    wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'js-upload-assignment-notebook');
-    wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'js-upload-solution-notebook');
+    wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'upload-assignment-notebook');
+    wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'upload-solution-notebook');
 
     // Solution file selection shows Generate Tests panel
     var solutionFileInput = document.getElementById('solution-notebook-file-input');
