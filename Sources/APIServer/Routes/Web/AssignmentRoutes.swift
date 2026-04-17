@@ -31,6 +31,7 @@ struct AssignmentRoutes: RouteCollection {
         // Course-scoped instructor actions (not under the /instructor prefix).
         routes.post("courses", ":courseID", "enrollment-mode", use: setCourseEnrollmentMode)
         routes.post("courses", ":courseID", "enroll-csv",      use: instructorBulkEnrollCSV)
+        routes.post("courses", ":courseID", "unenroll", ":userID", use: instructorUnenrollUser)
 
         let r = routes.grouped("instructor")
         r.get(use: list)
