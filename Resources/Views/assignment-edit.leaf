@@ -91,7 +91,11 @@
                         #if(solutionNotebookEditURL):
                         <a class="btn action-btn" id="solution-notebook-edit-btn" href="#(solutionNotebookEditURL)">Edit</a>
                         #else:
-                        <span class="card-meta">—</span>
+                        <form method="post" action="/instructor/#(assignmentID)/create-solution" style="margin:0">
+                            #csrfFormField()
+                            <button class="btn action-btn" type="submit"
+                                    title="Copy the assignment notebook as a starting point for the solution">Create solution</button>
+                        </form>
                         #endif
                     </td>
                 </tr>

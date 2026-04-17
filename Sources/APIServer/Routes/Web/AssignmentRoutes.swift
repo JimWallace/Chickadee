@@ -61,6 +61,7 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "open",    use: openAssignment)
         r.post(":assignmentID", "close",   use: closeAssignment)
         r.post(":assignmentID", "delete",  use: deleteAssignment)
+        r.post(":assignmentID", "create-solution", use: createSolutionFromAssignment)
 
         // Script editor — inline CRUD for individual test/support files in the setup zip.
         r.post("scan-notebook", use: scanNotebook)
@@ -1422,8 +1423,11 @@ struct AssignmentRoutes: RouteCollection {
             var notice: String?
         }
         let q = try? req.query.decode(EditQuery.self)
+        let draftSolutionPath = draftSolutionNotebookPath(
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
         let hasKnownSolution = assignment.validationStatus == "passed"
             || assignment.validationSubmissionID != nil
+            || FileManager.default.fileExists(atPath: draftSolutionPath)
         let currentFiles = currentSetupFiles(
             for: setup,
             assignmentID: idStr,
