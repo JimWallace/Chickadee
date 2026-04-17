@@ -492,6 +492,50 @@ extension AssignmentRoutes {
         return .noContent
     }
 
+    // MARK: - GET /instructor/new/draft/solution-notebook
+    //
+    // Returns the draft solution notebook JSON so the scan-for-functions flow
+    // works after an upload round-trip (file input is empty on reload).
+
+    @Sendable
+    func draftSolutionNotebook(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor, let userID = user.id else { throw Abort(.forbidden) }
+
+        guard let draftID = try? req.query.get(String.self, at: "draftID"),
+              !draftID.isEmpty,
+              let setup = try await APITestSetup.find(draftID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        let fallbackPath = draftSolutionNotebookPath(
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+        guard let data = draftNotebookData(
+            req: req, setupID: setup.id!, userID: userID,
+            fileKind: .solution, fallbackPath: fallbackPath)
+        else { throw Abort(.notFound) }
+
+        return Response(status: .ok,
+                        headers: ["Content-Type": "application/json"],
+                        body: .init(data: data))
+    }
+
+    // MARK: - GET /instructor/script-templates
+    //
+    // Returns a JSON dict of generic (non-function-specific) script templates
+    // keyed by the same identifiers used in the template <select> dropdown.
+
+    @Sendable
+    func getScriptTemplates(req: Request) async throws -> Response {
+        var templates: [String: String] = [:]
+        for type in PythonTestTemplateType.allCases {
+            templates["py:\(type.rawValue)"] = pythonTestScript(type: type)
+        }
+        for type in ShellTestTemplateType.allCases {
+            templates["sh:\(type.rawValue)"] = shellTestScript(type: type)
+        }
+        return try await templates.encodeResponse(for: req)
+    }
+
     // MARK: - POST /instructor/scan-notebook
     //
     // Scans a solution notebook for Python function definitions and returns

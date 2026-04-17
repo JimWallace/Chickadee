@@ -57,6 +57,7 @@ struct ResultRoutes: RouteCollection {
             // so the instructor sees pass/fail without needing to poll.
             if submission.kind == APISubmission.Kind.validation {
                 let passed = collection.buildStatus == .passed
+                    && collection.totalTests > 0
                     && collection.failCount == 0
                     && collection.errorCount == 0
                     && collection.timeoutCount == 0
