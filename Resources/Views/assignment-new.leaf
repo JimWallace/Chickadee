@@ -233,10 +233,6 @@ Create Assignment
         </label>
     </div>
 
-    <p class="card-meta" style="margin-bottom:.75rem">
-        The uploaded solution is validated immediately by a runner. The assignment stays closed until validation passes.
-        Once it passes, open it from the Instructor dashboard.
-    </p>
 </form>
 
 <!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
