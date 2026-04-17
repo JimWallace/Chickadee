@@ -4,7 +4,6 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
 #endexport
 #export("content"):
 <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem">
-    <a href="/admin" class="btn">← Admin</a>
     <h1 style="margin:0">
         #if(displayName):#(displayName)#else:#(username)#endif — Courses
     </h1>
