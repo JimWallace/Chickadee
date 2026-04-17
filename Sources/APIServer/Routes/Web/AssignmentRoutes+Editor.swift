@@ -211,6 +211,13 @@ extension AssignmentRoutes {
             resolvedSolutionNotebookRaw = existingSolution.data
             solutionFilename = existingSolution.filename
         }
+        if resolvedSolutionNotebookRaw.isEmpty, let userID = user.id,
+           let draftData = draftNotebookData(
+               req: req, setupID: setup.id!, userID: userID, fileKind: .solution,
+               fallbackPath: draftSolutionNotebookPath(
+                   testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)) {
+            resolvedSolutionNotebookRaw = draftData
+        }
         guard !resolvedSolutionNotebookRaw.isEmpty else {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
@@ -529,6 +536,38 @@ extension AssignmentRoutes {
         }
 
         return try await results.encodeResponse(for: req)
+    }
+
+    // MARK: - POST /instructor/:assignmentID/create-solution
+
+    @Sendable
+    func createSolutionFromAssignment(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard user.isInstructor, let userID = user.id else { throw Abort(.forbidden) }
+
+        let idStr = try assignmentPublicIDParameter(from: req)
+        guard
+            let assignment = try await assignmentByPublicID(idStr, on: req.db),
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        let sourceData = (try? notebookData(for: setup))
+            ?? defaultNotebookData(title: "\(assignment.title) Solution")
+        let normalized = normalizeNotebookForJupyterLite(sourceData)
+
+        let draftPath = draftSolutionNotebookPath(
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+        _ = try ensureDraftNotebookDirectory(
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+        try normalized.write(to: URL(fileURLWithPath: draftPath))
+
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req, setupID: setup.id!, userID: userID, fallbackSetup: setup,
+            relativePath: userNotebookWorkingCopyRelativePath(
+                setupID: setup.id!, userID: userID, fileKind: .solution),
+            overwriteWith: normalized)
+
+        return req.redirect(to: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")
     }
 }
 
