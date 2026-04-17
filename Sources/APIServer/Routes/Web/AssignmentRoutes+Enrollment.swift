@@ -118,4 +118,28 @@ extension AssignmentRoutes {
             returnURL:            "/instructor"
         ))
     }
+
+    // MARK: - POST /courses/:courseID/unenroll/:userID
+
+    @Sendable
+    func instructorUnenrollUser(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
+        guard caller.isInstructor else { throw Abort(.forbidden) }
+
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID       = UUID(uuidString: courseIDString),
+            let userIDString   = req.parameters.get("userID"),
+            let userID         = UUID(uuidString: userIDString)
+        else {
+            throw Abort(.badRequest)
+        }
+
+        try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID == userID)
+            .delete()
+
+        return req.redirect(to: "/instructor")
+    }
 }

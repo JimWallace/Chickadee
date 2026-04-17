@@ -437,6 +437,7 @@
                 <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇕</span></th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -448,6 +449,18 @@
                 <td class="js-relative-time"
                     #if(student.lastLoginAtISO):data-iso="#(student.lastLoginAtISO)"#endif>
                     #(student.lastLoginAtText)
+                </td>
+                <td>
+                    #if(!courseIsArchived):
+                    #if(currentUser.activeCourse):
+                    <form method="post" action="/courses/#(currentUser.activeCourse.id)/unenroll/#(student.id)"
+                          style="display:inline;margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                onclick="return confirm('Remove @#(student.username) from this course?')">Remove</button>
+                    </form>
+                    #endif
+                    #endif
                 </td>
             </tr>
         #endfor
