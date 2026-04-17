@@ -14,6 +14,40 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
 </p>
 
 <section class="admin-section">
+    <h2>Identity</h2>
+    #if(authProvider):
+    <p class="card-meta" style="margin-bottom:.75rem">Auth provider: <code>#(authProvider)</code></p>
+    #endif
+    <form method="post" action="/admin/users/#(targetUserID)/identity" style="max-width:540px">
+        #csrfFormField()
+        <div style="display:grid;gap:.75rem">
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.875rem">
+                SSO Subject
+                <input class="form-input" type="text" name="externalSubject"
+                       value="#(externalSubject)" placeholder="— not set —"
+                       style="font-family:monospace;font-size:.85rem">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.875rem">
+                User ID
+                <input class="form-input" type="text" name="userIdentifier"
+                       value="#(userIdentifier)" placeholder="— not set —">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.875rem">
+                Student ID
+                <input class="form-input" type="text" name="studentID"
+                       value="#(studentID)" placeholder="— not set —">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.875rem">
+                Email
+                <input class="form-input" type="email" name="email"
+                       value="#(email)" placeholder="— not set —">
+            </label>
+        </div>
+        <button class="btn btn-primary" type="submit" style="margin-top:.75rem">Save</button>
+    </form>
+</section>
+
+<section class="admin-section">
     <h2>Enrolled courses</h2>
     #if(enrolledCourses.isEmpty):
     <p class="empty">Not enrolled in any courses.</p>
