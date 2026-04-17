@@ -99,11 +99,6 @@ struct AdminUserDetailContext: Encodable {
     let displayName: String?
     let username: String
     let role: String
-    let authProvider: String
-    let externalSubject: String
-    let userIdentifier: String
-    let studentID: String
-    let email: String
     let enrolledCourses: [AdminUserCourseRow]
     let availableCourses: [AdminUserCourseRow]
 }
