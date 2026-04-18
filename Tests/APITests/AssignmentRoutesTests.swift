@@ -1159,4 +1159,180 @@ final class AssignmentRoutesTests: XCTestCase {
             XCTAssertTrue(body.contains(expectedClock), "Expected clock '\(expectedClock)' in body: \(body)")
         })
     }
+
+    // MARK: - Regression tests: assignment creation bug fixes
+
+    /// Bug #2 regression: browser posts suiteFiles with "suiteFiles[]" field name and includes extra
+    /// JSON fields in suiteConfig (source, isIncluded, dependsOn: [], displayName: null) that the
+    /// server must ignore. Files must land in the zip, the manifest must list them correctly, and
+    /// a validation job must be queued when at least one test suite entry is present.
+    func testSaveNewAssignmentWithBrowserFormatSuiteFilesAndFieldName() async throws {
+        _ = try await makeTestCourseID()
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
+
+        // Register an active runner so the validation-runner gate passes.
+        let now = Date()
+        let runnerProfile = RunnerProfile()
+        runnerProfile.runnerID = "runner-browser-fmt"
+        runnerProfile.displayName = "Runner Browser Format"
+        runnerProfile.platform = "linux"
+        runnerProfile.architecture = "x86_64"
+        runnerProfile.languageVersionsJSON = "[]"
+        runnerProfile.capabilitiesJSON = "[]"
+        runnerProfile.profileHash = nil
+        runnerProfile.lastRegisteredAt = now
+        runnerProfile.lastSeenAt = now
+        runnerProfile.isActive = true
+        try await runnerProfile.save(on: app.db)
+
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        let boundary = "Boundary-BrowserFmt"
+        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+
+        // Exact JSON that syncConfig() produces in assignment-new.leaf:
+        // extra fields (source, isIncluded) must be silently ignored by SuiteConfigRow.
+        let suiteConfig = """
+        [
+          {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null,"index":0},
+          {"source":"upload","isIncluded":true,"isTest":false,"tier":"support","order":2,"dependsOn":[],"points":1,"displayName":null,"index":1}
+        ]
+        """
+
+        var body = ByteBufferAllocator().buffer(capacity: 4096)
+        func field(_ name: String, _ value: String) {
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.writeString(value + "\r\n")
+        }
+        func file(_ name: String, filename: String, contentType: String, content: String) {
+            body.writeString("--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
+            body.writeString("Content-Type: \(contentType)\r\n\r\n")
+            body.writeString(content + "\r\n")
+        }
+        field("_csrf", csrf)
+        field("assignmentName", "Browser Format Lab")
+        file("assignmentNotebookFile", filename: "assignment.ipynb", contentType: "application/json", content: notebook)
+        file("solutionNotebookFile",   filename: "solution.ipynb",   contentType: "application/json", content: notebook)
+        // "suiteFiles[]" with brackets — exact field name sent by the browser's FormData API.
+        file("suiteFiles[]", filename: "test_bmi.py", contentType: "text/plain", content: "print('test bmi')")
+        file("suiteFiles[]", filename: "helpers.py",  contentType: "text/plain", content: "# helpers")
+        field("suiteConfig", suiteConfig)
+        body.writeString("--\(boundary)--\r\n")
+
+        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart", subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: body)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db)
+            .filter(\.$title == "Browser Format Lab")
+            .first()
+        let setupID = try XCTUnwrap(assignment?.testSetupID)
+        let setup   = try await APITestSetup.find(setupID, on: app.db)
+
+        // Manifest: test_bmi.py (isTest:true, tier:public) → 1 suite entry; helpers.py → support, not listed.
+        let props = try JSONDecoder().decode(
+            TestProperties.self,
+            from: try XCTUnwrap(setup?.manifest.data(using: .utf8))
+        )
+        XCTAssertEqual(props.testSuites.map(\.script), ["test_bmi.py"],
+                       "test_bmi.py must be the only test suite entry in manifest")
+
+        // Both files must be present in the zip (support files are stored even if not in manifest).
+        let zipEntries = Set(listZipEntries(zipPath: try XCTUnwrap(setup?.zipPath)))
+        XCTAssertTrue(zipEntries.contains("test_bmi.py"), "test_bmi.py missing from zip; entries: \(zipEntries)")
+        XCTAssertTrue(zipEntries.contains("helpers.py"),  "helpers.py missing from zip; entries: \(zipEntries)")
+
+        // Validation job must have been queued (Bug #2: was never queued when DataTransfer files
+        // were absent from FormData, causing testSuites to be empty and shouldQueueValidation=false).
+        XCTAssertEqual(assignment?.validationStatus, "pending")
+        XCTAssertNotNil(assignment?.validationSubmissionID,
+                        "validationSubmissionID must be set when suite files are present")
+    }
+
+    /// Bug #1 regression: the new assignment page must include JavaScript for the edit button
+    /// on uploaded suite file rows so instructors can view/edit script content before saving.
+    func testNewAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(.GET, "/instructor/new", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            // The rowHTML JS function must contain the edit-button class that opens the CodeMirror editor.
+            XCTAssertTrue(html.contains("suite-edit-upload-btn"),
+                          "New assignment page must contain suite-edit-upload-btn in rowHTML JS")
+        })
+    }
+
+    /// Bug #1 regression: the edit assignment page must include JavaScript for the edit button
+    /// on newly uploaded (not-yet-saved) suite file rows.
+    func testEditAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
+        let courseID = try await makeTestCourseID()
+        let cookie   = try await loginAsInstructor()
+        let setupID  = "setup_edit_upload_btn_reg"
+        let zipPath  = tmpDir + "testsetups/\(setupID).zip"
+        try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+        let setup = APITestSetup(
+            id: setupID, manifest: manifest, zipPath: zipPath,
+            notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb",
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+        let assignment = APIAssignment(
+            publicID: "RGRN01", testSetupID: setupID, title: "Edit Btn Regression",
+            dueAt: nil, isOpen: false, courseID: courseID
+        )
+        try await assignment.save(on: app.db)
+
+        try await app.asyncTest(.GET, "/instructor/RGRN01/edit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            // The rowHTML JS function for new (uploaded) items must contain the edit-button class.
+            XCTAssertTrue(html.contains("suite-edit-upload-btn"),
+                          "Edit assignment page must contain suite-edit-upload-btn for newly uploaded suite items")
+        })
+    }
+
+    /// Bug #3 regression: GET /instructor/script-templates must return a non-empty JSON dict
+    /// with keys for both Python and shell template types. The edit page's fetchTemplates()
+    /// now calls this endpoint (was previously broken, returning null).
+    func testScriptTemplatesEndpointReturnsTemplatesForAllTypes() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(.GET, "/instructor/script-templates", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let json = try JSONDecoder().decode([String: String].self, from: Data(res.body.readableBytesView))
+            // Must include at least one Python template and one shell template.
+            XCTAssertTrue(json.keys.contains(where: { $0.hasPrefix("py:") }),
+                          "Expected at least one py: key in script templates, got: \(json.keys.sorted())")
+            XCTAssertTrue(json.keys.contains(where: { $0.hasPrefix("sh:") }),
+                          "Expected at least one sh: key in script templates, got: \(json.keys.sorted())")
+            // Values must be non-empty script content.
+            for (key, content) in json {
+                XCTAssertFalse(content.isEmpty, "Template '\(key)' must have non-empty content")
+            }
+        })
+    }
 }

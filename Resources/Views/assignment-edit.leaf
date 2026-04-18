@@ -397,7 +397,10 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             + '</select></td>'
             + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
-            +   (isNew ? '' : '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.name) + '" title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>')
+            +   (isNew
+                    ? '<button class="btn action-btn suite-edit-upload-btn" type="button" data-name="' + escAttr(item.name) + '" title="View/Edit script" aria-label="View/Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
+                    : '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.name) + '" title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
+                )
             +   '<button class="btn action-btn action-danger suite-delete-btn" type="button" title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
             + '</div></td>'
             + '</tr>';
@@ -710,6 +713,7 @@ const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).cont
 let view = null;
 let currentFilename = null;  // null when creating a new file
 let isCreating = false;
+let isEditingUpload = false;  // true when editing a not-yet-saved upload item
 
 function initView(content, filename) {
     if (view) { view.destroy(); view = null; }
@@ -747,6 +751,24 @@ function openCreator() {
 function closeEditor() {
     overlay.style.display = 'none';
     if (view) { view.destroy(); view = null; }
+    isEditingUpload = false;
+    if (newNameInput) newNameInput.disabled = false;
+}
+
+// Open editor pre-loaded with the content of an upload-sourced (not yet saved) file.
+const editPageFilesInput = document.getElementById('suite-files-input');
+function openEditorForUpload(name, content) {
+    currentFilename = name;
+    isCreating = false;
+    isEditingUpload = true;
+    titleEl.textContent = 'Edit: ' + name;
+    newControls.style.display = '';
+    newNameInput.value = name;
+    newNameInput.disabled = true;
+    statusEl.textContent = '';
+    overlay.style.display = 'flex';
+    initView(content, name);
+    if (view) view.focus();
 }
 
 // ── Edit buttons on existing rows ─────────────────────────────────────────
@@ -766,6 +788,20 @@ document.addEventListener('click', function(e) {
         .catch(err => { statusEl.textContent = 'Error: ' + err; console.error('getScript error:', err); });
 });
 
+// ── Edit buttons on upload-sourced (not-yet-saved) rows ───────────────────
+
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest && e.target.closest('.suite-edit-upload-btn');
+    if (!btn) return;
+    const name = btn.getAttribute('data-name');
+    if (!name) return;
+    const files = Array.from(editPageFilesInput ? editPageFilesInput.files : []);
+    const file  = files.find(f => f.name === name);
+    if (!file) { statusEl.textContent = 'File not found in upload queue.'; return; }
+    file.text().then(content => openEditorForUpload(name, content))
+              .catch(err    => { statusEl.textContent = 'Could not read file: ' + err; });
+});
+
 // ── New Script button ──────────────────────────────────────────────────────
 
 if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
@@ -777,22 +813,9 @@ let templateCache = null;
 
 function fetchTemplates() {
     if (templateCache) return Promise.resolve(templateCache);
-    // Fetch generic templates (no function-specific personalisation) by scanning an empty notebook.
-    return fetch('/instructor/scan-notebook', {
-        method: 'POST',
-        body: JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }),
-        headers: {
-            'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken
-        }
-    })
-    .then(r => r.ok ? r.json() : [])
-    .then(functions => {
-        // If the notebook has no functions the endpoint returns [].
-        // Fall back to server-generated generic templates via the template-info endpoint.
-        templateCache = null;
-        return null;
-    });
+    return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': csrfToken } })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => { templateCache = data; return data; });
 }
 
 // Inline template content matching server templates (avoids a round-trip for the
@@ -823,24 +846,27 @@ templateSel.addEventListener('change', function() {
 });
 
 applyTplBtn.addEventListener('click', function() {
-    const tpl = INLINE_TEMPLATES[templateSel.value];
-    if (tpl === undefined) return;
+    const tplKey = templateSel ? templateSel.value : 'blank';
     // Auto-fill filename if empty.
-    if (!newNameInput.value.trim()) {
-        const [lang] = (templateSel.value || '').split(':');
-        const ext = lang === 'py' ? 'py' : lang === 'sh' ? 'sh' : 'py';
-        newNameInput.value = 'test_new.' + ext;
+    function doApply(content) {
+        if (!newNameInput.value.trim()) {
+            const [lang] = (tplKey || '').split(':');
+            const ext = lang === 'py' ? 'py' : lang === 'sh' ? 'sh' : 'py';
+            newNameInput.value = 'test_new.' + ext;
+        }
+        if (view) {
+            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+            view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput.value)) });
+            view.focus();
+        }
     }
-    if (view) {
-        view.dispatch({
-            changes: { from: 0, to: view.state.doc.length, insert: tpl }
-        });
-        // Re-apply language for new filename.
-        view.dispatch({
-            effects: langComp.reconfigure(langExtensionFor(newNameInput.value))
-        });
-        view.focus();
-    }
+    if (tplKey === 'blank') { doApply(''); return; }
+    // Try inline cache first, then fetch from server.
+    const inline = INLINE_TEMPLATES[tplKey];
+    if (inline !== undefined) { doApply(inline); return; }
+    fetchTemplates()
+        .then(templates => { doApply(templates[tplKey] || ''); })
+        .catch(err => { if (statusEl) statusEl.textContent = 'Could not load template: ' + err; });
 });
 
 // ── Save ───────────────────────────────────────────────────────────────────
@@ -848,6 +874,23 @@ applyTplBtn.addEventListener('click', function() {
 saveBtn.addEventListener('click', function() {
     if (!view) { statusEl.textContent = 'Editor not ready — try closing and reopening.'; return; }
     const content = view.state.doc.toString();
+
+    // Editing an upload-sourced file (not yet saved to the server): update filesInput.
+    if (isEditingUpload) {
+        const name = currentFilename;
+        if (!name) return;
+        const updated = new File([content], name, { type: 'text/plain' });
+        const dt = new DataTransfer();
+        Array.from(editPageFilesInput ? editPageFilesInput.files : []).forEach(f => {
+            dt.items.add(f.name === name ? updated : f);
+        });
+        if (editPageFilesInput) {
+            editPageFilesInput.files = dt.files;
+            editPageFilesInput.dispatchEvent(new Event('change'));
+        }
+        closeEditor();
+        return;
+    }
 
     if (isCreating) {
         const filename = (newNameInput.value || '').trim();

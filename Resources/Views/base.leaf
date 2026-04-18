@@ -76,9 +76,11 @@
         form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
         var meta = document.querySelector('meta[name="csrf-token"]');
         var csrfToken = meta ? meta.getAttribute('content') : '';
-        var btn = form.querySelector('[type="submit"]');
+        var btn = e.submitter || form.querySelector('[type="submit"]');
         if (btn) btn.disabled = true;
-        fetch(form.action, {
+        // Respect formaction on the activating submit button (e.g. hidden draft-action buttons).
+        var actionURL = (e.submitter && e.submitter.getAttribute('formaction')) || form.action;
+        fetch(actionURL, {
             method: form.method.toUpperCase() || 'POST',
             headers: { 'x-csrf-token': csrfToken },
             body: new FormData(form)
