@@ -26,8 +26,16 @@ extension WebRoutes {
            manifest.gradingMode == .browser {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .first()
         return try await req.view.render("submit",
-            SubmitContext(testSetupID: setupID, currentUser: req.currentUserContext)).encodeResponse(for: req)
+            SubmitContext(
+                testSetupID: setupID,
+                assignmentTitle: assignment?.title ?? setupID,
+                currentUser: req.currentUserContext
+            )
+        ).encodeResponse(for: req)
     }
 
     // MARK: - POST /testsetups/:id/submit

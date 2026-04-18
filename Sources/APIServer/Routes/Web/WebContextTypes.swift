@@ -56,6 +56,7 @@ struct IndexContext: Encodable {
 
 struct SubmitContext: Encodable {
     let testSetupID: String
+    let assignmentTitle: String
     let currentUser: CurrentUserContext?
 }
 

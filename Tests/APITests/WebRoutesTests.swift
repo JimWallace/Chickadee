@@ -287,6 +287,46 @@ final class WebRoutesTests: XCTestCase {
         })
     }
 
+    func testIndexShowsBrowserEditActionBeforeStudentHasAnyNotebookWork() async throws {
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enrollUser(user)
+
+        let setupID = "setup_browser_first_open"
+        let course = try await makeCourse()
+        let courseID = try course.requireID()
+        let notebookPath = tmpDir + "testsetups/\(setupID).ipynb"
+        let notebookJSON = """
+        {"cells":[{"cell_type":"markdown","metadata":{},"source":["Browser starter"]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
+        """
+        try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
+
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_browser.py"}],"timeLimitSeconds":10}
+        """
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: manifest,
+            zipPath: tmpDir + "testsetups/\(setupID).zip",
+            notebookPath: notebookPath,
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+        try await insertAssignment(testSetupID: setupID, title: "Browser Lab", isOpen: true)
+
+        try await app.asyncTest(.GET, "/", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("Browser Lab"))
+            XCTAssertTrue(
+                html.contains("/testsetups/\(setupID)/notebook?title=Browser Lab"),
+                "Browser-graded assignments should expose the notebook action even before any student edits"
+            )
+        })
+    }
+
     func testIndexHidesUnpublishedSetupsFromStudent() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
