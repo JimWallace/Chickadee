@@ -7,11 +7,6 @@ Courses — #if(displayName):#(displayName)#else:#(username)#endif
     <h1 style="margin:0">
         #if(displayName):#(displayName)#else:#(username)#endif — Courses
     </h1>
-    <form method="post" action="/admin/users/#(targetUserID)/delete" style="margin-left:auto">
-        #csrfFormField()
-        <button class="btn action-btn action-danger" type="submit"
-                onclick="return confirm('Delete this user? Their enrollments will be removed. They can log in again to restore their account.')">Delete User</button>
-    </form>
 </div>
 <p style="color:var(--gray-600);margin-top:-.75rem;margin-bottom:1.5rem">
     @#(username) · #(role)
