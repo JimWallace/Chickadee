@@ -96,7 +96,14 @@ final class RunnerWorkDirTests: XCTestCase {
         // 2. Copy submission (simulates the raw-file or unzip path)
         if let filename = submissionFilename {
             // Raw file submission — runner copies as-is
-            let dest = workDir.appendingPathComponent(filename)
+            let dest = stagedSubmissionDestination(
+                submissionDirectory: workDir,
+                submittedFilename: filename
+            )
+            try fm.createDirectory(
+                at: dest.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             if fm.fileExists(atPath: dest.path) {
                 try fm.removeItem(at: dest)
             }
@@ -218,6 +225,34 @@ final class RunnerWorkDirTests: XCTestCase {
         XCTAssertTrue(fileExists("solution.py"))
         let py = try readFile("solution.py")
         XCTAssertTrue(py.contains("def my_func()"))
+    }
+
+    func testValidationSubmissionFilenameIsSanitizedToBasename() throws {
+        let manifest = try makeManifest("""
+        {
+            "schemaVersion": 1,
+            "testSuites": [{"tier": "public", "script": "test_public.py"}],
+            "timeLimitSeconds": 10,
+            "starterNotebook": "assignment.ipynb"
+        }
+        """)
+
+        try simulateRunnerSetup(
+            setupFiles: [
+                ("assignment.ipynb", minimalNotebook),
+                ("test_public.py", "import test_runtime")
+            ],
+            submissionFilename: "nested/folder/solution.ipynb",
+            submissionContent: notebook(defining: "hello"),
+            manifest: manifest
+        )
+
+        XCTAssertTrue(fileExists("solution.ipynb"),
+                      "Single-file submissions should be staged by basename")
+        XCTAssertTrue(fileExists("solution.py"),
+                      "Sanitized notebook submissions must still extract to Python")
+        XCTAssertFalse(fileExists("nested"),
+                       "The runner should not recreate client-provided path segments")
     }
 
     // =========================================================================

@@ -194,7 +194,10 @@ extension AssignmentRoutes {
         var solutionFilename = "solution.ipynb"
         let solutionNotebookRaw: Data = {
             if let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 {
-                solutionFilename = solutionNotebookFile.filename.isEmpty ? "solution.ipynb" : solutionNotebookFile.filename
+                solutionFilename = submissionFilenameForStorage(
+                    uploadedName: solutionNotebookFile.filename,
+                    fallback: "solution.ipynb"
+                )
                 return Data(solutionNotebookFile.data.readableBytesView)
             }
             let archiveFiles = listZipEntries(zipPath: setup.zipPath)

@@ -124,6 +124,23 @@ final class AssignmentHelpersTests: XCTestCase {
         )
     }
 
+    func testSubmissionFilenameForStorageSanitizesAndPreservesExtension() {
+        XCTAssertEqual(
+            submissionFilenameForStorage(uploadedName: "../Assignment 0 Solution.ipynb", fallback: "solution.ipynb"),
+            "Assignment 0 Solution.ipynb"
+        )
+
+        XCTAssertEqual(
+            submissionFilenameForStorage(uploadedName: "C:\\\\fakepath\\\\dna.py", fallback: "solution.ipynb"),
+            "C   fakepath  dna.py"
+        )
+
+        XCTAssertEqual(
+            submissionFilenameForStorage(uploadedName: "   ", fallback: "solution.ipynb"),
+            "solution.ipynb"
+        )
+    }
+
     func testManifestDependentsReturnsScriptsThatReferenceDependency() {
         let manifest = try! makeWorkerManifestJSON(
             testSuites: [
