@@ -1208,6 +1208,55 @@ func defaultNotebookData(title: String) -> Data {
     return Data(json.utf8)
 }
 
+/// Resolves config rows that reference files by name (source=="existing") so that
+/// every row ends up with a numeric `index`.  The named files are extracted from
+/// the draft ZIP and appended to `suiteFiles`; their config rows are rewritten to
+/// use the new indices.  This lets `buildSuiteEntries` decode `SuiteConfigRow`
+/// (which requires `index`) regardless of which sources are present.
+func mergeExistingFilesIntoSuiteFiles(
+    suiteFiles: [File],
+    suiteConfigJSON: String?,
+    draftZipPath: String?
+) -> ([File], String?) {
+    guard let configJSON = suiteConfigJSON,
+          let configData = configJSON.data(using: .utf8),
+          var rows = (try? JSONSerialization.jsonObject(with: configData)) as? [[String: Any]] else {
+        return (suiteFiles, suiteConfigJSON)
+    }
+
+    var mergedFiles = suiteFiles
+    let uploadedNames = Set(suiteFiles.map { $0.filename })
+
+    for i in rows.indices {
+        var row = rows[i]
+        guard let name = row["name"] as? String, row["index"] == nil else { continue }
+        // Name-based row: find or extract the file, then rewrite row to use index.
+        let fileIndex: Int
+        if let existing = mergedFiles.firstIndex(where: { $0.filename == name }) {
+            fileIndex = existing
+        } else if let zipPath = draftZipPath,
+                  !uploadedNames.contains(name),
+                  let data = extractZipEntry(zipPath: zipPath, entryName: name) {
+            var buf = ByteBufferAllocator().buffer(capacity: data.count)
+            buf.writeBytes(data)
+            mergedFiles.append(File(data: buf, filename: name))
+            fileIndex = mergedFiles.count - 1
+        } else {
+            continue
+        }
+        row["index"] = fileIndex
+        row.removeValue(forKey: "name")
+        row.removeValue(forKey: "source")
+        rows[i] = row
+    }
+
+    guard let updatedData = try? JSONSerialization.data(withJSONObject: rows),
+          let updatedJSON = String(data: updatedData, encoding: .utf8) else {
+        return (mergedFiles, suiteConfigJSON)
+    }
+    return (mergedFiles, updatedJSON)
+}
+
 func createRunnerSetupZip(
     suiteFiles: [File],
     suiteConfigJSON: String?,

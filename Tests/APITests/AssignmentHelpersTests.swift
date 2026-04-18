@@ -864,6 +864,116 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertEqual(String(data: keepData, encoding: .utf8), "print('keep-updated')")
     }
 
+    // MARK: - mergeExistingFilesIntoSuiteFiles
+
+    func testMergeExistingFilesAddsNamedDraftFilesAndRewritesRowsWithIndices() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("merge-existing-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("draft.zip").path
+        try makeZip(at: zipPath, entries: [
+            ("test_existing.py", "print('existing')"),
+            ("helper.txt", "support data")
+        ])
+
+        // Config as sent by syncConfig() when user has one 'existing' item and one generated 'upload' item.
+        // This is the detect-functions scenario: 'existing' row has no 'index', causing SuiteConfigRow
+        // decode to fail and the existing test to be dropped from the manifest.
+        let configJSON = """
+        [
+          {"source":"existing","name":"test_existing.py","isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null},
+          {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
+        ]
+        """
+        let uploadedFile = makeFile(named: "test_generated.py", contents: "print('generated')")
+
+        let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
+            suiteFiles: [uploadedFile],
+            suiteConfigJSON: configJSON,
+            draftZipPath: zipPath
+        )
+
+        // Both files should now be in the merged list.
+        XCTAssertEqual(merged.count, 2)
+        XCTAssertTrue(merged.contains(where: { $0.filename == "test_generated.py" }))
+        XCTAssertTrue(merged.contains(where: { $0.filename == "test_existing.py" }))
+
+        // Updated JSON must use numeric 'index' for all rows so SuiteConfigRow decodes cleanly.
+        let updatedData = try XCTUnwrap(updatedJSON?.data(using: .utf8))
+        let rows = try XCTUnwrap(JSONSerialization.jsonObject(with: updatedData) as? [[String: Any]])
+        XCTAssertEqual(rows.count, 2)
+        for row in rows {
+            XCTAssertNotNil(row["index"], "Every row must have a numeric index after merging")
+            XCTAssertNil(row["name"], "'name' key should be removed after converting to index-based row")
+        }
+    }
+
+    func testMergeExistingFilesPassesThroughPureUploadConfig() throws {
+        // When no 'existing' rows are present the file list and row count should be unchanged.
+        let configJSON = """
+        [{"source":"upload","index":0,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1}]
+        """
+        let file = makeFile(named: "test.py", contents: "pass")
+
+        let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
+            suiteFiles: [file],
+            suiteConfigJSON: configJSON,
+            draftZipPath: nil
+        )
+
+        XCTAssertEqual(merged.count, 1)
+        // Verify the row is unchanged: still one index-based row with the correct fields.
+        let data = try XCTUnwrap(updatedJSON?.data(using: .utf8))
+        let rows = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0]["index"] as? Int, 0)
+        XCTAssertNil(rows[0]["name"])
+    }
+
+    func testDetectFunctionsRoundTripIncludesBothExistingAndGeneratedTests() throws {
+        // Full integration of the detect-functions save path: an assignment draft has an existing
+        // test file; the instructor generates an additional test via "Detect Functions"; on save the
+        // manifest must include BOTH the existing test and the newly generated one.
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("detect-functions-roundtrip-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let draftZipPath = tempRoot.appendingPathComponent("draft.zip").path
+        try makeZip(at: draftZipPath, entries: [
+            ("test_existing.py", "print('existing test')")
+        ])
+
+        let outputZipPath = tempRoot.appendingPathComponent("output.zip").path
+
+        // Simulate the config JSON produced by syncConfig() with one 'existing' and one 'upload' row.
+        let configJSON = """
+        [
+          {"source":"existing","name":"test_existing.py","isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null},
+          {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
+        ]
+        """
+        let generatedFile = makeFile(named: "test_generated.py", contents: "print('generated test')")
+
+        let (mergedFiles, mergedConfig) = mergeExistingFilesIntoSuiteFiles(
+            suiteFiles: [generatedFile],
+            suiteConfigJSON: configJSON,
+            draftZipPath: draftZipPath
+        )
+        let package = try createRunnerSetupZip(
+            suiteFiles: mergedFiles,
+            suiteConfigJSON: mergedConfig,
+            zipPath: outputZipPath
+        )
+
+        let testScripts = Set(package.testSuites.map(\.script))
+        XCTAssertTrue(testScripts.contains("test_existing.py"), "Existing draft test must survive the save")
+        XCTAssertTrue(testScripts.contains("test_generated.py"), "Generated test must be included in manifest")
+        XCTAssertEqual(package.testSuites.count, 2)
+    }
+
     func testPracticeLabBrowserSetupRoundTripPreservesAllSuiteFiles() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("practice-lab-roundtrip-\(UUID().uuidString)")

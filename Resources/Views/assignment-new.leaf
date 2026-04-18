@@ -636,6 +636,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
                 // A hidden draft-action button fired the submit — let base.leaf handle it.
                 return;
             }
+            // wireNotebookUpload sets form.action to the draft endpoint then calls
+            // requestSubmit() without a submitter, so e.submitter is null and the
+            // formaction check above won't catch it.  Bail so the file bytes reach
+            // the server in the normal browser multipart POST.
+            if (targetURL.endsWith('/draft')) {
+                return;
+            }
 
             // Prevent base.leaf's generic handler from running.
             e.preventDefault();
