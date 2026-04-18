@@ -903,6 +903,15 @@ struct AssignmentRoutes: RouteCollection {
 
         let suiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
 
+        let uploadedAssignmentNotebookFilename: String? = {
+            guard let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 else { return nil }
+            return assignmentNotebookFile.filename
+        }()
+        let uploadedSolutionNotebookFilename: String? = {
+            guard let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 else { return nil }
+            return solutionNotebookFile.filename
+        }()
+
         let assignmentNotebookRaw: Data = {
             if let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 {
                 return Data(assignmentNotebookFile.data.readableBytesView)
@@ -956,9 +965,8 @@ struct AssignmentRoutes: RouteCollection {
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
         let setupID = draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
-        let uploadedAssignmentFilename = assignmentNotebookFile?.filename
         let notebookFilename = notebookFilenameForStorage(
-            uploadedName: uploadedAssignmentFilename ?? draftState.assignmentNotebookName,
+            uploadedName: uploadedAssignmentNotebookFilename ?? draftState.assignmentNotebookName,
             fallback: draftSetup?.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
         )
         let notebookDir = setupsDir + "notebooks/\(setupID)/"
@@ -1081,7 +1089,7 @@ struct AssignmentRoutes: RouteCollection {
                 req: req,
                 setupID: setupID,
                 solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
-                filename: solutionNotebookFile?.filename
+                filename: uploadedSolutionNotebookFilename
                     ?? draftState.solutionNotebookName
                     ?? "solution.ipynb"
             )

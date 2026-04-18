@@ -508,7 +508,14 @@ actor WorkerDaemon {
         // worker can normalize it without mutating the raw artifact.
         try stageTimings.measureSync("submission_unpack") {
             if let filename = job.submissionFilename {
-                let dest = submissionDir.appendingPathComponent(filename)
+                let dest = stagedSubmissionDestination(
+                    submissionDirectory: submissionDir,
+                    submittedFilename: filename
+                )
+                try FileManager.default.createDirectory(
+                    at: dest.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
                 if FileManager.default.fileExists(atPath: dest.path) {
                     try FileManager.default.removeItem(at: dest)
                 }
@@ -1050,6 +1057,15 @@ private func legacyPreferredStudentModuleFilename(submissionFilename: String?) -
         return (submittedName as NSString).deletingPathExtension + ".py"
     }
     return nil
+}
+
+func stagedSubmissionDestination(
+    submissionDirectory: URL,
+    submittedFilename: String
+) -> URL {
+    let basename = URL(fileURLWithPath: submittedFilename).lastPathComponent
+    let safeName = basename.isEmpty ? "submission.bin" : basename
+    return submissionDirectory.appendingPathComponent(safeName)
 }
 
 private func shouldNormalizePythonSubmission(

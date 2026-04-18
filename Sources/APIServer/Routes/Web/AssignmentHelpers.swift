@@ -266,6 +266,22 @@ func notebookFilenameForStorage(uploadedName: String?, fallback: String) -> Stri
     return fileName
 }
 
+func submissionFilenameForStorage(uploadedName: String?, fallback: String) -> String {
+    var fileName = uploadedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if fileName.isEmpty {
+        fileName = fallback
+    }
+    fileName = URL(fileURLWithPath: fileName).lastPathComponent
+    fileName = fileName
+        .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r"))
+        .joined(separator: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if fileName.isEmpty {
+        fileName = fallback
+    }
+    return fileName
+}
+
 func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidationSolution: Bool) -> (
     assignmentFile: CurrentFileLink,
     solutionFile: CurrentFileLink?,
@@ -1471,9 +1487,13 @@ func enqueueRunnerValidationSubmission(
     solutionNotebookData: Data,
     filename: String = "solution.ipynb"
 ) async throws -> String {
+    let sanitizedFilename = submissionFilenameForStorage(
+        uploadedName: filename,
+        fallback: "solution.ipynb"
+    )
     let submissionsDir = req.application.submissionsDirectory
     let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-    let ext = (filename as NSString).pathExtension
+    let ext = (sanitizedFilename as NSString).pathExtension
     let filePath = submissionsDir + "\(subID).\(ext)"
     try solutionNotebookData.write(to: URL(fileURLWithPath: filePath))
 
@@ -1488,7 +1508,7 @@ func enqueueRunnerValidationSubmission(
         testSetupID:   setupID,
         zipPath:       filePath,
         attemptNumber: priorCount + 1,
-        filename:      filename,
+        filename:      sanitizedFilename,
         userID:        user.id,
         kind:          APISubmission.Kind.validation
     )

@@ -66,6 +66,10 @@ struct SubmissionRoutes: RouteCollection {
     @Sendable
     func createSubmissionFile(req: Request) async throws -> SubmissionCreatedResponse {
         let body = try req.content.decode(SubmitFileBody.self)
+        let submittedFilename = submissionFilenameForStorage(
+            uploadedName: body.filename,
+            fallback: "submission.bin"
+        )
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw Abort(.badRequest, reason: "Invalid testSetupID")
@@ -75,13 +79,13 @@ struct SubmissionRoutes: RouteCollection {
         let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
 
         // Derive extension from the provided filename, default to original ext.
-        let ext      = URL(fileURLWithPath: body.filename).pathExtension
+        let ext      = URL(fileURLWithPath: submittedFilename).pathExtension
         let filePath = submissionsDir + "\(subID).\(ext.isEmpty ? "bin" : ext)"
 
         // For .ipynb submissions, merge the instructor's hidden test cells back in
         // before saving, so the worker grades with the full authoritative test suite.
         let fileData: Data
-        if body.filename.hasSuffix(".ipynb"),
+        if submittedFilename.hasSuffix(".ipynb"),
            let setup2 = try await APITestSetup.find(body.testSetupID, on: req.db),
            let instructorData = try? notebookData(for: setup2) {
             fileData = mergeNotebook(student: body.file, instructor: instructorData)
@@ -100,7 +104,7 @@ struct SubmissionRoutes: RouteCollection {
             testSetupID:   setup.id!,
             zipPath:       filePath,
             attemptNumber: priorCount + 1,
-            filename:      body.filename,
+            filename:      submittedFilename,
             kind:          APISubmission.Kind.student
         )
         try await submission.save(on: req.db)

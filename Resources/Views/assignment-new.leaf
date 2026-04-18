@@ -641,6 +641,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             e.preventDefault();
 
             var fd = new FormData(form);
+            // The notebook upload controls are draft-only. By the time we do the
+            // final save, the canonical notebook bytes come from the saved draft
+            // copy, not these hidden file inputs. Some browsers still include
+            // empty file parts here (filename="", 0 bytes), which can confuse
+            // the server's filename resolution for validation submissions.
+            fd.delete('assignmentNotebookFile');
+            fd.delete('solutionNotebookFile');
             // Explicitly (re-)append suite files so DataTransfer-set files are always
             // included, even in browsers that don't propagate them through FormData.
             if (filesInput) {
