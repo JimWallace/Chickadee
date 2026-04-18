@@ -14,6 +14,7 @@
 //   POST /instructor/:assignmentID/open            → set isOpen=true → redirect to /instructor
 //   POST /instructor/:assignmentID/close           → set isOpen=false → redirect to /instructor
 //   POST /instructor/:assignmentID/delete          → remove assignment record → redirect to /instructor
+//   POST /instructor/setup/:setupID/delete         → remove orphaned (unpublished) test setup → redirect to /instructor
 //   POST /instructor/:assignmentID/section         → move assignment to a section (or ungrouped)
 //   POST /instructor/sections                      → create a new course section
 //   POST /instructor/sections/reorder              → reorder sections
@@ -62,6 +63,7 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "open",    use: openAssignment)
         r.post(":assignmentID", "close",   use: closeAssignment)
         r.post(":assignmentID", "delete",  use: deleteAssignment)
+        r.post("setup", ":setupID", "delete", use: deleteUnpublishedSetup)
         r.post(":assignmentID", "create-solution", use: createSolutionFromAssignment)
 
         // Script editor — inline CRUD for individual test/support files in the setup zip.
@@ -1412,6 +1414,29 @@ struct AssignmentRoutes: RouteCollection {
         }
 
         try await assignment.delete(on: req.db)
+        return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - POST /instructor/setup/:setupID/delete
+
+    @Sendable
+    func deleteUnpublishedSetup(req: Request) async throws -> Response {
+        let setupID = req.parameters.get("setupID") ?? ""
+        guard let setup = try await APITestSetup.find(setupID, on: req.db) else {
+            throw Abort(.notFound)
+        }
+        // Only allow deleting setups that have no associated assignment.
+        let hasAssignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .count() > 0
+        guard !hasAssignment else { throw Abort(.conflict) }
+
+        try? FileManager.default.removeItem(atPath: setup.zipPath)
+        if let notebookPath = setup.notebookPath, !notebookPath.isEmpty {
+            try? FileManager.default.removeItem(atPath: notebookPath)
+        }
+        removeMaterializedNotebookFiles(req: req, setupID: setupID)
+        try await setup.delete(on: req.db)
         return req.redirect(to: "/instructor")
     }
 
