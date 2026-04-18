@@ -273,6 +273,32 @@ final class AdminRoutesTests: XCTestCase {
         })
     }
 
+    func testAdminUserActionsRenderDeleteInUsersTableOnly() async throws {
+        let cookie = try await loginAsAdmin()
+        let managedUser = try await makeUser(username: "managed_for_actions", role: "student")
+        let userID = try managedUser.requireID()
+
+        try await app.asyncTest(.GET, "/admin", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = String(buffer: res.body)
+            XCTAssertTrue(body.contains("<th>Actions</th>"))
+            XCTAssertFalse(body.contains("<th>Courses</th>"))
+            XCTAssertTrue(body.contains("/admin/users/\(userID.uuidString)/delete"))
+            XCTAssertTrue(body.contains("aria-label=\"Delete user\""))
+        })
+
+        try await app.asyncTest(.GET, "/admin/users/\(userID.uuidString)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let body = String(buffer: res.body)
+            XCTAssertFalse(body.contains(">Delete User<"))
+            XCTAssertFalse(body.contains("/admin/users/\(userID.uuidString)/delete"))
+        })
+    }
+
     func testEditCourseUpdatesFields() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "EDIT101", name: "Original Name")
