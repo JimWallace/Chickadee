@@ -1005,9 +1005,16 @@ struct AssignmentRoutes: RouteCollection {
                 return String(data: encoded, encoding: .utf8)
             }
         }()
-        let setupPackage = try createRunnerSetupZip(
+        // Merge 'existing' (name-based) config rows with files from the draft ZIP so
+        // buildSuiteEntries can decode every row using its required `index` field.
+        let (mergedSuiteFiles, mergedConfigJSON) = mergeExistingFilesIntoSuiteFiles(
             suiteFiles: resolvedSuiteFiles,
             suiteConfigJSON: resolvedSuiteConfigJSON,
+            draftZipPath: draftSetup?.zipPath
+        )
+        let setupPackage = try createRunnerSetupZip(
+            suiteFiles: mergedSuiteFiles,
+            suiteConfigJSON: mergedConfigJSON,
             zipPath: zipPath
         )
 
