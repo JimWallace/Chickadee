@@ -219,7 +219,7 @@
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.3rem .45rem"
-                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
@@ -242,7 +242,7 @@
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.3rem .45rem"
-                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
@@ -399,7 +399,7 @@
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.3rem .45rem"
-                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
@@ -421,7 +421,7 @@
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.3rem .45rem"
-                                onclick="copyAssignmentURL(this, '#(row.setupID)')">
+                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
@@ -1039,8 +1039,8 @@ tr.assignment-draggable td {
     }
 })();
 
-function copyAssignmentURL(btn, setupID) {
-    var url = window.location.origin + '/testsetups/' + setupID + '/submit';
+function copyAssignmentURL(btn, vanityPath) {
+    var url = window.location.origin + vanityPath;
     navigator.clipboard.writeText(url).then(function () {
         var prev = btn.title;
         btn.title = 'Copied!';
