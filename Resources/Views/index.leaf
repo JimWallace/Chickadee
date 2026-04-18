@@ -87,15 +87,21 @@
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
                     #if(setup.gradingMode == "browser"):
-                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
-                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    <a class="btn btn-primary action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       title="Edit" aria-label="Edit" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </a>
                     #else:
-                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
-                       style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
-                       style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                       title="Edit" aria-label="Edit" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </a>
                     #endif
+                    <a class="btn btn-primary action-btn" href="/testsetups/#(setup.id)/submit"
+                       title="Upload" aria-label="Upload" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
                     #endif
                     #endif
                 </div>
@@ -172,15 +178,21 @@
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
                     #if(setup.gradingMode == "browser"):
-                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
-                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    <a class="btn btn-primary action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       title="Edit" aria-label="Edit" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </a>
                     #else:
-                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
-                       style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
-                       style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                       title="Edit" aria-label="Edit" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </a>
                     #endif
+                    <a class="btn btn-primary action-btn" href="/testsetups/#(setup.id)/submit"
+                       title="Upload" aria-label="Upload" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
                     #endif
                     #endif
                 </div>
@@ -257,15 +269,21 @@
                 <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                     #if(setup.isOpen):
                     #if(setup.gradingMode == "browser"):
-                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
-                       style="font-size:.8rem;padding:.25rem .6rem">Open &amp; Submit</a>
+                    <a class="btn btn-primary action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
+                       title="Edit" aria-label="Edit" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </a>
                     #else:
-                    <a class="btn btn-primary" href="/testsetups/#(setup.id)/submit"
-                       style="font-size:.8rem;padding:.25rem .6rem">Submit</a>
                     #if(setup.hasNotebook):
                     <a class="btn action-btn" href="/testsetups/#(setup.id)/notebook?title=#(setup.title)"
-                       style="font-size:.8rem;padding:.25rem .6rem">Edit</a>
+                       title="Edit" aria-label="Edit" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </a>
                     #endif
+                    <a class="btn btn-primary action-btn" href="/testsetups/#(setup.id)/submit"
+                       title="Upload" aria-label="Upload" style="padding:.3rem .45rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
                     #endif
                     #endif
                 </div>
