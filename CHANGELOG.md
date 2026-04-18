@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.70] - 2026-04-18
+
+### Changed
+
+- **Student submit and assignment actions polished**: the submit page now shows the assignment title instead of the raw setup ID and no longer includes the browser-run helper link; student dashboard assignment actions now use neutral icon styling with a clearer upload glyph.
+
+### Fixed
+
+- **Browser-graded first-open notebook flow remains available**: the student dashboard keeps the browser edit action visible before a student has existing notebook work, allowing the notebook route to seed a fresh working copy from the assignment notebook. Added regression coverage for this path.
+
 ## [0.4.69] - 2026-04-18
 
 ### Changed
