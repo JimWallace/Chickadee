@@ -276,6 +276,15 @@ struct AssignmentRoutes: RouteCollection {
             let validationStatus = assignment?.validationStatus ?? (assignment == nil ? "unpublished" : "passed")
             let validationSubmissionID = assignment?.validationSubmissionID
 
+            let vanityURL: String? = {
+                guard let title = assignment?.title, !title.isEmpty,
+                      let courseCode = courseState.active?.code, !courseCode.isEmpty
+                else { return nil }
+                let slug = VanityURLRoutes.slugify(title)
+                guard !slug.isEmpty else { return nil }
+                return "/\(courseCode)/\(slug)"
+            }()
+
             return AssignmentRow(
                 setupID:      setupID,
                 assignmentID: assignment?.publicID,
@@ -288,7 +297,8 @@ struct AssignmentRoutes: RouteCollection {
                 validationSubmissionID: validationSubmissionID,
                 suiteCount:   suiteCount,
                 createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—",
-                submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil
+                submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil,
+                vanityURL:    vanityURL
             )
         }
 
