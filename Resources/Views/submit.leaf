@@ -3,7 +3,7 @@
 Submit Code
 #endexport
 #export("content"):
-<h1>Submit to <code>#(testSetupID)</code></h1>
+<h1>Submit to #(assignmentTitle)</h1>
 <form class="form" id="submit-form" method="post"
     action="/testsetups/#(testSetupID)/submit" enctype="multipart/form-data">
     #csrfFormField()
@@ -17,8 +17,5 @@ Submit Code
         <a class="btn" href="/">Cancel</a>
     </div>
 </form>
-<p class="alt-submit">
-    Or <a href="/testsetups/#(testSetupID)/notebook">write and run in the browser →</a>
-</p>
 #endexport
 #endextend
