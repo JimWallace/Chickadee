@@ -3,6 +3,7 @@ import Fluent
 import Core
 import Foundation
 import FluentSQLiteDriver
+import Crypto
 
 struct WorkerJobRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -214,12 +215,13 @@ struct WorkerJobRoutes: RouteCollection {
 
         let base = resolvedWorkerBaseURL(req: req)
 
+        let setupDownloadVersion = testSetupDownloadVersion(for: setup)
         let job = Job(
             submissionID:       submission.id!,
             testSetupID:        setup.id!,
             attemptNumber:      submission.attemptNumber ?? 1,
             submissionURL:      URL(string: "\(base)/api/v1/worker/submissions/\(submission.id!)/download")!,
-            testSetupURL:       URL(string: "\(base)/api/v1/worker/testsetups/\(setup.id!)/download")!,
+            testSetupURL:       URL(string: "\(base)/api/v1/worker/testsetups/\(setup.id!)/download?v=\(setupDownloadVersion)")!,
             manifest:           manifest,
             submissionFilename: submission.filename
         )
@@ -308,6 +310,20 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
         return "localhost"
     }
     return host
+}
+
+private func testSetupDownloadVersion(for setup: APITestSetup) -> String {
+    var material = Data(setup.manifest.utf8)
+    if let attrs = try? FileManager.default.attributesOfItem(atPath: setup.zipPath) {
+        if let modified = attrs[.modificationDate] as? Date {
+            material.append(Data("|mtime=\(modified.timeIntervalSince1970)".utf8))
+        }
+        if let size = attrs[.size] {
+            material.append(Data("|size=\(size)".utf8))
+        }
+    }
+    let digest = Data(SHA256.hash(data: material)).map { String(format: "%02x", $0) }.joined()
+    return String(digest.prefix(16))
 }
 
 // MARK: - Application-level claim serializer

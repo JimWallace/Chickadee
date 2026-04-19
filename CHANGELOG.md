@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.72] - 2026-04-19
+
+### Fixed
+
+- **New Script tests now validate with the active test suite**: instructor-created scripts are validated from the current manifest-backed test suite, and worker setup downloads/cache keys now include a setup version derived from the manifest and zip metadata. This prevents workers from pairing an updated manifest with a stale cached setup bundle after scripts are added or edited in place.
+
 ## [0.4.71] - 2026-04-19
 
 ### Changed
