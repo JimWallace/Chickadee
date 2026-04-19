@@ -282,9 +282,8 @@ struct AssignmentRoutes: RouteCollection {
                 guard let title = assignment?.title, !title.isEmpty,
                       let courseCode = courseState.active?.code, !courseCode.isEmpty
                 else { return nil }
-                let slug = VanityURLRoutes.slugify(title)
-                guard !slug.isEmpty else { return nil }
-                return "/\(courseCode)/\(slug)"
+                guard !assignment!.slug.isEmpty else { return nil }
+                return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment!.slug)
             }()
 
             return AssignmentRow(

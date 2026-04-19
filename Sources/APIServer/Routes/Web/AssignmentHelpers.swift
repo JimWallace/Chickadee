@@ -148,6 +148,30 @@ func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> A
         .first()
 }
 
+func uniqueAssignmentSlug(
+    title: String,
+    courseID: UUID,
+    excludingAssignmentID: UUID? = nil,
+    db: Database,
+    reserved: Set<String> = []
+) async throws -> String {
+    let base = VanityURLRoutes.slugify(title).isEmpty ? "assignment" : VanityURLRoutes.slugify(title)
+    for suffix in 0..<10_000 {
+        let candidate = suffix == 0 ? base : "\(base)-\(suffix + 1)"
+        if reserved.contains(candidate) { continue }
+
+        var query = APIAssignment.query(on: db)
+            .filter(\.$courseID == courseID)
+            .filter(\.$slug == candidate)
+        if let excludingAssignmentID {
+            query = query.filter(\.$id != excludingAssignmentID)
+        }
+        let exists = try await query.count() > 0
+        if !exists { return candidate }
+    }
+    throw Abort(.internalServerError, reason: "Unable to allocate assignment URL slug")
+}
+
 func isValidAssignmentPublicID(_ value: String) -> Bool {
     value.count == APIAssignment.publicIDLength
         && value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
@@ -183,6 +207,7 @@ func createAssignmentWithUniquePublicID(
             publicID: candidate,
             testSetupID: testSetupID,
             title: title,
+            slug: try await uniqueAssignmentSlug(title: title, courseID: courseID, db: req.db),
             dueAt: dueAt,
             isOpen: isOpen,
             sortOrder: sortOrder,

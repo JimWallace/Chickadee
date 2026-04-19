@@ -31,6 +31,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @Field(key: "title")
     var title: String
 
+    /// Stable, course-scoped vanity URL slug.
+    @Field(key: "slug")
+    var slug: String
+
     /// Optional deadline. nil = no deadline.
     @OptionalField(key: "due_at")
     var dueAt: Date?
@@ -77,6 +81,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     }
 
     init(id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
+         slug: String? = nil,
          dueAt: Date? = nil, isOpen: Bool = true,
          deadlineOverrideActive: Bool = false,
          sortOrder: Int? = nil,
@@ -88,6 +93,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.publicID    = publicID
         self.testSetupID = testSetupID
         self.title       = title
+        self.slug        = slug ?? VanityURLRoutes.slugify(title)
         self.dueAt       = dueAt
         self.isOpen      = isOpen
         self.deadlineOverrideActive = deadlineOverrideActive

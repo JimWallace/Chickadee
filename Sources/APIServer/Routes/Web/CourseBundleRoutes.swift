@@ -472,6 +472,7 @@ struct CourseBundleRoutes: RouteCollection {
                 let newAssign = APIAssignment(
                     testSetupID:      setupID,
                     title:            bundledAssign.title,
+                    slug:             try await uniqueAssignmentSlug(title: bundledAssign.title, courseID: t.courseID, db: db),
                     dueAt:            bundledAssign.dueAt,
                     isOpen:           bundledAssign.isOpen,
                     sortOrder:        bundledAssign.sortOrder,
