@@ -321,7 +321,7 @@ final class WebRoutesTests: XCTestCase {
             let html = res.body.string
             XCTAssertTrue(html.contains("Browser Lab"))
             XCTAssertTrue(
-                html.contains("/testsetups/\(setupID)/notebook?title=Browser Lab"),
+                html.contains("/CS101/browser-lab"),
                 "Browser-graded assignments should expose the notebook action even before any student edits"
             )
         })

@@ -2,10 +2,9 @@
 //
 // Vanity URL support: GET /:courseCode/:assignmentSlug
 //
-// Resolves a human-readable course/assignment pair to the canonical notebook
-// URL for that assignment. Slug is derived from the assignment title by
-// lowercasing and stripping non-alphanumeric characters (e.g. "Lab 1: Intro"
-// → "lab1intro"). Only active (non-archived) courses match.
+// Resolves a human-readable course/assignment pair to canonical student
+// assignment routes. Slugs are persisted on assignments so URLs remain stable
+// when titles change. Only active (non-archived) courses match.
 //
 // Registered last in the auth group so fixed-path routes always win.
 
@@ -15,10 +14,36 @@ import Fluent
 struct VanityURLRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         routes.get(":courseCode", ":assignmentSlug", use: vanityRedirect)
+        routes.get(":courseCode", ":assignmentSlug", "notebook", use: vanityNotebookRedirect)
+        routes.get(":courseCode", ":assignmentSlug", "submit", use: vanitySubmitRedirect)
+        routes.get(":courseCode", ":assignmentSlug", "history", use: vanityHistoryRedirect)
     }
 
     @Sendable
     func vanityRedirect(req: Request) async throws -> Response {
+        let assignment = try await resolveAssignment(req: req)
+        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/notebook")
+    }
+
+    @Sendable
+    func vanityNotebookRedirect(req: Request) async throws -> Response {
+        let assignment = try await resolveAssignment(req: req)
+        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/notebook")
+    }
+
+    @Sendable
+    func vanitySubmitRedirect(req: Request) async throws -> Response {
+        let assignment = try await resolveAssignment(req: req)
+        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/submit")
+    }
+
+    @Sendable
+    func vanityHistoryRedirect(req: Request) async throws -> Response {
+        let assignment = try await resolveAssignment(req: req)
+        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/history")
+    }
+
+    private func resolveAssignment(req: Request) async throws -> APIAssignment {
         guard
             let courseCode = req.parameters.get("courseCode"),
             let slug = req.parameters.get("assignmentSlug")
@@ -39,14 +64,19 @@ struct VanityURLRoutes: RouteCollection {
             .filter(\.$courseID == courseID)
             .all()
 
-        guard let assignment = assignments.first(where: { VanityURLRoutes.slugify($0.title) == slug }) else {
+        guard let assignment = assignments.first(where: { $0.slug == slug }) else {
             throw Abort(.notFound)
         }
 
-        return req.redirect(to: "/testsetups/\(assignment.testSetupID)/notebook")
+        return assignment
+    }
+
+    static func vanityPath(courseCode: String, assignmentSlug: String) -> String {
+        "/\(courseCode)/\(assignmentSlug)"
     }
 
     static func slugify(_ title: String) -> String {
-        title.lowercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        let parts = title.lowercased().split { !$0.isASCII || (!$0.isLetter && !$0.isNumber) }
+        return parts.joined(separator: "-")
     }
 }

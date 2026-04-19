@@ -20,7 +20,7 @@ struct AssignmentRow: Encodable {
     let suiteCount:   Int
     let createdAt:    String
     let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
-    let vanityURL:    String?   // e.g. "/CS101/lab1intro"; nil if unpublished or no active course
+    let vanityURL:    String?   // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
 }
 
 /// A course section with its grouped assignment rows, used in instructor and student views.

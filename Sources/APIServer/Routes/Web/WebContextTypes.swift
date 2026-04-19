@@ -17,6 +17,9 @@ struct BaseContext: Encodable {
 struct TestSetupRow: Encodable {
     let id: String
     let title: String?      // from APIAssignment; nil when instructor sees unpublished setups
+    let notebookURL: String
+    let submitURL: String
+    let historyURL: String
     let suiteCount: Int
     let createdAt: String
     let dueAt: String?      // formatted due date, nil if no assignment or no due date

@@ -42,11 +42,11 @@ final class VanityURLRoutesTests: XCTestCase {
     // MARK: - slugify
 
     func testSlugify_stripsSpaces() {
-        XCTAssertEqual(VanityURLRoutes.slugify("Lab 1"), "lab1")
+        XCTAssertEqual(VanityURLRoutes.slugify("Lab 1"), "lab-1")
     }
 
     func testSlugify_stripsSpecialChars() {
-        XCTAssertEqual(VanityURLRoutes.slugify("Lab 1: Intro"), "lab1intro")
+        XCTAssertEqual(VanityURLRoutes.slugify("Lab 1: Intro"), "lab-1-intro")
     }
 
     func testSlugify_lowercases() {
@@ -54,7 +54,7 @@ final class VanityURLRoutesTests: XCTestCase {
     }
 
     func testSlugify_handlesHyphensAndSlashes() {
-        XCTAssertEqual(VanityURLRoutes.slugify("A2 - Sorting/Searching"), "a2sortingsearching")
+        XCTAssertEqual(VanityURLRoutes.slugify("A2 - Sorting/Searching"), "a2-sorting-searching")
     }
 
     func testSlugify_emptyString() {
@@ -98,7 +98,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van01")
 
-        try await app.asyncTest(.GET, "/hlth230/lab1") { res in
+        try await app.asyncTest(.GET, "/hlth230/lab-1") { res in
             XCTAssertEqual(res.status, .seeOther)
             XCTAssertEqual(res.headers.first(name: .location), "/login")
         }
@@ -113,7 +113,7 @@ final class VanityURLRoutesTests: XCTestCase {
 
         let cookie = try await loginUser(username: "vanity_student1", password: "pw",
                                          role: "student", on: app)
-        try await app.asyncTest(.GET, "/hlth230/lab1", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/hlth230/lab-1", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
@@ -129,7 +129,7 @@ final class VanityURLRoutesTests: XCTestCase {
 
         let cookie = try await loginUser(username: "vanity_student2", password: "pw",
                                          role: "student", on: app)
-        try await app.asyncTest(.GET, "/cs246/assignment2", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/cs246/assignment-2", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
@@ -140,12 +140,12 @@ final class VanityURLRoutesTests: XCTestCase {
     func testVanityURL_slugStripsSpecialChars() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
-        // Title "Lab 1: Intro" should match slug "lab1intro"
+        // Title "Lab 1: Intro" should match slug "lab-1-intro"
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1: Intro", setupID: "setup_van04")
 
         let cookie = try await loginUser(username: "vanity_student3", password: "pw",
                                          role: "student", on: app)
-        try await app.asyncTest(.GET, "/hlth230/lab1intro", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/hlth230/lab-1-intro", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
@@ -160,7 +160,7 @@ final class VanityURLRoutesTests: XCTestCase {
 
         let cookie = try await loginUser(username: "vanity_student4", password: "pw",
                                          role: "student", on: app)
-        try await app.asyncTest(.GET, "/hlth230/lab1", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/hlth230/lab-1", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -170,7 +170,7 @@ final class VanityURLRoutesTests: XCTestCase {
     func testVanityURL_unknownCourse_returns404() async throws {
         let cookie = try await loginUser(username: "vanity_student5", password: "pw",
                                          role: "student", on: app)
-        try await app.asyncTest(.GET, "/nosuchcourse/lab1", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/nosuchcourse/lab-1", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .notFound)
@@ -203,11 +203,65 @@ final class VanityURLRoutesTests: XCTestCase {
 
         let cookie = try await loginUser(username: "vanity_student7", password: "pw",
                                          role: "student", on: app)
-        try await app.asyncTest(.GET, "/hlth230/lab1", beforeRequest: { req in
+        try await app.asyncTest(.GET, "/hlth230/lab-1", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .seeOther)
             XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van08/notebook")
+        })
+    }
+
+    func testVanityURL_usesPersistedSlugAfterTitleRename() async throws {
+        let course = try await seedCourse(code: "HLTH230")
+        let courseID = try course.requireID()
+        let assignment = try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van09")
+        assignment.title = "Renamed Lab"
+        try await assignment.save(on: app.db)
+
+        let cookie = try await loginUser(username: "vanity_student8", password: "pw",
+                                         role: "student", on: app)
+        try await app.asyncTest(.GET, "/hlth230/lab-1", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van09/notebook")
+        })
+
+        try await app.asyncTest(.GET, "/hlth230/renamed-lab", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
+    func testUniqueAssignmentSlug_suffixesDuplicateTitlesInCourse() async throws {
+        let course = try await seedCourse(code: "HLTH230")
+        let courseID = try course.requireID()
+        try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van10")
+
+        let slug = try await uniqueAssignmentSlug(title: "Lab 1", courseID: courseID, db: app.db)
+        XCTAssertEqual(slug, "lab-1-2")
+    }
+
+    func testVanityURL_submitAndHistoryRoutesRedirectToCanonicalStudentRoutes() async throws {
+        let course = try await seedCourse(code: "HLTH230")
+        let courseID = try course.requireID()
+        try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van11")
+
+        let cookie = try await loginUser(username: "vanity_student9", password: "pw",
+                                         role: "student", on: app)
+        try await app.asyncTest(.GET, "/hlth230/lab-1/submit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van11/submit")
+        })
+
+        try await app.asyncTest(.GET, "/hlth230/lab-1/history", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van11/history")
         })
     }
 }

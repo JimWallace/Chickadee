@@ -118,6 +118,7 @@ private func registerBaseTestMigrations(on app: Application) {
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
     app.migrations.add(CreateAssignments())
+    app.migrations.add(AddAssignmentSlugs())
     app.migrations.add(CreatePerformanceIndexes())
     app.migrations.add(AddCourseSections())
     app.migrations.add(AddCourseOpenEnrollment())

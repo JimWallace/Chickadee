@@ -252,9 +252,19 @@ struct WebRoutes: RouteCollection {
                 return listZipEntries(zipPath: setup.zipPath)
                     .contains { $0.hasSuffix(".ipynb") }
             }()
+            let vanityBaseURL: String? = {
+                guard let assignment,
+                      let courseCode = courseState.active?.code,
+                      !courseCode.isEmpty,
+                      !assignment.slug.isEmpty else { return nil }
+                return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment.slug)
+            }()
             return TestSetupRow(
                 id:         setupID,
                 title:      assignment?.title,
+                notebookURL: vanityBaseURL ?? "/testsetups/\(setupID)/notebook",
+                submitURL:   vanityBaseURL.map { "\($0)/submit" } ?? "/testsetups/\(setupID)/submit",
+                historyURL:  vanityBaseURL.map { "\($0)/history" } ?? "/testsetups/\(setupID)/history",
                 suiteCount: props?.testSuites.count ?? 0,
                 createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },

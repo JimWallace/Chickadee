@@ -156,6 +156,7 @@ extension AdminRoutes {
                 let newAssignment = APIAssignment(
                     testSetupID:          newSetupID,
                     title:                a.title,
+                    slug:                 try await uniqueAssignmentSlug(title: a.title, courseID: newCourseID, db: db),
                     dueAt:                a.dueAt,
                     isOpen:               false,
                     sortOrder:            a.sortOrder ?? idx,

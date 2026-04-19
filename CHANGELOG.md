@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.71] - 2026-04-19
+
+### Changed
+
+- **Student assignment links now use stable vanity URLs**: assignments now store a per-course unique slug so student-facing links can use human-readable paths like `/CS101/lab-1-intro`. Slugs are backfilled for existing assignments, remain stable when titles change, and receive numeric suffixes when duplicate titles would collide.
+- **Student dashboard assignment actions now point at vanity paths**: notebook, submit, and history actions prefer `/COURSE/assignment-slug` routes while the existing canonical `/testsetups/...` handlers remain available for compatibility.
+
 ## [0.4.70] - 2026-04-18
 
 ### Changed
