@@ -196,6 +196,11 @@ final class WorkerRoutesTests: XCTestCase {
             XCTAssertEqual(job.submissionID, sub.id)
             XCTAssertEqual(job.testSetupID, setup.id)
             XCTAssertEqual(job.attemptNumber, 1)
+            XCTAssertEqual(job.testSetupURL.path, "/api/v1/worker/testsetups/\(setup.id!)/download")
+            XCTAssertNotNil(URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "v" })?
+                .value)
         })
 
         // Submission should now be "assigned"

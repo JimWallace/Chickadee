@@ -34,7 +34,7 @@
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
 
-    window.BrowserRunner = { runAndSubmit };
+    window.BrowserRunner = { runAndSubmit, runScripts };
 
     /**
      * Run all test scripts against the student's notebook and submit results.
@@ -44,6 +44,30 @@
      * @returns {{ outcomes: object[], response: object }}
      */
     async function runAndSubmit(notebookBytes, setupID) {
+        const result = await runScripts(notebookBytes, setupID, { filename: 'submission.ipynb' });
+
+        // Hide the loading-progress status bar — results are now in #nb-results.
+        if (statusEl) statusEl.hidden = true;
+
+        return {
+            outcomes: result.outcomes,
+            response: await postBrowserResult(notebookBytes, result.collection, setupID),
+        };
+    }
+
+    /**
+     * Run all configured test scripts against a supplied reference/student file.
+     *
+     * This is used by both student submissions (via runAndSubmit) and the
+     * instructor validation page, where results should be shown locally without
+     * creating a submission record.
+     *
+     * @param {Uint8Array} submissionBytes Raw bytes of the submitted solution file.
+     * @param {string}     setupID         The test setup ID for this assignment.
+     * @param {{filename?: string}} options
+     * @returns {{ outcomes: object[], collection: object }}
+     */
+    async function runScripts(submissionBytes, setupID, options = {}) {
         let py, JSZip;
         try {
             setRunnerStatus('loading', 'Initializing Python runtime…');
@@ -100,11 +124,19 @@
             py.FS.writeFile(`${workDir}/test_runtime.py`,  TEST_RUNTIME_PY);
             py.FS.writeFile(`${workDir}/sitecustomize.py`, SITECUSTOMIZE_PY);
 
-            // 3. Write notebook bytes and extract code cells to .py.
-            const notebookFilename = 'submission.ipynb';
-            py.FS.writeFile(`${workDir}/${notebookFilename}`, notebookBytes);
-            const notebookText = new TextDecoder().decode(notebookBytes);
-            await extractNotebook(py, workDir, notebookFilename, notebookText);
+            // 3. Write submitted solution bytes. Notebooks are extracted to a
+            // Python/R source file; plain .py files are used directly.
+            const submissionFilename = safeSubmissionFilename(options.filename || 'submission.ipynb');
+            py.FS.writeFile(`${workDir}/${submissionFilename}`, submissionBytes);
+            const lowerSubmissionName = submissionFilename.toLowerCase();
+            if (lowerSubmissionName.endsWith('.ipynb')) {
+                const notebookText = new TextDecoder().decode(submissionBytes);
+                await extractNotebook(py, workDir, submissionFilename, notebookText);
+            } else if (lowerSubmissionName.endsWith('.py')) {
+                py.FS.writeFile(`${workDir}/.chickadee_student_module`, submissionFilename);
+            } else if (lowerSubmissionName.endsWith('.r')) {
+                py.FS.writeFile(`${workDir}/.chickadee_student_module`, submissionFilename);
+            }
 
             // Add working directory to Python's path and set up builtins.
             //
@@ -233,14 +265,9 @@ for _module_name in student_module_names_in_load_order():
                 if (outcome.status === 'pass') passedScripts.add(script);
             }
 
-            // 5. Build collection and POST notebook + results atomically.
+            // 5. Build collection. The caller decides whether to submit it.
             const collection = buildCollection(setupID, outcomes);
-            const response   = await postBrowserResult(notebookBytes, collection, setupID);
-
-            // Hide the loading-progress status bar — results are now in #nb-results.
-            if (statusEl) statusEl.hidden = true;
-
-            return { outcomes, response };
+            return { outcomes, collection };
 
         } finally {
             // Clean up MEMFS to avoid OOM on repeated submissions.
@@ -480,6 +507,11 @@ sys.stderr = sys.__stderr__
             runnerVersion:   'browser-wasm-runner/1.0',
             timestamp:       new Date().toISOString(),
         };
+    }
+
+    function safeSubmissionFilename(filename) {
+        const raw = String(filename || '').split(/[\\/]/).pop().trim();
+        return raw || 'submission.ipynb';
     }
 
     function structuredSummaryText(payload, status) {
@@ -913,6 +945,7 @@ for _module_name in _tr.student_module_names_in_load_order():
     if (testHooks) {
         testHooks.exports = {
             runAndSubmit,
+            runScripts,
             extractNotebook,
             runPyScript,
             buildCollection,

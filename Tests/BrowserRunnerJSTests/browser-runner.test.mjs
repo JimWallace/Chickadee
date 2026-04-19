@@ -16,6 +16,7 @@ function plain(value) {
 class FakeFS {
   constructor() {
     this.entries = new Map([['/', { type: 'dir' }]]);
+    this.writes = [];
   }
 
   mkdir(targetPath) {
@@ -36,6 +37,7 @@ class FakeFS {
     if (!this.entries.has(parent) || this.entries.get(parent).type !== 'dir') {
       throw new Error(`Missing parent directory: ${parent}`);
     }
+    this.writes.push({ targetPath, value });
     this.entries.set(targetPath, { type: 'file', value });
   }
 
@@ -413,6 +415,34 @@ test('runAndSubmit executes Python scripts, posts a browser-wasm result collecti
     harness.fetchCalls.filter(call => call.url.includes('/manifest')).length,
     1,
   );
+});
+
+test('runScripts validates a plain Python solution without posting a submission', async () => {
+  const harness = await loadRunnerHarness({
+    zipFiles: {
+      'test_reference.py': '# pass\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'test_reference.py', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('answer = 42\n'),
+    'setup123',
+    { filename: 'solution.py' },
+  );
+
+  assert.equal(result.outcomes.length, 1);
+  assert.equal(result.outcomes[0].status, 'pass');
+  assert.equal(result.collection.totalTests, 1);
+  assert.equal(harness.postBodies.length, 0);
+  const hintWrite = harness.py.FS.writes.find(write => write.targetPath.endsWith('/.chickadee_student_module'));
+  assert.equal(hintWrite && String(hintWrite.value), 'solution.py');
 });
 
 test('dependency failures are skipped without executing blocked scripts', async () => {

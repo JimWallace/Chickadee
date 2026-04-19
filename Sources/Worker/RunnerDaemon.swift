@@ -6,6 +6,7 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import ArgumentParser
 import Core
+import Crypto
 
 private enum RunnerJobStatus: String {
     case passed
@@ -488,7 +489,8 @@ actor WorkerDaemon {
         async let submissionDownload: Void = download(url: job.submissionURL, to: submissionZip)
 
         let testSetupAcquireStartedAt = Date()
-        let testSetupDir = try await testSetupCache.acquire(testSetupID: job.testSetupID) {
+        let testSetupCacheKey = testSetupCacheKey(for: job)
+        let testSetupDir = try await testSetupCache.acquire(testSetupID: testSetupCacheKey) {
             let stagingZip = workDir.appendingPathComponent("testsetup.zip")
             let stagingDir = workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
             try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
@@ -1105,6 +1107,19 @@ private func shouldNormalizePythonSubmission(
         }
     }
     return false
+}
+
+private func testSetupCacheKey(for job: Job) -> String {
+    let encoder = JSONEncoder()
+    let manifestBytes = (try? encoder.encode(job.manifest)) ?? Data()
+    var material = Data()
+    material.append(Data(job.testSetupID.utf8))
+    material.append(0)
+    material.append(Data(job.testSetupURL.absoluteString.utf8))
+    material.append(0)
+    material.append(manifestBytes)
+    let digest = Data(SHA256.hash(data: material)).map { String(format: "%02x", $0) }.joined()
+    return "\(job.testSetupID)-\(digest.prefix(16))"
 }
 
 // MARK: - Script result JSON (optional last-line protocol)

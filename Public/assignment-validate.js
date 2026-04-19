@@ -2,19 +2,12 @@
 //
 // In-browser solution validator for the assignment validation page.
 //
-// Workflow (Python notebooks):
+// Workflow:
 //   1. Instructor selects a .py / .ipynb solution file via the file input.
-//   2. Clicking "Run tests" fetches the assignment notebook to get # TEST: cells.
-//   3. The solution file is injected into a fresh Pyodide interpreter.
-//   4. Each # TEST: cell from the notebook is run against the solution's namespace.
-//   5. Results are rendered inline (same CSS classes as submission.leaf).
-//   6. If all tests pass, the "Go live" panel is revealed.
-//
-// Workflow (R notebooks):
-//   Browser-side R execution is not yet supported (WebR startup overhead is
-//   significant; worker-side Rscript grading is authoritative).  When the
-//   notebook reports an R kernel the page skips in-browser execution, shows
-//   an explanatory notice, and reveals the "Go live" panel directly.
+//   2. Clicking "Run tests" uses BrowserRunner to fetch the setup zip and
+//      current manifest, then runs the manifest's configured test scripts.
+//   3. Results are rendered inline (same CSS classes as submission.leaf).
+//   4. If all tests pass, the "Go live" panel is revealed.
 //
 // No submission is posted to the server — this is purely local validation.
 
@@ -50,26 +43,17 @@
         setStatus('loading', 'Loading grading engine…');
 
         try {
-            const solutionSource = await readFileAsText(fileInput.files[0]);
-
-            // Fetch the assignment notebook to extract # TEST: cells.
-            setStatus('loading', 'Fetching test definitions…');
-            const notebookURL = `/api/v1/testsetups/${setupID}/assignment`;
-            const nbRes = await fetch(notebookURL);
-            if (!nbRes.ok) throw new Error(`Could not fetch assignment notebook: ${nbRes.status}. Make sure this test setup includes an assignment.ipynb.`);
-            const notebook = await nbRes.json();
-
-            // For R notebooks, in-browser execution is not yet available.
-            // Worker-side Rscript grading is authoritative; skip Pyodide and
-            // reveal Go Live so the instructor can proceed after a worker run.
-            if (notebookKernelLanguage(notebook) === 'r') {
-                setStatus('ok', 'R notebooks are validated by the runner — submit a test run first, then go live when satisfied.');
-                goLivePanel.hidden = false;
-                return;
-            }
+            const solutionFile = fileInput.files[0];
+            const solutionBytes = await readFileAsBytes(solutionFile);
 
             setStatus('loading', 'Running tests…');
-            const outcomes = await runSolutionAgainstNotebook(solutionSource, notebook);
+            if (!window.BrowserRunner || typeof window.BrowserRunner.runScripts !== 'function') {
+                throw new Error('Browser runner failed to load.');
+            }
+            const result = await window.BrowserRunner.runScripts(solutionBytes, setupID, {
+                filename: solutionFile.name || 'submission.ipynb',
+            });
+            const outcomes = result.outcomes || [];
 
             renderResults(outcomes);
             setStatus('', '');
@@ -281,6 +265,15 @@ else:
         });
     }
 
+    function readFileAsBytes(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(new Uint8Array(e.target.result));
+            reader.onerror = () => reject(new Error('Could not read file'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
     // -------------------------------------------------------------------------
     // Inline results rendering (same CSS as submission.leaf / notebook.js)
     // -------------------------------------------------------------------------
@@ -328,7 +321,7 @@ else:
                 ? `<details><summary>details</summary><pre>${escHtml(o.longResult)}</pre></details>`
                 : '';
             tr.innerHTML = `
-                <td><code>${escHtml(o.testName)}</code></td>
+                <td><code>${escHtml(o.displayName || o.testName)}</code></td>
                 <td><span class="tier">${escHtml(o.tier)}</span></td>
                 <td>${escHtml(o.shortResult)}${longCell}</td>
                 <td class="time">${o.executionTimeMs}</td>`;

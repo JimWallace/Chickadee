@@ -40,6 +40,7 @@ Validate — #(title)
     </div>
 </div>
 
+<script data-grading-mode="browser" src="/browser-runner.js"></script>
 <script
     data-assignment-id="#(assignmentID)"
     data-setup-id="#(setupID)"
