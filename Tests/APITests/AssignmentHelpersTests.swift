@@ -376,6 +376,29 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
     }
 
+    func testBuildSuiteEntriesFallsBackToExtensionlessShellShebangScripts() throws {
+        let suiteFiles = [
+            makeFile(named: "01_shell", contents: "#!/bin/sh\necho ok\n"),
+            makeFile(named: "02_bash", contents: "#!/usr/bin/env bash\necho ok\n"),
+            makeFile(named: "03_notes", contents: "echo support but no shebang\n"),
+            makeFile(named: "04_python.py", contents: "print('ok')\n")
+        ]
+
+        let entries = try buildSuiteEntries(
+            suiteFiles: suiteFiles,
+            storedNameByIndex: [
+                0: "01_shell",
+                1: "02_bash",
+                2: "03_notes",
+                3: "04_python.py"
+            ],
+            suiteConfigJSON: nil
+        )
+
+        XCTAssertEqual(entries.map(\.script), ["01_shell", "02_bash", "04_python.py"])
+        XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
+    }
+
     func testBuildSuiteEntriesTreatsAnyNonSupportTierAsATestWhenIsTestIsMissing() throws {
         let suiteFiles = [
             makeFile(named: "assignment.ipynb", contents: "{}"),

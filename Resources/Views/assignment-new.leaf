@@ -322,6 +322,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
 #suite-config-table td { vertical-align: top; }
 </style>
+<script src="/suite-list.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -335,22 +336,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     var items = [];
     var dragName = null;
 
-    function isLikelyScript(name) {
-        var ext = (name || '').toLowerCase().split('.').pop();
-        return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
-    }
+    var suiteUploadFiles = Array.from(filesInput.files || []);
 
-    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
-                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
-                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
-
-    function fileErrors(file) {
-        var errs = [];
-        var ext = (file.name || '').toLowerCase().split('.').pop();
-        if (BINARY_EXTS.indexOf(ext) >= 0) errs.push('Binary file — unlikely to work as a test script');
-        if (!file.name.includes('.'))       errs.push('No file extension');
-        if (file.size === 0)                errs.push('Empty file');
-        return errs;
+    function setQueuedUploadFiles(files) {
+        suiteUploadFiles = files || [];
+        var dt = new DataTransfer();
+        suiteUploadFiles.forEach(function (file) { dt.items.add(file); });
+        filesInput.files = dt.files;
     }
 
     function stemOf(filename) {
@@ -468,27 +460,24 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         syncConfig();
     }
 
-    function addUploadedFiles() {
-        var files = Array.from(filesInput.files || []);
-        items = items.filter(function (it) { return it.source !== 'upload'; });
-        files.forEach(function (file, idx) {
-            var name = file.name;
-            // Don't add if a same-named item already exists from draft
-            if (items.some(function (it) { return it.name === name; })) return;
-            items.push({
-                name:        name,
-                displayName: '',
-                source:      'upload',
-                index:       idx,
-                isTest:      isLikelyScript(name),
-                tier:        isLikelyScript(name) ? 'public' : 'support',
-                dependsOn:   [],
-                points:      1,
-                errors:      fileErrors(file)
-            });
-        });
-        renderTree();
+    function refreshUploadItems(selectedFiles) {
         syncConfig();
+        var mergedFiles = ChickadeeSuiteList.mergeFiles(suiteUploadFiles, selectedFiles || []);
+        var existingNames = {};
+        items.forEach(function (it) { if (it.source !== 'upload') existingNames[it.name] = true; });
+        mergedFiles = mergedFiles.filter(function (file) { return !existingNames[file.name]; });
+        return Promise.all(mergedFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
+            setQueuedUploadFiles(mergedFiles);
+            items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, classifications);
+            renderTree();
+            syncConfig();
+        });
+    }
+
+    function addUploadedFiles() {
+        refreshUploadItems(Array.from(filesInput.files || [])).catch(function (err) {
+            console.error('suite upload refresh failed:', err);
+        });
     }
 
     // --- Drag & Drop ---
@@ -568,7 +557,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var row = btn.closest('tr[data-name]');
         if (!row) return;
         var name = row.getAttribute('data-name');
+        var removed = items.find(function (it) { return it.name === name; });
         items = items.filter(function (it) { return it.name !== name; });
+        if (removed && removed.source === 'upload') {
+            setQueuedUploadFiles(suiteUploadFiles.filter(function (file) { return file.name !== name; }));
+            items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, []);
+        }
         items.forEach(function (it) { it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; }); });
         renderTree(); syncConfig();
     });

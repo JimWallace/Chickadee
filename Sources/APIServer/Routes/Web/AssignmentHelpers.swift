@@ -1423,12 +1423,10 @@ func buildSuiteEntries(
     }
 
     // Backward-compatible fallback when no suite config JSON is submitted.
-    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "r", "rb", "pl", "js", "php"]
     var defaults: [ConfiguredSuiteEntry] = []
     for index in suiteFiles.indices {
         guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
-        let ext = URL(fileURLWithPath: script).pathExtension.lowercased()
-        guard supportedExtensions.contains(ext) else { continue }
+        guard isLikelyTestSuiteFile(suiteFiles[index], storedName: script) else { continue }
         defaults.append(ConfiguredSuiteEntry(
             script: script,
             tier: "public",
@@ -1472,6 +1470,28 @@ func normalizeTier(_ raw: String?, isTest: Bool? = nil) -> String {
     default:
         return "public"
     }
+}
+
+func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
+    let supportedExtensions: Set<String> = ["sh", "bash", "zsh", "py", "r", "rb", "pl", "js", "php"]
+    let ext = URL(fileURLWithPath: storedName).pathExtension.lowercased()
+    if supportedExtensions.contains(ext) { return true }
+    guard ext.isEmpty else { return false }
+    return hasRecognizedShellShebang(file)
+}
+
+func hasRecognizedShellShebang(_ file: File) -> Bool {
+    let prefix = String(decoding: Data(file.data.readableBytesView.prefix(256)), as: UTF8.self)
+    let firstLine = prefix.split(whereSeparator: \.isNewline).first.map(String.init) ?? prefix
+    let normalized = firstLine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.hasPrefix("#!") else { return false }
+    if normalized.range(of: #"^#!\s*/.*/(ba|z)?sh\b"#, options: .regularExpression) != nil {
+        return true
+    }
+    if normalized.range(of: #"^#!\s*/usr/bin/env\s+(ba|z)?sh\b"#, options: .regularExpression) != nil {
+        return true
+    }
+    return false
 }
 
 func makeWorkerManifestJSON(
