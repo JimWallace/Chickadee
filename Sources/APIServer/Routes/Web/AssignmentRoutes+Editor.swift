@@ -29,7 +29,7 @@ extension AssignmentRoutes {
         let downloadName = currentSetupFiles(
             for: setup,
             assignmentID: idStr,
-            hasValidationSolution: assignment.validationSubmissionID != nil
+            solutionFilename: nil
         ).assignmentFile.name
         return buildFileResponse(data: data, filename: downloadName)
     }

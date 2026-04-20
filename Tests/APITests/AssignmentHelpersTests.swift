@@ -670,11 +670,15 @@ final class AssignmentHelpersTests: XCTestCase {
             courseID: UUID()
         )
 
-        let result = currentSetupFiles(for: setup, assignmentID: "asg123", hasValidationSolution: true)
+        let result = currentSetupFiles(
+            for: setup,
+            assignmentID: "asg123",
+            solutionFilename: "BMI Boundary Cases.ipynb"
+        )
 
         XCTAssertEqual(result.assignmentFile.name, "starter.ipynb")
         XCTAssertEqual(result.assignmentFile.url, "/instructor/asg123/files/notebook")
-        XCTAssertEqual(result.solutionFile?.name, "solution.ipynb")
+        XCTAssertEqual(result.solutionFile?.name, "BMI Boundary Cases.ipynb")
         XCTAssertEqual(result.solutionFile?.url, "/instructor/asg123/files/solution")
         XCTAssertEqual(result.existingSuiteRows.map(\.name), ["01_public.py", "02_release.py", "notes.txt"])
         XCTAssertEqual(result.existingSuiteRows[0].displayName, "Public test")
@@ -1072,7 +1076,7 @@ final class AssignmentHelpersTests: XCTestCase {
         )
         try Data("{}".utf8).write(to: URL(fileURLWithPath: setup.notebookPath ?? ""))
 
-        let result = currentSetupFiles(for: setup, assignmentID: "asg_practice", hasValidationSolution: false)
+        let result = currentSetupFiles(for: setup, assignmentID: "asg_practice", solutionFilename: nil)
 
         XCTAssertEqual(
             result.existingSuiteRows.map(\.name),

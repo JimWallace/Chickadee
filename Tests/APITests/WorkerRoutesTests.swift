@@ -209,6 +209,48 @@ final class WorkerRoutesTests: XCTestCase {
         XCTAssertEqual(updated?.workerID, "w1")
     }
 
+    func testRequestJobTestSetupVersionChangesWhenZipContentsChangeWithoutSizeChanging() async throws {
+        let setup = try await makeTestSetup(id: "wsetup_version", manifest: workerManifestJSON)
+        try Data("print('A')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
+        let firstSub = try await makeSubmission(id: "wsub_version_1", setupID: setup.id!)
+
+        let path = "/api/v1/worker/request"
+        let firstBody = try workerRequestBody(workerID: "w-version-1")
+        var firstVersion: String?
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: firstBody)
+            req.body = firstBody
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let job = try res.content.decode(Job.self)
+            XCTAssertEqual(job.submissionID, firstSub.id)
+            firstVersion = URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "v" })?
+                .value
+        })
+
+        try Data("print('B')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
+        let secondSub = try await makeSubmission(id: "wsub_version_2", setupID: setup.id!)
+
+        let secondBody = try workerRequestBody(workerID: "w-version-2")
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: secondBody)
+            req.body = secondBody
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let job = try res.content.decode(Job.self)
+            XCTAssertEqual(job.submissionID, secondSub.id)
+            let secondVersion = URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "v" })?
+                .value
+            XCTAssertNotNil(firstVersion)
+            XCTAssertNotNil(secondVersion)
+            XCTAssertNotEqual(firstVersion, secondVersion)
+        })
+    }
+
     func testRequestJob_browserModePendingStudent_claimedAsBackstop() async throws {
         // Browser-mode pending submissions ARE claimed by the worker as a backstop
         // (e.g., browser runner failed, timed out, or these are pre-fix stuck submissions).

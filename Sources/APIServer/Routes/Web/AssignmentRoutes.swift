@@ -1464,13 +1464,15 @@ struct AssignmentRoutes: RouteCollection {
         let q = try? req.query.decode(EditQuery.self)
         let draftSolutionPath = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
-        let hasKnownSolution = assignment.validationStatus == "passed"
+        let existingSolutionName = try await existingSolutionFilename(req: req, assignment: assignment)
+        let hasDraftSolution = FileManager.default.fileExists(atPath: draftSolutionPath)
+        let fallbackSolutionFilename = (assignment.validationStatus == "passed"
             || assignment.validationSubmissionID != nil
-            || FileManager.default.fileExists(atPath: draftSolutionPath)
+            || hasDraftSolution) ? "solution.ipynb" : nil
         let currentFiles = currentSetupFiles(
             for: setup,
             assignmentID: idStr,
-            hasValidationSolution: hasKnownSolution
+            solutionFilename: existingSolutionName ?? fallbackSolutionFilename
         )
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
         let ctx = EditAssignmentContext(
