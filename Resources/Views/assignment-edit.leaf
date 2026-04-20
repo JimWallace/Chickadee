@@ -314,6 +314,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     var items = [];
     var dragName = null;
     var suiteUploadFiles = Array.from(filesInput.files || []);
+    var suiteFilesReady = Promise.resolve();
 
     function setQueuedUploadFiles(files) {
         suiteUploadFiles = files || [];
@@ -456,12 +457,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var existingNames = {};
         items.forEach(function (it) { if (it.source !== 'upload') existingNames[it.name] = true; });
         mergedFiles = mergedFiles.filter(function (file) { return !existingNames[file.name]; });
-        return Promise.all(mergedFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
-            setQueuedUploadFiles(mergedFiles);
+        setQueuedUploadFiles(mergedFiles);
+        suiteFilesReady = Promise.all(suiteUploadFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
             items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, classifications);
             renderTree();
             syncConfig();
+            return suiteUploadFiles;
         });
+        return suiteFilesReady;
     }
 
     function addUploadedFiles() {
@@ -579,8 +582,33 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     filesInput.addEventListener('change', addUploadedFiles);
     if (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (e) {
             syncConfig();
+            if (e.defaultPrevented) return;
+            e.preventDefault();
+            var targetURL = form.action;
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var token = meta ? meta.getAttribute('content') : '';
+            var submitBtn = e.submitter || form.querySelector('.btn-primary[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            suiteFilesReady.then(function () {
+                syncConfig();
+                var fd = new FormData(form);
+                fd.delete('suiteFiles[]');
+                fd.delete('suiteFiles');
+                suiteUploadFiles.forEach(function (file) {
+                    fd.append('suiteFiles[]', file, file.name);
+                });
+                return fetch(targetURL, {
+                    method: 'POST',
+                    headers: { 'x-csrf-token': token },
+                    body: fd
+                });
+            }).then(function (res) {
+                window.location.href = res.url || window.location.href;
+            }).catch(function () {
+                if (submitBtn) submitBtn.disabled = false;
+            });
         });
         form.addEventListener('chickadee:before-multipart-submit', function () {
             syncConfig();

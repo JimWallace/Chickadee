@@ -23,22 +23,22 @@
         return SCRIPT_EXTS.indexOf(ext) >= 0;
     }
 
-    function hasRecognizedShellShebang(text) {
+    function hasRecognizedScriptShebang(text) {
         var firstLine = String(text || '').split(/\r?\n/, 1)[0].trim().toLowerCase();
         if (firstLine.indexOf('#!') !== 0) return false;
-        return /(^#!\s*\/.*\/(ba|z)?sh\b)|(^#!\s*\/usr\/bin\/env\s+(ba|z)?sh\b)/.test(firstLine);
+        return /(^#!\s*\/.*\/(ba|z)?sh\b)|(^#!\s*\/usr\/bin\/env\s+(ba|z)?sh\b)|(^#!.*\bpython[0-9.]*\b)/.test(firstLine);
     }
 
     function classify(name, content, size) {
         var ext = extensionOf(name);
         var hasExt = ext.length > 0;
         var binary = BINARY_EXTS.indexOf(ext) >= 0;
-        var shellShebang = !hasExt && hasRecognizedShellShebang(content || '');
-        var isScript = isLikelyScriptName(name) || shellShebang;
+        var scriptShebang = !hasExt && hasRecognizedScriptShebang(content || '');
+        var isScript = isLikelyScriptName(name) || scriptShebang;
         var errs = [];
         if (binary) errs.push('Binary file — unlikely to work as a test script');
-        if (!hasExt && !shellShebang) {
-            errs.push('No extension or shell shebang; this file will be included as support unless marked as a test');
+        if (!hasExt && !scriptShebang) {
+            errs.push('No extension or recognized shebang; this file will be included as support unless marked as a test');
         }
         if (size === 0) errs.push('Empty file');
         return {
@@ -115,7 +115,7 @@
     return {
         classify: classify,
         classifyFile: classifyFile,
-        hasRecognizedShellShebang: hasRecognizedShellShebang,
+        hasRecognizedScriptShebang: hasRecognizedScriptShebang,
         isLikelyScriptName: isLikelyScriptName,
         mergeFiles: mergeFiles,
         upsertUploadItems: upsertUploadItems

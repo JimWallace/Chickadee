@@ -871,6 +871,105 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertEqual(requirement?.requirementSpec.requiredCapabilities.map(\.name), ["numpy", "pandas"])
     }
 
+    func testSaveNewAssignmentFinalizesDraftWithGeneratedSuiteFilesVisibleOnEdit() async throws {
+        let courseID = try await makeTestCourseID()
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
+
+        let now = Date()
+        let runnerProfile = RunnerProfile()
+        runnerProfile.runnerID = "runner-generated-draft"
+        runnerProfile.displayName = "Runner Generated Draft"
+        runnerProfile.platform = "linux"
+        runnerProfile.architecture = "x86_64"
+        runnerProfile.languageVersionsJSON = "[]"
+        runnerProfile.capabilitiesJSON = "[]"
+        runnerProfile.profileHash = nil
+        runnerProfile.lastRegisteredAt = now
+        runnerProfile.lastSeenAt = now
+        runnerProfile.isActive = true
+        try await runnerProfile.save(on: app.db)
+
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+        let setupID = "setup_generated_suite_finalize"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+        let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
+        let notebookDir = tmpDir + "testsetups/notebooks/\(setupID)/"
+        try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
+        let assignmentPath = notebookDir + "assignment.ipynb"
+        try defaultNotebookData(title: "Generated Suite").write(to: URL(fileURLWithPath: assignmentPath))
+        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: tmpDir + "testsetups/", setupID: setupID)
+        try defaultNotebookData(title: "Generated Suite Solution").write(to: URL(fileURLWithPath: solutionPath))
+
+        let setup = APITestSetup(
+            id: setupID,
+            manifest: manifest,
+            zipPath: zipPath,
+            notebookPath: assignmentPath,
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+
+        let suiteConfig = """
+        [
+          {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":"alpha exists","index":0},
+          {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":"beta exists","index":1}
+        ]
+        """
+        let boundary = "Boundary-New-Generated-Suite"
+        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartBody(
+                boundary: boundary,
+                fields: [
+                    ("_csrf", csrf),
+                    ("draftID", setupID),
+                    ("assignmentName", "Generated Suite Lab"),
+                    ("suiteConfig", suiteConfig)
+                ],
+                files: [
+                    (name: "suiteFiles[]", filename: "test_alpha.py", contentType: "text/plain", data: Data("print('alpha')\n".utf8)),
+                    (name: "suiteFiles[]", filename: "test_beta.py", contentType: "text/plain", data: Data("print('beta')\n".utf8))
+                ]
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db)
+            .filter(\.$title == "Generated Suite Lab")
+            .first()
+        let savedSetup = try await APITestSetup.find(try XCTUnwrap(assignment?.testSetupID), on: app.db)
+        let props = try JSONDecoder().decode(
+            TestProperties.self,
+            from: try XCTUnwrap(savedSetup?.manifest.data(using: .utf8))
+        )
+        XCTAssertEqual(props.testSuites.map(\.script), ["test_alpha.py", "test_beta.py"])
+
+        let zipEntries = Set(listZipEntries(zipPath: try XCTUnwrap(savedSetup?.zipPath)))
+        XCTAssertTrue(zipEntries.contains("test_alpha.py"), "test_alpha.py missing from zip; entries: \(zipEntries)")
+        XCTAssertTrue(zipEntries.contains("test_beta.py"), "test_beta.py missing from zip; entries: \(zipEntries)")
+
+        try await app.asyncTest(.GET, "/instructor/\(try XCTUnwrap(assignment?.publicID))/edit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains("test_alpha.py"))
+            XCTAssertTrue(html.contains("test_beta.py"))
+        })
+    }
+
     func testSaveNewAssignmentRequiresCompatibleRunnerForValidation() async throws {
         let courseID = try await makeTestCourseID()
         app.migrations.add(CreateRunnerProfiles())
@@ -1275,6 +1374,10 @@ final class AssignmentRoutesTests: XCTestCase {
             // The rowHTML JS function must contain the edit-button class that opens the CodeMirror editor.
             XCTAssertTrue(html.contains("suite-edit-upload-btn"),
                           "New assignment page must contain suite-edit-upload-btn in rowHTML JS")
+            XCTAssertTrue(html.contains("chickadeeAddSuiteUploadFiles"),
+                          "Generated tests should update the suite upload queue directly")
+            XCTAssertTrue(html.contains("suiteUploadFiles.forEach(function (file)"),
+                          "Final save should append queued generated/uploaded files from the suite model")
         })
     }
 

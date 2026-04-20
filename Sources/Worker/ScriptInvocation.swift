@@ -104,7 +104,10 @@ private func shebangLine(for script: URL) -> String? {
           let text = String(data: data.prefix(512), encoding: .utf8) else {
         return nil
     }
-    let firstLine = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
+    let normalizedText = text
+        .trimmingCharacters(in: CharacterSet(charactersIn: "\u{feff}"))
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    let firstLine = normalizedText.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
     guard let firstLine, firstLine.hasPrefix("#!") else { return nil }
     return firstLine.lowercased()
 }

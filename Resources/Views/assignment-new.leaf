@@ -337,6 +337,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     var dragName = null;
 
     var suiteUploadFiles = Array.from(filesInput.files || []);
+    var suiteFilesReady = Promise.resolve();
 
     function setQueuedUploadFiles(files) {
         suiteUploadFiles = files || [];
@@ -466,12 +467,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var existingNames = {};
         items.forEach(function (it) { if (it.source !== 'upload') existingNames[it.name] = true; });
         mergedFiles = mergedFiles.filter(function (file) { return !existingNames[file.name]; });
-        return Promise.all(mergedFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
-            setQueuedUploadFiles(mergedFiles);
+        setQueuedUploadFiles(mergedFiles);
+        suiteFilesReady = Promise.all(suiteUploadFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
             items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, classifications);
             renderTree();
             syncConfig();
+            return suiteUploadFiles;
         });
+        return suiteFilesReady;
     }
 
     function addUploadedFiles() {
@@ -580,6 +583,16 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     }
     filesInput.addEventListener('change', addUploadedFiles);
 
+    window.chickadeeAddSuiteUploadFiles = function (files) {
+        return refreshUploadItems(Array.from(files || []));
+    };
+    window.chickadeeSuiteUploadFiles = function () {
+        return suiteUploadFiles.slice();
+    };
+    window.chickadeeSuiteFilesReady = function () {
+        return suiteFilesReady;
+    };
+
     // Notebook upload buttons: open picker, submit to draft endpoint on selection.
     // Uses explicit form.action override instead of formaction on hidden buttons to
     // avoid browser inconsistencies with programmatic clicks on hidden submit elements.
@@ -641,31 +654,34 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             // Prevent base.leaf's generic handler from running.
             e.preventDefault();
 
-            var fd = new FormData(form);
-            // The notebook upload controls are draft-only. By the time we do the
-            // final save, the canonical notebook bytes come from the saved draft
-            // copy, not these hidden file inputs. Some browsers still include
-            // empty file parts here (filename="", 0 bytes), which can confuse
-            // the server's filename resolution for validation submissions.
-            fd.delete('assignmentNotebookFile');
-            fd.delete('solutionNotebookFile');
-            // Explicitly (re-)append suite files so DataTransfer-set files are always
-            // included, even in browsers that don't propagate them through FormData.
-            if (filesInput) {
-                Array.from(filesInput.files).forEach(function (file) {
-                    fd.append('suiteFiles[]', file, file.name);
-                });
-            }
-
             var meta   = document.querySelector('meta[name="csrf-token"]');
             var token  = meta ? meta.getAttribute('content') : '';
             var submitBtn = e.submitter || form.querySelector('.btn-primary[type="submit"]');
             if (submitBtn) submitBtn.disabled = true;
 
-            fetch(targetURL, {
-                method: 'POST',
-                headers: { 'x-csrf-token': token },
-                body: fd
+            suiteFilesReady.then(function () {
+                syncConfig();
+                var fd = new FormData(form);
+                // The notebook upload controls are draft-only. By the time we do the
+                // final save, the canonical notebook bytes come from the saved draft
+                // copy, not these hidden file inputs. Some browsers still include
+                // empty file parts here (filename="", 0 bytes), which can confuse
+                // the server's filename resolution for validation submissions.
+                fd.delete('assignmentNotebookFile');
+                fd.delete('solutionNotebookFile');
+                fd.delete('suiteFiles[]');
+                fd.delete('suiteFiles');
+                // Use our own upload queue as the source of truth. This preserves
+                // generated File objects even in browsers that omit DataTransfer-set
+                // input.files from FormData(form).
+                suiteUploadFiles.forEach(function (file) {
+                    fd.append('suiteFiles[]', file, file.name);
+                });
+                return fetch(targetURL, {
+                    method: 'POST',
+                    headers: { 'x-csrf-token': token },
+                    body: fd
+                });
             }).then(function (res) {
                 window.location.href = res.url || window.location.href;
             }).catch(function () {
@@ -764,20 +780,21 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
             var checked = Array.from(fnChecklist.querySelectorAll('input[type=checkbox]:checked'));
             if (checked.length === 0) { if (scanStatus) scanStatus.textContent = 'Select at least one function.'; return; }
-            var dt = new DataTransfer();
-            for (var i = 0; i < filesInput.files.length; i++) dt.items.add(filesInput.files[i]);
+            var generatedFiles = [];
             checked.forEach(function (chk) {
                 var fnName = chk.value;
                 var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
                 var params = fn ? (fn.paramNames || []) : [];
                 var content = genPyTemplate(tplType, fnName, params);
                 var filename = 'test_' + fnName + '.py';
-                dt.items.add(new File([content], filename, { type: 'text/plain' }));
+                generatedFiles.push(new File([content], filename, { type: 'text/plain' }));
             });
-            filesInput.files = dt.files;
-            filesInput.dispatchEvent(new Event('change'));
-            if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
-            if (scanResults) scanResults.style.display = 'none';
+            window.chickadeeAddSuiteUploadFiles(generatedFiles).then(function () {
+                if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
+                if (scanResults) scanResults.style.display = 'none';
+            }).catch(function (err) {
+                if (scanStatus) scanStatus.textContent = 'Could not add generated tests: ' + err;
+            });
         });
     }
 
@@ -946,18 +963,7 @@ if (saveBtn) {
         const content  = view ? view.state.doc.toString() : '';
         const file     = new File([content], filename, { type: 'text/plain' });
 
-        const dt = new DataTransfer();
-        for (let i = 0; i < filesInput.files.length; i++) dt.items.add(filesInput.files[i]);
-        // Replace if same name already exists; otherwise append
-        let replaced = false;
-        const existing = Array.from(dt.files);
-        const dt2 = new DataTransfer();
-        existing.forEach(function (f) { if (f.name !== filename) dt2.items.add(f); else replaced = true; });
-        dt2.items.add(file);
-
-        filesInput.files = dt2.files;
-        filesInput.dispatchEvent(new Event('change'));
-        closeEditor();
+        window.chickadeeAddSuiteUploadFiles([file]).then(closeEditor);
     });
 }
 

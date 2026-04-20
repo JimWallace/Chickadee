@@ -79,6 +79,19 @@ final class ScriptInvocationTests {
         #expect(inv.arguments.contains("-c"))
     }
 
+    @Test func extensionlessDisplayNameWithPythonShebangUsesPython3() {
+        let script = makeScript(name: "BMI Boundary Cases", content: "#!/usr/bin/env python3\nprint('hi')")
+        let inv = scriptInvocation(for: script)
+        #expect(inv.arguments.first == "python3")
+        #expect(inv.arguments.last == script.path)
+    }
+
+    @Test func leadingBlankBeforePythonShebangUsesPython3() {
+        let script = makeScript(name: "BMI Boundary Cases", content: "\n#!/usr/bin/env python3\nprint('hi')")
+        let inv = scriptInvocation(for: script)
+        #expect(inv.arguments.first == "python3")
+    }
+
     @Test func shebangShUsesSh() {
         let script = makeScript(name: "test_nosh", content: "#!/bin/sh\necho hi")
         let inv = scriptInvocation(for: script)
