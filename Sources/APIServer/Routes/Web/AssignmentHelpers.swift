@@ -1477,10 +1477,10 @@ func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
     let ext = URL(fileURLWithPath: storedName).pathExtension.lowercased()
     if supportedExtensions.contains(ext) { return true }
     guard ext.isEmpty else { return false }
-    return hasRecognizedShellShebang(file)
+    return hasRecognizedScriptShebang(file)
 }
 
-func hasRecognizedShellShebang(_ file: File) -> Bool {
+func hasRecognizedScriptShebang(_ file: File) -> Bool {
     let prefix = String(decoding: Data(file.data.readableBytesView.prefix(256)), as: UTF8.self)
     let firstLine = prefix.split(whereSeparator: \.isNewline).first.map(String.init) ?? prefix
     let normalized = firstLine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1489,6 +1489,9 @@ func hasRecognizedShellShebang(_ file: File) -> Bool {
         return true
     }
     if normalized.range(of: #"^#!\s*/usr/bin/env\s+(ba|z)?sh\b"#, options: .regularExpression) != nil {
+        return true
+    }
+    if normalized.range(of: #"^#!.*\bpython[0-9.]*\b"#, options: .regularExpression) != nil {
         return true
     }
     return false

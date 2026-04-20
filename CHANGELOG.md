@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.73] - 2026-04-19
+
+### Fixed
+
+- **Generated and uploaded assignment tests now persist from the visible suite list**: create/edit assignment saves now submit the same queued suite files shown on screen, preventing generated function-exists tests from disappearing after Save & Validate.
+- **Extensionless Python test scripts now run as Python**: files such as `BMI Boundary Cases` with a `#!/usr/bin/env python3` shebang are classified as runnable tests and dispatched through the Python test runtime instead of `/bin/sh`.
+
 ## [0.4.72] - 2026-04-19
 
 ### Fixed

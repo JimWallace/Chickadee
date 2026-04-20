@@ -376,12 +376,13 @@ final class AssignmentHelpersTests: XCTestCase {
         XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
     }
 
-    func testBuildSuiteEntriesFallsBackToExtensionlessShellShebangScripts() throws {
+    func testBuildSuiteEntriesFallsBackToExtensionlessShebangScripts() throws {
         let suiteFiles = [
             makeFile(named: "01_shell", contents: "#!/bin/sh\necho ok\n"),
             makeFile(named: "02_bash", contents: "#!/usr/bin/env bash\necho ok\n"),
             makeFile(named: "03_notes", contents: "echo support but no shebang\n"),
-            makeFile(named: "04_python.py", contents: "print('ok')\n")
+            makeFile(named: "04_python.py", contents: "print('ok')\n"),
+            makeFile(named: "BMI Boundary Cases", contents: "#!/usr/bin/env python3\nprint('ok')\n")
         ]
 
         let entries = try buildSuiteEntries(
@@ -390,12 +391,13 @@ final class AssignmentHelpersTests: XCTestCase {
                 0: "01_shell",
                 1: "02_bash",
                 2: "03_notes",
-                3: "04_python.py"
+                3: "04_python.py",
+                4: "BMI Boundary Cases"
             ],
             suiteConfigJSON: nil
         )
 
-        XCTAssertEqual(entries.map(\.script), ["01_shell", "02_bash", "04_python.py"])
+        XCTAssertEqual(entries.map(\.script), ["01_shell", "02_bash", "04_python.py", "BMI Boundary Cases"])
         XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
     }
 

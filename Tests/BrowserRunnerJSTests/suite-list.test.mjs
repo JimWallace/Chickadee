@@ -25,13 +25,24 @@ test('classifies extensionless shell shebang files as scripts', async () => {
   assert.deepEqual(bash.errors, []);
 });
 
+test('classifies extensionless python shebang files as scripts', async () => {
+  const result = await SuiteList.classifyFile(fakeFile(
+    'BMI Boundary Cases',
+    '#!/usr/bin/env python3\n\nprint("ok")\n',
+  ));
+
+  assert.equal(result.isScript, true);
+  assert.equal(result.tier, 'public');
+  assert.deepEqual(result.errors, []);
+});
+
 test('classifies extensionless files without shebang as support with a clear warning', async () => {
   const result = await SuiteList.classifyFile(fakeFile('notes', 'echo not necessarily runnable\n'));
 
   assert.equal(result.isScript, false);
   assert.equal(result.tier, 'support');
   assert.deepEqual(result.errors, [
-    'No extension or shell shebang; this file will be included as support unless marked as a test',
+    'No extension or recognized shebang; this file will be included as support unless marked as a test',
   ]);
 });
 
