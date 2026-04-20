@@ -1360,6 +1360,91 @@ final class AssignmentRoutesTests: XCTestCase {
                         "validationSubmissionID must be set when suite files are present")
     }
 
+    func testEditPageShowsUploadedSolutionNotebookFilenameAfterCreate() async throws {
+        _ = try await makeTestCourseID()
+        app.migrations.add(CreateRunnerProfiles())
+        try await app.autoMigrate()
+        let now = Date()
+        let runnerProfile = RunnerProfile()
+        runnerProfile.runnerID = "runner-solution-name"
+        runnerProfile.displayName = "Runner Solution Name"
+        runnerProfile.platform = "linux"
+        runnerProfile.architecture = "x86_64"
+        runnerProfile.languageVersionsJSON = "[]"
+        runnerProfile.capabilitiesJSON = "[]"
+        runnerProfile.profileHash = nil
+        runnerProfile.lastRegisteredAt = now
+        runnerProfile.lastSeenAt = now
+        runnerProfile.isActive = true
+        try await runnerProfile.save(on: app.db)
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+        let boundary = "Boundary-Solution-Filename"
+        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+        let solutionName = "BMI Boundary Cases.ipynb"
+        let suiteConfig = """
+        [
+          {"index":0,"isTest":true,"tier":"public","order":1,"points":1,"displayName":"Smoke test"}
+        ]
+        """
+
+        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartBody(
+                boundary: boundary,
+                fields: [
+                    ("_csrf", csrf),
+                    ("assignmentName", "Named Solution Lab"),
+                    ("suiteConfig", suiteConfig)
+                ],
+                files: [
+                    (
+                        name: "assignmentNotebookFile",
+                        filename: "starter.ipynb",
+                        contentType: "application/json",
+                        data: Data(notebook.utf8)
+                    ),
+                    (
+                        name: "solutionNotebookFile",
+                        filename: solutionName,
+                        contentType: "application/json",
+                        data: Data(notebook.utf8)
+                    ),
+                    (
+                        name: "suiteFiles[]",
+                        filename: "test_smoke.py",
+                        contentType: "text/plain",
+                        data: Data("print('ok')\n".utf8)
+                    )
+                ]
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db)
+            .filter(\.$title == "Named Solution Lab")
+            .first()
+        let validationID = try XCTUnwrap(assignment?.validationSubmissionID)
+        let validationSubmission = try await APISubmission.find(validationID, on: app.db)
+        XCTAssertEqual(validationSubmission?.filename, solutionName)
+
+        try await app.asyncTest(.GET, "/instructor/\(try XCTUnwrap(assignment?.publicID))/edit", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains(solutionName), html)
+        })
+    }
+
     /// Bug #1 regression: the new assignment page must include JavaScript for the edit button
     /// on uploaded suite file rows so instructors can view/edit script content before saving.
     func testNewAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {

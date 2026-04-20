@@ -314,13 +314,9 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
 
 private func testSetupDownloadVersion(for setup: APITestSetup) -> String {
     var material = Data(setup.manifest.utf8)
-    if let attrs = try? FileManager.default.attributesOfItem(atPath: setup.zipPath) {
-        if let modified = attrs[.modificationDate] as? Date {
-            material.append(Data("|mtime=\(modified.timeIntervalSince1970)".utf8))
-        }
-        if let size = attrs[.size] {
-            material.append(Data("|size=\(size)".utf8))
-        }
+    if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
+        material.append(Data("|zip=".utf8))
+        material.append(zipData)
     }
     let digest = Data(SHA256.hash(data: material)).map { String(format: "%02x", $0) }.joined()
     return String(digest.prefix(16))

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.74] - 2026-04-20
+
+### Fixed
+
+- **Solution notebook filenames stay visible after upload**: the assignment edit page now displays the original uploaded validation solution filename instead of falling back to the internal draft name `solution.ipynb`.
+- **Runners pick up every saved script change**: worker setup download versions now hash the actual setup ZIP contents, preventing stale runner cache hits when edited scripts keep the same file size or timestamp granularity.
+
 ## [0.4.73] - 2026-04-19
 
 ### Fixed

@@ -307,7 +307,7 @@ func submissionFilenameForStorage(uploadedName: String?, fallback: String) -> St
     return fileName
 }
 
-func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidationSolution: Bool) -> (
+func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFilename: String?) -> (
     assignmentFile: CurrentFileLink,
     solutionFile: CurrentFileLink?,
     existingSuiteRows: [EditableSuiteRow]
@@ -345,8 +345,8 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, hasValidat
                 url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(solutionEntry))"
             )
         }
-        if hasValidationSolution {
-            return CurrentFileLink(name: "solution.ipynb", url: "/instructor/\(assignmentID)/files/solution")
+        if let solutionFilename, !solutionFilename.isEmpty {
+            return CurrentFileLink(name: solutionFilename, url: "/instructor/\(assignmentID)/files/solution")
         }
         return nil
     }()
@@ -814,6 +814,23 @@ func loadExistingSolution(req: Request, assignment: APIAssignment) async throws 
             data: data,
             filename: fallbackSubmission.filename ?? "solution.ipynb"
         )
+    }
+
+    return nil
+}
+
+func existingSolutionFilename(req: Request, assignment: APIAssignment) async throws -> String? {
+    if let validationID = assignment.validationSubmissionID,
+       let validationSubmission = try await APISubmission.find(validationID, on: req.db) {
+        return validationSubmission.filename ?? "solution.ipynb"
+    }
+
+    if let fallbackSubmission = try await APISubmission.query(on: req.db)
+        .filter(\.$testSetupID == assignment.testSetupID)
+        .filter(\.$kind == APISubmission.Kind.validation)
+        .sort(\.$submittedAt, .descending)
+        .first() {
+        return fallbackSubmission.filename ?? "solution.ipynb"
     }
 
     return nil
