@@ -111,6 +111,7 @@
         <h2 style="margin:0">Test Suite</h2>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
+            <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
             <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
         </div>
     </div>
@@ -125,15 +126,10 @@
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)" data-generated="#(row.isGeneratedFlag)" data-generated-by="#(row.generatedByDisplay)">
+            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
                 <td><div class="suite-name-cell">
                     <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
                     <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                    #if(row.isGeneratedFlag == "1"):
-                    <span class="suite-generated-badge" title="Generated from pattern family #(row.generatedByDisplay). Edit the family to change this test.">
-                        ⟳ #(row.generatedByDisplay)
-                    </span>
-                    #endif
                 </div></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
@@ -158,23 +154,36 @@
                 </td>
             </tr>
             #endfor
+            #for(family in familyRows):
+            <tr data-source="family" data-family-id="#(family.id)">
+                <td><div class="suite-name-cell suite-family-cell">
+                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>
+                    <span class="suite-family-icon" title="Pattern family">⟳</span>
+                    <div style="display:flex;flex-direction:column;gap:.15rem">
+                        <strong style="font-size:.85rem">#(family.name)</strong>
+                        <span class="card-meta" style="font-size:.72rem">
+                            #(family.functionName)() · #(family.caseCountText)
+                        </span>
+                    </div>
+                </div></td>
+                <td><span class="card-meta" style="font-size:.75rem">#(family.tier)</span></td>
+                <td><span class="card-meta" style="font-size:.75rem">#(family.totalPoints)</span></td>
+                <td class="time">
+                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <button class="btn action-btn family-edit-btn" type="button" data-family-id="#(family.id)"
+                                title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </button>
+                        <button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="#(family.id)"
+                                title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            #endfor
         </tbody>
     </table>
-
-    <!-- ── Pattern Families ─────────────────────────────────────────────── -->
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0 .5rem">
-        <h2 style="margin:0">Pattern Families</h2>
-        <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
-    </div>
-    <p class="card-meta" style="margin:0 0 .6rem;font-size:.8rem">
-        A family expands into individual test scripts at save time — one per case.
-        Generated scripts appear in the Test Suite above and cannot be edited directly;
-        change the family to change them.
-    </p>
-    <div id="family-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
-    <p class="card-meta" id="family-list-empty" style="margin:.4rem 0 0;font-size:.8rem;color:var(--meta)">
-        No pattern families yet.
-    </p>
 </form>
 
 <!-- Seed data: current families as JSON, consumed by the family editor JS.
@@ -196,31 +205,15 @@
         <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
                 <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Family ID (filename fragment)
-                    <input type="text" class="form-input" id="family-id" placeholder="e.g. bmi_boundaries"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Name (shown in UI)
-                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Kind
-                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="boundary_equality">Boundary equality (single arg, compare with ==)</option>
+                    Function
+                    <select class="form-input" id="family-function-select" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="">— Scanning solution notebook… —</option>
                     </select>
-                </label>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Function name
-                    <input type="text" class="form-input" id="family-function" placeholder="e.g. bmi_category"
-                           style="padding:.3rem .5rem;font-size:.85rem">
+                    <span id="family-function-hint" class="card-meta" style="font-size:.72rem"></span>
                 </label>
                 <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Parameter names (comma-separated)
-                    <input type="text" class="form-input" id="family-params" placeholder="e.g. bmi"
+                    Family name (shown in UI)
+                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
                            style="padding:.3rem .5rem;font-size:.85rem">
                 </label>
                 <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
@@ -238,6 +231,14 @@
                           style="padding:.3rem .5rem;font-size:.85rem"></textarea>
             </label>
 
+            <!-- Hidden fields: kind is fixed at boundary_equality in v1;
+                 the family id, function name, and param list are derived
+                 from the function dropdown selection. -->
+            <input type="hidden" id="family-kind" value="boundary_equality">
+            <input type="hidden" id="family-id">
+            <input type="hidden" id="family-function">
+            <input type="hidden" id="family-params">
+
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
                     <strong style="font-size:.85rem">Cases</strong>
@@ -247,11 +248,12 @@
                 </div>
                 <table class="results-table" id="family-cases-table" style="font-size:.8rem">
                     <thead>
-                        <tr>
-                            <th style="width:6.5rem">Key</th>
+                        <tr id="family-cases-header">
+                            <th style="width:2.25rem">#</th>
                             <th>Label</th>
-                            <th>Args (JSON, one per param)</th>
-                            <th>Expected (JSON)</th>
+                            <!-- One arg column per detected parameter; columns are rebuilt
+                                 dynamically when the function changes. -->
+                            <th class="pf-case-expected-col">Expected</th>
                             <th>Hint (override)</th>
                             <th style="width:4rem"></th>
                         </tr>
@@ -363,29 +365,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
 .suite-file-hint a { color: inherit; }
 #suite-config-table td { vertical-align: top; }
-.suite-generated-badge {
-    display: inline-flex; align-items: center; gap: .25rem;
-    font-size: .7rem; padding: .1rem .4rem; border-radius: .3rem;
-    background: var(--hover-bg, #eef3f9); color: var(--meta);
-    border: 1px solid var(--border, #ddd); white-space: nowrap;
-    cursor: help;
+tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); }
+.suite-family-cell { display: flex; align-items: center; gap: .5rem; }
+.suite-family-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.4rem; height: 1.4rem; border-radius: 50%;
+    background: var(--hover-bg, #eef3f9); color: var(--blue, #0070c9);
+    font-size: .85rem; font-weight: 700; flex-shrink: 0;
 }
-tr[data-generated="1"] .suite-display-name,
-tr[data-generated="1"] .suite-tier,
-tr[data-generated="1"] .suite-points,
-tr[data-generated="1"] .suite-edit-btn,
-tr[data-generated="1"] .suite-delete-btn,
-tr[data-generated="1"] .suite-drag-handle {
-    opacity: .55; pointer-events: none;
-}
-.pattern-family-card {
-    border: 1px solid var(--border, #ddd); border-radius: .4rem;
-    padding: .6rem .75rem; display: flex; align-items: center; gap: .75rem;
-    flex-wrap: wrap; background: var(--surface-alt, transparent);
-}
-.pattern-family-card .pf-name { font-weight: 600; font-size: .9rem; }
-.pattern-family-card .pf-meta { font-size: .75rem; color: var(--meta); }
-.pattern-family-card .pf-actions { margin-left: auto; display: flex; gap: .4rem; }
 </style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>
@@ -1154,7 +1141,10 @@ function checkUWDates(dateTimeValue, warningEl) {
     var assignmentID = '#(assignmentID)';
     var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-    // Seed families from the JSON tag embedded in the page.
+    // Seed families from the JSON tag embedded in the page.  The in-table
+    // rows are already rendered server-side by Leaf; we only use this state
+    // to populate the edit modal, compute the next family id on create, and
+    // build the payload sent to PUT /families.
     var familiesState = [];
     var seed = document.getElementById('pattern-families-seed');
     if (seed) {
@@ -1162,18 +1152,24 @@ function checkUWDates(dateTimeValue, warningEl) {
         catch (e) { familiesState = []; }
     }
 
-    var familyListEl     = document.getElementById('family-list');
-    var familyListEmpty  = document.getElementById('family-list-empty');
+    // Cached scan result.  Populated on first modal open, reused until the
+    // page reloads.  Each entry has { name, paramNames, paramCount }.
+    var scannedFunctions = null;
+    var scanLoading = false;
+
     var addFamilyBtn     = document.getElementById('add-family-btn');
     var overlay          = document.getElementById('family-editor-overlay');
     var titleEl          = document.getElementById('family-editor-title');
     var idInput          = document.getElementById('family-id');
     var nameInput        = document.getElementById('family-name');
-    var kindSelect       = document.getElementById('family-kind');
+    var kindInput        = document.getElementById('family-kind');
     var fnInput          = document.getElementById('family-function');
     var paramsInput      = document.getElementById('family-params');
+    var fnSelect         = document.getElementById('family-function-select');
+    var fnHint           = document.getElementById('family-function-hint');
     var defaultTierSel   = document.getElementById('family-default-tier');
     var defaultHintInput = document.getElementById('family-default-hint');
+    var casesHeader      = document.getElementById('family-cases-header');
     var casesBody        = document.getElementById('family-cases-body');
     var casesEmpty       = document.getElementById('family-cases-empty');
     var addCaseBtn       = document.getElementById('add-case-btn');
@@ -1190,109 +1186,194 @@ function checkUWDates(dateTimeValue, warningEl) {
             .replace(/"/g, '&quot;');
     }
 
-    function renderFamilyList() {
-        familyListEl.innerHTML = '';
-        if (!familiesState.length) {
-            familyListEmpty.style.display = '';
-            return;
+    // ── Solution-notebook scan ─────────────────────────────────────────────
+
+    /// Fetches the assignment's solution notebook and posts it to
+    /// /instructor/scan-notebook.  Caches the result on `scannedFunctions`.
+    function ensureScannedFunctions() {
+        if (scannedFunctions !== null) return Promise.resolve(scannedFunctions);
+        if (scanLoading) {
+            return new Promise(function (resolve) {
+                var iv = setInterval(function () {
+                    if (!scanLoading) { clearInterval(iv); resolve(scannedFunctions || []); }
+                }, 50);
+            });
         }
-        familyListEmpty.style.display = 'none';
-        familiesState.forEach(function (family, idx) {
-            var caseCount = (family.cases || []).length;
-            var card = document.createElement('div');
-            card.className = 'pattern-family-card';
-            card.innerHTML =
-                '<div>'
-              +   '<div class="pf-name">' + escHtml(family.name) + '</div>'
-              +   '<div class="pf-meta">'
-              +     escHtml(family.functionName || '') + '('
-              +     escHtml((family.paramNames || []).join(', ')) + ') &middot; '
-              +     caseCount + ' case' + (caseCount === 1 ? '' : 's')
-              +   '</div>'
-              + '</div>'
-              + '<div class="pf-actions">'
-              +   '<button type="button" class="btn action-btn" data-action="edit" data-idx="' + idx + '">Edit</button>'
-              +   '<button type="button" class="btn action-btn action-danger" data-action="delete" data-idx="' + idx + '">Delete</button>'
-              + '</div>';
-            familyListEl.appendChild(card);
-        });
+        scanLoading = true;
+        return fetch('/instructor/' + encodeURIComponent(assignmentID) + '/files/solution', {
+            headers: { 'x-csrf-token': csrfToken }
+        })
+        .then(function (r) { return r.ok ? r.text() : Promise.reject('No solution notebook'); })
+        .then(function (text) {
+            return fetch('/instructor/scan-notebook', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                body: text
+            });
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject('Scan failed'); })
+        .then(function (fns) { scannedFunctions = fns || []; scanLoading = false; return scannedFunctions; })
+        .catch(function () { scannedFunctions = []; scanLoading = false; return []; });
     }
 
-    function clearCasesTable() { casesBody.innerHTML = ''; updateCasesEmptyMessage(); }
+    function populateFunctionSelect(selectedName) {
+        if (!scannedFunctions || !scannedFunctions.length) {
+            fnSelect.innerHTML = '<option value="">— No functions detected in solution —</option>';
+            fnSelect.disabled = true;
+            fnHint.textContent = 'Create or update the solution notebook so its top-level functions can be detected.';
+            return;
+        }
+        fnSelect.disabled = false;
+        fnHint.textContent = '';
+        var options = ['<option value="">— Select a function —</option>'];
+        scannedFunctions.forEach(function (fn) {
+            var label = fn.name + '(' + ((fn.paramNames || []).join(', ')) + ')';
+            var sel = (fn.name === selectedName) ? ' selected' : '';
+            options.push('<option value="' + escHtml(fn.name) + '"' + sel + '>' + escHtml(label) + '</option>');
+        });
+        fnSelect.innerHTML = options.join('');
+        // If a function was preselected, make sure derived fields are consistent.
+        if (selectedName) applyFunctionSelection(selectedName, /*preserveCases=*/true);
+    }
+
+    /// When a function is picked (or the modal opens in edit mode), update
+    /// the hidden id/function/params fields and rebuild the per-arg columns
+    /// in the cases table.  Optionally preserves existing case rows (edit mode).
+    function applyFunctionSelection(fnName, preserveCases) {
+        var fn = (scannedFunctions || []).find(function (f) { return f.name === fnName; });
+        var paramNames = fn ? (fn.paramNames || []) : [];
+        fnInput.value = fnName || '';
+        paramsInput.value = paramNames.join(',');
+        // Default family id to the function name (user can't edit it in v1).
+        // Keep existing id in edit mode where it may differ.
+        if (!preserveCases || !idInput.value) {
+            idInput.value = fnName ? sanitizeFamilyID(fnName) : '';
+        }
+        // Auto-suggest a family name if the user hasn't typed one yet.
+        if (fnName && !nameInput.value.trim()) {
+            nameInput.value = fnName + ' — boundary cases';
+        }
+        rebuildCasesHeader(paramNames);
+        if (!preserveCases) {
+            casesBody.innerHTML = '';
+            addCaseRow(null, paramNames);
+        } else {
+            // Regenerate rows to match the new param columns, preserving
+            // existing data by position.
+            var existing = readCasesFromTableRaw(paramNames.length);
+            casesBody.innerHTML = '';
+            existing.forEach(function (c) { addCaseRow(c, paramNames); });
+            if (!existing.length) addCaseRow(null, paramNames);
+        }
+        updateCasesEmptyMessage();
+    }
+
+    function sanitizeFamilyID(s) {
+        return String(s || '').toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    function rebuildCasesHeader(paramNames) {
+        var th = ['<th style="width:2.25rem">#</th>', '<th>Label</th>'];
+        if (!paramNames.length) {
+            th.push('<th>Args (JSON)</th>');
+        } else {
+            paramNames.forEach(function (p) {
+                th.push('<th><code style="font-size:.7rem">' + escHtml(p) + '</code></th>');
+            });
+        }
+        th.push('<th>Expected</th>');
+        th.push('<th>Hint (override)</th>');
+        th.push('<th style="width:4rem"></th>');
+        casesHeader.innerHTML = th.join('');
+    }
+
+    // ── Cases table ────────────────────────────────────────────────────────
 
     function updateCasesEmptyMessage() {
         casesEmpty.style.display = casesBody.children.length === 0 ? '' : 'none';
     }
 
-    function addCaseRow(initial) {
-        var c = initial || { key: '', label: '', args: [], expected: null, hint: '' };
+    function nextCaseKey() {
+        // Pad to two digits so the filename sort stays stable for up to 99 cases.
+        var n = casesBody.children.length + 1;
+        return (n < 10 ? '0' + n : String(n));
+    }
+
+    function addCaseRow(initial, paramNames) {
+        paramNames = paramNames || [];
+        var c = initial || { label: '', args: [], expected: null, hint: '' };
+        var tds = [];
+        // Column 1: auto-numbered sequence (readonly, regenerated on reorder).
+        tds.push('<td class="pf-case-num" style="text-align:center;color:var(--meta);font-size:.75rem"></td>');
+        tds.push('<td><input type="text" class="form-input pf-case-label" value="' + escHtml(c.label) + '" placeholder="e.g. bmi < 18.5 is underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
+
+        if (!paramNames.length) {
+            // No param names yet — single free-form JSON args field.
+            tds.push('<td><input type="text" class="form-input pf-case-args" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+        } else {
+            paramNames.forEach(function (_, i) {
+                var val = (c.args && c.args[i] !== undefined) ? JSON.stringify(c.args[i]) : '';
+                tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="18.49" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+            });
+        }
+        tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(c.expected == null ? '' : JSON.stringify(c.expected)) + '" placeholder="&quot;underweight&quot;" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+        tds.push('<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
+        tds.push('<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>');
+
         var tr = document.createElement('tr');
-        tr.innerHTML =
-            '<td><input type="text" class="form-input pf-case-key" value="' + escHtml(c.key) + '" placeholder="01" style="width:5rem;padding:.2rem .4rem;font-size:.8rem"></td>'
-          + '<td><input type="text" class="form-input pf-case-label" value="' + escHtml(c.label) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>'
-          + '<td><input type="text" class="form-input pf-case-args" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
-          + '<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(JSON.stringify(c.expected == null ? null : c.expected)) + '" placeholder="&quot;underweight&quot;" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
-          + '<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>'
-          + '<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>';
+        tr.innerHTML = tds.join('');
         casesBody.appendChild(tr);
+        renumberCases();
         updateCasesEmptyMessage();
     }
 
-    function openEditor(familyIdx) {
-        editingIndex = (typeof familyIdx === 'number') ? familyIdx : -1;
-        statusEl.textContent = '';
-        clearCasesTable();
-
-        if (editingIndex >= 0) {
-            var family = familiesState[editingIndex];
-            titleEl.textContent = 'Edit Pattern Family';
-            idInput.value = family.id || '';
-            idInput.disabled = true; // id is the filename key; don't allow rename in v1
-            nameInput.value = family.name || '';
-            kindSelect.value = family.kind || 'boundary_equality';
-            fnInput.value = family.functionName || '';
-            paramsInput.value = (family.paramNames || []).join(', ');
-            defaultTierSel.value = (family.defaults && family.defaults.tier) || 'public';
-            defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
-            (family.cases || []).forEach(function (c) { addCaseRow(c); });
-        } else {
-            titleEl.textContent = 'New Pattern Family';
-            idInput.value = '';
-            idInput.disabled = false;
-            nameInput.value = '';
-            kindSelect.value = 'boundary_equality';
-            fnInput.value = '';
-            paramsInput.value = '';
-            defaultTierSel.value = 'public';
-            defaultHintInput.value = '';
-            addCaseRow(null);
-        }
-
-        overlay.style.display = 'flex';
-        setTimeout(function () { idInput.disabled ? nameInput.focus() : idInput.focus(); }, 0);
+    function renumberCases() {
+        Array.from(casesBody.querySelectorAll('.pf-case-num')).forEach(function (td, i) {
+            var n = i + 1;
+            td.textContent = (n < 10 ? '0' + n : String(n));
+        });
     }
 
-    function closeEditor() { overlay.style.display = 'none'; }
-
-    function readCasesFromTable() {
+    /// Reads current rows into PatternCase values, validating JSON.  Throws
+    /// Error with a readable message on any parse failure.
+    function readCasesFromTable(paramNames) {
+        paramNames = paramNames || [];
         var rows = Array.from(casesBody.querySelectorAll('tr'));
         var out = [];
         for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
-            var key   = row.querySelector('.pf-case-key').value.trim();
             var label = row.querySelector('.pf-case-label').value.trim();
-            var rawArgs = row.querySelector('.pf-case-args').value.trim();
-            var rawExp  = row.querySelector('.pf-case-expected').value.trim();
-            var hint    = row.querySelector('.pf-case-hint').value.trim();
-            var args, expected;
-            try { args = rawArgs === '' ? [] : JSON.parse(rawArgs); }
-            catch (e) { throw new Error('Case ' + (key || '#' + (i + 1)) + ': args is not valid JSON — ' + e.message); }
-            if (!Array.isArray(args)) throw new Error('Case ' + (key || '#' + (i + 1)) + ': args must be a JSON array');
-            try { expected = rawExp === '' ? null : JSON.parse(rawExp); }
-            catch (e) { throw new Error('Case ' + (key || '#' + (i + 1)) + ': expected is not valid JSON — ' + e.message); }
+            var rawExp = row.querySelector('.pf-case-expected').value.trim();
+            var hint   = row.querySelector('.pf-case-hint').value.trim();
+            var caseNum = (i + 1 < 10 ? '0' + (i + 1) : String(i + 1));
+            var args = [];
+            if (paramNames.length === 0) {
+                var rawArgs = (row.querySelector('.pf-case-args') || {}).value || '';
+                rawArgs = rawArgs.trim();
+                if (rawArgs !== '') {
+                    try { args = JSON.parse(rawArgs); }
+                    catch (e) { throw new Error('Case ' + caseNum + ': args must be valid JSON (' + e.message + ')'); }
+                    if (!Array.isArray(args)) throw new Error('Case ' + caseNum + ': args must be a JSON array');
+                }
+            } else {
+                for (var a = 0; a < paramNames.length; a++) {
+                    var cell = row.querySelector('.pf-case-arg[data-arg-index="' + a + '"]');
+                    var raw = cell ? cell.value.trim() : '';
+                    if (raw === '') throw new Error('Case ' + caseNum + ': missing value for "' + paramNames[a] + '"');
+                    try { args.push(JSON.parse(raw)); }
+                    catch (e) { throw new Error('Case ' + caseNum + ' / ' + paramNames[a] + ': must be valid JSON (' + e.message + ')'); }
+                }
+            }
+            var expected;
+            if (rawExp === '') throw new Error('Case ' + caseNum + ': expected value is required');
+            try { expected = JSON.parse(rawExp); }
+            catch (e) { throw new Error('Case ' + caseNum + ': expected must be valid JSON (' + e.message + ')'); }
+            if (!label) throw new Error('Case ' + caseNum + ': label is required');
             out.push({
-                key: key, label: label,
-                args: args, expected: expected,
+                key: caseNum,
+                label: label,
+                args: args,
+                expected: expected,
                 hint: hint || null,
                 enabled: true
             });
@@ -1300,15 +1381,92 @@ function checkUWDates(dateTimeValue, warningEl) {
         return out;
     }
 
+    /// Lossy read used when switching between function selections — preserves
+    /// what we can but doesn't throw on parse errors (those rows will appear
+    /// as empty cells, which the user can correct).
+    function readCasesFromTableRaw(argCount) {
+        var rows = Array.from(casesBody.querySelectorAll('tr'));
+        return rows.map(function (row) {
+            var label = row.querySelector('.pf-case-label').value;
+            var rawExp = row.querySelector('.pf-case-expected').value;
+            var hint = row.querySelector('.pf-case-hint').value;
+            var args = [];
+            var cells = row.querySelectorAll('.pf-case-arg');
+            if (cells.length) {
+                Array.from(cells).forEach(function (c) {
+                    try { args.push(JSON.parse(c.value)); } catch (_) { args.push(null); }
+                });
+            } else {
+                var single = row.querySelector('.pf-case-args');
+                if (single) {
+                    try { args = JSON.parse(single.value); if (!Array.isArray(args)) args = []; } catch (_) { args = []; }
+                }
+            }
+            var expected = null;
+            try { expected = rawExp.trim() === '' ? null : JSON.parse(rawExp); } catch (_) {}
+            return { label: label, args: args, expected: expected, hint: hint };
+        });
+    }
+
+    // ── Modal open/close ───────────────────────────────────────────────────
+
+    function openEditor(familyIdx) {
+        editingIndex = (typeof familyIdx === 'number') ? familyIdx : -1;
+        statusEl.textContent = '';
+        casesBody.innerHTML = '';
+
+        var preselectedFn = '';
+        if (editingIndex >= 0) {
+            var family = familiesState[editingIndex];
+            titleEl.textContent = 'Edit Pattern Family';
+            idInput.value = family.id || '';
+            nameInput.value = family.name || '';
+            kindInput.value = family.kind || 'boundary_equality';
+            fnInput.value = family.functionName || '';
+            paramsInput.value = (family.paramNames || []).join(',');
+            defaultTierSel.value = (family.defaults && family.defaults.tier) || 'public';
+            defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
+            preselectedFn = family.functionName || '';
+            rebuildCasesHeader(family.paramNames || []);
+            (family.cases || []).forEach(function (c) { addCaseRow(c, family.paramNames || []); });
+            if (!(family.cases || []).length) addCaseRow(null, family.paramNames || []);
+        } else {
+            titleEl.textContent = 'New Pattern Family';
+            idInput.value = '';
+            nameInput.value = '';
+            kindInput.value = 'boundary_equality';
+            fnInput.value = '';
+            paramsInput.value = '';
+            defaultTierSel.value = 'public';
+            defaultHintInput.value = '';
+            rebuildCasesHeader([]);
+        }
+
+        overlay.style.display = 'flex';
+        updateCasesEmptyMessage();
+
+        // Kick off (or reuse) the scan and populate the function dropdown.
+        fnSelect.innerHTML = '<option value="">— Scanning solution notebook… —</option>';
+        fnSelect.disabled = true;
+        fnHint.textContent = '';
+        ensureScannedFunctions().then(function () {
+            populateFunctionSelect(preselectedFn);
+        });
+
+        setTimeout(function () { nameInput.focus(); }, 0);
+    }
+
+    function closeEditor() { overlay.style.display = 'none'; }
+
     function readFamilyFromEditor() {
-        var params = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-        var cases  = readCasesFromTable();
+        var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var cases = readCasesFromTable(paramNames);
         return {
             id: idInput.value.trim(),
             name: nameInput.value.trim(),
-            kind: kindSelect.value,
+            kind: kindInput.value || 'boundary_equality',
             functionName: fnInput.value.trim(),
-            paramNames: params,
+            paramNames: paramNames,
             defaults: {
                 tier: defaultTierSel.value,
                 points: 1,
@@ -1327,12 +1485,11 @@ function checkUWDates(dateTimeValue, warningEl) {
             body: JSON.stringify(next)
         })
         .then(function (r) {
-            if (!r.ok) return r.text().then(function (t) { throw new Error(t || ('HTTP ' + r.status)); });
+            if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
             return r.json();
         })
         .then(function (applied) {
             familiesState = applied;
-            renderFamilyList();
             saveBtn.disabled = false;
             statusEl.textContent = '';
             return applied;
@@ -1344,6 +1501,21 @@ function checkUWDates(dateTimeValue, warningEl) {
         });
     }
 
+    /// Server error pages are HTML; pull the `error-message` paragraph out of
+    /// them so the status line shows a clean one-liner instead of a blob.
+    function extractErrorMessage(body) {
+        if (!body) return '';
+        var m = body.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
+        if (m) {
+            var text = m[1].replace(/<[^>]+>/g, '').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+                           .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+            return text.trim();
+        }
+        return body.length > 200 ? body.substring(0, 200) + '…' : body;
+    }
+
+    // ── Event wiring ───────────────────────────────────────────────────────
+
     if (addFamilyBtn) addFamilyBtn.addEventListener('click', function () { openEditor(-1); });
     if (closeBtn)     closeBtn.addEventListener('click', closeEditor);
     if (cancelBtn)    cancelBtn.addEventListener('click', closeEditor);
@@ -1352,58 +1524,70 @@ function checkUWDates(dateTimeValue, warningEl) {
         if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
     });
 
-    if (addCaseBtn) addCaseBtn.addEventListener('click', function () { addCaseRow(null); });
+    if (fnSelect) fnSelect.addEventListener('change', function () {
+        applyFunctionSelection(fnSelect.value, /*preserveCases=*/true);
+    });
+
+    if (addCaseBtn) addCaseBtn.addEventListener('click', function () {
+        var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        addCaseRow(null, paramNames);
+    });
     casesBody.addEventListener('click', function (e) {
         var btn = e.target && e.target.closest('.pf-case-remove');
         if (btn) {
             var tr = btn.closest('tr');
             if (tr) tr.remove();
+            renumberCases();
             updateCasesEmptyMessage();
         }
     });
 
-    familyListEl.addEventListener('click', function (e) {
-        var btn = e.target && e.target.closest('button[data-action]');
-        if (!btn) return;
-        var idx = parseInt(btn.getAttribute('data-idx'), 10);
-        var action = btn.getAttribute('data-action');
-        if (action === 'edit') {
-            openEditor(idx);
-        } else if (action === 'delete') {
-            var family = familiesState[idx];
-            if (!family) return;
-            var caseCount = (family.cases || []).length;
-            if (!confirm('Delete pattern family "' + family.name + '"? '
-                         + 'This removes ' + caseCount + ' generated test script'
-                         + (caseCount === 1 ? '' : 's') + '.')) {
-                return;
+    // Suite table: handle Edit/Delete on family rows (script rows are handled
+    // by the existing script-editor wiring elsewhere in this file).
+    var suiteBody = document.getElementById('suite-config-body');
+    if (suiteBody) {
+        suiteBody.addEventListener('click', function (e) {
+            var editBtn = e.target && e.target.closest('.family-edit-btn');
+            var delBtn  = e.target && e.target.closest('.family-delete-btn');
+            if (editBtn) {
+                var fid = editBtn.getAttribute('data-family-id');
+                var idx = familiesState.findIndex(function (f) { return f.id === fid; });
+                if (idx >= 0) openEditor(idx);
+            } else if (delBtn) {
+                var fid2 = delBtn.getAttribute('data-family-id');
+                var idx2 = familiesState.findIndex(function (f) { return f.id === fid2; });
+                if (idx2 < 0) return;
+                var family = familiesState[idx2];
+                var caseCount = (family.cases || []).length;
+                if (!confirm('Delete pattern family "' + family.name + '"? This removes '
+                             + caseCount + ' generated test script' + (caseCount === 1 ? '' : 's') + '.')) {
+                    return;
+                }
+                var next = familiesState.slice();
+                next.splice(idx2, 1);
+                putFamilies(next)
+                    .then(function () { window.location.reload(); })
+                    .catch(function () {});
             }
-            var next = familiesState.slice();
-            next.splice(idx, 1);
-            putFamilies(next)
-                .then(function () { window.location.reload(); })
-                .catch(function () {});
-        }
-    });
+        });
+    }
 
     saveBtn.addEventListener('click', function () {
         var family;
         try { family = readFamilyFromEditor(); }
         catch (e) { statusEl.textContent = e.message || String(e); return; }
 
-        if (!family.id) { statusEl.textContent = 'Family id is required.'; return; }
+        if (!family.functionName) { statusEl.textContent = 'Pick a function from the dropdown first.'; return; }
+        if (!family.id) { statusEl.textContent = 'Family id could not be derived from the function name.'; return; }
         if (!family.name) { statusEl.textContent = 'Family name is required.'; return; }
-        if (!family.functionName) { statusEl.textContent = 'Function name is required.'; return; }
         if (!family.cases.length) { statusEl.textContent = 'Add at least one case.'; return; }
 
         var next = familiesState.slice();
         if (editingIndex >= 0) {
             next[editingIndex] = family;
         } else {
-            // Reject duplicate id at save time (validation would catch this too,
-            // but a client-side check gives a faster, clearer message).
             if (next.some(function (f) { return f.id === family.id; })) {
-                statusEl.textContent = 'A family with id "' + family.id + '" already exists.';
+                statusEl.textContent = 'A family for "' + family.functionName + '" already exists.';
                 return;
             }
             next.push(family);
@@ -1412,8 +1596,6 @@ function checkUWDates(dateTimeValue, warningEl) {
             .then(function () { window.location.reload(); })
             .catch(function () {});
     });
-
-    renderFamilyList();
 })();
 </script>
 #endexport

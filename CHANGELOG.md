@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.76] - 2026-04-21
+
+### Changed
+
+- **Pattern family editor redesigned**:
+  - "New Family" moved into the Test Suite header alongside "New Script" and "Upload"; the separate Pattern Families section is gone.  Families now render as dedicated rows inside the Test Suite table (one row per family, distinct styling with ⟳ badge) showing family name, function signature, case count, default tier, and total points.  The N generated `.py` entries no longer clutter the list — the family row represents them collectively.
+  - Function is picked from a dropdown populated by scanning the assignment's solution notebook (reuses the existing `/instructor/scan-notebook` endpoint).  Selecting a function auto-fills the family id and parameter list, and rebuilds the cases table with one column per detected parameter — so instructors enter individual typed values (`18.49`, `"underweight"`) rather than composing a JSON array by hand.
+  - Case keys are now auto-generated (`01`, `02`, …) as rows are added/reordered; the Key column is gone from the editor.  Fixes a 422 error when a user saved with an empty key field.
+  - Save errors from the server (validation 422s) are now parsed out of the HTML error page and shown as a single-line status in the editor instead of the raw HTML.
+
 ## [0.4.75] - 2026-04-20
 
 ### Fixed

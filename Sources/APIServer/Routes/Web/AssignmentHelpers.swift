@@ -338,14 +338,10 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
         )
     }()
 
-    var familyNameByID: [String: String] = [:]
     let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, generatedBy: String?)] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return []
-        }
-        for family in props.patternFamilies {
-            familyNameByID[family.id] = family.name
         }
         return props.testSuites.enumerated().map { (idx, item) in
             (script: item.script, tier: item.tier.rawValue, order: idx + 1,
@@ -378,9 +374,11 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
             return lhs < rhs
         }
 
-    let existingSuiteRows = nonNotebookFiles.enumerated().map { idx, name in
+    // Generated entries are represented by their family's row in the suite
+    // table, so omit them from the raw script list here.
+    let existingSuiteRows = nonNotebookFiles.enumerated().compactMap { idx, name -> EditableSuiteRow? in
         let entry = testMap[name]
-        let familyID = entry?.generatedBy
+        if entry?.generatedBy != nil { return nil }
         return EditableSuiteRow(
             name: name,
             url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(name))",
@@ -389,9 +387,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
             order: entry?.order ?? (idx + 1),
             dependsOn: entry?.dependsOn ?? [],
             points: entry?.points ?? 1,
-            displayName: entry?.name,
-            generatedBy: familyID,
-            generatedByName: familyID.flatMap { familyNameByID[$0] }
+            displayName: entry?.name
         )
     }
 
@@ -1017,14 +1013,10 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
         let name: String?
         let generatedBy: String?
     }
-    var familyNameByID: [String: String] = [:]
     let manifestTests: [String: ManifestRow] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return [:]
-        }
-        for family in props.patternFamilies {
-            familyNameByID[family.id] = family.name
         }
         var map: [String: ManifestRow] = [:]
         for (idx, entry) in props.testSuites.enumerated() {
@@ -1040,9 +1032,12 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
         return map
     }()
 
-    return entries.enumerated().map { idx, name in
+    // Generated entries (pattern-family output) are represented collectively
+    // by their family's row in the suite table — hide them from the raw list
+    // so instructors don't see N duplicate generated rows for one family.
+    return entries.enumerated().compactMap { idx, name -> EditableSuiteRow? in
         let info = manifestTests[name]
-        let familyID = info?.generatedBy
+        if info?.generatedBy != nil { return nil }
         return EditableSuiteRow(
             name: name,
             url: "#",
@@ -1051,14 +1046,34 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
             order: info?.order ?? (idx + 1),
             dependsOn: info?.dependsOn ?? [],
             points: info?.points ?? 1,
-            displayName: info?.name,
-            generatedBy: familyID,
-            generatedByName: familyID.flatMap { familyNameByID[$0] }
+            displayName: info?.name
         )
     }
     .sorted { lhs, rhs in
         if lhs.order != rhs.order { return lhs.order < rhs.order }
         return lhs.name < rhs.name
+    }
+}
+
+/// Returns one `FamilySuiteRow` per pattern family declared on this setup.
+/// Used to populate the family rows in the assignment editor's suite table.
+func familySuiteRowsForSetup(_ setup: APITestSetup) -> [FamilySuiteRow] {
+    guard let data = setup.manifest.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+    else { return [] }
+    return props.patternFamilies.map { family in
+        let totalPoints = family.cases
+            .filter(\.enabled)
+            .map { $0.resolvedPoints(defaults: family.defaults) }
+            .reduce(0, +)
+        return FamilySuiteRow(
+            id: family.id,
+            name: family.name,
+            functionName: family.functionName,
+            tier: family.defaults.tier.rawValue,
+            caseCount: family.cases.filter(\.enabled).count,
+            totalPoints: totalPoints
+        )
     }
 }
 
