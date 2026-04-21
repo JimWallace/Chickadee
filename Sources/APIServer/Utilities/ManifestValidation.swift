@@ -138,6 +138,14 @@ func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuite
                     reason: "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
             }
         }
+
+        // Kind-specific rules: approximateEquality needs a non-negative tolerance.
+        if family.kind == .approximateEquality {
+            if let tol = family.defaults.tolerance, tol < 0 || !tol.isFinite {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': tolerance must be a non-negative finite number.")
+            }
+        }
     }
 
     // 2. Filename collisions: no generated filename may match a hand-written

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.80] - 2026-04-21
+
+### Added
+
+- **`.approximateEquality` pattern-family kind** for float-returning functions.  The instructor picks "Approximate equality (float tolerance)" from the new kind dropdown in the family editor modal, optionally sets a tolerance (default 1e-6), and each generated test checks `abs(result - expected) <= tolerance` with a dedicated `isinstance` guard for non-numeric returns.  Failure messages include the tolerance *and* the actual delta so students see exactly how far off they are (`value outside tolerance` / `expected: 22.857 (±0.01)` / `got: 23.0` / `delta: 0.143`).  `PatternDefaults.tolerance: Double?` is decoded with `decodeIfPresent … ?? nil`, so legacy manifests roundtrip unchanged; validation rejects negative or non-finite tolerances.
+- **Editable Pts on family rows** in the suite editor.  The previous read-only `<span>` becomes an `<input type="number">` whose value edits `family.defaults.points` and fires a live `PUT /suite`.  Per-case point overrides in the family editor modal continue to take precedence via `PatternCase.resolvedPoints(defaults:)`.
+
+### Fixed
+
+- **Regression guard for authored suite-list order**: `testApply_authoredOrderPreservedInManifestAndOutcomes` pins that authored `[script_a, family(3 cases), script_b]` lands in the manifest as `[script_a, fam_01, fam_02, fam_03, script_b]` — `topologicallySorted` never re-orders entries that have no dependencies, and the runner walks `testSuites` in array order, so submission results always match the instructor's drag-drop order.  Assignments imported from pre-v0.4.79 Chickadee may still have their families appended at the end of `testSuites`; dragging the family row once on the edit page persists the new authored order.
+
 ## [0.4.79] - 2026-04-21
 
 ### Changed
