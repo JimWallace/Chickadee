@@ -1505,6 +1505,7 @@ struct AssignmentRoutes: RouteCollection {
                 ? "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
                 : nil,
             existingSuiteRows: currentFiles.existingSuiteRows,
+            familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
             notice: q?.notice,
             error: q?.error
