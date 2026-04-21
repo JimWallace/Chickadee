@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.75] - 2026-04-20
+
+### Fixed
+
+- **`require_function(name, num_args=…)` now works**: the exists-template kwarg previously raised `TypeError: unexpected keyword argument 'num_args'` because the runtime helper only accepted `name`.  `require_function` now optionally validates the student function's positional arity and emits a student-friendly `errored(…)` on mismatch.  Added a drift-guard test that fails if any template passes a kwarg the runtime doesn't accept (#373).
+
+### Changed
+
+- **Rich per-test failure feedback**: the Python test-runtime's `failed(msg)` / `errored(msg)` helpers now route multi-line messages through stdout (so they land in the outcome's `longResult`) and use the first non-empty line as the `shortResult` summary.  The `correctness`, `exception`, and `typeCheck` templates in the script editor were rewritten to the single-case rich-feedback shape (labelled `input:` / `expected:` / `got:` / `Hint:` lines, separate exception-handling branch, `isinstance` guard where relevant).  `cornerCases` per-case messages gained the same labelled structure (#374).
+- **Assignment-new generator uses server-rendered templates**: the client-side `genPyTemplate` JS was replaced with a lookup into the `templates` array returned by `POST /instructor/scan-notebook`, eliminating the duplicated template renderer that caused #373 in the first place.  The stale inline Python templates in the assignment edit view's `INLINE_TEMPLATES` cache were removed; the editor now fetches templates from `/instructor/script-templates` so the server is the single source of truth.
+
+### Added
+
+- **Pattern-generated test families** (#375): instructors can now define a family of similar tests from a compact specification — one function, shared defaults, a table of cases — and Chickadee expands each enabled case into an ordinary Python test script at save time.  Generated scripts live in the test setup zip alongside hand-written ones and run through the existing worker pipeline with no runner changes.
+  - New Core types: `PatternFamily`, `PatternCase`, `PatternKind` (`.boundaryEquality` is the v1 template; uses a single-arg equality check in the rich-feedback format introduced for #374).  `TestProperties.patternFamilies` carries the canonical spec; `TestSuiteEntry.generatedBy` marks generated entries.
+  - Rendering is deterministic: stable filenames (`{tier}test_{familyID}_{caseKey}.py`), SHA-256 `spec_hash` embedded in the generated script header, sorted-key JSON encoding for family storage.
+  - Pattern family editor UI in the assignment editor: a "Pattern Families" section below the test suite table with an "Add Family" button, a modal editor for family metadata + a dynamic cases table (args and expected as JSON literals), and a "Generated" provenance badge + read-only treatment on generated rows.
+  - Raw-script edit/delete endpoints now return `409` with "edit the family" when the target entry has `generatedBy` set, so the family editor is the only mutation surface for generated scripts.
+  - Cache invalidation for free: the runner's setup cache key incorporates manifest bytes, so family edits change the key and runners refetch the zip.  Covered by `testApply_addFamilyWritesScriptsAndChangesManifestHash`.
+
 ## [0.4.74] - 2026-04-20
 
 ### Fixed

@@ -125,10 +125,15 @@
         </thead>
         <tbody id="suite-config-body">
             #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
+            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)" data-generated="#(row.isGeneratedFlag)" data-generated-by="#(row.generatedByDisplay)">
                 <td><div class="suite-name-cell">
                     <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
                     <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
+                    #if(row.isGeneratedFlag == "1"):
+                    <span class="suite-generated-badge" title="Generated from pattern family #(row.generatedByDisplay). Edit the family to change this test.">
+                        ⟳ #(row.generatedByDisplay)
+                    </span>
+                    #endif
                 </div></td>
                 <td>
                     <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
@@ -155,7 +160,117 @@
             #endfor
         </tbody>
     </table>
+
+    <!-- ── Pattern Families ─────────────────────────────────────────────── -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0 .5rem">
+        <h2 style="margin:0">Pattern Families</h2>
+        <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
+    </div>
+    <p class="card-meta" style="margin:0 0 .6rem;font-size:.8rem">
+        A family expands into individual test scripts at save time — one per case.
+        Generated scripts appear in the Test Suite above and cannot be edited directly;
+        change the family to change them.
+    </p>
+    <div id="family-list" style="display:flex;flex-direction:column;gap:.5rem"></div>
+    <p class="card-meta" id="family-list-empty" style="margin:.4rem 0 0;font-size:.8rem;color:var(--meta)">
+        No pattern families yet.
+    </p>
 </form>
+
+<!-- Seed data: current families as JSON, consumed by the family editor JS.
+     rawJSON emits the string verbatim because the default Leaf variable tag
+     HTML-escapes quotes, which would break JSON.parse in the client. -->
+<script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
+
+<!-- ── Pattern Family Editor Modal ──────────────────────────────────────── -->
+<div id="family-editor-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(960px,96vw);max-height:92vh;
+                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
+            <div id="family-editor-title" style="font-weight:600;flex:1">New Pattern Family</div>
+            <button class="btn-link" id="family-editor-close" type="button" aria-label="Close" title="Close"
+                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+        </div>
+
+        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Family ID (filename fragment)
+                    <input type="text" class="form-input" id="family-id" placeholder="e.g. bmi_boundaries"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Name (shown in UI)
+                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Kind
+                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="boundary_equality">Boundary equality (single arg, compare with ==)</option>
+                    </select>
+                </label>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Function name
+                    <input type="text" class="form-input" id="family-function" placeholder="e.g. bmi_category"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Parameter names (comma-separated)
+                    <input type="text" class="form-input" id="family-params" placeholder="e.g. bmi"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Default tier
+                    <select class="form-input" id="family-default-tier" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="public">public</option>
+                        <option value="release">release</option>
+                        <option value="secret">secret</option>
+                    </select>
+                </label>
+            </div>
+            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                Default hint (used when a case omits its own)
+                <textarea class="form-input" id="family-default-hint" rows="2"
+                          style="padding:.3rem .5rem;font-size:.85rem"></textarea>
+            </label>
+
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+                    <strong style="font-size:.85rem">Cases</strong>
+                    <button class="btn action-btn" type="button" id="add-case-btn" style="padding:.2rem .6rem;font-size:.8rem">
+                        + Add case
+                    </button>
+                </div>
+                <table class="results-table" id="family-cases-table" style="font-size:.8rem">
+                    <thead>
+                        <tr>
+                            <th style="width:6.5rem">Key</th>
+                            <th>Label</th>
+                            <th>Args (JSON, one per param)</th>
+                            <th>Expected (JSON)</th>
+                            <th>Hint (override)</th>
+                            <th style="width:4rem"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="family-cases-body"></tbody>
+                </table>
+                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--meta)">
+                    No cases yet.  Add at least one to save this family.
+                </p>
+            </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
+            <button class="btn btn-primary" id="family-save-btn" type="button">Save</button>
+            <button class="btn" id="family-cancel-btn" type="button">Cancel</button>
+            <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+        </div>
+    </div>
+</div>
 
 <!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
 <div id="script-editor-overlay"
@@ -248,6 +363,29 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
 .suite-file-hint a { color: inherit; }
 #suite-config-table td { vertical-align: top; }
+.suite-generated-badge {
+    display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .7rem; padding: .1rem .4rem; border-radius: .3rem;
+    background: var(--hover-bg, #eef3f9); color: var(--meta);
+    border: 1px solid var(--border, #ddd); white-space: nowrap;
+    cursor: help;
+}
+tr[data-generated="1"] .suite-display-name,
+tr[data-generated="1"] .suite-tier,
+tr[data-generated="1"] .suite-points,
+tr[data-generated="1"] .suite-edit-btn,
+tr[data-generated="1"] .suite-delete-btn,
+tr[data-generated="1"] .suite-drag-handle {
+    opacity: .55; pointer-events: none;
+}
+.pattern-family-card {
+    border: 1px solid var(--border, #ddd); border-radius: .4rem;
+    padding: .6rem .75rem; display: flex; align-items: center; gap: .75rem;
+    flex-wrap: wrap; background: var(--surface-alt, transparent);
+}
+.pattern-family-card .pf-name { font-weight: 600; font-size: .9rem; }
+.pattern-family-card .pf-meta { font-size: .75rem; color: var(--meta); }
+.pattern-family-card .pf-actions { margin-left: auto; display: flex; gap: .4rem; }
 </style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>
@@ -860,20 +998,11 @@ function fetchTemplates() {
         .then(data => { templateCache = data; return data; });
 }
 
-// Inline template content matching server templates (avoids a round-trip for the
-// generic "no function name" versions).  These are identical to what the server
-// returns for pythonTestScript / shellTestScript with default args.
+// Small inline cache of the smallest templates so "blank" doesn't round-trip.
+// Richer templates (correctness / corner_cases / exception / type_check / …)
+// are fetched from /instructor/script-templates and cached per-session — this
+// keeps the server's rendering the single source of truth and avoids drift.
 const INLINE_TEMPLATES = {
-    'py:exists':       '# Test: my_function is defined and callable\nrequire_function("my_function")\npassed("my_function is defined and callable")\n',
-    'py:correctness':  '# Test: my_function returns the correct output for known inputs\ntest_cases = [\n    ((), None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.my_function(*args)\n    if result != expected:\n        failures.append(f"  my_function{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n',
-    'py:corner_cases': '# Test: my_function handles edge / corner cases\ncorner_cases = [\n    ((None,),   None),\n    ((0,),      None),\n    ((-1,),     None),\n    (([],),     None),\n    (("",),     None),\n]\nfailures = []\nfor args, expected in corner_cases:\n    try:\n        result = student_module.my_function(*args)\n        if expected is not None and result != expected:\n            failures.append(f"  my_function{args} = {result!r}, expected {expected!r}")\n    except Exception as e:\n        failures.append(f"  my_function{args} raised {type(e).__name__}: {e}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(corner_cases)} corner case(s) handled")\n',
-    'py:exception':    '# Test: my_function raises the expected exception\nexpected_exc = ValueError  # TODO: change to expected exception type\ntry:\n    student_module.my_function()  # TODO: add arguments\n    failed(f"Expected {expected_exc.__name__} but no exception was raised")\nexcept expected_exc:\n    passed(f"Correctly raises {expected_exc.__name__}")\nexcept Exception as e:\n    failed(f"Wrong exception: expected {expected_exc.__name__}, got {type(e).__name__}: {e}")\n',
-    'py:type_check':   '# Test: my_function returns the expected type\nexpected_type = list  # TODO: change to the expected return type\nresult = student_module.my_function()  # TODO: add arguments\nif not isinstance(result, expected_type):\n    failed(f"my_function() returned {type(result).__name__}, expected {expected_type.__name__}")\nelse:\n    passed(f"my_function() returned {type(result).__name__} as expected")\n',
-    'py:performance':  '# Test: my_function completes within the time limit\nimport time\ntime_limit_ms = 100  # TODO: adjust\nstart = time.perf_counter()\nstudent_module.my_function()  # TODO: add arguments\nelapsed_ms = (time.perf_counter() - start) * 1000\nif elapsed_ms < time_limit_ms:\n    passed(f"Completed in {elapsed_ms:.1f} ms (limit: {time_limit_ms} ms)")\nelse:\n    failed(f"Too slow: {elapsed_ms:.1f} ms (limit: {time_limit_ms} ms)")\n',
-    'py:differential': '# Test: my_function matches a reference implementation\ndef _reference_my_function(*args, **kwargs):\n    pass  # TODO: implement reference solution\ntest_inputs = []\nfailures = []\nfor args in test_inputs:\n    args = args if isinstance(args, tuple) else (args,)\n    expected = _reference_my_function(*args)\n    actual   = student_module.my_function(*args)\n    if actual != expected:\n        failures.append(f"  my_function{args} = {actual!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_inputs)} case(s) match reference")\n',
-    'sh:always_pass':    '#!/bin/sh\n# TODO: replace this placeholder with a real test\necho "passed"\nexit 0\n',
-    'sh:file_exists':    '#!/bin/sh\nFILE="solution.py"  # TODO: change to the expected filename\nif [ -f "$FILE" ]; then\n    echo "File $FILE found"\n    exit 0\nelse\n    echo "File $FILE not found" >&2\n    exit 1\nfi\n',
-    'sh:command_output': '#!/bin/sh\nEXPECTED="expected output"  # TODO: replace\nACTUAL=$(python3 -c "import solution; print(solution.main())" 2>&1)\nif [ "$ACTUAL" = "$EXPECTED" ]; then\n    echo "Output matches"\n    exit 0\nelse\n    printf \'Expected: %s\\nActual:   %s\\n\' "$EXPECTED" "$ACTUAL" >&2\n    exit 1\nfi\n',
     'blank': ''
 };
 
@@ -1016,6 +1145,276 @@ function checkUWDates(dateTimeValue, warningEl) {
         }
     }).catch(function () { /* silently ignore */ });
 }
+</script>
+
+<!-- ── Pattern Family Editor JS ─────────────────────────────────────────── -->
+<script>
+(function () {
+    // assignmentID is the short public slug, already safe as a JS string literal.
+    var assignmentID = '#(assignmentID)';
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    // Seed families from the JSON tag embedded in the page.
+    var familiesState = [];
+    var seed = document.getElementById('pattern-families-seed');
+    if (seed) {
+        try { familiesState = JSON.parse(seed.textContent || '[]') || []; }
+        catch (e) { familiesState = []; }
+    }
+
+    var familyListEl     = document.getElementById('family-list');
+    var familyListEmpty  = document.getElementById('family-list-empty');
+    var addFamilyBtn     = document.getElementById('add-family-btn');
+    var overlay          = document.getElementById('family-editor-overlay');
+    var titleEl          = document.getElementById('family-editor-title');
+    var idInput          = document.getElementById('family-id');
+    var nameInput        = document.getElementById('family-name');
+    var kindSelect       = document.getElementById('family-kind');
+    var fnInput          = document.getElementById('family-function');
+    var paramsInput      = document.getElementById('family-params');
+    var defaultTierSel   = document.getElementById('family-default-tier');
+    var defaultHintInput = document.getElementById('family-default-hint');
+    var casesBody        = document.getElementById('family-cases-body');
+    var casesEmpty       = document.getElementById('family-cases-empty');
+    var addCaseBtn       = document.getElementById('add-case-btn');
+    var saveBtn          = document.getElementById('family-save-btn');
+    var cancelBtn        = document.getElementById('family-cancel-btn');
+    var closeBtn         = document.getElementById('family-editor-close');
+    var statusEl         = document.getElementById('family-editor-status');
+
+    var editingIndex = -1;   // index in familiesState; -1 when creating.
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderFamilyList() {
+        familyListEl.innerHTML = '';
+        if (!familiesState.length) {
+            familyListEmpty.style.display = '';
+            return;
+        }
+        familyListEmpty.style.display = 'none';
+        familiesState.forEach(function (family, idx) {
+            var caseCount = (family.cases || []).length;
+            var card = document.createElement('div');
+            card.className = 'pattern-family-card';
+            card.innerHTML =
+                '<div>'
+              +   '<div class="pf-name">' + escHtml(family.name) + '</div>'
+              +   '<div class="pf-meta">'
+              +     escHtml(family.functionName || '') + '('
+              +     escHtml((family.paramNames || []).join(', ')) + ') &middot; '
+              +     caseCount + ' case' + (caseCount === 1 ? '' : 's')
+              +   '</div>'
+              + '</div>'
+              + '<div class="pf-actions">'
+              +   '<button type="button" class="btn action-btn" data-action="edit" data-idx="' + idx + '">Edit</button>'
+              +   '<button type="button" class="btn action-btn action-danger" data-action="delete" data-idx="' + idx + '">Delete</button>'
+              + '</div>';
+            familyListEl.appendChild(card);
+        });
+    }
+
+    function clearCasesTable() { casesBody.innerHTML = ''; updateCasesEmptyMessage(); }
+
+    function updateCasesEmptyMessage() {
+        casesEmpty.style.display = casesBody.children.length === 0 ? '' : 'none';
+    }
+
+    function addCaseRow(initial) {
+        var c = initial || { key: '', label: '', args: [], expected: null, hint: '' };
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td><input type="text" class="form-input pf-case-key" value="' + escHtml(c.key) + '" placeholder="01" style="width:5rem;padding:.2rem .4rem;font-size:.8rem"></td>'
+          + '<td><input type="text" class="form-input pf-case-label" value="' + escHtml(c.label) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>'
+          + '<td><input type="text" class="form-input pf-case-args" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
+          + '<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(JSON.stringify(c.expected == null ? null : c.expected)) + '" placeholder="&quot;underweight&quot;" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
+          + '<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>'
+          + '<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>';
+        casesBody.appendChild(tr);
+        updateCasesEmptyMessage();
+    }
+
+    function openEditor(familyIdx) {
+        editingIndex = (typeof familyIdx === 'number') ? familyIdx : -1;
+        statusEl.textContent = '';
+        clearCasesTable();
+
+        if (editingIndex >= 0) {
+            var family = familiesState[editingIndex];
+            titleEl.textContent = 'Edit Pattern Family';
+            idInput.value = family.id || '';
+            idInput.disabled = true; // id is the filename key; don't allow rename in v1
+            nameInput.value = family.name || '';
+            kindSelect.value = family.kind || 'boundary_equality';
+            fnInput.value = family.functionName || '';
+            paramsInput.value = (family.paramNames || []).join(', ');
+            defaultTierSel.value = (family.defaults && family.defaults.tier) || 'public';
+            defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
+            (family.cases || []).forEach(function (c) { addCaseRow(c); });
+        } else {
+            titleEl.textContent = 'New Pattern Family';
+            idInput.value = '';
+            idInput.disabled = false;
+            nameInput.value = '';
+            kindSelect.value = 'boundary_equality';
+            fnInput.value = '';
+            paramsInput.value = '';
+            defaultTierSel.value = 'public';
+            defaultHintInput.value = '';
+            addCaseRow(null);
+        }
+
+        overlay.style.display = 'flex';
+        setTimeout(function () { idInput.disabled ? nameInput.focus() : idInput.focus(); }, 0);
+    }
+
+    function closeEditor() { overlay.style.display = 'none'; }
+
+    function readCasesFromTable() {
+        var rows = Array.from(casesBody.querySelectorAll('tr'));
+        var out = [];
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var key   = row.querySelector('.pf-case-key').value.trim();
+            var label = row.querySelector('.pf-case-label').value.trim();
+            var rawArgs = row.querySelector('.pf-case-args').value.trim();
+            var rawExp  = row.querySelector('.pf-case-expected').value.trim();
+            var hint    = row.querySelector('.pf-case-hint').value.trim();
+            var args, expected;
+            try { args = rawArgs === '' ? [] : JSON.parse(rawArgs); }
+            catch (e) { throw new Error('Case ' + (key || '#' + (i + 1)) + ': args is not valid JSON — ' + e.message); }
+            if (!Array.isArray(args)) throw new Error('Case ' + (key || '#' + (i + 1)) + ': args must be a JSON array');
+            try { expected = rawExp === '' ? null : JSON.parse(rawExp); }
+            catch (e) { throw new Error('Case ' + (key || '#' + (i + 1)) + ': expected is not valid JSON — ' + e.message); }
+            out.push({
+                key: key, label: label,
+                args: args, expected: expected,
+                hint: hint || null,
+                enabled: true
+            });
+        }
+        return out;
+    }
+
+    function readFamilyFromEditor() {
+        var params = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var cases  = readCasesFromTable();
+        return {
+            id: idInput.value.trim(),
+            name: nameInput.value.trim(),
+            kind: kindSelect.value,
+            functionName: fnInput.value.trim(),
+            paramNames: params,
+            defaults: {
+                tier: defaultTierSel.value,
+                points: 1,
+                hint: defaultHintInput.value.trim() || null
+            },
+            cases: cases
+        };
+    }
+
+    function putFamilies(next) {
+        statusEl.textContent = 'Saving…';
+        saveBtn.disabled = true;
+        return fetch('/instructor/' + encodeURIComponent(assignmentID) + '/families', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: JSON.stringify(next)
+        })
+        .then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { throw new Error(t || ('HTTP ' + r.status)); });
+            return r.json();
+        })
+        .then(function (applied) {
+            familiesState = applied;
+            renderFamilyList();
+            saveBtn.disabled = false;
+            statusEl.textContent = '';
+            return applied;
+        })
+        .catch(function (err) {
+            saveBtn.disabled = false;
+            statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
+            throw err;
+        });
+    }
+
+    if (addFamilyBtn) addFamilyBtn.addEventListener('click', function () { openEditor(-1); });
+    if (closeBtn)     closeBtn.addEventListener('click', closeEditor);
+    if (cancelBtn)    cancelBtn.addEventListener('click', closeEditor);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
+    });
+
+    if (addCaseBtn) addCaseBtn.addEventListener('click', function () { addCaseRow(null); });
+    casesBody.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest('.pf-case-remove');
+        if (btn) {
+            var tr = btn.closest('tr');
+            if (tr) tr.remove();
+            updateCasesEmptyMessage();
+        }
+    });
+
+    familyListEl.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest('button[data-action]');
+        if (!btn) return;
+        var idx = parseInt(btn.getAttribute('data-idx'), 10);
+        var action = btn.getAttribute('data-action');
+        if (action === 'edit') {
+            openEditor(idx);
+        } else if (action === 'delete') {
+            var family = familiesState[idx];
+            if (!family) return;
+            var caseCount = (family.cases || []).length;
+            if (!confirm('Delete pattern family "' + family.name + '"? '
+                         + 'This removes ' + caseCount + ' generated test script'
+                         + (caseCount === 1 ? '' : 's') + '.')) {
+                return;
+            }
+            var next = familiesState.slice();
+            next.splice(idx, 1);
+            putFamilies(next)
+                .then(function () { window.location.reload(); })
+                .catch(function () {});
+        }
+    });
+
+    saveBtn.addEventListener('click', function () {
+        var family;
+        try { family = readFamilyFromEditor(); }
+        catch (e) { statusEl.textContent = e.message || String(e); return; }
+
+        if (!family.id) { statusEl.textContent = 'Family id is required.'; return; }
+        if (!family.name) { statusEl.textContent = 'Family name is required.'; return; }
+        if (!family.functionName) { statusEl.textContent = 'Function name is required.'; return; }
+        if (!family.cases.length) { statusEl.textContent = 'Add at least one case.'; return; }
+
+        var next = familiesState.slice();
+        if (editingIndex >= 0) {
+            next[editingIndex] = family;
+        } else {
+            // Reject duplicate id at save time (validation would catch this too,
+            // but a client-side check gives a faster, clearer message).
+            if (next.some(function (f) { return f.id === family.id; })) {
+                statusEl.textContent = 'A family with id "' + family.id + '" already exists.';
+                return;
+            }
+            next.push(family);
+        }
+        putFamilies(next)
+            .then(function () { window.location.reload(); })
+            .catch(function () {});
+    });
+
+    renderFamilyList();
+})();
 </script>
 #endexport
 #endextend

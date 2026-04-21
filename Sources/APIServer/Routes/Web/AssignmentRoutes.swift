@@ -73,6 +73,12 @@ struct AssignmentRoutes: RouteCollection {
         r.put(":assignmentID",  "scripts", ":filename", use: updateScript)
         r.post(":assignmentID", "scripts",              use: createScript)
         r.delete(":assignmentID", "scripts", ":filename", use: deleteScript)
+
+        // Pattern family editor — canonical spec lives inside the test setup
+        // manifest.  PUT replaces the full list atomically (renders scripts,
+        // mutates the zip, rewrites the manifest); GET reads the current list.
+        r.get(":assignmentID", "families", use: getPatternFamilies)
+        r.put(":assignmentID", "families", use: putPatternFamilies)
     }
 
     // MARK: - GET /instructor
@@ -1475,6 +1481,15 @@ struct AssignmentRoutes: RouteCollection {
             solutionFilename: existingSolutionName ?? fallbackSolutionFilename
         )
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
+        let patternFamiliesJSON: String = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return "[]" }
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.sortedKeys]
+            let familyData = (try? enc.encode(props.patternFamilies)) ?? Data("[]".utf8)
+            return String(data: familyData, encoding: .utf8) ?? "[]"
+        }()
         let ctx = EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
@@ -1490,6 +1505,7 @@ struct AssignmentRoutes: RouteCollection {
                 ? "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
                 : nil,
             existingSuiteRows: currentFiles.existingSuiteRows,
+            patternFamiliesJSON: patternFamiliesJSON,
             notice: q?.notice,
             error: q?.error
         )

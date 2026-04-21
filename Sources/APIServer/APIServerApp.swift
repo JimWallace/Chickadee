@@ -124,6 +124,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
     app.leaf.tags["appVersion"] = AppVersionTag()
+    app.leaf.tags["rawJSON"] = RawJSONTag()
     // FileMiddleware is registered first so static files are served directly.
     // It short-circuits the responder chain (returns without calling next), so
     // middleware registered after it only runs for dynamic Leaf-rendered pages.

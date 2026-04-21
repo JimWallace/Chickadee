@@ -55,6 +55,19 @@ struct ConfiguredSuiteEntry {
     let dependsOn: [String]    // script names of prerequisites; empty == none
     let points: Int            // grade weight; 1 = default (unweighted)
     let displayName: String?   // optional human-readable name shown to students
+    let generatedBy: String?   // pattern family id; nil for hand-written scripts
+
+    init(script: String, tier: String, order: Int,
+         dependsOn: [String], points: Int, displayName: String?,
+         generatedBy: String? = nil) {
+        self.script = script
+        self.tier = tier
+        self.order = order
+        self.dependsOn = dependsOn
+        self.points = points
+        self.displayName = displayName
+        self.generatedBy = generatedBy
+    }
 }
 
 struct RunnerSetupPackage {
@@ -325,14 +338,19 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
         )
     }()
 
-    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
+    var familyNameByID: [String: String] = [:]
+    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, generatedBy: String?)] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return []
         }
+        for family in props.patternFamilies {
+            familyNameByID[family.id] = family.name
+        }
         return props.testSuites.enumerated().map { (idx, item) in
             (script: item.script, tier: item.tier.rawValue, order: idx + 1,
-             dependsOn: item.dependsOn, points: item.points, name: item.name)
+             dependsOn: item.dependsOn, points: item.points, name: item.name,
+             generatedBy: item.generatedBy)
         }
     }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
@@ -362,6 +380,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
 
     let existingSuiteRows = nonNotebookFiles.enumerated().map { idx, name in
         let entry = testMap[name]
+        let familyID = entry?.generatedBy
         return EditableSuiteRow(
             name: name,
             url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(name))",
@@ -370,7 +389,9 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
             order: entry?.order ?? (idx + 1),
             dependsOn: entry?.dependsOn ?? [],
             points: entry?.points ?? 1,
-            displayName: entry?.name
+            displayName: entry?.name,
+            generatedBy: familyID,
+            generatedByName: familyID.flatMap { familyNameByID[$0] }
         )
     }
 
@@ -458,6 +479,56 @@ func updateScriptInZip(zipPath: String, filename: String, content: String) throw
     guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
 }
 
+/// Applies a batch of script writes and deletions to a test setup zip in a
+/// single extract-then-repack cycle.  Cheaper than repeated single-file
+/// updates when regenerating a whole pattern family at once.
+///
+/// - `writes`: filename → UTF-8 content.  Overwrites if the entry exists.
+/// - `deletions`: filenames to remove.  Missing entries are silently ignored.
+///   Applied before writes, so the same filename in both collections results
+///   in the `writes` value winning.
+func applyScriptChangesToZip(
+    zipPath: String,
+    writes: [String: String],
+    deletions: [String]
+) throws {
+    let fm = FileManager.default
+    let tempDir = fm.temporaryDirectory
+        .appendingPathComponent("chickadee_zip_apply_\(UUID().uuidString)")
+    try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tempDir) }
+
+    let deletionSet = Set(deletions)
+
+    for entry in listZipEntries(zipPath: zipPath) {
+        guard !deletionSet.contains(entry) else { continue }
+        guard let data = extractZipEntry(zipPath: zipPath, entryName: entry) else { continue }
+        let dest = tempDir.appendingPathComponent(entry)
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: dest)
+    }
+
+    for (filename, content) in writes {
+        guard let contentData = content.data(using: .utf8) else {
+            throw ScriptZipError.invalidUTF8
+        }
+        let dest = tempDir.appendingPathComponent(filename)
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try contentData.write(to: dest)
+    }
+
+    try? fm.removeItem(atPath: zipPath)
+    let zip = Process()
+    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+    zip.currentDirectoryURL = tempDir
+    zip.arguments = ["-q", "-r", zipPath, "."]
+    zip.standardOutput = Pipe()
+    zip.standardError  = Pipe()
+    try zip.run()
+    zip.waitUntilExit()
+    guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+}
+
 /// Removes a file from the test setup zip.
 /// Throws `ScriptZipError.fileNotFound` if the entry does not exist.
 func removeScriptFromZip(zipPath: String, filename: String) throws {
@@ -505,8 +576,21 @@ func manifestDependents(manifestJSON: String, filename: String) -> [String] {
         .map(\.script)
 }
 
+/// If the manifest entry for `filename` was produced by a pattern family,
+/// returns that family id.  Returns nil for hand-written scripts or missing
+/// entries.  Used by the raw-script edit/delete endpoints to reject edits
+/// that must instead go through the family editor.
+func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
+    guard let data = manifestJSON.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+        return nil
+    }
+    return props.testSuites.first(where: { $0.script == filename })?.generatedBy
+}
+
 /// Returns updated manifest JSON with a new `TestSuiteEntry` appended.
-/// Preserves all existing entries, grading mode, makefile config, and starterNotebook.
+/// Preserves all existing entries, grading mode, makefile config,
+/// starterNotebook, and pattern families.
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestAddingScript(
     manifestJSON: String,
@@ -523,7 +607,8 @@ func updateManifestAddingScript(
             order: idx + 1,
             dependsOn: e.dependsOn,
             points: e.points,
-            displayName: e.name
+            displayName: e.name,
+            generatedBy: e.generatedBy
         )
     }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
@@ -533,14 +618,16 @@ func updateManifestAddingScript(
         order: nextOrder,
         dependsOn: entry.dependsOn,
         points: entry.points,
-        displayName: entry.displayName
+        displayName: entry.displayName,
+        generatedBy: entry.generatedBy
     )
     let updated = existing + [newEntry]
     return try? makeWorkerManifestJSON(
         testSuites: updated,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
-        starterNotebook: props.starterNotebook
+        starterNotebook: props.starterNotebook,
+        patternFamilies: props.patternFamilies
     )
 }
 
@@ -562,14 +649,16 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
                 order: idx + 1,
                 dependsOn: e.dependsOn.filter { $0 != filename },
                 points: e.points,
-                displayName: e.name
+                displayName: e.name,
+                generatedBy: e.generatedBy
             )
         }
     return try? makeWorkerManifestJSON(
         testSuites: updated,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
-        starterNotebook: props.starterNotebook
+        starterNotebook: props.starterNotebook,
+        patternFamilies: props.patternFamilies
     )
 }
 
@@ -920,20 +1009,40 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
         .filter { $0 != "assignment.ipynb" && $0 != "solution.ipynb" }
         .sorted()
 
-    let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
+    struct ManifestRow {
+        let tier: String
+        let order: Int
+        let dependsOn: [String]
+        let points: Int
+        let name: String?
+        let generatedBy: String?
+    }
+    var familyNameByID: [String: String] = [:]
+    let manifestTests: [String: ManifestRow] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return [:]
         }
-        var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = [:]
+        for family in props.patternFamilies {
+            familyNameByID[family.id] = family.name
+        }
+        var map: [String: ManifestRow] = [:]
         for (idx, entry) in props.testSuites.enumerated() {
-            map[entry.script] = (entry.tier.rawValue, idx + 1, entry.dependsOn, entry.points, entry.name)
+            map[entry.script] = ManifestRow(
+                tier: entry.tier.rawValue,
+                order: idx + 1,
+                dependsOn: entry.dependsOn,
+                points: entry.points,
+                name: entry.name,
+                generatedBy: entry.generatedBy
+            )
         }
         return map
     }()
 
     return entries.enumerated().map { idx, name in
         let info = manifestTests[name]
+        let familyID = info?.generatedBy
         return EditableSuiteRow(
             name: name,
             url: "#",
@@ -942,7 +1051,9 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
             order: info?.order ?? (idx + 1),
             dependsOn: info?.dependsOn ?? [],
             points: info?.points ?? 1,
-            displayName: info?.name
+            displayName: info?.name,
+            generatedBy: familyID,
+            generatedByName: familyID.flatMap { familyNameByID[$0] }
         )
     }
     .sorted { lhs, rhs in
@@ -1518,7 +1629,8 @@ func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
     gradingMode: String = "worker",
-    starterNotebook: String? = "assignment.ipynb"
+    starterNotebook: String? = "assignment.ipynb",
+    patternFamilies: [PatternFamily] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -1535,6 +1647,9 @@ func makeWorkerManifestJSON(
         if entry.points > 1 {
             dict["points"] = entry.points
         }
+        if let fid = entry.generatedBy, !fid.isEmpty {
+            dict["generatedBy"] = fid
+        }
         return dict
     }
     var manifest: [String: Any] = [
@@ -1547,6 +1662,17 @@ func makeWorkerManifestJSON(
     ]
     if let starterNotebook {
         manifest["starterNotebook"] = starterNotebook
+    }
+    if !patternFamilies.isEmpty {
+        // Encode the typed family values via JSONEncoder (keys sorted for
+        // reproducibility), then reparse with JSONSerialization so they
+        // splice into the dictionary-of-Any shape used here.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let familyData = try encoder.encode(patternFamilies)
+        if let parsed = try JSONSerialization.jsonObject(with: familyData) as? [Any] {
+            manifest["patternFamilies"] = parsed
+        }
     }
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"

@@ -2,12 +2,59 @@
 //
 // Python and shell test script templates for the in-browser script editor.
 // Templates use the test_runtime builtins injected by the runner:
-//   passed(message)          — exit 0 with short result
-//   failed(message)          — exit 1 with short result
-//   errored(message)         — exit 2 with short result
-//   require_function(name[, num_args]) — exit 2 if function not found
+//   passed(message)                     — exit 0 with short result
+//   failed(message)                     — exit 1; multi-line message becomes
+//                                         stdout (rendered in longResult) and
+//                                         its first line becomes shortResult
+//   errored(message)                    — exit 2; same routing as failed()
+//   require_function(name[, num_args])  — exit 2 if function is missing or
+//                                         has the wrong positional-arg count
+//
+// When editing, keep these kwargs in sync with `require_function` in
+// Sources/Worker/TestRuntimeSources.swift and Tools/runner-support/test_runtime.py
+// (enforced by TestScriptTemplatesTests.testTemplates_useOnlyKnownRequireFunctionKwargs).
 
 import Foundation
+
+// MARK: - Rich-feedback argument rendering
+
+/// Renders Python fragments describing a function's parameters for the
+/// single-case rich-feedback templates (correctness, typeCheck, exception).
+///
+/// Given paramNames = ["bmi"] the fragments produce:
+///   argDeclarations  → `bmi = None   # TODO: replace with input value`
+///   callArgs         → `bmi`
+///   inputLineLiteral → `f"  input:    bmi={bmi!r}\n"`
+///   callReprExpr     → `{bmi!r}`
+///
+/// For empty paramNames the literals degrade gracefully to "(no input)"
+/// and an empty call expression.
+private struct RichTemplateArgs {
+    let paramNames: [String]
+    var hasArgs: Bool { !paramNames.isEmpty }
+    var callArgs: String { paramNames.joined(separator: ", ") }
+
+    var argDeclarations: String {
+        paramNames
+            .map { "\($0) = None   # TODO: replace with input value" }
+            .joined(separator: "\n")
+    }
+
+    /// Python source fragment for the `input:` line inside a `failed(...)`
+    /// concatenation — already quoted, with trailing `\n` escape.
+    var inputLineLiteral: String {
+        guard hasArgs else {
+            return #""  input:    (no input)\n""#
+        }
+        let preview = paramNames.map { "\($0)={\($0)!r}" }.joined(separator: ", ")
+        return "f\"  input:    \(preview)\\n\""
+    }
+
+    /// `{x!r}, {y!r}` — used inside an outer f-string to echo the call args.
+    var callReprExpr: String {
+        paramNames.map { "{\($0)!r}" }.joined(separator: ", ")
+    }
+}
 
 // MARK: - Template type enumerations
 
@@ -71,8 +118,9 @@ func pythonTestScript(
     paramNames: [String] = []
 ) -> String {
     let argList = paramNames.joined(separator: ", ")
+    let rich = RichTemplateArgs(paramNames: paramNames)
 
-    // Placeholder call args — use "*args" form so the template compiles without filling in values.
+    // Placeholder call args — use "None" form so the template compiles without filling in values.
     let placeholderCallArgs: String = {
         if paramNames.isEmpty { return "" }
         return paramNames.map { _ in "None  # TODO: replace" }.joined(separator: ", ")
@@ -89,26 +137,34 @@ func pythonTestScript(
         """
 
     case .correctness:
-        let argTuple = paramNames.isEmpty ? "()"
-            : paramNames.count == 1 ? "(\(paramNames[0]),)"
-            : "(\(argList))"
+        let declsBlock = rich.argDeclarations.isEmpty ? "" : rich.argDeclarations + "\n"
         return """
-        # Test: \(functionName) returns the correct output for known inputs
+        # Test: \(functionName) returns the correct output
         #
-        # Each entry is  (args_tuple, expected_output).
-        # Replace None with the actual expected output for each case.
-        test_cases = [
-            (\(argTuple), None),  # TODO: replace None with expected output
-        ]
-        failures = []
-        for args, expected in test_cases:
-            result = student_module.\(functionName)(*args)
-            if result != expected:
-                failures.append(f"  \(functionName){args} = {result!r}, expected {expected!r}")
-        if failures:
-            failed("\\n".join(failures))
-        else:
-            passed(f"All {len(test_cases)} case(s) passed")
+        # Fill in the input value(s) and expected output, then customise the hint.
+        \(declsBlock)expected = None   # TODO: replace with expected output
+
+        try:
+            result = student_module.\(functionName)(\(rich.callArgs))
+        except Exception as ex:
+            failed(
+                "\(functionName) raised an unexpected exception\\n"
+                \(rich.inputLineLiteral)
+                f"  expected: {expected!r}\\n"
+                f"  error:    {type(ex).__name__}: {ex}\\n"
+                "Hint: the function should return a value for this input, not raise."
+            )
+
+        if result != expected:
+            failed(
+                "\(functionName) returned the wrong value\\n"
+                \(rich.inputLineLiteral)
+                f"  expected: {expected!r}\\n"
+                f"  got:      {result!r}\\n"
+                "Hint: describe the correct behaviour here."
+            )
+
+        passed(f"Correct: \(functionName)(\(rich.callReprExpr)) returned {result!r}")
         """
 
     case .cornerCases:
@@ -126,45 +182,88 @@ func pythonTestScript(
         ]
         failures = []
         for args, expected in corner_cases:
+            args_preview = ", ".join(repr(a) for a in args)
             try:
                 result = student_module.\(functionName)(*args)
                 if expected is not None and result != expected:
-                    failures.append(f"  \(functionName){args} = {result!r}, expected {expected!r}")
-            except Exception as e:
-                failures.append(f"  \(functionName){args} raised {type(e).__name__}: {e}")
+                    failures.append(
+                        f"  \(functionName)({args_preview})\\n"
+                        f"    expected: {expected!r}\\n"
+                        f"    got:      {result!r}"
+                    )
+            except Exception as ex:
+                failures.append(
+                    f"  \(functionName)({args_preview})\\n"
+                    f"    raised: {type(ex).__name__}: {ex}"
+                )
         if failures:
-            failed("\\n".join(failures))
-        else:
-            passed(f"All {len(corner_cases)} corner case(s) handled")
+            failed(
+                f"\(functionName) mishandled {len(failures)} of {len(corner_cases)} corner case(s):\\n"
+                + "\\n".join(failures)
+                + "\\nHint: check that each corner case returns the right value and doesn't raise."
+            )
+        passed(f"All {len(corner_cases)} corner case(s) handled")
         """
 
     case .exception:
+        let declsBlock = rich.argDeclarations.isEmpty ? "" : rich.argDeclarations + "\n"
         return """
-        # Test: \(functionName) raises the expected exception
+        # Test: \(functionName) raises the expected exception on invalid input
         #
-        # Replace ValueError with the exception you expect, and fill in
-        # the arguments that should trigger it.
-        expected_exc = ValueError  # TODO: change to expected exception type
+        # Fill in the input value(s) that should trigger the exception.
+        \(declsBlock)expected_exc = ValueError   # TODO: change to expected exception type
+
         try:
-            student_module.\(functionName)(\(placeholderCallArgs))
-            failed(f"Expected {expected_exc.__name__} but no exception was raised")
+            result = student_module.\(functionName)(\(rich.callArgs))
         except expected_exc:
-            passed(f"Correctly raises {expected_exc.__name__}")
-        except Exception as e:
-            failed(f"Wrong exception: expected {expected_exc.__name__}, got {type(e).__name__}: {e}")
+            passed(f"\(functionName)(\(rich.callReprExpr)) correctly raised {expected_exc.__name__}")
+        except Exception as ex:
+            failed(
+                f"\(functionName) raised the wrong exception\\n"
+                \(rich.inputLineLiteral)
+                f"  expected: {expected_exc.__name__}\\n"
+                f"  got:      {type(ex).__name__}: {ex}\\n"
+                "Hint: describe which inputs should trigger this exception."
+            )
+        else:
+            failed(
+                f"\(functionName) did not raise {expected_exc.__name__}\\n"
+                \(rich.inputLineLiteral)
+                f"  expected: raises {expected_exc.__name__}\\n"
+                f"  got:      returned {result!r}\\n"
+                "Hint: describe which inputs should trigger this exception."
+            )
         """
 
     case .typeCheck:
+        let declsBlock = rich.argDeclarations.isEmpty ? "" : rich.argDeclarations + "\n"
         return """
         # Test: \(functionName) returns the expected type
         #
         # Replace `list` with the type you expect (int, str, dict, bool, …).
-        expected_type = list  # TODO: change to the expected return type
-        result = student_module.\(functionName)(\(placeholderCallArgs))
+        \(declsBlock)expected_type = list   # TODO: change to the expected return type
+
+        try:
+            result = student_module.\(functionName)(\(rich.callArgs))
+        except Exception as ex:
+            failed(
+                f"\(functionName) raised an unexpected exception\\n"
+                \(rich.inputLineLiteral)
+                f"  expected: a {expected_type.__name__}\\n"
+                f"  error:    {type(ex).__name__}: {ex}\\n"
+                f"Hint: \(functionName) should return a {expected_type.__name__} for this input, not raise."
+            )
+
         if not isinstance(result, expected_type):
-            failed(f"\(functionName)() returned {type(result).__name__}, expected {expected_type.__name__}")
-        else:
-            passed(f"\(functionName)() returned {type(result).__name__} as expected")
+            failed(
+                "Return type error\\n"
+                \(rich.inputLineLiteral)
+                f"  expected: a {expected_type.__name__}\\n"
+                f"  got:      {result!r} (type {type(result).__name__})\\n"
+                f"Hint: \(functionName) should return a {expected_type.__name__}."
+            )
+
+        passed(f"\(functionName)(\(rich.callReprExpr)) returned a {type(result).__name__} as expected")
         """
 
     case .performance:
