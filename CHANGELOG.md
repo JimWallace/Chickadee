@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.78] - 2026-04-21
+
+### Fixed
+
+- **Pattern family cases accept bare-typed values**: the per-parameter columns in the pattern family editor previously required strict JSON, so typing `underweight` in an expected cell raised `JSON Parse error: Unexpected identifier "o"` and blocked Save.  Each typed column now accepts raw values — numbers, booleans, `null`, arrays/objects, and **bare strings without surrounding quotes** — so `bmi=18.49`, `expected=underweight` just works.  Complex values can still be written as JSON (`[1, 2]`, `{"k": 1}`).  Round-trips through re-opening the modal display strings without quote noise.
+- **Family rows now stay visible in the Test Suite list**: the client-side suite-list JS was rebuilding the `<tbody>` on every render and only knew about raw-script rows, so server-rendered family rows vanished as soon as `initFromDOM()` ran.  `renderTree()` now detaches and re-inserts family rows across the rebuild so families appear alongside scripts in the suite list, where they belong.
+
 ## [0.4.77] - 2026-04-21
 
 ### Fixed
