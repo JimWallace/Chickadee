@@ -21,8 +21,13 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// `script` is the filename/path of a runnable test script in the test setup zip.
 /// `name` is an optional human-readable display name shown to students. When absent,
 /// the display name falls back to the script filename without its extension.
-/// `dependsOn` is an optional list of other `script` names that must pass before
-/// this test is executed. If any dependency did not pass, this test is auto-failed.
+/// `dependsOn` is an optional list of prerequisites that must pass before this
+/// test runs.  In the **authored** manifest (as produced by the `/suite` editor),
+/// entries can be either raw script filenames or `family:<id>` tokens referring
+/// to a pattern family by id.  The server expands `family:<id>` tokens into the
+/// family's enabled generated filenames before persisting the manifest for the
+/// runner, so the runner only ever sees concrete script names in `dependsOn`.
+/// If any prerequisite did not pass, this test is auto-failed.
 /// `points` is the integer weight used for grade calculation (default 1).
 /// `generatedBy` is the id of the `PatternFamily` that produced this entry, or
 /// nil for hand-written scripts.  Generated scripts are read-only in the

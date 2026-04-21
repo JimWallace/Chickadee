@@ -79,6 +79,13 @@ struct AssignmentRoutes: RouteCollection {
         // mutates the zip, rewrites the manifest); GET reads the current list.
         r.get(":assignmentID", "families", use: getPatternFamilies)
         r.put(":assignmentID", "families", use: putPatternFamilies)
+
+        // Unified suite editor — GET returns the full reconciled list
+        // (scripts + families, in manifest order).  PUT replaces the whole
+        // list atomically; each mutation in the suite-edit UI sends a fresh
+        // snapshot here and replaces its local state from the response.
+        r.get(":assignmentID", "suite", use: getSuite)
+        r.put(":assignmentID", "suite", use: putSuite)
     }
 
     // MARK: - GET /instructor
@@ -1507,6 +1514,7 @@ struct AssignmentRoutes: RouteCollection {
             existingSuiteRows: currentFiles.existingSuiteRows,
             familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
+            suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest),
             notice: q?.notice,
             error: q?.error
         )

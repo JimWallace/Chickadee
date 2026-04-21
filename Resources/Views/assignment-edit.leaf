@@ -54,7 +54,10 @@
         </div>
 
         <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
-            <button class="btn btn-primary" type="submit">Save</button>
+            <button class="btn btn-primary" type="submit"
+                    title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
+                Save &amp; Validate
+            </button>
             <a class="btn" href="/instructor">Cancel</a>
         </div>
     </div>
@@ -186,9 +189,11 @@
     </table>
 </form>
 
-<!-- Seed data: current families as JSON, consumed by the family editor JS.
-     rawJSON emits the string verbatim because the default Leaf variable tag
-     HTML-escapes quotes, which would break JSON.parse in the client. -->
+<!-- Seed data: current suite state (scripts + families in authored form)
+     and families as JSON.  rawJSON emits the string verbatim because the
+     default Leaf variable tag HTML-escapes quotes, which would break
+     JSON.parse in the client. -->
+<script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
 <script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
 
 <!-- ── Pattern Family Editor Modal ──────────────────────────────────────── -->
@@ -428,48 +433,110 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
     // Initialise the due-date display on load
     refreshDueDisplay();
 
-    // ── Suite file management ─────────────────────────────────────────────────
+    // ── Unified suite editor ─────────────────────────────────────────────
+    //
+    // Since v0.4.79, the suite list is a single flat array of items whose
+    // `kind` is either "script" or "family".  The server is the source of
+    // truth: every mutation (reorder, dep-adopt, tier/points/displayName
+    // edit, family CRUD) sends the full `items[]` snapshot to
+    // `PUT /instructor/:id/suite` and replaces the local state from the
+    // response — no client-side manifest synthesis, no hidden suiteConfig
+    // blob.  See Sources/APIServer/Routes/Web/AssignmentRoutes+Suite.swift.
+    //
+    // Item shape (in-memory):
+    //   { kind: "script", id: "foo.py", script: "foo.py",
+    //     tier, points, displayName, dependsOn }
+    //   { kind: "family", id: "family:bmi", familyID: "bmi",
+    //     family: { /* full PatternFamily JSON */ }, dependsOn }
+    // `id` is the dependency token (filename for scripts, "family:<id>" for
+    // families) so drag-adopt just writes `dependsOn = [target.id]`.
 
+    var assignmentPublicID = '#(assignmentID)';
+    var csrfMeta  = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
     var filesInput  = document.getElementById('suite-files-input');
-    var configField = document.getElementById('suite-config-field');
     var body        = document.getElementById('suite-config-body');
-    if (!filesInput || !configField || !body) return;
+    if (!body) return;
 
-    // items: { name, source, index?, isTest, tier, dependsOn[], points, url? }
     var items = [];
-    var dragName = null;
-    var suiteUploadFiles = Array.from(filesInput.files || []);
-    var suiteFilesReady = Promise.resolve();
+    var dragID = null;
+    var pushTimer = null;
+    var pushInFlight = false;
+    var pushPending = false;
 
-    function setQueuedUploadFiles(files) {
-        suiteUploadFiles = files || [];
-        var dt = new DataTransfer();
-        suiteUploadFiles.forEach(function (file) { dt.items.add(file); });
-        filesInput.files = dt.files;
+    // Seed from the server-rendered JSON blob — the same shape as the
+    // `GET /suite` endpoint response.
+    (function seed() {
+        var el = document.getElementById('suite-state-seed');
+        if (!el) return;
+        var payload;
+        try { payload = JSON.parse(el.textContent || '{"items":[]}'); }
+        catch (_) { payload = { items: [] }; }
+        items = normaliseItems(payload.items || []);
+    })();
+
+    function normaliseItems(raw) {
+        return (raw || []).map(function (i) {
+            if (i.kind === 'family' && i.family) {
+                var fid = i.family.id;
+                return {
+                    kind: 'family',
+                    id: 'family:' + fid,
+                    familyID: fid,
+                    family: i.family,
+                    dependsOn: (i.dependsOn && i.dependsOn.length)
+                        ? i.dependsOn.slice()
+                        : (i.family.dependsOn || []).slice()
+                };
+            }
+            var s = i.script || {};
+            return {
+                kind: 'script',
+                id: s.script || '',
+                script: s.script || '',
+                tier: s.tier || 'public',
+                points: Math.max(1, parseInt(s.points) || 1),
+                displayName: s.displayName == null ? '' : String(s.displayName),
+                dependsOn: (s.dependsOn || []).slice()
+            };
+        });
     }
 
-    function hasChildren(name) {
-        return items.some(function (it) { return it.dependsOn.indexOf(name) >= 0; });
+    function escHtml(v) {
+        return String(v == null ? '' : v)
+            .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+            .replaceAll('"','&quot;').replaceAll("'",'&#39;');
     }
+    function escAttr(v) { return String(v == null ? '' : v).replaceAll('"','&quot;'); }
 
-    function isChild(name) {
-        var it = items.find(function (i) { return i.name === name; });
-        return it ? it.dependsOn.length > 0 : false;
+    function findByID(id) { return items.find(function (it) { return it.id === id; }); }
+    function hasChildren(id) {
+        return items.some(function (it) { return it.dependsOn.indexOf(id) >= 0; });
+    }
+    function isChild(id) {
+        var it = findByID(id);
+        return it ? (it.dependsOn && it.dependsOn.length > 0) : false;
     }
 
     function visualOrder() {
+        // One-level parent/child tree keyed by item id.  Only the first
+        // element of dependsOn is used for the visual parent link; the
+        // actual dependency list (which can be multi-valued, including
+        // family refs) is preserved unchanged on the item.
         var result = [];
         var childMap = {};
         items.forEach(function (it) {
-            if (it.dependsOn.length > 0) {
+            if (it.dependsOn && it.dependsOn.length > 0) {
                 var p = it.dependsOn[0];
                 childMap[p] = childMap[p] || [];
                 childMap[p].push(it);
             }
         });
-        items.filter(function (it) { return it.dependsOn.length === 0; }).forEach(function (root) {
+        items.filter(function (it) {
+            return !it.dependsOn || it.dependsOn.length === 0;
+        }).forEach(function (root) {
             result.push({ item: root, depth: 0 });
-            (childMap[root.name] || []).forEach(function (child) {
+            (childMap[root.id] || []).forEach(function (child) {
                 result.push({ item: child, depth: 1 });
             });
         });
@@ -487,146 +554,163 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
         return dot > 0 ? filename.slice(0, dot) : filename;
     }
 
-    function itemIsTest(item) {
-        return item.tier !== 'support';
+    function depBadgeHTML(dependsOn) {
+        if (!dependsOn || !dependsOn.length) return '';
+        var labels = dependsOn.map(function (d) {
+            if (d.indexOf('family:') === 0) {
+                var fid = d.slice('family:'.length);
+                var fitem = items.find(function (it) {
+                    return it.kind === 'family' && it.familyID === fid;
+                });
+                var name = fitem && fitem.family ? fitem.family.name : fid;
+                return '⟳\u00a0' + escHtml(name);
+            }
+            return escHtml(d);
+        });
+        return '<span class="suite-dep-badge" title="Runs only after the listed prerequisites pass">↳ ' + labels.join(', ') + '</span>';
     }
 
-    function rowHTML(item, depth) {
-        var isNew    = item.source === 'upload';
-        var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
-        var errBadge = errs.length > 0
-            ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
-            : '';
-        var fileHint = isNew ? errBadge : '';
+    function scriptRowHTML(item, depth) {
         var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
         var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
         var pts       = item.points || 1;
-        // Default input value to display name if set, otherwise the filename stem
-        var nameVal   = escAttr(item.displayName || stemOf(item.name));
-        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
+        var nameVal   = escAttr(item.displayName || stemOf(item.script));
+        return '<tr data-id="' + escAttr(item.id) + '" data-kind="script" data-source="existing">'
             + '<td' + indent + '><div class="suite-name-cell">'
             +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
             +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
-            +   fileHint
+            +   depBadgeHTML(item.dependsOn)
             + '</div></td>'
             + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
             +   tierOptions(item.tier)
             + '</select></td>'
             + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
-            +   (isNew
-                    ? '<button class="btn action-btn suite-edit-upload-btn" type="button" data-name="' + escAttr(item.name) + '" title="View/Edit script" aria-label="View/Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
-                    : '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.name) + '" title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
-                )
+            +   '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.script) + '" title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
             +   '<button class="btn action-btn action-danger suite-delete-btn" type="button" title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
             + '</div></td>'
             + '</tr>';
     }
 
+    function familyRowHTML(item, depth) {
+        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
+        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
+        var family = item.family || {};
+        var caseCount = (family.cases || []).filter(function (c) { return c.enabled !== false; }).length;
+        var caseText  = caseCount === 1 ? '1 case' : caseCount + ' cases';
+        var totalPoints = (family.cases || [])
+            .filter(function (c) { return c.enabled !== false; })
+            .reduce(function (acc, c) {
+                return acc + (c.points != null ? c.points : ((family.defaults && family.defaults.points) || 1));
+            }, 0);
+        var tier = (family.defaults && family.defaults.tier) || 'public';
+        return '<tr data-id="' + escAttr(item.id) + '" data-kind="family" data-source="family" data-family-id="' + escAttr(family.id || '') + '">'
+            + '<td' + indent + '><div class="suite-name-cell suite-family-cell">'
+            +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
+            +   connector
+            +   '<span class="suite-family-icon" title="Pattern family">⟳</span>'
+            +   '<div style="display:flex;flex-direction:column;gap:.15rem">'
+            +     '<strong style="font-size:.85rem">' + escHtml(family.name || family.id || '') + '</strong>'
+            +     '<span class="card-meta" style="font-size:.72rem">'
+            +       escHtml(family.functionName || '') + '() · ' + caseText
+            +     '</span>'
+            +   '</div>'
+            +   depBadgeHTML(item.dependsOn)
+            + '</div></td>'
+            + '<td><span class="card-meta" style="font-size:.75rem">' + escHtml(tier) + '</span></td>'
+            + '<td><span class="card-meta" style="font-size:.75rem">' + totalPoints + '</span></td>'
+            + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
+            +   '<button class="btn action-btn family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
+            +   '<button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
+            + '</div></td>'
+            + '</tr>';
+    }
+
+    function rowHTML(item, depth) {
+        return item.kind === 'family' ? familyRowHTML(item, depth) : scriptRowHTML(item, depth);
+    }
+
     function renderTree() {
         var visual = visualOrder();
-        // Preserve server-rendered family rows across the rebuild — they
-        // live alongside raw scripts in the suite list but are managed by
-        // the family editor modal, not this JS.  Detach them before we
-        // overwrite innerHTML, then re-insert above the drop zone.
-        var familyRows = Array.from(body.querySelectorAll('tr[data-source="family"]'));
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
             + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
-        if (familyRows.length) {
-            var dropZone = body.querySelector('tr.suite-root-drop');
-            familyRows.forEach(function (row) {
-                body.insertBefore(row, dropZone);
-            });
-        }
     }
 
-    function syncConfig() {
-        var visual = visualOrder();
-        var config = visual.map(function (v, i) {
-            var item = v.item;
-            var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
-            if (row) {
-                var tierEl        = row.querySelector('.suite-tier');
-                var ptsEl         = row.querySelector('.suite-points');
-                var displayNameEl = row.querySelector('.suite-display-name');
-                if (tierEl)        item.tier        = tierEl.value;
-                item.isTest = itemIsTest(item);
-                if (ptsEl)         item.points      = Math.max(1, parseInt(ptsEl.value) || 1);
-                if (displayNameEl) {
-                    var val = displayNameEl.value.trim();
-                    // Null out when the instructor left the default (equals the filename stem)
-                    item.displayName = (val && val !== stemOf(item.name)) ? val : null;
+    // ── Persistence ──────────────────────────────────────────────────────
+
+    /// Builds the `PUT /suite` request body from the current `items[]`.
+    function buildPayload() {
+        return {
+            items: items.map(function (item) {
+                if (item.kind === 'family') {
+                    // Stamp the row-level dependsOn onto the family spec
+                    // server-side too, so the payload is self-contained.
+                    var family = Object.assign({}, item.family);
+                    family.dependsOn = item.dependsOn ? item.dependsOn.slice() : [];
+                    return { kind: 'family', family: family, dependsOn: family.dependsOn.slice() };
                 }
-            }
-            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
-            if (item.source === 'upload') { base.index = item.index; }
-            else                          { base.name  = item.name;  }
-            return base;
-        });
-        configField.value = JSON.stringify(config);
+                var display = item.displayName && item.displayName.trim();
+                if (display === '' || display === stemOf(item.script)) display = null;
+                return {
+                    kind: 'script',
+                    script: {
+                        script:      item.script,
+                        tier:        item.tier,
+                        points:      Math.max(1, parseInt(item.points) || 1),
+                        displayName: display,
+                        dependsOn:   (item.dependsOn || []).slice()
+                    }
+                };
+            })
+        };
     }
 
-    // Initialize items from server-rendered existing rows
-    function initFromDOM() {
-        items = [];
-        body.querySelectorAll('tr[data-source="existing"]').forEach(function (row) {
-            var name      = row.getAttribute('data-name') || '';
-            var isTest    = row.getAttribute('data-is-test') === 'true';
-            var tier      = row.getAttribute('data-tier') || 'public';
-            var url       = row.querySelector('a') ? row.querySelector('a').getAttribute('href') : '#';
-            var depsRaw   = row.getAttribute('data-depends-on') || '[]';
-            var dependsOn = [];
-            try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
-            var points      = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
-            var displayName = row.getAttribute('data-display-name') || '';
-            items.push({ name: name, displayName: displayName, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, points: points, url: url });
-        });
-        renderTree();
-        syncConfig();
+    function schedulePush() {
+        if (pushTimer) clearTimeout(pushTimer);
+        pushTimer = setTimeout(doPush, 300);
     }
 
-    // Add newly uploaded files to the items list (appended as root items)
-    function refreshUploadItems(selectedFiles) {
-        syncConfig();
-        var mergedFiles = ChickadeeSuiteList.mergeFiles(suiteUploadFiles, selectedFiles || []);
-        var existingNames = {};
-        items.forEach(function (it) { if (it.source !== 'upload') existingNames[it.name] = true; });
-        mergedFiles = mergedFiles.filter(function (file) { return !existingNames[file.name]; });
-        setQueuedUploadFiles(mergedFiles);
-        suiteFilesReady = Promise.all(suiteUploadFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
-            items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, classifications);
+    function doPush() {
+        if (pushInFlight) { pushPending = true; return; }
+        pushInFlight = true;
+        fetch('/instructor/' + encodeURIComponent(assignmentPublicID) + '/suite', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: JSON.stringify(buildPayload())
+        })
+        .then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+            return r.json();
+        })
+        .then(function (payload) {
+            items = normaliseItems(payload.items || []);
             renderTree();
-            syncConfig();
-            return suiteUploadFiles;
+        })
+        .catch(function (err) {
+            console.error('Suite save failed:', err);
+            // Rehydrate from server so the UI doesn't stay on a rejected state.
+            window.location.reload();
+        })
+        .finally(function () {
+            pushInFlight = false;
+            if (pushPending) { pushPending = false; doPush(); }
         });
-        return suiteFilesReady;
     }
 
-    function addUploadedFiles() {
-        refreshUploadItems(Array.from(filesInput.files || [])).catch(function (err) {
-            console.error('suite upload refresh failed:', err);
-        });
+    function extractErrorMessage(body) {
+        if (!body) return '';
+        var m = body.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
+        if (m) {
+            return m[1].replace(/<[^>]+>/g, '')
+                .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .trim();
+        }
+        return body.length > 200 ? body.substring(0, 200) + '…' : body;
     }
 
-    // --- Drag & Drop ---
-
-    body.addEventListener('dragstart', function (e) {
-        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
-        var row = handle.closest('tr[data-name]');
-        if (!row) { e.preventDefault(); return; }
-        dragName = row.getAttribute('data-name');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragName);  // required by Safari
-        row.classList.add('suite-row-dragging');
-    });
-
-    body.addEventListener('dragend', function () {
-        dragName = null;
-        body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
-        clearDropIndicators();
-    });
+    // ── Drag & drop ──────────────────────────────────────────────────────
 
     function clearDropIndicators() {
         body.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover').forEach(function (r) {
@@ -634,23 +718,40 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
         });
     }
 
+    body.addEventListener('dragstart', function (e) {
+        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
+        if (!handle) { e.preventDefault(); return; }
+        var row = handle.closest('tr[data-id]');
+        if (!row) { e.preventDefault(); return; }
+        dragID = row.getAttribute('data-id');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragID);
+        row.classList.add('suite-row-dragging');
+    });
+
+    body.addEventListener('dragend', function () {
+        dragID = null;
+        body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
+        clearDropIndicators();
+    });
+
     body.addEventListener('dragover', function (e) {
-        if (!dragName) return;
+        if (!dragID) return;
         e.preventDefault();
         clearDropIndicators();
         var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
         if (rootZone) { rootZone.classList.add('drop-hover'); return; }
-        var target = e.target.closest && e.target.closest('tr[data-name]');
+        var target = e.target.closest && e.target.closest('tr[data-id]');
         if (!target) return;
+        var tid = target.getAttribute('data-id');
+        if (tid === dragID) return;
         var rect  = target.getBoundingClientRect();
         var relY  = (e.clientY - rect.top) / rect.height;
-        var tName = target.getAttribute('data-name');
-        if (tName === dragName) return;
         if (relY < 0.3) {
             target.classList.add('drop-before');
         } else if (relY > 0.7) {
             target.classList.add('drop-after');
-        } else if (!isChild(tName) && !hasChildren(dragName)) {
+        } else if (!isChild(tid) && !hasChildren(dragID)) {
             target.classList.add('drop-adopt');
         } else {
             target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
@@ -664,133 +765,235 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
 
     body.addEventListener('drop', function (e) {
         e.preventDefault();
-        if (!dragName) return;
-        var dragItem = items.find(function (it) { return it.name === dragName; });
+        if (!dragID) return;
+        var dragItem = findByID(dragID);
         if (!dragItem) return;
 
         var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
         if (rootZone) {
             dragItem.dependsOn = [];
-            renderTree(); syncConfig(); return;
+            renderTree(); schedulePush(); return;
         }
 
-        var target = e.target.closest && e.target.closest('tr[data-name]');
+        var target = e.target.closest && e.target.closest('tr[data-id]');
         if (!target) return;
-        var tName = target.getAttribute('data-name');
-        if (!tName || tName === dragName) return;
+        var tid = target.getAttribute('data-id');
+        if (!tid || tid === dragID) return;
 
         var rect = target.getBoundingClientRect();
         var relY = (e.clientY - rect.top) / rect.height;
 
-        if (relY >= 0.3 && relY <= 0.7 && !isChild(tName) && !hasChildren(dragName)) {
-            dragItem.dependsOn = [tName];
+        if (relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildren(dragID)) {
+            dragItem.dependsOn = [tid];
         } else {
             dragItem.dependsOn = [];
-            items = items.filter(function (it) { return it.name !== dragName; });
-            var tIdx = items.findIndex(function (it) { return it.name === tName; });
+            items = items.filter(function (it) { return it.id !== dragID; });
+            var tIdx = items.findIndex(function (it) { return it.id === tid; });
             items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
         }
-        renderTree(); syncConfig();
+        renderTree(); schedulePush();
     });
 
-    // Delete button
-    body.addEventListener('click', function (event) {
-        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
-        if (!btn) return;
-        var row = btn.closest('tr[data-name]');
+    // ── Inline script edits ──────────────────────────────────────────────
+
+    body.addEventListener('change', function (e) {
+        var row = e.target.closest && e.target.closest('tr[data-kind="script"]');
         if (!row) return;
-        var name = row.getAttribute('data-name');
-        var removed = items.find(function (it) { return it.name === name; });
-        items = items.filter(function (it) { return it.name !== name; });
-        if (removed && removed.source === 'upload') {
-            setQueuedUploadFiles(suiteUploadFiles.filter(function (file) { return file.name !== name; }));
-            items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, []);
-        }
-        // Clear any dependsOn references to the deleted item
-        items.forEach(function (it) {
-            it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; });
-        });
-        renderTree(); syncConfig();
+        var item = findByID(row.getAttribute('data-id'));
+        if (!item) return;
+        var tierEl = row.querySelector('.suite-tier');
+        var ptsEl  = row.querySelector('.suite-points');
+        if (tierEl) item.tier = tierEl.value;
+        if (ptsEl)  item.points = Math.max(1, parseInt(ptsEl.value) || 1);
+        schedulePush();
     });
 
-    body.addEventListener('change', function () { syncConfig(); });
-    body.addEventListener('input',  function () { syncConfig(); });
+    body.addEventListener('input', function (e) {
+        var row = e.target.closest && e.target.closest('tr[data-kind="script"]');
+        if (!row) return;
+        var nameEl = row.querySelector('.suite-display-name');
+        if (!nameEl) return;
+        var item = findByID(row.getAttribute('data-id'));
+        if (!item) return;
+        var val = nameEl.value.trim();
+        item.displayName = (val && val !== stemOf(item.script)) ? val : '';
+        schedulePush();
+    });
 
-    filesInput.addEventListener('change', addUploadedFiles);
-    if (form) {
-        form.addEventListener('submit', function (e) {
-            syncConfig();
-            if (e.defaultPrevented) return;
-            e.preventDefault();
-            var targetURL = form.action;
-            var meta = document.querySelector('meta[name="csrf-token"]');
-            var token = meta ? meta.getAttribute('content') : '';
-            var submitBtn = e.submitter || form.querySelector('.btn-primary[type="submit"]');
-            if (submitBtn) submitBtn.disabled = true;
-            suiteFilesReady.then(function () {
-                syncConfig();
-                var fd = new FormData(form);
-                fd.delete('suiteFiles[]');
-                fd.delete('suiteFiles');
-                suiteUploadFiles.forEach(function (file) {
-                    fd.append('suiteFiles[]', file, file.name);
-                });
-                return fetch(targetURL, {
-                    method: 'POST',
-                    headers: { 'x-csrf-token': token },
-                    body: fd
-                });
-            }).then(function (res) {
-                window.location.href = res.url || window.location.href;
-            }).catch(function () {
-                if (submitBtn) submitBtn.disabled = false;
+    // ── Delete script row (family delete is handled by the family-editor JS) ──
+    body.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('.suite-delete-btn');
+        if (!btn) return;
+        var row = btn.closest('tr[data-kind="script"]');
+        if (!row) return;
+        var id = row.getAttribute('data-id');
+        var item = findByID(id);
+        if (!item) return;
+        if (!confirm('Delete test script "' + item.script + '"? This also removes it as a dependency from other items.')) return;
+
+        // Delete the script file on the server (this also removes its
+        // manifest entry).  Then drop the local item and push the list.
+        fetch('/instructor/' + encodeURIComponent(assignmentPublicID) +
+              '/scripts/' + encodeURIComponent(item.script), {
+            method: 'DELETE',
+            headers: { 'x-csrf-token': csrfToken }
+        })
+        .then(function (r) {
+            if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+        })
+        .then(function () {
+            items = items.filter(function (it) { return it.id !== id; });
+            items.forEach(function (it) {
+                it.dependsOn = (it.dependsOn || []).filter(function (d) { return d !== id; });
             });
+            renderTree();
+            schedulePush();
+        })
+        .catch(function (err) {
+            alert('Could not delete: ' + (err.message || err));
         });
-        form.addEventListener('chickadee:before-multipart-submit', function () {
-            syncConfig();
+    });
+
+    // ── "Upload" button: stream uploaded files straight through the
+    //     per-script CRUD endpoint rather than queueing them.  Each successful
+    //     upload appends to the local items list.
+    if (filesInput) {
+        filesInput.addEventListener('change', function () {
+            var files = Array.from(filesInput.files || []);
+            filesInput.value = '';
+            var chain = Promise.resolve();
+            files.forEach(function (file) {
+                chain = chain.then(function () {
+                    return ChickadeeSuiteList.classifyFile(file).then(function (cls) {
+                        return file.text().then(function (content) {
+                            return fetch('/instructor/' + encodeURIComponent(assignmentPublicID) + '/scripts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                                body: JSON.stringify({
+                                    filename: file.name,
+                                    content: content,
+                                    tier: cls.tier,
+                                    points: 1,
+                                    isTest: cls.isScript
+                                })
+                            }).then(function (r) {
+                                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+                                return r.json();
+                            }).then(function (data) {
+                                if (window.chickadeeAddExistingSuiteScript) {
+                                    window.chickadeeAddExistingSuiteScript(data);
+                                }
+                            });
+                        });
+                    });
+                });
+            });
+            chain.catch(function (err) { alert('Upload failed: ' + (err.message || err)); });
         });
     }
 
     var addTestBtn = document.getElementById('add-test-btn');
-    if (addTestBtn) {
+    if (addTestBtn && filesInput) {
         addTestBtn.addEventListener('click', function () {
-            filesInput.value = '';
             filesInput.click();
         });
     }
 
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    // ── Form submit ─────────────────────────────────────────────────────
+    // Save & Validate handles notebook + metadata only now.  Flush any
+    // pending suite-state push before letting the multipart form submit.
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+            // No longer bundling suiteConfig — let the normal form submit proceed.
+            // If a suite PUT is in flight, finish it first so state is consistent.
+            if (pushInFlight || pushPending) {
+                e.preventDefault();
+                var iv = setInterval(function () {
+                    if (!pushInFlight && !pushPending) {
+                        clearInterval(iv);
+                        form.submit();
+                    }
+                }, 50);
+            }
+        });
     }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
 
-    initFromDOM();
-
+    /// Public hook used by the Script Editor modal when a brand-new file
+    /// has been created.  Adds a local item and pushes the updated list.
     window.chickadeeAddExistingSuiteScript = function (script) {
         if (!script || !script.filename) return;
-        syncConfig();
-        items = items.filter(function (it) { return it.name !== script.filename; });
-        setQueuedUploadFiles(suiteUploadFiles.filter(function (file) { return file.name !== script.filename; }));
+        items = items.filter(function (it) {
+            return !(it.kind === 'script' && it.script === script.filename);
+        });
         items.push({
-            name:        script.filename,
+            kind: 'script',
+            id: script.filename,
+            script: script.filename,
+            tier: script.tier || (script.isTest ? 'public' : 'support'),
+            points: Math.max(1, parseInt(script.points) || 1),
             displayName: '',
-            source:      'existing',
-            isTest:      !!script.isTest,
-            tier:        script.tier || (script.isTest ? 'public' : 'support'),
-            dependsOn:   [],
-            points:      Math.max(1, parseInt(script.points) || 1),
-            url:         script.editURL || '#'
+            dependsOn: []
         });
         renderTree();
-        syncConfig();
+        schedulePush();
     };
 
-    // Reload when restored from bfcache (browser back/forward) so the page
-    // always reflects the server's current state rather than a cached snapshot.
+    /// Public hook used by the Family Editor modal after a family save
+    /// (see the pattern-family JS block further down).  Given the full
+    /// family list returned from `PUT /families`, this replaces the local
+    /// state's family entries while preserving the position + dependencies
+    /// of any family that was already in the list.
+    window.chickadeeSyncFamilies = function (nextFamilies) {
+        var byID = {};
+        (nextFamilies || []).forEach(function (f) { byID[f.id] = f; });
+
+        // Update or insert entries for each family.
+        var seen = {};
+        items = items.map(function (item) {
+            if (item.kind !== 'family') return item;
+            var f = byID[item.familyID];
+            if (!f) return null; // family was removed
+            seen[item.familyID] = true;
+            return {
+                kind: 'family',
+                id: 'family:' + f.id,
+                familyID: f.id,
+                family: f,
+                dependsOn: (f.dependsOn || []).slice()
+            };
+        }).filter(Boolean);
+
+        (nextFamilies || []).forEach(function (f) {
+            if (seen[f.id]) return;
+            items.push({
+                kind: 'family',
+                id: 'family:' + f.id,
+                familyID: f.id,
+                family: f,
+                dependsOn: (f.dependsOn || []).slice()
+            });
+        });
+
+        // Drop deleted families from any remaining dependsOn lists.
+        var aliveFamilyIDs = Object.keys(byID);
+        items.forEach(function (it) {
+            it.dependsOn = (it.dependsOn || []).filter(function (d) {
+                if (d.indexOf('family:') !== 0) return true;
+                var fid = d.slice('family:'.length);
+                return aliveFamilyIDs.indexOf(fid) >= 0;
+            });
+        });
+        renderTree();
+        schedulePush();
+    };
+
+    // Reload on bfcache restore so the page always reflects server state.
     window.addEventListener('pageshow', function (e) {
         if (e.persisted) window.location.reload();
     });
 
+    renderTree();
 })();
 </script>
 <style>
@@ -1606,7 +1809,11 @@ function checkUWDates(dateTimeValue, warningEl) {
                 var next = familiesState.slice();
                 next.splice(idx2, 1);
                 putFamilies(next)
-                    .then(function () { window.location.reload(); })
+                    .then(function (applied) {
+                        if (window.chickadeeSyncFamilies) {
+                            window.chickadeeSyncFamilies(applied);
+                        }
+                    })
                     .catch(function () {});
             }
         });
@@ -1633,7 +1840,12 @@ function checkUWDates(dateTimeValue, warningEl) {
             next.push(family);
         }
         putFamilies(next)
-            .then(function () { window.location.reload(); })
+            .then(function (applied) {
+                if (window.chickadeeSyncFamilies) {
+                    window.chickadeeSyncFamilies(applied);
+                }
+                closeEditor();
+            })
             .catch(function () {});
     });
 })();

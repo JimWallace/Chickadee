@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.79] - 2026-04-21
+
+### Changed
+
+- **Assignment suite editor unified around a server-authoritative model.** Raw scripts and pattern families now live in a single ordered list in the suite table — drag-reorder, drop-to-adopt-as-dependency, and tier/points/displayName edits all persist live through the new `PUT /instructor/:assignmentID/suite` endpoint.  The old client-side `#suite-config-field` JSON blob and the `/edit/save` suite-rebuild path are gone; the main "Save" button is relabeled **"Save & Validate"** and now only handles assignment name, due date, notebook uploads, and validation-submission enqueue.  Server response from `PUT /suite` returns the reconciled state so the client never drifts.
+
+### Added
+
+- **Dependencies across scripts and families.**  `dependsOn` entries accept a new `family:<id>` token in the authored form; the server expands these to the family's enabled generated filenames before persisting the manifest, so the runner still sees only concrete script names.  Families may also declare their own `PatternFamily.dependsOn: [String]` which every generated case inherits.  Authored-graph cycle detection rejects self-referential families, script↔family cycles, and family↔family cycles.  Editor UI: drop a row onto a family to adopt `family:<id>`, drop a family onto a script to have every case inherit that prereq.
+- **`GET /instructor/:assignmentID/suite`** returns the author-facing view of the suite list — one row per script or family, in manifest order, with `family:<id>` tokens re-collapsed from expanded filename sets in `dependsOn`.  The edit page seeds the editor state from the same payload embedded as JSON at load time.
+
+### Removed
+
+- **`#suite-config-field` hidden input and the `syncConfig()`/`chickadee:before-multipart-submit` pipeline.**  `saveEditedAssignment` no longer reads `suiteFiles[]` / `suiteConfig` multipart fields — clients built against v0.4.78 or earlier will find that suite edits sent via the old Save button are silently ignored.  Migrate to `PUT /suite` for suite changes.
+
 ## [0.4.78] - 2026-04-21
 
 ### Fixed

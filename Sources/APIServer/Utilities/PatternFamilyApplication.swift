@@ -1,39 +1,100 @@
 // APIServer/Utilities/PatternFamilyApplication.swift
 //
-// Applies a list of PatternFamily specs to an APITestSetup: diffs old vs
-// new families, mutates the zip (add/update/delete generated `.py` files),
-// and rewrites the manifest JSON to reflect the new spec + expanded
-// TestSuiteEntries.
+// Applies a list of PatternFamily specs — and optionally an authored,
+// ordered suite (interleaving raw scripts and families) — to an APITestSetup.
+// Owns the atomic save path:
 //
-// The runner's cache key includes the manifest bytes, so updating the
-// manifest here is what causes runners to fetch a fresh copy after a family
-// edit — there is no separate bust-the-cache step.
+//   1. Validates the spec (families + family-ref dependencies).
+//   2. Diffs old vs new generated `.py` files and mutates the zip.
+//   3. Rebuilds `testSuites` in authored order, expanding every
+//      `family:<id>` token in `dependsOn` to the concrete generated
+//      filenames so the runner never needs to understand families.
+//   4. Rewrites the manifest JSON and persists it.
+//
+// The runner's cache key includes manifest bytes, so updating the manifest
+// here is what causes runners to fetch a fresh copy after an edit — there is
+// no separate bust-the-cache step.
 
 import Foundation
 import Core
 import Vapor
 import Fluent
 
-/// Outcome of applying a new family list, useful for logging / tests.
-struct PatternFamilyApplyResult: Equatable {
-    let writtenFiles:  [String]   // filenames added or overwritten in the zip
-    let deletedFiles:  [String]   // filenames removed from the zip
-    let manifestBefore: String    // manifest JSON before the change
-    let manifestAfter:  String    // manifest JSON after the change
+// MARK: - Authored suite model
+
+/// The instructor-authored metadata for a raw (hand-written) script row —
+/// the tier/points/deps that would otherwise have lived in a `suiteConfig`
+/// JSON blob before the v0.4.79 unification.  `dependsOn` may include
+/// `family:<id>` tokens; they're expanded before the manifest is persisted.
+struct AuthoredRawScript: Equatable {
+    let script: String
+    let tier: TestTier
+    let points: Int
+    let displayName: String?
+    let dependsOn: [String]
 }
 
-/// Validates `nextFamilies`, computes a diff against the families currently
-/// recorded in `setup.manifest`, applies the diff to the zip, and rewrites
-/// the manifest.  On success, persists the updated manifest to the database.
+/// One position in the unified suite-edit list.  Either a raw script entry
+/// or a reference to one of the families in `nextFamilies`.  Array ordering
+/// is authoritative for UI order — a family's generated scripts occupy a
+/// contiguous block at the family's position.
+enum AuthoredSuiteItem: Equatable {
+    case script(AuthoredRawScript)
+    case family(id: String)
+}
+
+// MARK: - Family-ref helpers
+
+/// `family:<id>` is the author-facing syntax for "depends on every enabled
+/// case of family <id>".  Nothing in the persisted manifest should ever
+/// carry this token — `applyPatternFamilies` expands it before save.
+private let familyRefPrefix = "family:"
+
+/// Returns the family id if `dep` is a `family:<id>` token, otherwise nil.
+func parseFamilyDepToken(_ dep: String) -> String? {
+    guard dep.hasPrefix(familyRefPrefix) else { return nil }
+    let id = String(dep.dropFirst(familyRefPrefix.count))
+    return id.isEmpty ? nil : id
+}
+
+/// Builds the authored-form token for a family reference.
+func familyDepToken(_ familyID: String) -> String {
+    "\(familyRefPrefix)\(familyID)"
+}
+
+// MARK: - Outcome
+
+struct PatternFamilyApplyResult: Equatable {
+    let writtenFiles:  [String]
+    let deletedFiles:  [String]
+    let manifestBefore: String
+    let manifestAfter:  String
+}
+
+// MARK: - Entry point
+
+/// Validates `nextFamilies` + any `authoredItems` the caller provides,
+/// applies zip mutations, expands `family:<id>` dependency tokens, and
+/// rewrites the manifest in authored order.  On success, persists the
+/// updated manifest to the database.
 ///
-/// - Returns: a `PatternFamilyApplyResult` describing the zip mutations.
-/// - Throws: `Abort(.unprocessableEntity)` on validation failure (in which
-///   case neither the zip nor the manifest is modified), or the underlying
-///   error from zip or database operations.
+/// - When `authoredItems == nil` the function preserves the raw-script
+///   entries from the existing manifest verbatim (their tier/points/deps
+///   survive) and appends generated entries after them — the original
+///   v0.4.76 behaviour, used by callers that aren't driving the unified
+///   suite editor (e.g. the v0.4.77 save-edit re-apply and pre-v0.4.79
+///   tests).
+/// - When `authoredItems != nil` the caller is the source of truth for
+///   position, tier, points, displayName, and dependencies of every raw
+///   row; generated rows are interleaved at each family's authored
+///   position.  Families referenced by `authoredItems` must appear in
+///   `nextFamilies`; families in `nextFamilies` not referenced by
+///   `authoredItems` are appended at the end (defensive).
 @discardableResult
 func applyPatternFamilies(
     to setup: APITestSetup,
     nextFamilies: [PatternFamily],
+    authoredItems: [AuthoredSuiteItem]? = nil,
     on db: Database
 ) async throws -> PatternFamilyApplyResult {
 
@@ -43,11 +104,75 @@ func applyPatternFamilies(
         throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
     }
 
-    // 1. Validate new family list against the raw-script portion of the
-    //    existing manifest (hand-written entries are preserved verbatim).
-    try validatePatternFamilies(nextFamilies, testSuites: props.testSuites)
+    // ── 1. Figure out the authored raw-entry list + ordering ────────────
+    let authoredRawEntries: [AuthoredRawScript]
+    let itemsForOrdering: [AuthoredSuiteItem]
+    if let authoredItems {
+        authoredRawEntries = authoredItems.compactMap { item in
+            if case .script(let s) = item { return s } else { return nil }
+        }
+        itemsForOrdering = authoredItems
+    } else {
+        authoredRawEntries = props.testSuites
+            .filter { $0.generatedBy == nil }
+            .map { e in
+                AuthoredRawScript(
+                    script: e.script,
+                    tier: e.tier,
+                    points: e.points,
+                    displayName: e.name,
+                    dependsOn: e.dependsOn
+                )
+            }
+        // Fallback ordering: raw scripts in their existing order, then each
+        // family in `nextFamilies` order at the end.
+        itemsForOrdering =
+            authoredRawEntries.map { .script($0) }
+            + nextFamilies.map { .family(id: $0.id) }
+    }
 
-    // 2. Diff old vs new generated filenames.
+    // ── 2. Validate: family spec + family-ref dependency tokens ─────────
+    let authoredAsTestSuites = authoredRawEntries.map {
+        TestSuiteEntry(
+            tier: $0.tier, script: $0.script, name: $0.displayName,
+            dependsOn: $0.dependsOn, points: $0.points, generatedBy: nil
+        )
+    }
+    try validatePatternFamilies(nextFamilies, testSuites: authoredAsTestSuites)
+
+    let knownFamilyIDs = Set(nextFamilies.map(\.id))
+    for r in authoredRawEntries {
+        for dep in r.dependsOn {
+            if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
+                throw Abort(.unprocessableEntity,
+                    reason: "Script '\(r.script)' depends on unknown pattern family '\(fid)'.")
+            }
+        }
+    }
+    for f in nextFamilies {
+        for dep in f.dependsOn {
+            if let fid = parseFamilyDepToken(dep) {
+                if fid == f.id {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(f.id)' cannot depend on itself.")
+                }
+                guard knownFamilyIDs.contains(fid) else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(f.id)' depends on unknown family '\(fid)'.")
+                }
+            }
+        }
+    }
+
+    // Cycle detection on the authored graph (family ids + script filenames
+    // as a single node set; family:<id> edges expand to the family node,
+    // NOT to its generated scripts, so family→family cycles are caught).
+    try detectAuthoredCycles(
+        authoredRaw: authoredRawEntries,
+        families: nextFamilies
+    )
+
+    // ── 3. Diff generated filenames and mutate the zip ──────────────────
     let oldGeneratedFilenames = Set(
         props.patternFamilies.flatMap(patternFamilyAllGeneratedFilenames)
     )
@@ -63,47 +188,115 @@ func applyPatternFamilies(
     let toDelete = oldGeneratedFilenames.subtracting(newGeneratedFilenames)
     let toWrite  = renderedByFilename.mapValues(\.source)
 
-    // 3. Apply the zip mutations.  This is a single extract-repack cycle.
     try applyScriptChangesToZip(
         zipPath: setup.zipPath,
         writes: toWrite,
         deletions: Array(toDelete)
     )
 
-    // 4. Build the new testSuites list: preserve raw (generatedBy == nil)
-    //    entries in their original order, then append entries for each
-    //    rendered case in a stable family/case order.  Generated entries
-    //    added for the first time have no `dependsOn`; re-applied ones
-    //    preserve any dependsOn the instructor had previously declared.
+    // ── 4. Build new `testSuites` in authored order, expanding family refs ─
+    let familyByID: [String: PatternFamily] = Dictionary(
+        uniqueKeysWithValues: nextFamilies.map { ($0.id, $0) }
+    )
+    var familyFilenames: [String: [String]] = [:]
+    for f in nextFamilies {
+        familyFilenames[f.id] = f.cases
+            .filter(\.enabled)
+            .map { c in
+                generatedScriptFilename(
+                    familyID: f.id,
+                    caseKey: c.key,
+                    tier: c.resolvedTier(defaults: f.defaults)
+                )
+            }
+    }
+
+    func expandDeps(_ deps: [String]) -> [String] {
+        var out: [String] = []
+        var seen = Set<String>()
+        for d in deps {
+            if let fid = parseFamilyDepToken(d) {
+                for f in familyFilenames[fid] ?? [] {
+                    guard !toDelete.contains(f), seen.insert(f).inserted else { continue }
+                    out.append(f)
+                }
+            } else {
+                guard !toDelete.contains(d), seen.insert(d).inserted else { continue }
+                out.append(d)
+            }
+        }
+        return out
+    }
+
     let oldEntryByScript: [String: TestSuiteEntry] = Dictionary(
         uniqueKeysWithValues: props.testSuites.map { ($0.script, $0) }
     )
-    var newConfigured: [ConfiguredSuiteEntry] = []
 
-    // (a) raw entries, preserving relative order.
+    var newConfigured: [ConfiguredSuiteEntry] = []
     var order = 0
-    for e in props.testSuites where e.generatedBy == nil {
-        order += 1
-        newConfigured.append(ConfiguredSuiteEntry(
-            script:      e.script,
-            tier:        e.tier.rawValue,
-            order:       order,
-            dependsOn:   e.dependsOn.filter { !toDelete.contains($0) },
-            points:      e.points,
-            displayName: e.name,
-            generatedBy: nil
-        ))
+    var emittedFamilyIDs: Set<String> = []
+
+    for item in itemsForOrdering {
+        switch item {
+        case .script(let s):
+            order += 1
+            newConfigured.append(ConfiguredSuiteEntry(
+                script:      s.script,
+                tier:        s.tier.rawValue,
+                order:       order,
+                dependsOn:   expandDeps(s.dependsOn),
+                points:      s.points,
+                displayName: s.displayName,
+                generatedBy: nil
+            ))
+
+        case .family(let fid):
+            guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
+            emittedFamilyIDs.insert(fid)
+            let inherited = expandDeps(family.dependsOn)
+            for generated in renderPatternFamily(family) {
+                order += 1
+                let prior = oldEntryByScript[generated.filename]
+                let perCase = expandDeps(prior?.dependsOn ?? [])
+                var combined: [String] = []
+                var seen = Set<String>()
+                for d in inherited + perCase {
+                    guard seen.insert(d).inserted else { continue }
+                    combined.append(d)
+                }
+                newConfigured.append(ConfiguredSuiteEntry(
+                    script:      generated.filename,
+                    tier:        generated.tier.rawValue,
+                    order:       order,
+                    dependsOn:   combined,
+                    points:      generated.points,
+                    displayName: generated.displayName,
+                    generatedBy: generated.familyID
+                ))
+            }
+        }
     }
-    // (b) generated entries, stable ordering across families then cases.
-    for family in nextFamilies {
+
+    // Defensive: any family in `nextFamilies` that wasn't referenced by
+    // `authoredItems` still needs its generated scripts emitted (e.g. if
+    // the caller forgot to include a newly added family).
+    for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
+        let inherited = expandDeps(family.dependsOn)
         for generated in renderPatternFamily(family) {
             order += 1
             let prior = oldEntryByScript[generated.filename]
+            let perCase = expandDeps(prior?.dependsOn ?? [])
+            var combined: [String] = []
+            var seen = Set<String>()
+            for d in inherited + perCase {
+                guard seen.insert(d).inserted else { continue }
+                combined.append(d)
+            }
             newConfigured.append(ConfiguredSuiteEntry(
                 script:      generated.filename,
                 tier:        generated.tier.rawValue,
                 order:       order,
-                dependsOn:   prior?.dependsOn.filter { !toDelete.contains($0) } ?? [],
+                dependsOn:   combined,
                 points:      generated.points,
                 displayName: generated.displayName,
                 generatedBy: generated.familyID
@@ -119,6 +312,14 @@ func applyPatternFamilies(
         patternFamilies: nextFamilies
     )
 
+    // Belt-and-suspenders: the post-expansion manifest is the one the runner
+    // will actually consume.  It must not contain any `family:<id>` tokens,
+    // must reference only existing scripts, and must still be acyclic.
+    if let postData = newManifest.data(using: .utf8),
+       let postProps = try? JSONDecoder().decode(TestProperties.self, from: postData) {
+        try validateManifestDependencies(postProps)
+    }
+
     setup.manifest = newManifest
     try await setup.save(on: db)
 
@@ -129,3 +330,66 @@ func applyPatternFamilies(
         manifestAfter:  newManifest
     )
 }
+
+// MARK: - Authored-graph cycle detection
+
+/// Detects dependency cycles on the authored graph where raw scripts are
+/// identified by filename and families are identified by `family:<id>`.
+/// `family:<id>` edges point to the family node (not to its generated
+/// scripts) so the graph stays small.  Uses Kahn's algorithm.
+private func detectAuthoredCycles(
+    authoredRaw: [AuthoredRawScript],
+    families: [PatternFamily]
+) throws {
+    var prereqs: [String: [String]] = [:]   // node → prerequisites of that node
+
+    for r in authoredRaw {
+        let node = r.script
+        prereqs[node, default: []].append(contentsOf: r.dependsOn.map(normaliseNode))
+    }
+    for f in families {
+        let node = familyDepToken(f.id)
+        prereqs[node, default: []].append(contentsOf: f.dependsOn.map(normaliseNode))
+    }
+
+    // Include every referenced prerequisite as a node so Kahn's terminates.
+    for (_, deps) in prereqs {
+        for d in deps where prereqs[d] == nil {
+            prereqs[d] = []
+        }
+    }
+
+    var inDegree: [String: Int] = prereqs.mapValues { $0.count }
+    var dependents: [String: [String]] = [:]
+    for (node, deps) in prereqs {
+        for d in deps {
+            dependents[d, default: []].append(node)
+        }
+    }
+
+    var queue = inDegree.filter { $0.value == 0 }.map(\.key)
+    var processed = 0
+    while !queue.isEmpty {
+        let node = queue.removeLast()
+        processed += 1
+        for dependent in dependents[node, default: []] {
+            inDegree[dependent, default: 0] -= 1
+            if inDegree[dependent] == 0 {
+                queue.append(dependent)
+            }
+        }
+    }
+
+    guard processed == inDegree.count else {
+        throw Abort(
+            .unprocessableEntity,
+            reason: "Dependency graph contains a cycle among scripts and/or pattern families."
+        )
+    }
+}
+
+/// Normalises a dependency token to its canonical node form.  Raw
+/// filenames stay as-is; `family:<id>` tokens keep the prefix so they
+/// don't collide with a real file name like "family" (filename has no
+/// colon; a clash is impossible in practice).
+private func normaliseNode(_ dep: String) -> String { dep }

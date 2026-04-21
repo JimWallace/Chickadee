@@ -248,6 +248,9 @@ func configureLeaf(_ app: Application) {
     }
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
+    app.leaf.tags["csrfToken"] = CSRFTokenTag()
+    app.leaf.tags["appVersion"] = AppVersionTag()
+    app.leaf.tags["rawJSON"] = RawJSONTag()
 }
 
 // MARK: - CSRF token extraction

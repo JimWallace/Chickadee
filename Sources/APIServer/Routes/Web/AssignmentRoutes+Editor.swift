@@ -227,20 +227,18 @@ extension AssignmentRoutes {
         }
         let solutionIsNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
 
-        let resolvedSuite: ResolvedEditSuiteFiles
-        do {
-            resolvedSuite = try resolveEditSuiteFiles(
-                setupZipPath: setup.zipPath,
-                setupManifestJSON: setup.manifest,
-                uploadedSuiteFiles: uploadedSuiteFiles,
-                suiteConfigJSON: suiteConfigRaw
-            )
-        } catch {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=\(urlEncode(error.localizedDescription))"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-        guard !resolvedSuite.files.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20or%20keep%20at%20least%20one%20test%20suite%20or%20support%20file"
+        // As of v0.4.79, the assignment Save button is for notebook +
+        // metadata + (re-)validation only.  The test suite itself is
+        // edited live via the per-script and PUT /suite endpoints, so we
+        // intentionally ignore `suiteFiles`/`suiteConfig` if they arrive
+        // and refuse to rebuild the zip from them.  That lets legacy
+        // clients roundtrip safely while clients built against the new
+        // endpoint skip the fields entirely.
+        _ = uploadedSuiteFiles
+        _ = suiteConfigRaw
+
+        guard try setupHasAnyTestEntries(manifestJSON: setup.manifest) else {
+            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
@@ -261,60 +259,19 @@ extension AssignmentRoutes {
         }()
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
 
-        let setupPackage = try createRunnerSetupZip(
-            suiteFiles: resolvedSuite.files,
-            suiteConfigJSON: resolvedSuite.reindexedSuiteConfigJSON,
-            zipPath: setup.zipPath
-        )
-        guard !setupPackage.testSuites.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-        // Preserve the grading mode, starterNotebook, and pattern families
-        // already stored in the manifest — editing the suite files must not
-        // silently reset them.  Generated scripts belonging to families are
-        // filtered out of the UI's suite list, so they aren't in
-        // `setupPackage.testSuites`; we re-apply the families below to
-        // regenerate them back into the zip and the manifest's testSuites.
-        let existingManifestDict: [String: Any] = {
-            guard let data = setup.manifest.data(using: .utf8),
-                  let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            else { return [:] }
-            return dict
-        }()
-        let existingGradingMode = existingManifestDict["gradingMode"] as? String ?? "worker"
-        let existingStarterNotebook = existingManifestDict["starterNotebook"] as? String ?? "assignment.ipynb"
-        let existingFamilies: [PatternFamily] = {
-            guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
-            else { return [] }
-            return props.patternFamilies
-        }()
-        setup.manifest = try makeWorkerManifestJSON(
-            testSuites: setupPackage.testSuites,
-            includeMakefile: setupPackage.hasMakefile,
-            gradingMode: existingGradingMode,
-            starterNotebook: existingStarterNotebook,
-            patternFamilies: existingFamilies
-        )
         setup.notebookPath = notebookPath
         try await setup.save(on: req.db)
 
-        // Regenerate pattern-family scripts into the freshly-rebuilt zip and
-        // rewrite the manifest's `testSuites` so generated entries carry
-        // `generatedBy` tags and point at files that actually exist.
-        if !existingFamilies.isEmpty {
-            _ = try await applyPatternFamilies(
-                to: setup,
-                nextFamilies: existingFamilies,
-                on: req.db
-            )
-        }
-
+        let activeTestSuiteScripts: Set<String> = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return [] }
+            return Set(props.testSuites.map(\.script))
+        }()
         extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: setup.id!,
-            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
+            testSuiteScripts: activeTestSuiteScripts,
             testSetupsDirectory: req.application.testSetupsDirectory
         )
 
