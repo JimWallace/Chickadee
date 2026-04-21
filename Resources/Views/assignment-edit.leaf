@@ -526,8 +526,19 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
 
     function renderTree() {
         var visual = visualOrder();
+        // Preserve server-rendered family rows across the rebuild — they
+        // live alongside raw scripts in the suite list but are managed by
+        // the family editor modal, not this JS.  Detach them before we
+        // overwrite innerHTML, then re-insert above the drop zone.
+        var familyRows = Array.from(body.querySelectorAll('tr[data-source="family"]'));
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
             + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+        if (familyRows.length) {
+            var dropZone = body.querySelector('tr.suite-root-drop');
+            familyRows.forEach(function (row) {
+                body.insertBefore(row, dropZone);
+            });
+        }
     }
 
     function syncConfig() {
