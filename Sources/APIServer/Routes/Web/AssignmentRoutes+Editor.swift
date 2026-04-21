@@ -270,8 +270,12 @@ extension AssignmentRoutes {
             let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Select%20at%20least%20one%20test%20file%20in%20the%20suite%20list"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
-        // Preserve the grading mode and starterNotebook already stored in the
-        // manifest — editing the suite files must not silently reset them.
+        // Preserve the grading mode, starterNotebook, and pattern families
+        // already stored in the manifest — editing the suite files must not
+        // silently reset them.  Generated scripts belonging to families are
+        // filtered out of the UI's suite list, so they aren't in
+        // `setupPackage.testSuites`; we re-apply the families below to
+        // regenerate them back into the zip and the manifest's testSuites.
         let existingManifestDict: [String: Any] = {
             guard let data = setup.manifest.data(using: .utf8),
                   let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -280,14 +284,33 @@ extension AssignmentRoutes {
         }()
         let existingGradingMode = existingManifestDict["gradingMode"] as? String ?? "worker"
         let existingStarterNotebook = existingManifestDict["starterNotebook"] as? String ?? "assignment.ipynb"
+        let existingFamilies: [PatternFamily] = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return [] }
+            return props.patternFamilies
+        }()
         setup.manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
             gradingMode: existingGradingMode,
-            starterNotebook: existingStarterNotebook
+            starterNotebook: existingStarterNotebook,
+            patternFamilies: existingFamilies
         )
         setup.notebookPath = notebookPath
         try await setup.save(on: req.db)
+
+        // Regenerate pattern-family scripts into the freshly-rebuilt zip and
+        // rewrite the manifest's `testSuites` so generated entries carry
+        // `generatedBy` tags and point at files that actually exist.
+        if !existingFamilies.isEmpty {
+            _ = try await applyPatternFamilies(
+                to: setup,
+                nextFamilies: existingFamilies,
+                on: req.db
+            )
+        }
+
         extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
             setupID: setup.id!,

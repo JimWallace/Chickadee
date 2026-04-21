@@ -306,6 +306,86 @@ final class PatternFamilyTests: XCTestCase {
         }
     }
 
+    /// The /edit/save flow rebuilds the zip + manifest from the visible UI
+    /// suite rows (which filter out generated scripts) and then re-applies
+    /// pattern families.  This test simulates that sequence and verifies that
+    /// families survive a zip+manifest rebuild: the family spec persists in
+    /// the manifest, generated .py files land back in the zip, and the
+    /// manifest's testSuites carry `generatedBy` tags.  Regression guard for
+    /// the v0.4.76 bug where families silently vanished on Save.
+    func testApply_surviveEditSaveManifestRebuild() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        // Seed: one raw script + one family.
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_handmade.py",
+            content: "# handmade\npassed('ok')\n"
+        )
+        let rawEntry = ConfiguredSuiteEntry(
+            script: "publictest_handmade.py", tier: "public", order: 1,
+            dependsOn: [], points: 1, displayName: nil
+        )
+        fixture.setup.manifest = try makeWorkerManifestJSON(
+            testSuites: [rawEntry], includeMakefile: false
+        )
+        try await fixture.setup.save(on: fixture.app.db)
+        _ = try await applyPatternFamilies(
+            to: fixture.setup, nextFamilies: [bmiFamily()], on: fixture.app.db
+        )
+
+        // Sanity: both raw + generated present before the rebuild.
+        let beforeEntries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+        XCTAssertTrue(beforeEntries.contains("publictest_handmade.py"))
+        XCTAssertTrue(beforeEntries.contains("publictest_bmi_category_01.py"))
+
+        // Simulate /edit/save: rewrite the zip from "visible" rows only
+        // (raw scripts) — this intentionally drops the generated .py files
+        // from the zip, matching what createRunnerSetupZip does.  Then
+        // rebuild the manifest forwarding the existing pattern families,
+        // and re-apply them to restore generated files.
+        let existingFamilies = try decodeManifest(fixture.setup.manifest).patternFamilies
+        XCTAssertEqual(existingFamilies.count, 1, "family must survive into the existing manifest")
+
+        // Nuke generated files from the zip (simulating the full zip rewrite).
+        for f in patternFamilyAllGeneratedFilenames(existingFamilies[0]) {
+            try? removeScriptFromZip(zipPath: fixture.setup.zipPath, filename: f)
+        }
+        fixture.setup.manifest = try makeWorkerManifestJSON(
+            testSuites: [rawEntry], includeMakefile: false,
+            patternFamilies: existingFamilies
+        )
+        try await fixture.setup.save(on: fixture.app.db)
+
+        // Re-apply — this is the fix in saveEditedAssignment.
+        _ = try await applyPatternFamilies(
+            to: fixture.setup, nextFamilies: existingFamilies, on: fixture.app.db
+        )
+
+        // After the simulated save: raw + generated both present, family
+        // spec persisted, testSuites entries carry generatedBy tags.
+        let afterEntries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
+        XCTAssertTrue(afterEntries.contains("publictest_handmade.py"),
+                      "Raw script must survive")
+        XCTAssertTrue(afterEntries.contains("publictest_bmi_category_01.py"),
+                      "Generated script must be restored by applyPatternFamilies")
+        XCTAssertTrue(afterEntries.contains("publictest_bmi_category_02.py"))
+        XCTAssertTrue(afterEntries.contains("publictest_bmi_category_03.py"))
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.patternFamilies.count, 1)
+        XCTAssertEqual(props.patternFamilies[0].id, "bmi_category")
+        let generatedEntries = props.testSuites.filter { $0.generatedBy != nil }
+        XCTAssertEqual(generatedEntries.count, 3)
+        // Each generated entry's display name must carry the case label so
+        // the student result view shows distinct, labelled test rows.
+        let names = Set(generatedEntries.compactMap(\.name))
+        XCTAssertTrue(names.contains("BMI < 18.5 is underweight"))
+        XCTAssertTrue(names.contains("BMI = 18.5 is normal"))
+        XCTAssertTrue(names.contains("BMI >= 30 is obese"))
+    }
+
     func testApply_removingCaseDeletesItsScript() async throws {
         let fixture = try await makeFixture()
         defer { fixture.cleanup() }

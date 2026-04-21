@@ -221,6 +221,24 @@ struct FamilySuiteRow: Encodable {
 
     /// Leaf-friendly formatted case count suffix: "1 case" or "N cases".
     var caseCountText: String { caseCount == 1 ? "1 case" : "\(caseCount) cases" }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, functionName, tier, caseCount, totalPoints, caseCountText
+    }
+
+    func encode(to encoder: Encoder) throws {
+        // Synthesized Encodable would skip `caseCountText` because it's a
+        // computed property; Leaf needs it to render the row subtitle, so
+        // we emit it explicitly here.
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(functionName, forKey: .functionName)
+        try c.encode(tier, forKey: .tier)
+        try c.encode(caseCount, forKey: .caseCount)
+        try c.encode(totalPoints, forKey: .totalPoints)
+        try c.encode(caseCountText, forKey: .caseCountText)
+    }
 }
 
 struct AssignmentStudentHistoryContext: Encodable {

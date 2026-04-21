@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.77] - 2026-04-21
+
+### Fixed
+
+- **Pattern families survive the "Save" button on the assignment editor**: clicking Save (which rebuilds the test setup zip from the visible suite rows and rewrites the manifest) was silently wiping both the family spec in `patternFamilies` and every generated `.py` file in the zip, so saved families never appeared in the test suite after a round-trip.  `saveEditedAssignment` now forwards the existing `patternFamilies` into the rebuilt manifest and re-runs `applyPatternFamilies` so the generated scripts are regenerated back into the zip.  Each generated case continues to produce its own `TestOutcome` row with the case label as the test name, so per-case results appear as distinct tests in the submission view.  Regression guard: `testApply_surviveEditSaveManifestRebuild`.
+- **`FamilySuiteRow.caseCountText` was missing from the Leaf context**: the computed property was dropped by the synthesized `Encodable`, leaving the suite-table row's subtitle blank.  Replaced with an explicit `encode(to:)` that emits the field.
+
 ## [0.4.76] - 2026-04-21
 
 ### Changed
