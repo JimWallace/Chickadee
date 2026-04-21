@@ -747,6 +747,14 @@ def _emit(payload: Dict[str, object]) -> None:
     print(json.dumps(payload, ensure_ascii=False))
 
 
+def _first_nonempty_line(text: str) -> str:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line:
+            return line
+    return ""
+
+
 def passed(message: Optional[str] = None):
     label = _first_comment_label()
     _emit({
@@ -759,18 +767,25 @@ def passed(message: Optional[str] = None):
 
 def failed(message: str = "failed"):
     label = _first_comment_label()
+    text = message if isinstance(message, str) else str(message)
+    summary = _first_nonempty_line(text) or "failed"
+    if text.strip() and text.strip() != "failed":
+        print(text)
     _emit({
-        "shortResult": f"{label}: failed",
+        "shortResult": f"{label}: {summary}",
         "status": "fail",
         "test": label,
-        "error": message,
+        "error": text,
     })
     raise SystemExit(1)
 
 
 def errored(message: str = "error", err: Optional[Exception] = None):
     label = _first_comment_label()
-    summary = message.strip() if isinstance(message, str) and message.strip() else "error"
+    text = message if isinstance(message, str) else str(message)
+    summary = _first_nonempty_line(text) or "error"
+    if text.strip() and text.strip() != "error":
+        print(text)
     payload = {
         "shortResult": f"{label}: {summary}",
         "status": "error",
@@ -892,7 +907,7 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
-def require_function(name: str):
+def require_function(name: str, num_args: Optional[int] = None):
     modules = load_student_modules()
     for key in _loaded_student_order:
         module = modules.get(key)
@@ -900,6 +915,8 @@ def require_function(name: str):
             continue
         fn = getattr(module, name, None)
         if fn is not None and callable(fn):
+            if num_args is not None:
+                _require_num_args(fn, name, num_args)
             return fn
 
     if not modules:
@@ -913,6 +930,40 @@ def require_function(name: str):
         errored("Could not load a student Python module from submission.")
 
     errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
+
+
+def _require_num_args(fn: Any, name: str, num_args: int) -> None:
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return
+    positional_kinds = {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
+    positional = [p for p in sig.parameters.values() if p.kind in positional_kinds]
+    required = sum(1 for p in positional if p.default is inspect.Parameter.empty)
+    accepts_varargs = any(
+        p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()
+    )
+    total = len(positional)
+    if accepts_varargs:
+        if num_args < required:
+            errored(
+                f"'{name}' requires at least {required} positional argument(s), "
+                f"but the test expects it to take {num_args}."
+            )
+        return
+    if not (required <= num_args <= total):
+        if required == total:
+            errored(
+                f"'{name}' should take {num_args} argument(s), but it takes {total}."
+            )
+        else:
+            errored(
+                f"'{name}' should take {num_args} argument(s), "
+                f"but it takes {required}-{total}."
+            )
 `;
 
     // sitecustomize.py — auto-imported by Python; makes helpers available as builtins.

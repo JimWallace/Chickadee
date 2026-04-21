@@ -714,18 +714,18 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     if (genPanel) genPanel.style.display = '';
     #endif
 
-    function genPyTemplate(type, fnName, paramNames) {
-        var argList = paramNames.join(', ');
-        switch (type) {
-        case 'py:exists':
-            var numArgs = paramNames.length ? ', num_args=' + paramNames.length : '';
-            return '# Test: ' + fnName + ' is defined and callable\nrequire_function("' + fnName + '"' + numArgs + ')\npassed("' + fnName + ' is defined and callable")\n';
-        case 'py:correctness':
-            var argTuple = paramNames.length === 0 ? '()' : paramNames.length === 1 ? '(' + paramNames[0] + ',)' : '(' + argList + ')';
-            return '# Test: ' + fnName + ' returns the correct output for known inputs\ntest_cases = [\n    (' + argTuple + ', None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.' + fnName + '(*args)\n    if result != expected:\n        failures.append(f"  ' + fnName + '{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n';
-        default:
-            return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
+    // Look up the server-rendered template for a scanned function.  The
+    // /instructor/scan-notebook response embeds a per-function `templates`
+    // array with content already personalised for each function's name and
+    // parameter list, so we don't duplicate the template logic in JS.
+    function genPyTemplate(type, fnName) {
+        var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
+        if (fn && Array.isArray(fn.templates)) {
+            var key = type.indexOf(':') === -1 ? type : type.split(':')[1];
+            var tpl = fn.templates.find(function (t) { return t.id === key; });
+            if (tpl && typeof tpl.content === 'string') return tpl.content;
         }
+        return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
     }
 
     if (scanBtn) {
@@ -783,9 +783,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var generatedFiles = [];
             checked.forEach(function (chk) {
                 var fnName = chk.value;
-                var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
-                var params = fn ? (fn.paramNames || []) : [];
-                var content = genPyTemplate(tplType, fnName, params);
+                var content = genPyTemplate(tplType, fnName);
                 var filename = 'test_' + fnName + '.py';
                 generatedFiles.push(new File([content], filename, { type: 'text/plain' }));
             });

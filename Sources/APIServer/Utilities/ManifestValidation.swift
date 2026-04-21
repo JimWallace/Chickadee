@@ -1,9 +1,21 @@
 // APIServer/Utilities/ManifestValidation.swift
 //
-// Validates the dependency graph in a TestProperties manifest.
+// Validates the dependency graph and pattern-family spec in a TestProperties
+// manifest.
 
 import Core
 import Vapor
+
+/// Validates families + dependency graph in one call.  Throws
+/// `Abort(.unprocessableEntity)` with a student-friendly reason on any
+/// structural problem.
+func validateManifest(_ manifest: TestProperties) throws {
+    try validatePatternFamilies(
+        manifest.patternFamilies,
+        testSuites: manifest.testSuites
+    )
+    try validateManifestDependencies(manifest)
+}
 
 /// Validates the `dependsOn` references and dependency graph in a manifest.
 ///
@@ -62,4 +74,107 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
             reason: "Manifest dependency error: dependency graph contains a cycle"
         )
     }
+}
+
+/// Validates a list of pattern families before they are applied to a test
+/// setup.  Called by `validateManifest` and also directly from family CRUD
+/// endpoints when rendering a preview.
+///
+/// Checks:
+/// - family `id` is unique across the assignment, is a valid filename fragment,
+///   and is a valid Python identifier (so it can appear in filenames).
+/// - `functionName` is a valid Python identifier.
+/// - every `paramName` is a valid Python identifier, and names are unique.
+/// - within each family, `case.key` is unique and is a valid filename fragment.
+/// - each case's `args.count` matches `paramNames.count` (when paramNames set).
+/// - disabled cases participate in name/collision checks so a later toggle
+///   doesn't spring a surprise.
+/// - no generated filename collides with a hand-written script in `testSuites`
+///   (raw entries are those with `generatedBy == nil`).
+func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuiteEntry]) throws {
+    // 1. Per-family structural checks.
+    var seenFamilyIDs: Set<String> = []
+    for family in families {
+        guard isValidIdentifierFragment(family.id) else {
+            throw Abort(.unprocessableEntity,
+                reason: "Pattern family id '\(family.id)' must contain only letters, digits, and underscore")
+        }
+        guard seenFamilyIDs.insert(family.id).inserted else {
+            throw Abort(.unprocessableEntity,
+                reason: "Duplicate pattern family id '\(family.id)'")
+        }
+        guard isValidPythonIdentifier(family.functionName) else {
+            throw Abort(.unprocessableEntity,
+                reason: "Pattern family '\(family.id)': functionName '\(family.functionName)' is not a valid Python identifier")
+        }
+        var seenParams: Set<String> = []
+        for param in family.paramNames {
+            guard isValidPythonIdentifier(param) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': parameter name '\(param)' is not a valid Python identifier")
+            }
+            guard seenParams.insert(param).inserted else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': duplicate parameter name '\(param)'")
+            }
+        }
+
+        var seenCaseKeys: Set<String> = []
+        for c in family.cases {
+            guard isValidIdentifierFragment(c.key) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': case key '\(c.key)' must contain only letters, digits, and underscore")
+            }
+            guard seenCaseKeys.insert(c.key).inserted else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': duplicate case key '\(c.key)'")
+            }
+            guard !c.label.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': case '\(c.key)' is missing a label")
+            }
+            if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+            }
+        }
+    }
+
+    // 2. Filename collisions: no generated filename may match a hand-written
+    //    script's filename.  "Hand-written" = manifest entry with generatedBy == nil.
+    let rawScripts = Set(testSuites.filter { $0.generatedBy == nil }.map(\.script))
+    for family in families {
+        for filename in patternFamilyAllGeneratedFilenames(family) {
+            if rawScripts.contains(filename) {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key.")
+            }
+        }
+    }
+}
+
+private let pythonKeywords: Set<String> = [
+    "False", "None", "True", "and", "as", "assert", "async", "await", "break",
+    "class", "continue", "def", "del", "elif", "else", "except", "finally",
+    "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
+    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"
+]
+
+private func isValidPythonIdentifier(_ s: String) -> Bool {
+    guard !s.isEmpty, !pythonKeywords.contains(s) else { return false }
+    let chars = Array(s)
+    let first = chars[0]
+    guard first.isLetter || first == "_" else { return false }
+    for ch in chars.dropFirst() {
+        guard ch.isLetter || ch.isNumber || ch == "_" else { return false }
+    }
+    return true
+}
+
+/// Stricter than Python identifier: lowercase-preferred alphanumeric + underscore,
+/// allowed to start with a digit (for case keys like "01").  Used to validate
+/// filename-fragment safety.
+private func isValidIdentifierFragment(_ s: String) -> Bool {
+    guard !s.isEmpty else { return false }
+    return s.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
 }

@@ -374,6 +374,11 @@ extension AssignmentRoutes {
             throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
         }
 
+        if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
+            throw Abort(.conflict,
+                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Edit the family rather than the generated script.")
+        }
+
         do {
             try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: body.content)
         } catch ScriptZipError.zipFailed {
@@ -474,6 +479,11 @@ extension AssignmentRoutes {
 
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
             throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+        }
+
+        if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
+            throw Abort(.conflict,
+                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family).")
         }
 
         let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)

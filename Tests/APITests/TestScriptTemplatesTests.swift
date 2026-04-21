@@ -40,10 +40,40 @@ final class TestScriptTemplatesTests: XCTestCase {
         XCTAssertFalse(s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
+    func testCorrectnessTemplate_richFeedback_withParams() {
+        let s = pythonTestScript(type: .correctness, functionName: "bmi_category", paramNames: ["bmi"])
+        // Single-case rich-feedback shape: an input variable declaration, an
+        // `expected` placeholder, a try/except + value-comparison, each failed()
+        // call with labeled input/expected/got lines and a Hint line.
+        XCTAssertTrue(s.contains("bmi = None"), "Should declare the input variable")
+        XCTAssertTrue(s.contains("expected = None"))
+        XCTAssertTrue(s.contains("student_module.bmi_category(bmi)"))
+        XCTAssertTrue(s.contains("raised an unexpected exception"))
+        XCTAssertTrue(s.contains("returned the wrong value"))
+        XCTAssertTrue(s.contains("input:    bmi={bmi!r}"))
+        XCTAssertTrue(s.contains("Hint:"))
+    }
+
+    func testCorrectnessTemplate_richFeedback_noParams() {
+        let s = pythonTestScript(type: .correctness, functionName: "get_answer", paramNames: [])
+        XCTAssertTrue(s.contains("student_module.get_answer()"))
+        XCTAssertTrue(s.contains("(no input)"))
+        XCTAssertFalse(s.contains("= None   # TODO: replace with input value"),
+                       "No input declarations when there are no params")
+    }
+
     func testCornerCasesTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .cornerCases, functionName: "check", paramNames: ["n"])
         XCTAssertTrue(s.contains("check"))
         XCTAssertTrue(s.contains("corner_cases"))
+    }
+
+    func testCornerCasesTemplate_richPerCaseMessages() {
+        let s = pythonTestScript(type: .cornerCases, functionName: "check", paramNames: ["n"])
+        XCTAssertTrue(s.contains("args_preview"))
+        XCTAssertTrue(s.contains("expected:"))
+        XCTAssertTrue(s.contains("got:"))
+        XCTAssertTrue(s.contains("raised:"))
     }
 
     func testExceptionTemplate_containsFunctionName() {
@@ -52,10 +82,86 @@ final class TestScriptTemplatesTests: XCTestCase {
         XCTAssertTrue(s.contains("ValueError"))
     }
 
+    func testExceptionTemplate_richFeedback() {
+        let s = pythonTestScript(type: .exception, functionName: "divide", paramNames: ["a", "b"])
+        XCTAssertTrue(s.contains("a = None"))
+        XCTAssertTrue(s.contains("b = None"))
+        XCTAssertTrue(s.contains("expected_exc = ValueError"))
+        XCTAssertTrue(s.contains("raised the wrong exception"))
+        XCTAssertTrue(s.contains("did not raise"))
+        XCTAssertTrue(s.contains("input:    a={a!r}, b={b!r}"))
+    }
+
     func testTypeCheckTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .typeCheck, functionName: "items", paramNames: [])
         XCTAssertTrue(s.contains("items"))
         XCTAssertTrue(s.contains("isinstance"))
+    }
+
+    func testTypeCheckTemplate_richFeedback() {
+        let s = pythonTestScript(type: .typeCheck, functionName: "get_name", paramNames: ["user_id"])
+        XCTAssertTrue(s.contains("user_id = None"))
+        XCTAssertTrue(s.contains("expected_type = list"))
+        XCTAssertTrue(s.contains("Return type error"))
+        XCTAssertTrue(s.contains("raised an unexpected exception"))
+        XCTAssertTrue(s.contains("input:    user_id={user_id!r}"))
+    }
+
+    // MARK: - Drift guards
+
+    /// Fails if any template passes a kwarg to `require_function` that the
+    /// Python test_runtime helpers do not accept.  Prevents the 0.4.x-era bug
+    /// where `num_args` was emitted by templates but the runtime's signature
+    /// was `require_function(name)` only.
+    func testTemplates_useOnlyKnownRequireFunctionKwargs() {
+        let knownKwargs: Set<String> = ["num_args"]
+        // One call with "real" params, one with none, to exercise both arms of
+        // each template branch.
+        let renderings: [(String, String)] = [
+            ("with-params", /* any type with params */ ""),
+            ("no-params",   "")
+        ]
+        _ = renderings
+        for type in PythonTestTemplateType.allCases {
+            for params in [["a", "b"], [] as [String]] {
+                let s = pythonTestScript(type: type, functionName: "f", paramNames: params)
+                for kwarg in kwargsInRequireFunctionCalls(source: s) {
+                    XCTAssertTrue(
+                        knownKwargs.contains(kwarg),
+                        "Template \(type.rawValue) (params=\(params)) passes unknown kwarg " +
+                        "'\(kwarg)' to require_function(). Add it to the runtime helpers " +
+                        "in TestRuntimeSources.swift + Tools/runner-support/test_runtime.py + " +
+                        "Public/browser-runner.js, or drop it from the template."
+                    )
+                }
+            }
+        }
+    }
+
+    /// Extract kwarg names used in any `require_function(...)` call in the
+    /// given Python source.  Intentionally conservative: only handles the
+    /// simple-call forms our templates produce (no nested parens).
+    private func kwargsInRequireFunctionCalls(source: String) -> [String] {
+        var kwargs: [String] = []
+        var remaining = source[...]
+        while let callStart = remaining.range(of: "require_function(") {
+            let afterOpen = callStart.upperBound
+            guard let callEnd = remaining[afterOpen...].firstIndex(of: ")") else { break }
+            let body = remaining[afterOpen..<callEnd]
+            for part in body.split(separator: ",") {
+                let trimmed = part.trimmingCharacters(in: .whitespaces)
+                if let eq = trimmed.firstIndex(of: "="),
+                   !trimmed.contains("==") {
+                    let name = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
+                    if !name.isEmpty && !name.hasPrefix("\"") {
+                        kwargs.append(name)
+                    }
+                }
+            }
+            remaining = remaining[callEnd...]
+            remaining = remaining.dropFirst() // step past the ')'
+        }
+        return kwargs
     }
 
     func testPerformanceTemplate_containsFunctionName() {

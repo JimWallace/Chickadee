@@ -24,29 +24,36 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// `dependsOn` is an optional list of other `script` names that must pass before
 /// this test is executed. If any dependency did not pass, this test is auto-failed.
 /// `points` is the integer weight used for grade calculation (default 1).
+/// `generatedBy` is the id of the `PatternFamily` that produced this entry, or
+/// nil for hand-written scripts.  Generated scripts are read-only in the
+/// raw-script editor; edits and deletes flow through the family editor.
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
     public let script: String       // e.g. "01_public.py"
     public let name: String?        // optional display name shown to students
     public let dependsOn: [String]  // script names of prerequisites; empty == no deps
     public let points: Int          // grade weight; 1 = default (unweighted)
+    public let generatedBy: String? // pattern family id, nil for hand-written scripts
 
     public init(tier: TestTier, script: String, name: String? = nil,
-                dependsOn: [String] = [], points: Int = 1) {
-        self.tier      = tier
-        self.script    = script
-        self.name      = name
-        self.dependsOn = dependsOn
-        self.points    = points
+                dependsOn: [String] = [], points: Int = 1,
+                generatedBy: String? = nil) {
+        self.tier        = tier
+        self.script      = script
+        self.name        = name
+        self.dependsOn   = dependsOn
+        self.points      = points
+        self.generatedBy = generatedBy
     }
 
     public init(from decoder: Decoder) throws {
-        let c     = try decoder.container(keyedBy: CodingKeys.self)
-        tier      = try c.decode(TestTier.self,    forKey: .tier)
-        script    = try c.decode(String.self,      forKey: .script)
-        name      = try c.decodeIfPresent(String.self,   forKey: .name)
-        dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
-        points    = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        let c       = try decoder.container(keyedBy: CodingKeys.self)
+        tier        = try c.decode(TestTier.self,    forKey: .tier)
+        script      = try c.decode(String.self,      forKey: .script)
+        name        = try c.decodeIfPresent(String.self,   forKey: .name)
+        dependsOn   = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+        points      = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        generatedBy = try c.decodeIfPresent(String.self, forKey: .generatedBy)
     }
 }
 
@@ -68,6 +75,29 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// tests so grading scripts don't confuse it with the student's submission.
     /// Nil when the assignment has no notebook template.
     public let starterNotebook: String?
+    /// Pattern families whose expansion produced some of the entries in
+    /// `testSuites`.  The runner ignores this field entirely — families are
+    /// a save-time authoring concern; by the time the zip reaches the runner
+    /// every generated `.py` is an ordinary test script.
+    public let patternFamilies: [PatternFamily]
+
+    public init(schemaVersion: Int = 1,
+                gradingMode: GradingMode = .worker,
+                requiredFiles: [String] = [],
+                testSuites: [TestSuiteEntry] = [],
+                timeLimitSeconds: Int = 10,
+                makefile: MakefileConfig? = nil,
+                starterNotebook: String? = nil,
+                patternFamilies: [PatternFamily] = []) {
+        self.schemaVersion    = schemaVersion
+        self.gradingMode      = gradingMode
+        self.requiredFiles    = requiredFiles
+        self.testSuites       = testSuites
+        self.timeLimitSeconds = timeLimitSeconds
+        self.makefile         = makefile
+        self.starterNotebook  = starterNotebook
+        self.patternFamilies  = patternFamilies
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -78,5 +108,6 @@ public struct TestProperties: Codable, Equatable, Sendable {
         timeLimitSeconds = try c.decodeIfPresent(Int.self,              forKey: .timeLimitSeconds) ?? 10
         makefile         = try c.decodeIfPresent(MakefileConfig.self,   forKey: .makefile)
         starterNotebook  = try c.decodeIfPresent(String.self,           forKey: .starterNotebook)
+        patternFamilies  = try c.decodeIfPresent([PatternFamily].self,  forKey: .patternFamilies)  ?? []
     }
 }
