@@ -230,16 +230,28 @@
                     </select>
                 </label>
             </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Pattern kind
+                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="boundary_equality">Exact equality (== comparison)</option>
+                        <option value="approximate_equality">Approximate equality (float tolerance)</option>
+                    </select>
+                </label>
+                <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">
+                    Tolerance (max |result − expected|)
+                    <input type="number" class="form-input" id="family-default-tolerance" step="any" min="0"
+                           placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+            </div>
             <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
                 Default hint (used when a case omits its own)
                 <textarea class="form-input" id="family-default-hint" rows="2"
                           style="padding:.3rem .5rem;font-size:.85rem"></textarea>
             </label>
 
-            <!-- Hidden fields: kind is fixed at boundary_equality in v1;
-                 the family id, function name, and param list are derived
-                 from the function dropdown selection. -->
-            <input type="hidden" id="family-kind" value="boundary_equality">
+            <!-- Hidden fields: the family id, function name, and param list
+                 are derived from the function dropdown selection. -->
             <input type="hidden" id="family-id">
             <input type="hidden" id="family-function">
             <input type="hidden" id="family-params">
@@ -599,12 +611,9 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
         var family = item.family || {};
         var caseCount = (family.cases || []).filter(function (c) { return c.enabled !== false; }).length;
         var caseText  = caseCount === 1 ? '1 case' : caseCount + ' cases';
-        var totalPoints = (family.cases || [])
-            .filter(function (c) { return c.enabled !== false; })
-            .reduce(function (acc, c) {
-                return acc + (c.points != null ? c.points : ((family.defaults && family.defaults.points) || 1));
-            }, 0);
-        var tier = (family.defaults && family.defaults.tier) || 'public';
+        var defaults = family.defaults || {};
+        var defaultPoints = Math.max(1, parseInt(defaults.points) || 1);
+        var tier = defaults.tier || 'public';
         return '<tr data-id="' + escAttr(item.id) + '" data-kind="family" data-source="family" data-family-id="' + escAttr(family.id || '') + '">'
             + '<td' + indent + '><div class="suite-name-cell suite-family-cell">'
             +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
@@ -619,7 +628,7 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
             +   depBadgeHTML(item.dependsOn)
             + '</div></td>'
             + '<td><span class="card-meta" style="font-size:.75rem">' + escHtml(tier) + '</span></td>'
-            + '<td><span class="card-meta" style="font-size:.75rem">' + totalPoints + '</span></td>'
+            + '<td><input type="number" class="form-input suite-family-points" min="1" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
             +   '<button class="btn action-btn family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
             +   '<button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
@@ -797,15 +806,32 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
     // ── Inline script edits ──────────────────────────────────────────────
 
     body.addEventListener('change', function (e) {
-        var row = e.target.closest && e.target.closest('tr[data-kind="script"]');
-        if (!row) return;
-        var item = findByID(row.getAttribute('data-id'));
-        if (!item) return;
-        var tierEl = row.querySelector('.suite-tier');
-        var ptsEl  = row.querySelector('.suite-points');
-        if (tierEl) item.tier = tierEl.value;
-        if (ptsEl)  item.points = Math.max(1, parseInt(ptsEl.value) || 1);
-        schedulePush();
+        var scriptRow = e.target.closest && e.target.closest('tr[data-kind="script"]');
+        if (scriptRow) {
+            var item = findByID(scriptRow.getAttribute('data-id'));
+            if (!item) return;
+            var tierEl = scriptRow.querySelector('.suite-tier');
+            var ptsEl  = scriptRow.querySelector('.suite-points');
+            if (tierEl) item.tier = tierEl.value;
+            if (ptsEl)  item.points = Math.max(1, parseInt(ptsEl.value) || 1);
+            schedulePush();
+            return;
+        }
+        var familyRow = e.target.closest && e.target.closest('tr[data-kind="family"]');
+        if (familyRow) {
+            var fitem = findByID(familyRow.getAttribute('data-id'));
+            if (!fitem || !fitem.family) return;
+            var ptsEl2 = familyRow.querySelector('.suite-family-points');
+            if (ptsEl2) {
+                var newPts = Math.max(1, parseInt(ptsEl2.value) || 1);
+                // Mutate defaults.points in place — the family object is
+                // sent verbatim by buildPayload().
+                fitem.family = Object.assign({}, fitem.family, {
+                    defaults: Object.assign({}, fitem.family.defaults || {}, { points: newPts })
+                });
+                schedulePush();
+            }
+        }
     });
 
     body.addEventListener('input', function (e) {
@@ -1383,6 +1409,8 @@ function checkUWDates(dateTimeValue, warningEl) {
     var fnHint           = document.getElementById('family-function-hint');
     var defaultTierSel   = document.getElementById('family-default-tier');
     var defaultHintInput = document.getElementById('family-default-hint');
+    var toleranceInput   = document.getElementById('family-default-tolerance');
+    var toleranceLabel   = document.getElementById('family-tolerance-label');
     var casesHeader      = document.getElementById('family-cases-header');
     var casesBody        = document.getElementById('family-cases-body');
     var casesEmpty       = document.getElementById('family-cases-empty');
@@ -1653,6 +1681,11 @@ function checkUWDates(dateTimeValue, warningEl) {
 
     // ── Modal open/close ───────────────────────────────────────────────────
 
+    function updateToleranceVisibility() {
+        if (!toleranceLabel) return;
+        toleranceLabel.style.display = (kindInput.value === 'approximate_equality') ? 'flex' : 'none';
+    }
+
     function openEditor(familyIdx) {
         editingIndex = (typeof familyIdx === 'number') ? familyIdx : -1;
         statusEl.textContent = '';
@@ -1669,6 +1702,8 @@ function checkUWDates(dateTimeValue, warningEl) {
             paramsInput.value = (family.paramNames || []).join(',');
             defaultTierSel.value = (family.defaults && family.defaults.tier) || 'public';
             defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
+            var tol = family.defaults && family.defaults.tolerance;
+            toleranceInput.value = (tol == null) ? '' : String(tol);
             preselectedFn = family.functionName || '';
             rebuildCasesHeader(family.paramNames || []);
             (family.cases || []).forEach(function (c) { addCaseRow(c, family.paramNames || []); });
@@ -1682,8 +1717,10 @@ function checkUWDates(dateTimeValue, warningEl) {
             paramsInput.value = '';
             defaultTierSel.value = 'public';
             defaultHintInput.value = '';
+            toleranceInput.value = '';
             rebuildCasesHeader([]);
         }
+        updateToleranceVisibility();
 
         overlay.style.display = 'flex';
         updateCasesEmptyMessage();
@@ -1704,17 +1741,29 @@ function checkUWDates(dateTimeValue, warningEl) {
     function readFamilyFromEditor() {
         var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
         var cases = readCasesFromTable(paramNames);
+        var kind = kindInput.value || 'boundary_equality';
+        var defaults = {
+            tier: defaultTierSel.value,
+            points: 1,
+            hint: defaultHintInput.value.trim() || null
+        };
+        if (kind === 'approximate_equality') {
+            var tolRaw = (toleranceInput.value || '').trim();
+            if (tolRaw !== '') {
+                var tol = Number(tolRaw);
+                if (!isFinite(tol) || tol < 0) {
+                    throw new Error('Tolerance must be a non-negative number.');
+                }
+                defaults.tolerance = tol;
+            }
+        }
         return {
             id: idInput.value.trim(),
             name: nameInput.value.trim(),
-            kind: kindInput.value || 'boundary_equality',
+            kind: kind,
             functionName: fnInput.value.trim(),
             paramNames: paramNames,
-            defaults: {
-                tier: defaultTierSel.value,
-                points: 1,
-                hint: defaultHintInput.value.trim() || null
-            },
+            defaults: defaults,
             cases: cases
         };
     }
@@ -1770,6 +1819,8 @@ function checkUWDates(dateTimeValue, warningEl) {
     if (fnSelect) fnSelect.addEventListener('change', function () {
         applyFunctionSelection(fnSelect.value, /*preserveCases=*/true);
     });
+
+    if (kindInput) kindInput.addEventListener('change', updateToleranceVisibility);
 
     if (addCaseBtn) addCaseBtn.addEventListener('click', function () {
         var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);

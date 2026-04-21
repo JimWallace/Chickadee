@@ -729,6 +729,157 @@ final class PatternFamilyTests: XCTestCase {
         }
     }
 
+    // MARK: - approximateEquality kind
+
+    private func approxFamily(tolerance: Double? = 0.01) -> PatternFamily {
+        PatternFamily(
+            id: "bmi_kg_m2",
+            name: "BMI numeric",
+            kind: .approximateEquality,
+            functionName: "bmi",
+            paramNames: ["mass_kg", "height_m"],
+            defaults: PatternDefaults(tier: .pub, points: 1, hint: nil, tolerance: tolerance),
+            cases: [
+                PatternCase(key: "01", label: "average adult",
+                            args: [.double(70.0), .double(1.75)], expected: .double(22.857)),
+                PatternCase(key: "02", label: "tall adult",
+                            args: [.double(85.0), .double(1.90)], expected: .double(23.546)),
+            ]
+        )
+    }
+
+    func testRenderer_approxEquality_emitsToleranceComparison() {
+        let rendered = renderPatternFamily(approxFamily(tolerance: 0.05))
+        XCTAssertEqual(rendered.count, 2)
+        let src = rendered[0].source
+        XCTAssertTrue(src.contains("tolerance = 0.05"),
+                      "Expected Python literal for tolerance; got: \(src)")
+        XCTAssertTrue(src.contains("delta = abs(result - expected)"))
+        XCTAssertTrue(src.contains("if delta > tolerance:"))
+        XCTAssertTrue(src.contains("wrong return type"),
+                      "Approx kind must also guard against non-numeric return types")
+        XCTAssertTrue(src.contains("value outside tolerance"))
+    }
+
+    func testRenderer_approxEquality_defaultToleranceAppliedWhenNil() {
+        let rendered = renderPatternFamily(approxFamily(tolerance: nil))
+        let src = rendered[0].source
+        // 1e-6 renders as Swift's "1e-06" via String(Double) — either form
+        // is acceptable as a Python float literal.
+        XCTAssertTrue(src.contains("tolerance = 1e-06") || src.contains("tolerance = 0.000001"),
+                      "Default tolerance (1e-6) missing from: \(src)")
+    }
+
+    func testRenderer_approxEquality_isValidPython() throws {
+        let rendered = renderPatternFamily(approxFamily(tolerance: 0.01))
+        for g in rendered {
+            try assertValidPythonSyntax(g.source, label: g.filename)
+        }
+    }
+
+    func testValidation_approxEquality_rejectsNegativeTolerance() {
+        let family = PatternFamily(
+            id: "bad", name: "bad", kind: .approximateEquality,
+            functionName: "f", paramNames: ["x"],
+            defaults: PatternDefaults(tolerance: -0.1),
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
+            XCTAssertTrue("\(err)".contains("tolerance"))
+        }
+    }
+
+    func testValidation_approxEquality_acceptsZeroTolerance() {
+        let family = PatternFamily(
+            id: "strict", name: "strict", kind: .approximateEquality,
+            functionName: "f", paramNames: ["x"],
+            defaults: PatternDefaults(tolerance: 0),
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
+        )
+        XCTAssertNoThrow(try validatePatternFamilies([family], testSuites: []))
+    }
+
+    func testValidation_approxEquality_rejectsNonFiniteTolerance() {
+        let family = PatternFamily(
+            id: "nan", name: "nan", kind: .approximateEquality,
+            functionName: "f", paramNames: ["x"],
+            defaults: PatternDefaults(tolerance: .nan),
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: []))
+    }
+
+    // MARK: - Editable family points round-trip
+
+    /// When `family.defaults.points` is non-default, every generated
+    /// `TestSuiteEntry.points` in the manifest must carry it — this is
+    /// how the suite editor's family-row Pts input propagates.
+    func testApply_familyDefaultPointsPropagatesToGeneratedEntries() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        var family = bmiFamily()
+        family = PatternFamily(
+            id: family.id, name: family.name, kind: family.kind,
+            functionName: family.functionName, paramNames: family.paramNames,
+            defaults: PatternDefaults(tier: .pub, points: 5, hint: family.defaults.hint),
+            cases: family.cases
+        )
+        _ = try await applyPatternFamilies(
+            to: fixture.setup, nextFamilies: [family], on: fixture.app.db)
+        let props = try decodeManifest(fixture.setup.manifest)
+        let generated = props.testSuites.filter { $0.generatedBy != nil }
+        XCTAssertEqual(generated.count, 3)
+        for entry in generated {
+            XCTAssertEqual(entry.points, 5,
+                           "family.defaults.points=5 must propagate to every generated entry")
+        }
+    }
+
+    // MARK: - Authored order preservation (ordering regression guard)
+
+    /// Given authored `[script_a, family(3 cases), script_b]`, the final
+    /// `testSuites` array must be `[script_a, family_01, family_02,
+    /// family_03, script_b]` in that exact order.  `topologicallySorted`
+    /// must not reorder entries that have no dependencies.  Pins the
+    /// invariant that made the v0.4.79 "generated rows render at end"
+    /// observation a legacy-manifest issue rather than a new-code bug.
+    func testApply_authoredOrderPreservedInManifestAndOutcomes() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_a.py", content: "passed('a')\n"
+        )
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_b.py", content: "passed('b')\n"
+        )
+        let a = AuthoredRawScript(
+            script: "publictest_a.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        let b = AuthoredRawScript(
+            script: "publictest_b.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [bmiFamily()],
+            authoredItems: [.script(a), .family(id: "bmi_category"), .script(b)],
+            on: fixture.app.db
+        )
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.testSuites.map(\.script), [
+            "publictest_a.py",
+            "publictest_bmi_category_01.py",
+            "publictest_bmi_category_02.py",
+            "publictest_bmi_category_03.py",
+            "publictest_b.py",
+        ])
+    }
+
     // MARK: - Fixture plumbing
 
     private struct Fixture {

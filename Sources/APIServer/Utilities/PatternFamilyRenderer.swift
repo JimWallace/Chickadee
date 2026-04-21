@@ -75,6 +75,8 @@ private func renderCase(family: PatternFamily, case c: PatternCase, specHash: St
     switch family.kind {
     case .boundaryEquality:
         source = renderBoundaryEquality(family: family, case: c, specHash: specHash)
+    case .approximateEquality:
+        source = renderApproximateEquality(family: family, case: c, specHash: specHash)
     }
 
     let tier = c.resolvedTier(defaults: family.defaults)
@@ -151,6 +153,93 @@ private func renderBoundaryEquality(family: PatternFamily, case c: PatternCase, 
         )
 
     passed(f"\(family.functionName)(\(callReprExpr)) returned {result!r}")
+    """
+}
+
+// MARK: - approximateEquality
+
+/// Default tolerance when the family spec leaves `defaults.tolerance` nil.
+/// 1e-6 matches Python's `math.isclose` default `abs_tol=0.0` / `rel_tol=1e-9`
+/// in spirit but is permissive enough for typical student arithmetic.
+private let defaultApproxTolerance: Double = 1e-6
+
+/// Renders an approximate-equality case.  Shape mirrors
+/// `renderBoundaryEquality` — same header, input echo, rich failure
+/// messages — with the comparison replaced by
+/// `abs(result - expected) > tolerance` guarded by an `isinstance` check
+/// that rejects non-numeric returns cleanly.  The failure message
+/// includes the tolerance and the actual delta so students see exactly
+/// how far off they are.
+private func renderApproximateEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+    let argNames: [String] = {
+        if !family.paramNames.isEmpty { return family.paramNames }
+        return c.args.indices.map { "arg_\($0 + 1)" }
+    }()
+
+    let declLines = zip(argNames, c.args)
+        .map { "\($0.0) = \($0.1.pythonLiteral)" }
+        .joined(separator: "\n")
+
+    let callArgs = argNames.joined(separator: ", ")
+
+    let inputLineLiteral: String
+    if argNames.isEmpty {
+        inputLineLiteral = #""  input:    (no input)\n""#
+    } else {
+        let preview = argNames.map { "\($0)={\($0)!r}" }.joined(separator: ", ")
+        inputLineLiteral = "f\"  input:    \(preview)\\n\""
+    }
+
+    let callReprExpr = argNames.map { "{\($0)!r}" }.joined(separator: ", ")
+
+    let resolvedHint = c.resolvedHint(defaults: family.defaults)
+    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+
+    let tolerance = family.defaults.tolerance ?? defaultApproxTolerance
+    // Use JSONValue's Python rendering so whole-number tolerances come out
+    // as floats (e.g. 1.0, not 1) — keeps the comparison well-typed.
+    let toleranceLiteral = JSONValue.double(tolerance).pythonLiteral
+
+    return """
+    # Test: \(c.label)
+    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+
+    \(declLines.isEmpty ? "# (no input arguments)" : declLines)
+    expected = \(c.expected.pythonLiteral)
+    tolerance = \(toleranceLiteral)
+
+    try:
+        result = student_module.\(family.functionName)(\(callArgs))
+    except Exception as ex:
+        failed(
+            "unexpected exception\\n"
+            \(inputLineLiteral)
+            f"  expected: {expected!r} (±{tolerance})\\n"
+            f"  error:    {type(ex).__name__}: {ex}\\n"
+            \(hintLine)
+        )
+
+    if not isinstance(result, (int, float)) or isinstance(result, bool):
+        failed(
+            "wrong return type\\n"
+            \(inputLineLiteral)
+            f"  expected: a number close to {expected!r}\\n"
+            f"  got:      {result!r} (type {type(result).__name__})\\n"
+            \(hintLine)
+        )
+
+    delta = abs(result - expected)
+    if delta > tolerance:
+        failed(
+            "value outside tolerance\\n"
+            \(inputLineLiteral)
+            f"  expected: {expected!r} (±{tolerance})\\n"
+            f"  got:      {result!r}\\n"
+            f"  delta:    {delta}\\n"
+            \(hintLine)
+        )
+
+    passed(f"\(family.functionName)(\(callReprExpr)) returned {result!r} (within ±{tolerance})")
     """
 }
 

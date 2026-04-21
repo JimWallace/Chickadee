@@ -17,30 +17,41 @@ import Foundation
 /// Template shape used to render a family's cases into Python source.
 ///
 /// v1 implements `boundaryEquality` only: one function, one argument per case,
-/// expected value compared with `==`.  Future kinds (e.g. `boundaryBoolean`,
-/// `boundaryMultiArg`, `boundaryException`) slot in alongside.
+/// expected value compared with `==`.  `approximateEquality` is the
+/// floating-point counterpart: `abs(result - expected) <= tolerance`.
+/// Future kinds (e.g. `boundaryBoolean`, `boundaryMultiArg`,
+/// `boundaryException`) slot in alongside.
 public enum PatternKind: String, Codable, Sendable, Equatable {
     case boundaryEquality = "boundary_equality"
+    case approximateEquality = "approximate_equality"
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,
-/// or `hint` individually.
+/// or `hint` individually.  `tolerance` applies only to kinds that do
+/// approximate comparison (`.approximateEquality`); other kinds ignore it.
 public struct PatternDefaults: Codable, Equatable, Sendable {
     public let tier: TestTier
     public let points: Int
     public let hint: String?
+    /// Maximum absolute difference between `result` and `expected` that
+    /// still counts as a pass, for floating-point `.approximateEquality`
+    /// families.  When nil the renderer uses a sensible default (1e-6).
+    public let tolerance: Double?
 
-    public init(tier: TestTier = .pub, points: Int = 1, hint: String? = nil) {
+    public init(tier: TestTier = .pub, points: Int = 1, hint: String? = nil,
+                tolerance: Double? = nil) {
         self.tier = tier
         self.points = points
         self.hint = hint
+        self.tolerance = tolerance
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        tier   = try c.decodeIfPresent(TestTier.self, forKey: .tier)   ?? .pub
-        points = try c.decodeIfPresent(Int.self,      forKey: .points) ?? 1
-        hint   = try c.decodeIfPresent(String.self,   forKey: .hint)
+        tier      = try c.decodeIfPresent(TestTier.self, forKey: .tier)      ?? .pub
+        points    = try c.decodeIfPresent(Int.self,      forKey: .points)    ?? 1
+        hint      = try c.decodeIfPresent(String.self,   forKey: .hint)
+        tolerance = try c.decodeIfPresent(Double.self,   forKey: .tolerance)
     }
 }
 

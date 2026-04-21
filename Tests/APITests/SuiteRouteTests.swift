@@ -264,6 +264,112 @@ final class SuiteRouteTests: XCTestCase {
         XCTAssertEqual(followup.dependsOn, [])
     }
 
+    // v0.4.80: `family.defaults.points` should propagate to every
+    // generated TestSuiteEntry so the suite-row Pts input works as
+    // "grade weight per generated case."
+    func testPut_familyDefaultsPointsAppliedToGeneratedEntries() async throws {
+        let id = try await makeAssignment(withScripts: [])
+        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+        let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+        let body = #"""
+        {"items":[
+            {"kind":"family","family":{
+                "id":"bmi","name":"BMI","kind":"boundary_equality",
+                "functionName":"bmi_category","paramNames":["bmi"],
+                "defaults":{"tier":"public","points":3},
+                "cases":[
+                    {"key":"01","label":"a","args":[18.49],"expected":"underweight","enabled":true},
+                    {"key":"02","label":"b","args":[22.0],"expected":"normal","enabled":true}
+                ]
+            }}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/\(id)/suite", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: body)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, res.body.string)
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
+        let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+        let generated = props.testSuites.filter { $0.generatedBy != nil }
+        XCTAssertEqual(generated.count, 2)
+        for entry in generated {
+            XCTAssertEqual(entry.points, 3)
+        }
+    }
+
+    // v0.4.80: .approximateEquality kind round-trips cleanly through PUT
+    // and generates Python that uses `abs(result - expected) > tolerance`.
+    func testPut_approximateEqualityKindRoundTrip() async throws {
+        let id = try await makeAssignment(withScripts: [])
+        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+        let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+        let body = #"""
+        {"items":[
+            {"kind":"family","family":{
+                "id":"bmi","name":"BMI","kind":"approximate_equality",
+                "functionName":"bmi","paramNames":["mass_kg","height_m"],
+                "defaults":{"tier":"public","points":1,"tolerance":0.01},
+                "cases":[
+                    {"key":"01","label":"adult","args":[70.0,1.75],"expected":22.857,"enabled":true}
+                ]
+            }}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/\(id)/suite", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: body)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, res.body.string)
+        })
+
+        let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
+        let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+        // The generated .py must contain the approx-kind comparison.
+        let source = try XCTUnwrap(readScriptFromZip(
+            zipPath: setup.zipPath,
+            filename: "publictest_bmi_01.py"
+        ))
+        XCTAssertTrue(source.contains("tolerance = 0.01"), source)
+        XCTAssertTrue(source.contains("delta = abs(result - expected)"), source)
+        XCTAssertTrue(source.contains("if delta > tolerance:"), source)
+    }
+
+    // v0.4.80: tolerance < 0 is rejected at the /suite boundary.
+    func testPut_rejectsNegativeTolerance() async throws {
+        let id = try await makeAssignment(withScripts: [])
+        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+        let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+        let body = #"""
+        {"items":[
+            {"kind":"family","family":{
+                "id":"bad","name":"bad","kind":"approximate_equality",
+                "functionName":"f","paramNames":["x"],
+                "defaults":{"tier":"public","points":1,"tolerance":-0.5},
+                "cases":[
+                    {"key":"01","label":"a","args":[1],"expected":1,"enabled":true}
+                ]
+            }}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/\(id)/suite", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: body)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .unprocessableEntity)
+            XCTAssertTrue(res.body.string.contains("tolerance"))
+        })
+    }
+
     func testPut_studentCannotEdit() async throws {
         let id = try await makeAssignment()
         let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)
