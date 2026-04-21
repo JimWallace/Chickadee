@@ -1312,11 +1312,11 @@ function checkUWDates(dateTimeValue, warningEl) {
             tds.push('<td><input type="text" class="form-input pf-case-args" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
         } else {
             paramNames.forEach(function (_, i) {
-                var val = (c.args && c.args[i] !== undefined) ? JSON.stringify(c.args[i]) : '';
-                tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="18.49" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+                var val = (c.args && c.args[i] !== undefined) ? renderTypedCellValue(c.args[i]) : '';
+                tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="e.g. 18.49 or underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
             });
         }
-        tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(c.expected == null ? '' : JSON.stringify(c.expected)) + '" placeholder="&quot;underweight&quot;" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+        tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(c.expected == null ? '' : renderTypedCellValue(c.expected)) + '" placeholder="e.g. underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
         tds.push('<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
         tds.push('<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>');
 
@@ -1334,8 +1334,36 @@ function checkUWDates(dateTimeValue, warningEl) {
         });
     }
 
-    /// Reads current rows into PatternCase values, validating JSON.  Throws
-    /// Error with a readable message on any parse failure.
+    /// Interprets a per-column cell value the way an instructor would expect:
+    ///   - `18.49`        → number 18.49
+    ///   - `true`/`false` → boolean
+    ///   - `null`         → null
+    ///   - `[1, 2]` / `{"k": 1}` / `"quoted"` → parsed JSON
+    ///   - anything else  → taken as a literal string (so `underweight`
+    ///                      becomes "underweight" without requiring quotes)
+    /// This keeps the typed-column UI readable — users shouldn't have to
+    /// quote strings when each cell corresponds to a single parameter.
+    function parseTypedCellValue(raw) {
+        var trimmed = String(raw == null ? '' : raw).trim();
+        try { return JSON.parse(trimmed); }
+        catch (_) { return String(raw); }
+    }
+
+    /// Inverse of `parseTypedCellValue` for redisplaying an existing value
+    /// in a cell when the modal reopens.  Strings render without surrounding
+    /// quotes so the user's original typing round-trips; everything else
+    /// renders as JSON so structural values stay visually distinct.
+    function renderTypedCellValue(v) {
+        if (v === null) return 'null';
+        if (typeof v === 'string') return v;
+        return JSON.stringify(v);
+    }
+
+    /// Reads current rows into PatternCase values.  Strict JSON is only
+    /// required for the fallback single-args field (when no parameters are
+    /// detected); per-column cells accept bare values — see
+    /// `parseTypedCellValue` above.  Throws Error with a readable message
+    /// on required-field or structural failures.
     function readCasesFromTable(paramNames) {
         paramNames = paramNames || [];
         var rows = Array.from(casesBody.querySelectorAll('tr'));
@@ -1343,11 +1371,14 @@ function checkUWDates(dateTimeValue, warningEl) {
         for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
             var label = row.querySelector('.pf-case-label').value.trim();
-            var rawExp = row.querySelector('.pf-case-expected').value.trim();
+            var rawExp = row.querySelector('.pf-case-expected').value;
+            if (rawExp.trim() === '') rawExp = '';
             var hint   = row.querySelector('.pf-case-hint').value.trim();
             var caseNum = (i + 1 < 10 ? '0' + (i + 1) : String(i + 1));
             var args = [];
             if (paramNames.length === 0) {
+                // Fallback layout (no params detected): one JSON-array field.
+                // Keep strict JSON here since the user is composing an array.
                 var rawArgs = (row.querySelector('.pf-case-args') || {}).value || '';
                 rawArgs = rawArgs.trim();
                 if (rawArgs !== '') {
@@ -1358,16 +1389,14 @@ function checkUWDates(dateTimeValue, warningEl) {
             } else {
                 for (var a = 0; a < paramNames.length; a++) {
                     var cell = row.querySelector('.pf-case-arg[data-arg-index="' + a + '"]');
-                    var raw = cell ? cell.value.trim() : '';
-                    if (raw === '') throw new Error('Case ' + caseNum + ': missing value for "' + paramNames[a] + '"');
-                    try { args.push(JSON.parse(raw)); }
-                    catch (e) { throw new Error('Case ' + caseNum + ' / ' + paramNames[a] + ': must be valid JSON (' + e.message + ')'); }
+                    var raw = cell ? cell.value : '';
+                    if (raw.trim() === '') throw new Error('Case ' + caseNum + ': missing value for "' + paramNames[a] + '"');
+                    args.push(parseTypedCellValue(raw));
                 }
             }
             var expected;
             if (rawExp === '') throw new Error('Case ' + caseNum + ': expected value is required');
-            try { expected = JSON.parse(rawExp); }
-            catch (e) { throw new Error('Case ' + caseNum + ': expected must be valid JSON (' + e.message + ')'); }
+            expected = parseTypedCellValue(rawExp);
             if (!label) throw new Error('Case ' + caseNum + ': label is required');
             out.push({
                 key: caseNum,
