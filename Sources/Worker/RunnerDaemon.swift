@@ -745,16 +745,10 @@ actor WorkerDaemon {
         }()
         let stdoutText = strippedStdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let longResult: String? = {
-            guard status != .pass else { return stderrText.isEmpty ? nil : stderrText }
             var sections: [String] = []
-            if !stdoutText.isEmpty {
-                sections.append("stdout:\n\(stdoutText)")
-            }
-            if !stderrText.isEmpty {
-                sections.append("stderr:\n\(stderrText)")
-            }
-            if sections.isEmpty { return nil }
-            return sections.joined(separator: "\n\n")
+            if !stdoutText.isEmpty { sections.append("stdout:\n\(stdoutText)") }
+            if !stderrText.isEmpty { sections.append("stderr:\n\(stderrText)") }
+            return sections.isEmpty ? nil : sections.joined(separator: "\n\n")
         }()
         let baseName = (entry.script as NSString).deletingPathExtension
         let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }

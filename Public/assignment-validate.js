@@ -109,22 +109,23 @@
         await py.runPythonAsync('import sys; sys.modules.clear()');
 
         // Step 1: Execute the solution file.
-        try {
-            await py.runPythonAsync(solutionSource);
-        } catch (err) {
-            const longResult = await captureTraceback(py, err);
-            return [{
-                testName:          'solution_load_error',
-                testClass:         null,
-                tier:              'public',
-                status:            'error',
-                shortResult:       `Solution failed to load: ${firstLine(err.message)}`,
-                longResult,
-                executionTimeMs:   0,
-                memoryUsageBytes:  null,
-                attemptNumber:     1,
-                isFirstPassSuccess: false,
-            }];
+        {
+            const { stdout, stderr, error } = await withStreams(py, () => py.runPythonAsync(solutionSource));
+            if (error) {
+                const traceback = await captureTraceback(py, error);
+                return [{
+                    testName:          'solution_load_error',
+                    testClass:         null,
+                    tier:              'public',
+                    status:            'error',
+                    shortResult:       `Solution failed to load: ${firstLine(error.message)}`,
+                    longResult:        formatStreams(stdout, stderr, traceback),
+                    executionTimeMs:   0,
+                    memoryUsageBytes:  null,
+                    attemptNumber:     1,
+                    isFirstPassSuccess: false,
+                }];
+            }
         }
 
         // Step 2: Run notebook setup cells (non-test code cells), then test cells.
@@ -147,23 +148,24 @@
                 outcomes.push(outcome);
             } else {
                 // Setup cell (imports, helpers, etc.) — run silently.
-                try {
-                    await py.runPythonAsync(source);
-                } catch (err) {
-                    const longResult = await captureTraceback(py, err);
-                    outcomes.push({
-                        testName:          'setup_error',
-                        testClass:         null,
-                        tier:              'public',
-                        status:            'error',
-                        shortResult:       `Setup cell failed: ${firstLine(err.message)}`,
-                        longResult,
-                        executionTimeMs:   Date.now() - startMs,
-                        memoryUsageBytes:  null,
-                        attemptNumber:     1,
-                        isFirstPassSuccess: false,
-                    });
-                    break;
+                {
+                    const { stdout, stderr, error } = await withStreams(py, () => py.runPythonAsync(source));
+                    if (error) {
+                        const traceback = await captureTraceback(py, error);
+                        outcomes.push({
+                            testName:          'setup_error',
+                            testClass:         null,
+                            tier:              'public',
+                            status:            'error',
+                            shortResult:       `Setup cell failed: ${firstLine(error.message)}`,
+                            longResult:        formatStreams(stdout, stderr, traceback),
+                            executionTimeMs:   Date.now() - startMs,
+                            memoryUsageBytes:  null,
+                            attemptNumber:     1,
+                            isFirstPassSuccess: false,
+                        });
+                        break;
+                    }
                 }
             }
         }
@@ -175,13 +177,13 @@
     async function runTestCell(py, source, meta, startMs) {
         let status      = 'pass';
         let shortResult = 'passed';
-        let longResult  = null;
+        let traceback   = null;
 
-        try {
-            await py.runPythonAsync(source);
-        } catch (err) {
-            const msg = err.message || String(err);
-            longResult = await captureTraceback(py, err);
+        const { stdout, stderr, error } = await withStreams(py, () => py.runPythonAsync(source));
+
+        if (error) {
+            const msg = error.message || String(error);
+            traceback = await captureTraceback(py, error);
 
             if (msg.includes('AssertionError') || msg.includes('assert')) {
                 status = 'fail';
@@ -201,7 +203,7 @@
             tier:              meta.tier,
             status,
             shortResult,
-            longResult,
+            longResult:        formatStreams(stdout, stderr, traceback),
             executionTimeMs:   Date.now() - startMs,
             memoryUsageBytes:  null,
             attemptNumber:     1,
@@ -227,6 +229,33 @@ else:
         } catch (_) {
             return err.message || String(err);
         }
+    }
+
+    // Run fn() while capturing Pyodide stdout/stderr. Always resets streams.
+    // Returns { stdout, stderr, error } where error is non-null if fn() threw.
+    async function withStreams(py, fn) {
+        const stdoutChunks = [], stderrChunks = [];
+        py.setStdout({ batched: (s) => stdoutChunks.push(s) });
+        py.setStderr({ batched: (s) => stderrChunks.push(s) });
+        let error = null;
+        try { await fn(); }
+        catch (e) { error = e; }
+        finally { py.setStdout({}); py.setStderr({}); }
+        return {
+            stdout: stdoutChunks.join('').trimEnd(),
+            stderr: stderrChunks.join('').trimEnd(),
+            error,
+        };
+    }
+
+    // Build a longResult string from captured streams and optional traceback.
+    // Matches the section format produced by the runner ("stdout:\n…", etc.).
+    function formatStreams(stdout, stderr, traceback) {
+        const sections = [];
+        if (stdout)   sections.push(`stdout:\n${stdout}`);
+        if (stderr)   sections.push(`stderr:\n${stderr}`);
+        if (traceback) sections.push(`traceback:\n${traceback}`);
+        return sections.length ? sections.join('\n\n') : null;
     }
 
     function extractAssertionMessage(msg) {
@@ -317,13 +346,10 @@ else:
         for (const o of outcomes) {
             const tr = document.createElement('tr');
             tr.className = `status-${o.status}`;
-            const longCell = o.longResult
-                ? `<details><summary>details</summary><pre>${escHtml(o.longResult)}</pre></details>`
-                : '';
             tr.innerHTML = `
                 <td><code>${escHtml(o.displayName || o.testName)}</code></td>
                 <td><span class="tier">${escHtml(o.tier)}</span></td>
-                <td>${escHtml(o.shortResult)}${longCell}</td>
+                <td>${escHtml(o.shortResult)}${buildOutputPanes(o)}</td>
                 <td class="time">${o.executionTimeMs}</td>`;
             tbody.appendChild(tr);
         }
@@ -334,6 +360,33 @@ else:
         resultsEl.appendChild(table);
         resultsEl.hidden = false;
         resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Build collapsible output panes from a longResult string.
+    // Recognises "stdout:\n…", "stderr:\n…", "traceback:\n…" section headers
+    // produced by both the runner and the Pyodide validator. Falls back to a
+    // single pane if no headers are found.
+    function buildOutputPanes(o) {
+        if (!o.longResult) return '';
+        const failing = o.status !== 'pass';
+
+        const sectionRe = /^(stdout|stderr|traceback):\n/gm;
+        const matches = [...o.longResult.matchAll(sectionRe)];
+        if (matches.length === 0) {
+            return `<details${failing ? ' open' : ''}><summary>details</summary><pre>${escHtml(o.longResult)}</pre></details>`;
+        }
+
+        let html = '';
+        for (let i = 0; i < matches.length; i++) {
+            const name    = matches[i][1];
+            const start   = matches[i].index + matches[i][0].length;
+            const end     = i + 1 < matches.length ? matches[i + 1].index : o.longResult.length;
+            const content = o.longResult.slice(start, end).trimEnd();
+            if (!content) continue;
+            const autoOpen = failing && (name === 'stderr' || name === 'traceback');
+            html += `<details class="stream-pane stream-${name}"${autoOpen ? ' open' : ''}><summary>${name}</summary><pre>${escHtml(content)}</pre></details>`;
+        }
+        return html;
     }
 
     function escHtml(str) {
