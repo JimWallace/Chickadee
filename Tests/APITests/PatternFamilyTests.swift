@@ -490,6 +490,245 @@ final class PatternFamilyTests: XCTestCase {
                        "Failed validation must not mutate the zip")
     }
 
+    // MARK: - family:<id> dependency expansion
+
+    /// When a raw script declares `dependsOn: ["family:bmi_category"]`, the
+    /// persisted manifest that reaches the runner must have that token
+    /// expanded to the family's actual enabled generated filenames — the
+    /// runner has no notion of families.
+    func testApply_expandsFamilyRefOnRawScriptDep() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_followup.py",
+            content: "# followup\npassed('ok')\n"
+        )
+        let rawEntry = AuthoredRawScript(
+            script: "publictest_followup.py",
+            tier: .pub, points: 1, displayName: nil,
+            dependsOn: ["family:bmi_category"]
+        )
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [bmiFamily()],
+            authoredItems: [.script(rawEntry), .family(id: "bmi_category")],
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        let followup = try XCTUnwrap(props.testSuites.first { $0.script == "publictest_followup.py" })
+        XCTAssertEqual(Set(followup.dependsOn), Set([
+            "publictest_bmi_category_01.py",
+            "publictest_bmi_category_02.py",
+            "publictest_bmi_category_03.py",
+        ]), "family:<id> must expand to all enabled generated filenames")
+        // No `family:` tokens must survive into the persisted manifest.
+        for entry in props.testSuites {
+            for dep in entry.dependsOn {
+                XCTAssertFalse(dep.hasPrefix("family:"),
+                               "Persisted dep '\(dep)' must be a filename, not a family ref")
+            }
+        }
+    }
+
+    /// Family-level `dependsOn` propagates to every generated case, with
+    /// family-ref tokens expanded to the referenced family's filenames.
+    func testApply_familyLevelDepsExpandedAndInheritedByCases() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        // Seed a prereq raw script.
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_prereq.py",
+            content: "# prereq\npassed('ok')\n"
+        )
+        let prereq = AuthoredRawScript(
+            script: "publictest_prereq.py",
+            tier: .pub, points: 1, displayName: nil, dependsOn: []
+        )
+        let family = PatternFamily(
+            id: "bmi_category", name: "BMI", kind: .boundaryEquality,
+            functionName: "bmi_category", paramNames: ["bmi"],
+            defaults: PatternDefaults(hint: "x"),
+            cases: bmiFamily().cases,
+            dependsOn: ["publictest_prereq.py"]
+        )
+
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [family],
+            authoredItems: [.script(prereq), .family(id: family.id)],
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        let generated = props.testSuites.filter { $0.generatedBy != nil }
+        XCTAssertEqual(generated.count, 3)
+        for g in generated {
+            XCTAssertEqual(g.dependsOn, ["publictest_prereq.py"],
+                           "Every generated case must inherit the family-level dep")
+        }
+    }
+
+    /// Removing a family drops `family:<id>` tokens from other entries'
+    /// dependsOn — no dangling refs remain.
+    func testApply_removingFamilyClearsFamilyRefsFromOtherEntries() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_followup.py",
+            content: "# followup\npassed('ok')\n"
+        )
+        let followup = AuthoredRawScript(
+            script: "publictest_followup.py",
+            tier: .pub, points: 1, displayName: nil,
+            dependsOn: ["family:bmi_category"]
+        )
+        // First apply with the family present.
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [bmiFamily()],
+            authoredItems: [.script(followup), .family(id: "bmi_category")],
+            on: fixture.app.db
+        )
+        // Now remove the family: the raw script's dependsOn has to drop the
+        // dangling filenames (and since no family remains, expansion emits nothing).
+        let followupNoFamilyRef = AuthoredRawScript(
+            script: "publictest_followup.py",
+            tier: .pub, points: 1, displayName: nil, dependsOn: []
+        )
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [],
+            authoredItems: [.script(followupNoFamilyRef)],
+            on: fixture.app.db
+        )
+        let props = try decodeManifest(fixture.setup.manifest)
+        let entry = try XCTUnwrap(props.testSuites.first { $0.script == "publictest_followup.py" })
+        XCTAssertEqual(entry.dependsOn, [])
+        XCTAssertTrue(props.patternFamilies.isEmpty)
+    }
+
+    /// The authored-graph cycle detector rejects script→family→script cycles.
+    func testApply_rejectsScriptFamilyScriptCycle() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_a.py", content: "passed('ok')\n"
+        )
+        // Cycle: a → family:bmi → a
+        let a = AuthoredRawScript(
+            script: "publictest_a.py",
+            tier: .pub, points: 1, displayName: nil,
+            dependsOn: ["family:bmi_category"]
+        )
+        let family = PatternFamily(
+            id: "bmi_category", name: "BMI", kind: .boundaryEquality,
+            functionName: "bmi_category", paramNames: ["bmi"],
+            defaults: PatternDefaults(),
+            cases: bmiFamily().cases,
+            dependsOn: ["publictest_a.py"]
+        )
+
+        do {
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [family],
+                authoredItems: [.script(a), .family(id: family.id)],
+                on: fixture.app.db
+            )
+            XCTFail("Expected cycle to be rejected")
+        } catch let abort as AbortError {
+            XCTAssertTrue("\(abort.reason)".contains("cycle"),
+                          "Expected cycle error, got: \(abort.reason)")
+        }
+    }
+
+    /// Family-to-family cycles are rejected too.
+    func testApply_rejectsFamilyFamilyCycle() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        let fa = PatternFamily(
+            id: "fa", name: "fa", kind: .boundaryEquality,
+            functionName: "fa", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))],
+            dependsOn: ["family:fb"]
+        )
+        let fb = PatternFamily(
+            id: "fb", name: "fb", kind: .boundaryEquality,
+            functionName: "fb", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "b", args: [.int(1)], expected: .int(1))],
+            dependsOn: ["family:fa"]
+        )
+        do {
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [fa, fb],
+                authoredItems: [.family(id: "fa"), .family(id: "fb")],
+                on: fixture.app.db
+            )
+            XCTFail("Expected cycle to be rejected")
+        } catch let abort as AbortError {
+            XCTAssertTrue("\(abort.reason)".contains("cycle"))
+        }
+    }
+
+    /// Self-referential families (`family: F depends on family:F`) are rejected.
+    func testApply_rejectsSelfReferentialFamily() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        let f = PatternFamily(
+            id: "loop", name: "loop", kind: .boundaryEquality,
+            functionName: "loop", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))],
+            dependsOn: ["family:loop"]
+        )
+        do {
+            _ = try await applyPatternFamilies(
+                to: fixture.setup, nextFamilies: [f],
+                authoredItems: [.family(id: "loop")], on: fixture.app.db)
+            XCTFail("Expected self-ref to be rejected")
+        } catch let abort as AbortError {
+            XCTAssertTrue("\(abort.reason)".contains("itself") || "\(abort.reason)".contains("cycle"))
+        }
+    }
+
+    /// Referencing a family id that doesn't exist yields a readable error.
+    func testApply_rejectsUnknownFamilyRef() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_a.py", content: "passed('ok')\n"
+        )
+        let a = AuthoredRawScript(
+            script: "publictest_a.py",
+            tier: .pub, points: 1, displayName: nil,
+            dependsOn: ["family:does_not_exist"]
+        )
+        do {
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [],
+                authoredItems: [.script(a)],
+                on: fixture.app.db
+            )
+            XCTFail("Expected unknown-family-ref rejection")
+        } catch let abort as AbortError {
+            XCTAssertTrue("\(abort.reason)".contains("does_not_exist"))
+        }
+    }
+
     // MARK: - Fixture plumbing
 
     private struct Fixture {

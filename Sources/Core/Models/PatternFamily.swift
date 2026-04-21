@@ -111,11 +111,19 @@ public struct PatternFamily: Codable, Equatable, Sendable {
     public let paramNames: [String]
     public let defaults: PatternDefaults
     public let cases: [PatternCase]
+    /// Family-level prerequisites.  Each entry is either a raw script filename
+    /// or a `family:<otherId>` token referring to another family by id.  Every
+    /// generated case inherits these dependencies.  When the manifest is
+    /// persisted for the runner, `family:<id>` tokens are expanded to the
+    /// family's enabled generated filenames so the runner only ever sees
+    /// concrete script names.
+    public let dependsOn: [String]
 
     public init(id: String, name: String, kind: PatternKind,
                 functionName: String, paramNames: [String] = [],
                 defaults: PatternDefaults = PatternDefaults(),
-                cases: [PatternCase] = []) {
+                cases: [PatternCase] = [],
+                dependsOn: [String] = []) {
         self.id = id
         self.name = name
         self.kind = kind
@@ -123,6 +131,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         self.paramNames = paramNames
         self.defaults = defaults
         self.cases = cases
+        self.dependsOn = dependsOn
     }
 
     public init(from decoder: Decoder) throws {
@@ -134,6 +143,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         paramNames   = try c.decodeIfPresent([String].self, forKey: .paramNames) ?? []
         defaults     = try c.decodeIfPresent(PatternDefaults.self, forKey: .defaults) ?? PatternDefaults()
         cases        = try c.decodeIfPresent([PatternCase].self,   forKey: .cases)    ?? []
+        dependsOn    = try c.decodeIfPresent([String].self,        forKey: .dependsOn) ?? []
     }
 }
 

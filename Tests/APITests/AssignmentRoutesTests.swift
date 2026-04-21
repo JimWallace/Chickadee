@@ -606,7 +606,10 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertTrue(zipEntries.contains("test.properties.json"))
     }
 
-    func testSaveEditedAssignmentPersistsDisplayNameForExistingSuiteFile() async throws {
+    // As of v0.4.79, suite metadata (displayName/tier/points/dependsOn) is
+    // mutated live via `PUT /instructor/:id/suite`, not via the Save &
+    // Validate form POST.  The two tests below exercise that flow.
+    func testPutSuitePersistsDisplayNameForExistingSuiteFile() async throws {
         let courseID = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_display"
@@ -621,31 +624,18 @@ final class AssignmentRoutesTests: XCTestCase {
         try await assignment.save(on: app.db)
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/ABC123/edit", cookie: cookie, on: app)
-        let boundary = "Boundary-Edit-DisplayName"
-        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
-        let suiteConfig = """
-        [
-          {"source":"existing","name":"test_q1.py","tier":"public","order":1,"points":1,"displayName":"BMI check"}
-        ]
-        """
-
-        try await app.asyncTest(.POST, "/instructor/ABC123/edit/save", beforeRequest: { req in
+        let body = #"""
+        {"items":[
+            {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"BMI check","dependsOn":[]}}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/ABC123/suite", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartEditBody(
-                boundary: boundary,
-                csrf: csrf,
-                assignmentName: "Practice Lab",
-                assignmentNotebook: notebook,
-                solutionNotebook: notebook,
-                suiteConfig: suiteConfig
-            ))
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: body)
         }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.status, .ok, res.body.string)
         })
 
         let savedSetup = try await APITestSetup.find(setupID, on: app.db)
@@ -657,7 +647,7 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertEqual(props.testSuites[0].name, "BMI check")
     }
 
-    func testSaveEditedAssignmentShowsUpdatedDisplayNameOnReopen() async throws {
+    func testPutSuiteDisplayNameVisibleOnSubsequentEditPageLoad() async throws {
         let courseID = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_display_reload"
@@ -672,66 +662,26 @@ final class AssignmentRoutesTests: XCTestCase {
         try await assignment.save(on: app.db)
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/GHI789/edit", cookie: cookie, on: app)
-        let boundary = "Boundary-Edit-Reload"
-        let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
-        let suiteConfig = """
-        [
-          {"source":"existing","name":"test_q1.py","tier":"public","order":1,"points":1,"displayName":"BMI check"}
-        ]
-        """
-
-        try await app.asyncTest(.POST, "/instructor/GHI789/edit/save", beforeRequest: { req in
+        let body = #"""
+        {"items":[
+            {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"BMI check","dependsOn":[]}}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/GHI789/suite", beforeRequest: { req in
             req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartEditBody(
-                boundary: boundary,
-                csrf: csrf,
-                assignmentName: "Practice Lab",
-                assignmentNotebook: notebook,
-                solutionNotebook: notebook,
-                suiteConfig: suiteConfig
-            ))
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: body)
         }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
+            XCTAssertEqual(res.status, .ok, res.body.string)
         })
 
         try await app.asyncTest(.GET, "/instructor/GHI789/edit", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("value=\"BMI check\""), html)
-            XCTAssertFalse(html.contains("value=\"test_q1\""), html)
-        })
-    }
-
-    func testEditPageSyncsSuiteConfigOnSubmit() async throws {
-        let courseID = try await makeTestCourseID()
-        let cookie = try await loginAsInstructor()
-        let setupID = "setup_edit_submit_sync"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
-        try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
-        let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
-        """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
-        try await setup.save(on: app.db)
-        let assignment = APIAssignment(publicID: "DEF456", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
-        try await assignment.save(on: app.db)
-
-        try await app.asyncTest(.GET, "/instructor/DEF456/edit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("form.addEventListener('submit'"))
-            XCTAssertTrue(html.contains("form.addEventListener('chickadee:before-multipart-submit'"))
-            XCTAssertTrue(html.contains("syncConfig();"))
-            XCTAssertTrue(html.contains("chickadee:before-multipart-submit"))
+            // The seeded suite-state JSON should carry the updated name.
+            XCTAssertTrue(res.body.string.contains("\"displayName\":\"BMI check\""), res.body.string)
         })
     }
 

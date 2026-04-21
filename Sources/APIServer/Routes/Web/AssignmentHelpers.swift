@@ -584,6 +584,16 @@ func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
     return props.testSuites.first(where: { $0.script == filename })?.generatedBy
 }
 
+/// Returns true when the setup's manifest has at least one test entry
+/// (raw script or generated-by-family).  Used by `saveEditedAssignment`
+/// to refuse saving an empty suite.
+func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
+    guard let data = manifestJSON.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+    else { return false }
+    return !props.testSuites.isEmpty
+}
+
 /// Returns updated manifest JSON with a new `TestSuiteEntry` appended.
 /// Preserves all existing entries, grading mode, makefile config,
 /// starterNotebook, and pattern families.

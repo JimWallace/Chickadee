@@ -248,6 +248,13 @@ func configureLeaf(_ app: Application) {
     }
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
+    // rawJSON is safe to register in tests (pure string passthrough).
+    // csrfToken / appVersion are intentionally NOT registered here — they
+    // trigger CSRF.createToken / version lookups that assume a more complete
+    // middleware stack than the minimal test app.  Pages that embed
+    // `#csrfToken()` or `#appVersion()` will render those tokens verbatim;
+    // no existing test asserts on that markup.
+    app.leaf.tags["rawJSON"] = RawJSONTag()
 }
 
 // MARK: - CSRF token extraction

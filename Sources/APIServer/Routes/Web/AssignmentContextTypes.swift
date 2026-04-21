@@ -141,6 +141,11 @@ struct EditAssignmentContext: Encodable {
     /// Pattern families currently defined on this assignment, rendered as a
     /// JSON array.  The editor JS parses it to seed the in-page family list.
     let patternFamiliesJSON: String
+    /// Full reconciled `GET /suite` payload embedded as JSON.  The editor JS
+    /// parses it once at page load as the initial state of the unified
+    /// items list; every subsequent mutation is a PUT whose response
+    /// replaces this state.
+    let suiteStateJSON: String
     let notice: String?
     let error: String?
 }
