@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.91] - 2026-04-22
+
+### Added
+
+- **Pattern family editor on the Create Assignment page.**  The instructor can now author pattern families from `/instructor/new` before the assignment is published — previously families were an edit-only feature.  Three-part change:
+  1. **Suite-table JS extracted to `Public/suite-table.js`.**  Phase 1b of the authoring-page parity refactor.  The ~620-line IIFE that owned drag/drop reorder, dep-adopt, tier/points/display-name inline edits, and `PUT /suite` persistence now lives in a shared module with a `window.initSuiteTable(config)` factory.  `onFamiliesChange` and `addExistingScript` are returned as methods (still wired to the legacy `window.chickadee*` globals so the existing pattern-family and script-editor modules keep working unchanged).
+  2. **Draft-aware backend routes** (`Sources/APIServer/Routes/Web/AssignmentRoutes+Draft.swift`).  Sibling endpoints to the `:assignmentID`-scoped routes, identified by a `draftID` query parameter that resolves directly to the draft `APITestSetup`:
+       - `GET /instructor/new/draft/suite?draftID=<id>`
+       - `PUT /instructor/new/draft/suite?draftID=<id>`
+       - `PUT /instructor/new/draft/families?draftID=<id>`
+       - `POST /instructor/new/draft/scripts?draftID=<id>`
+       - `DELETE /instructor/new/draft/scripts/:filename?draftID=<id>`
+     The shared helpers (`applyPatternFamilies`, `buildSuitePayload`, `listZipEntries`, …) already operate on `APITestSetup`, so the handlers are thin wrappers — same validation, same zip/manifest mutation.  They skip the `scheduleValidationAfterSuiteEdit` call the assignment-scoped handler makes because drafts don't have a validation pipeline yet (that kicks in on publish).
+  3. **Create page wired to the shared family-editor module.**  New "New Family" button in the Test Suite toolbar; the family modal HTML is duplicated for now (Leaf partial `#extend("includes/…")` hit a cycle-detection false positive in v0.4.90 — revisit later); `Public/pattern-family-editor.js` is initialised with the draft URLs.  After a family save, the page reloads so the server-rendered suite table picks up the newly generated scripts.  Once the suite table itself migrates to `Public/suite-table.js` on this page (phase 3b), we can switch to an in-place sync.
+
+### Fixed
+
+- **Draft pattern families now survive the create→publish transition.**  `saveNewAssignment` was calling `makeWorkerManifestJSON(testSuites:…)` without forwarding the draft setup's `patternFamilies`, so on publish the manifest was rebuilt with an empty `patternFamilies` field and `applyPatternFamilies` was never re-run — generated scripts lost their family provenance (same class of bug as v0.4.77's saveEdit fix).  The finalize flow now (a) reads `patternFamilies` from the existing draft manifest, (b) passes them through to `makeWorkerManifestJSON`, and (c) re-runs `applyPatternFamilies` after save so the regenerated scripts land in the final zip.
+
+### Changed
+
+- **`safeScriptFilename(from:)` is now file-internal** (was `private`) so `AssignmentRoutes+Draft.swift` can reuse the same `:filename` sanitisation logic.  No behaviour change.
+
 ## [0.4.90] - 2026-04-22
 
 ### Changed

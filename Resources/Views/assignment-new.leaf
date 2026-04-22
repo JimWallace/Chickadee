@@ -143,6 +143,7 @@ Create Assignment
         <h2 style="margin:0">Test Suite</h2>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
+            <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
             <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
         </div>
     </div>
@@ -239,6 +240,135 @@ Create Assignment
     </div>
 
 </form>
+
+<!-- Pattern families seed — same shape as the edit page's seed.
+     Server renders the current draft's families (empty before first save). -->
+<script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
+
+<!-- ── Pattern Family Editor Modal ──────────────────────────────────────────
+     HTML duplicated from assignment-edit.leaf until the LeafKit partial
+     cycle-detection false positive is resolved.  The JS module that drives
+     this modal (Public/pattern-family-editor.js) is shared. -->
+<div id="family-editor-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(960px,96vw);max-height:92vh;
+                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
+            <div id="family-editor-title" style="font-weight:600;flex:1">New Pattern Family</div>
+            <button class="btn-link" id="family-editor-close" type="button" aria-label="Close" title="Close"
+                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+        </div>
+
+        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label id="family-function-label" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Function
+                    <select class="form-input" id="family-function-select" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="">— Scanning solution notebook… —</option>
+                    </select>
+                    <span id="family-function-hint" class="card-meta" style="font-size:.72rem"></span>
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Family name (shown in UI)
+                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Pattern kind
+                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="boundary_equality">Exact equality (== comparison)</option>
+                        <option value="approximate_equality">Approximate equality (float tolerance)</option>
+                        <option value="variable_equality">Variable equality (module-level variable)</option>
+                    </select>
+                </label>
+                <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">
+                    Tolerance (max |result − expected|)
+                    <input type="number" class="form-input" id="family-default-tolerance" step="any" min="0"
+                           placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+            </div>
+            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                Default hint (used when a case omits its own)
+                <textarea class="form-input" id="family-default-hint" rows="2"
+                          style="padding:.3rem .5rem;font-size:.85rem"></textarea>
+            </label>
+
+            <input type="hidden" id="family-id">
+            <input type="hidden" id="family-function">
+            <input type="hidden" id="family-params">
+
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+                    <strong style="font-size:.85rem">Cases</strong>
+                    <button class="btn action-btn" type="button" id="add-case-btn" style="padding:.2rem .6rem;font-size:.8rem">
+                        + Add case
+                    </button>
+                </div>
+                <table class="results-table" id="family-cases-table" style="font-size:.8rem">
+                    <thead>
+                        <tr id="family-cases-header">
+                            <th style="width:2.25rem">#</th>
+                            <th>Label</th>
+                            <th class="pf-case-expected-col">Expected</th>
+                            <th>Hint (override)</th>
+                            <th style="width:4rem"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="family-cases-body"></tbody>
+                </table>
+                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--meta)">
+                    No cases yet.  Add at least one to save this family.
+                </p>
+            </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
+            <button class="btn btn-primary" id="family-save-btn" type="button">Save</button>
+            <button class="btn" id="family-cancel-btn" type="button">Cancel</button>
+            <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Pattern family editor module — same implementation as the edit page,
+     wired to draft-scoped URLs.  After a save, the page reloads so the
+     server-rendered suite table picks up the newly generated scripts. -->
+<script src="/pattern-family-editor.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var draftID = #rawJSON(draftIDJSON);
+    if (!draftID) return;  // No draft yet — user hasn't uploaded a solution notebook
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var seed = document.getElementById('pattern-families-seed');
+    var initialFamilies = [];
+    if (seed) {
+        try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
+        catch (e) { initialFamilies = []; }
+    }
+    window.initPatternFamilyEditor({
+        draftID: draftID,
+        csrfToken: csrfToken,
+        initialFamilies: initialFamilies,
+        urls: {
+            solutionNotebook: function () {
+                return '/instructor/new/draft/solution-notebook?draftID=' + encodeURIComponent(draftID);
+            },
+            scanNotebook: function () { return '/instructor/scan-notebook'; },
+            putFamilies: function () {
+                return '/instructor/new/draft/families?draftID=' + encodeURIComponent(draftID);
+            }
+        },
+        onFamiliesChange: function () {
+            // Reload so the server-rendered suite table reflects the newly
+            // generated scripts.  When the suite-table migration lands
+            // later we can switch this to an in-place sync.
+            window.location.reload();
+        }
+    });
+})();
+</script>
 
 <!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
 <div id="script-editor-overlay"
