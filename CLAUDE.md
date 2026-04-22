@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.86**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.87**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:

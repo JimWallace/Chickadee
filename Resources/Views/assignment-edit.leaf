@@ -841,15 +841,32 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         }
     });
 
+    // Display-name edits use a two-phase model to avoid a race between live
+    // typing and the debounced `PUT /suite` response:
+    //
+    //   • `input` updates the in-memory `items[]` entry so any *other*
+    //     action (drag, tier change, etc.) sends the current typed value.
+    //   • `change` (blur / Enter) triggers the actual PUT.
+    //
+    // Without this split, every keystroke fired a debounced PUT, the
+    // server's echo overwrote `items[]` mid-keystroke, and `renderTree()`
+    // blew away the user's in-progress typing — which looked like focus
+    // being stolen.  `tier`/`points` cells already use `change` for the
+    // same reason; this brings display-name in line.
     body.addEventListener('input', function (e) {
-        var row = e.target.closest && e.target.closest('tr[data-kind="script"]');
+        var target = e.target;
+        if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
+        var row = target.closest('tr[data-kind="script"]');
         if (!row) return;
-        var nameEl = row.querySelector('.suite-display-name');
-        if (!nameEl) return;
         var item = findByID(row.getAttribute('data-id'));
         if (!item) return;
-        var val = nameEl.value.trim();
+        var val = target.value.trim();
         item.displayName = (val && val !== stemOf(item.script)) ? val : '';
+    });
+
+    body.addEventListener('change', function (e) {
+        var target = e.target;
+        if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
         schedulePush();
     });
 
