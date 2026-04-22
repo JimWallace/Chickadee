@@ -16,18 +16,59 @@ public struct NotebookFunctionInfo: Codable, Sendable {
     public let name: String
     /// Parameter names, excluding `self`, `cls`, `*args`, `**kwargs`.
     public let paramNames: [String]
+    /// Per-parameter type annotations as written in the source (`nil` when
+    /// the param has no annotation).  Length matches `paramNames`.  Used
+    /// by the family editor to coerce typed cell values into the right
+    /// JSON shape before sending them to the server.
+    public let paramTypes: [String?]
+    /// The `-> X` return type annotation, `nil` when absent.  Used by the
+    /// family editor to coerce the Expected cell into the right shape.
+    public let returnType: String?
     /// True if at least one parameter has a type annotation or `->` return hint.
     public let hasTypeHints: Bool
     /// True if a docstring appears in the first few lines of the function body.
     public let hasDocstring: Bool
+    /// True when a later `def <name>` in the notebook redefines this function.
+    /// Python has no real overloading — the last definition wins at runtime —
+    /// so a family targeting a shadowed version will fail (wrong signature).
+    /// Decoded with `decodeIfPresent ?? false` so older clients that don't
+    /// send the field still roundtrip.
+    public let isShadowed: Bool
 
     public var paramCount: Int { paramNames.count }
 
-    public init(name: String, paramNames: [String], hasTypeHints: Bool, hasDocstring: Bool) {
+    public init(name: String,
+                paramNames: [String],
+                paramTypes: [String?] = [],
+                returnType: String? = nil,
+                hasTypeHints: Bool,
+                hasDocstring: Bool,
+                isShadowed: Bool = false) {
         self.name = name
         self.paramNames = paramNames
+        // Keep paramTypes aligned with paramNames even when the caller omitted it
+        // (back-compat: older callers constructed this struct without types).
+        self.paramTypes = paramTypes.count == paramNames.count
+            ? paramTypes
+            : Array(repeating: nil, count: paramNames.count)
+        self.returnType = returnType
         self.hasTypeHints = hasTypeHints
         self.hasDocstring = hasDocstring
+        self.isShadowed = isShadowed
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name         = try c.decode(String.self,     forKey: .name)
+        paramNames   = try c.decode([String].self,   forKey: .paramNames)
+        hasTypeHints = try c.decode(Bool.self,       forKey: .hasTypeHints)
+        hasDocstring = try c.decode(Bool.self,       forKey: .hasDocstring)
+        isShadowed   = try c.decodeIfPresent(Bool.self,       forKey: .isShadowed)   ?? false
+        let decodedParamTypes = try c.decodeIfPresent([String?].self, forKey: .paramTypes) ?? []
+        paramTypes   = decodedParamTypes.count == paramNames.count
+            ? decodedParamTypes
+            : Array(repeating: nil, count: paramNames.count)
+        returnType   = try c.decodeIfPresent(String.self,     forKey: .returnType)
     }
 }
 
@@ -44,10 +85,31 @@ public func scanNotebookForFunctions(_ notebookData: Data) -> [NotebookFunctionI
         let cells = notebook["cells"] as? [[String: Any]]
     else { return [] }
 
-    return cells.flatMap { cell -> [NotebookFunctionInfo] in
+    let raw: [NotebookFunctionInfo] = cells.flatMap { cell -> [NotebookFunctionInfo] in
         guard (cell["cell_type"] as? String) == "code" else { return [] }
         let source = cellSource(cell)
         return extractTopLevelFunctions(from: source)
+    }
+
+    // Python's second `def foo(...)` replaces the first at runtime — every
+    // entry except the *last* occurrence of each name is shadowed.  Mark them
+    // so the client can warn the instructor away from targeting a version
+    // the runner will never see.
+    var lastIndexByName: [String: Int] = [:]
+    for (i, info) in raw.enumerated() {
+        lastIndexByName[info.name] = i
+    }
+    return raw.enumerated().map { idx, info in
+        let shadowed = (lastIndexByName[info.name] ?? idx) != idx
+        return NotebookFunctionInfo(
+            name: info.name,
+            paramNames: info.paramNames,
+            paramTypes: info.paramTypes,
+            returnType: info.returnType,
+            hasTypeHints: info.hasTypeHints,
+            hasDocstring: info.hasDocstring,
+            isShadowed: shadowed
+        )
     }
 }
 
@@ -105,7 +167,10 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
     let paramsRaw = String(line[paramsRange])
 
     let hasTypeHints = paramsRaw.contains(":") || line.contains("->")
-    let paramNames   = parseParamNames(from: paramsRaw)
+    let parsedParams = parseParams(from: paramsRaw)
+    let paramNames   = parsedParams.map(\.name)
+    let paramTypes   = parsedParams.map(\.type)
+    let returnType   = parseReturnType(from: line)
     let hasDocstring = bodyLines.prefix(5).contains {
         let t = $0.trimmingCharacters(in: .whitespaces)
         return t.hasPrefix("\"\"\"") || t.hasPrefix("'''")
@@ -114,45 +179,67 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
     return NotebookFunctionInfo(
         name: name,
         paramNames: paramNames,
+        paramTypes: paramTypes,
+        returnType: returnType,
         hasTypeHints: hasTypeHints,
         hasDocstring: hasDocstring
     )
 }
 
+/// A single parsed parameter: name plus optional type annotation.
+private struct ParsedParam {
+    let name: String
+    let type: String?
+}
+
 /// Parses a raw parameter list string (the content between `(` and `)`) into
-/// a list of parameter names, stripping type annotations, default values,
-/// and ignoring `self`, `cls`, `*args`, `**kwargs`, and `/`.
-private func parseParamNames(from raw: String) -> [String] {
+/// a list of `(name, type?)` pairs, stripping default values and ignoring
+/// `self`, `cls`, `*args`, `**kwargs`, and `/`.
+private func parseParams(from raw: String) -> [ParsedParam] {
     let trimmed = raw.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
 
     return trimmed
         .split(separator: ",")
-        .compactMap { part -> String? in
-            var param = part.trimmingCharacters(in: .whitespaces)
+        .compactMap { part -> ParsedParam? in
+            var chunk = part.trimmingCharacters(in: .whitespaces)
 
-            // Strip type annotation: "x: int" → "x"
-            if let colonIdx = param.firstIndex(of: ":") {
-                param = String(param[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+            // Strip default value: "x = 0" or "x: int = 0" → type survives
+            if let eqIdx = chunk.firstIndex(of: "=") {
+                chunk = String(chunk[..<eqIdx]).trimmingCharacters(in: .whitespaces)
             }
-            // Strip default value: "x=0" → "x"
-            if let eqIdx = param.firstIndex(of: "=") {
-                param = String(param[..<eqIdx]).trimmingCharacters(in: .whitespaces)
+            // Split name / type at first `:`.
+            var paramName = chunk
+            var paramType: String? = nil
+            if let colonIdx = chunk.firstIndex(of: ":") {
+                paramName = String(chunk[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+                let t = String(chunk[chunk.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+                paramType = t.isEmpty ? nil : t
             }
             // Skip *args, **kwargs, and the keyword-only marker (*).
-            // Any parameter starting with * is variadic or positional-only — exclude it.
-            guard !param.hasPrefix("*") else { return nil }
-
-            // Skip special names and the positional-only separator
-            guard !param.isEmpty, param != "/", param != "self", param != "cls" else { return nil }
-
-            // Must be a valid Python identifier
+            guard !paramName.hasPrefix("*") else { return nil }
+            guard !paramName.isEmpty, paramName != "/", paramName != "self", paramName != "cls" else { return nil }
             guard
-                let first = param.first,
+                let first = paramName.first,
                 first.isLetter || first == "_",
-                param.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" })
+                paramName.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" })
             else { return nil }
 
-            return param
+            return ParsedParam(name: paramName, type: paramType)
         }
+}
+
+/// Extracts the `-> TYPE` return-type annotation from the signature line.
+/// Returns nil if the signature has no return annotation.
+private func parseReturnType(from line: String) -> String? {
+    // Look for `)` followed by `->` and capture everything up to a trailing
+    // colon (the `def` line's terminator).  Generic types with commas or
+    // spaces (`dict[str, int]`) are preserved verbatim.
+    let pattern = #"\)\s*->\s*(.+?)\s*:\s*$"#
+    guard let regex = try? NSRegularExpression(pattern: pattern),
+          let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+          let range = Range(match.range(at: 1), in: line)
+    else { return nil }
+    let t = String(line[range]).trimmingCharacters(in: .whitespaces)
+    return t.isEmpty ? nil : t
 }
