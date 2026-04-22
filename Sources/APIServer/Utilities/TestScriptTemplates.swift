@@ -68,6 +68,7 @@ enum PythonTestTemplateType: String, CaseIterable {
     case performance      = "performance"
     case differential     = "differential"
     case variableEquality = "variable_equality"
+    case structuralCheck  = "structural_check"
 
     var displayName: String {
         switch self {
@@ -79,6 +80,7 @@ enum PythonTestTemplateType: String, CaseIterable {
         case .performance:      return "Performance / Runtime"
         case .differential:     return "Differential (reference solution)"
         case .variableEquality: return "Variable Equality"
+        case .structuralCheck:  return "Structural Check (AST properties)"
         }
     }
 
@@ -92,6 +94,7 @@ enum PythonTestTemplateType: String, CaseIterable {
         case .performance:      return "Measures execution time and checks it is within a threshold"
         case .differential:     return "Compares output against an inline reference implementation"
         case .variableEquality: return "Checks that a module-level variable is defined and equals an expected value"
+        case .structuralCheck:  return "Verifies structural properties of student code (type hints, docstring, assert count, …)"
         }
     }
 }
@@ -123,10 +126,14 @@ func pythonTestScript(
     let argList = paramNames.joined(separator: ", ")
     let rich = RichTemplateArgs(paramNames: paramNames)
 
-    // Placeholder call args — use "None" form so the template compiles without filling in values.
+    // Placeholder call args — use plain `None` values so the generated
+    // line still parses as Python.  The inline "# TODO" comment that used
+    // to live here broke `ast.parse` because `#` swallows the rest of the
+    // line including the closing `)`.  The TODO guidance now lives on a
+    // separate comment line above the call site.
     let placeholderCallArgs: String = {
         if paramNames.isEmpty { return "" }
-        return paramNames.map { _ in "None  # TODO: replace" }.joined(separator: ", ")
+        return paramNames.map { _ in "None" }.joined(separator: ", ")
     }()
 
     // Wrap the switch in a closure so every case can `return …` while we
@@ -347,6 +354,98 @@ func pythonTestScript(
             )
 
         passed(f"{variable_name} == {expected!r}")
+        """
+
+    case .structuralCheck:
+        return """
+        # Test: \(functionName) meets the required structural properties
+        #
+        # Each entry below is a check on the student's source code (via AST
+        # introspection — `student_module` is parsed, not executed further).
+        # Set each check to its required value to enable it, or leave as
+        # None to skip that check.  Module-level asserts are counted even
+        # when NotebookExtractor has quarantined them inside an
+        # `if __name__ == "__main__":` block.
+        import ast
+        import inspect
+
+        target_function     = "\(functionName)"    # "" to skip per-function checks
+        parameter_count     = None                # int — require exactly N parameters
+        typed_parameters    = None                # True — require every param has a type hint
+        return_type_hint    = None                # True — require a return-type annotation
+        has_docstring       = None                # True — require a function docstring
+        min_asserts_in_body = None                # int — require >= N asserts inside the function body
+        min_module_asserts  = None                # int — require >= N module-level asserts (anywhere)
+
+        # ── AST walk ───────────────────────────────────────────────────────
+        try:
+            source = inspect.getsource(student_module)
+            tree   = ast.parse(source)
+        except Exception as ex:
+            errored(f"Could not parse student source: {type(ex).__name__}: {ex}")
+
+        def _find_function(node, name):
+            for n in ast.walk(node):
+                if isinstance(n, ast.FunctionDef) and n.name == name:
+                    return n
+            return None
+
+        def _count_asserts_everywhere(nodes):
+            total = 0
+            for n in nodes:
+                if isinstance(n, ast.Assert):
+                    total += 1
+                else:
+                    # Walk `if __name__ == "__main__":` wrappers and any other
+                    # compound bodies so quarantined asserts still count.
+                    for child in ast.iter_child_nodes(n):
+                        total += _count_asserts_everywhere([child])
+            return total
+
+        failures = []
+
+        if target_function:
+            fn_node = _find_function(tree, target_function)
+            if fn_node is None:
+                failed(
+                    f"Function `{target_function}` is not defined in your submission.\\n"
+                    "Hint: make sure the function name matches the assignment exactly."
+                )
+
+            if parameter_count is not None:
+                actual = len(fn_node.args.args)
+                if actual != parameter_count:
+                    failures.append(f"parameter count: expected {parameter_count}, got {actual}")
+
+            if typed_parameters is True:
+                untyped = [a.arg for a in fn_node.args.args if a.annotation is None]
+                if untyped:
+                    failures.append(f"missing type hints on parameter(s): {', '.join(untyped)}")
+
+            if return_type_hint is True and fn_node.returns is None:
+                failures.append(f"missing return-type annotation on {target_function}")
+
+            if has_docstring is True and ast.get_docstring(fn_node) is None:
+                failures.append(f"missing docstring on {target_function}")
+
+            if min_asserts_in_body is not None:
+                count = sum(1 for n in ast.walk(fn_node) if isinstance(n, ast.Assert))
+                if count < min_asserts_in_body:
+                    failures.append(f"{target_function} has {count} assert(s); need >= {min_asserts_in_body}")
+
+        if min_module_asserts is not None:
+            count = _count_asserts_everywhere(tree.body)
+            if count < min_module_asserts:
+                failures.append(f"module-level asserts: found {count}, need >= {min_module_asserts}")
+
+        if failures:
+            failed(
+                f"Structural check(s) failed for {target_function or 'module'}:\\n"
+                + "\\n".join(f"  - {f}" for f in failures)
+                + "\\nHint: review the code-style requirements in the assignment."
+            )
+
+        passed(f"Structural checks passed for {target_function or 'module'}")
         """
     }
     }()
