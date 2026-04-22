@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.90] - 2026-04-22
+
+### Changed
+
+- **Pattern family editor JavaScript extracted to `Public/pattern-family-editor.js`.**  Phase 1 of the Create/Edit authoring-page parity refactor.  The ~950-line IIFE that drove the family modal (function-scan flow, type-aware coercion, Pyodide auto-compute, case table rendering, PUT /families persistence) was duplicated effort away from being shared — every family polish release had to land in `assignment-edit.leaf` and would have to land a second time when the Create Assignment page gained the feature.  The module now exposes a `window.initPatternFamilyEditor(config)` factory that both pages will call with their own `assignmentID` (edit mode) or `draftID` (future create mode) and URL resolvers.  Edit page behaves identically; no user-facing change.
+  - Config shape: `{ assignmentID?, draftID?, csrfToken, initialFamilies, urls: { solutionNotebook, scanNotebook, putFamilies }, onFamiliesChange }`.  The `urls` functions let the host dispatch to assignment-scoped (`/instructor/:id/families`) or draft-scoped routes without the module needing to know which mode it's in.
+  - `window.chickadeeSyncFamilies` stays as the suite-table sync hook but is now invoked through the `onFamiliesChange` callback, so future modules can swap it for a different sink.
+  - Leaf template keeps the modal HTML inline.  An attempt to extract the markup into a `#extend("includes/pattern-family-editor")` partial hit a LeafKit cycle-detection false positive; deferred until the underlying LeafKit issue is understood.
+  - Next phases (separate PRs): extract the suite-table IIFE (~590 LOC) similarly, add draft-aware backend routes, then light up pattern families on the Create Assignment page.
+
 ## [0.4.89] - 2026-04-22
 
 ### Fixed
