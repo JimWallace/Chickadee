@@ -1450,6 +1450,15 @@ function checkUWDates(dateTimeValue, warningEl) {
     var editingTier = 'public';
     var editingPoints = 1;
 
+    // Current function's type annotations.  Populated from the scan result
+    // in applyFunctionSelection and used by readCasesFromTable to coerce
+    // typed cell values into the right JSON shape (so `True` in a `bool`
+    // column becomes `true`, not the string "True").  Parallel to
+    // paramNames; each entry is either a string (Python type annotation as
+    // written — `int`, `bool`, `list[int]`, `Optional[str]`) or null.
+    var currentParamTypes = [];
+    var currentReturnType = null;
+
     function escHtml(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1498,6 +1507,16 @@ function checkUWDates(dateTimeValue, warningEl) {
         var options = ['<option value="">— Select a function —</option>'];
         scannedFunctions.forEach(function (fn) {
             var label = fn.name + '(' + ((fn.paramNames || []).join(', ')) + ')';
+            // A shadowed definition is one the runtime will never see —
+            // Python's second `def <name>` replaces the first, so a family
+            // targeting the early version silently fails with "wrong arity"
+            // errors.  Disable the option and annotate so the instructor
+            // sees why.
+            if (fn.isShadowed) {
+                label += '  ⚠ redefined later (will not be callable)';
+                options.push('<option value="" disabled>' + escHtml(label) + '</option>');
+                return;
+            }
             var sel = (fn.name === selectedName) ? ' selected' : '';
             options.push('<option value="' + escHtml(fn.name) + '"' + sel + '>' + escHtml(label) + '</option>');
         });
@@ -1510,8 +1529,28 @@ function checkUWDates(dateTimeValue, warningEl) {
     /// the hidden id/function/params fields and rebuild the per-arg columns
     /// in the cases table.  Optionally preserves existing case rows (edit mode).
     function applyFunctionSelection(fnName, preserveCases) {
-        var fn = (scannedFunctions || []).find(function (f) { return f.name === fnName; });
+        // When a name is defined multiple times, pick the LAST (non-shadowed)
+        // occurrence — that's the version Python actually exposes at runtime.
+        // `Array.find` would return the first, which is the shadowed one.
+        var fn = null;
+        (scannedFunctions || []).forEach(function (f) {
+            if (f.name === fnName && !f.isShadowed) fn = f;
+        });
+        if (!fn) {
+            // Fallback: no live definition (only shadowed ones) — fall through
+            // to first match so the editor still populates, but the dropdown
+            // will have already disabled these entries.
+            fn = (scannedFunctions || []).find(function (f) { return f.name === fnName; });
+        }
         var paramNames = fn ? (fn.paramNames || []) : [];
+        // Capture the per-parameter + return types for type-aware coercion
+        // of cell values.  Fall back to an all-null array when the scanner
+        // didn't report paramTypes (older clients or hint-free notebooks).
+        var scannedTypes = fn ? (fn.paramTypes || []) : [];
+        currentParamTypes = paramNames.map(function (_, i) {
+            return scannedTypes[i] != null ? scannedTypes[i] : null;
+        });
+        currentReturnType = fn ? (fn.returnType || null) : null;
         fnInput.value = fnName || '';
         paramsInput.value = paramNames.join(',');
         // Default family id to the function name (user can't edit it in v1).
@@ -1547,11 +1586,20 @@ function checkUWDates(dateTimeValue, warningEl) {
         if (!paramNames.length) {
             th.push('<th>Args (JSON)</th>');
         } else {
-            paramNames.forEach(function (p) {
-                th.push('<th><code style="font-size:.7rem">' + escHtml(p) + '</code></th>');
+            paramNames.forEach(function (p, i) {
+                // Show the type annotation alongside the param name when we
+                // know it — `bmi: float`, `exempt: bool` — so the instructor
+                // sees what the column expects without scrolling back to
+                // the solution.
+                var t = currentParamTypes && currentParamTypes[i];
+                var label = t ? (escHtml(p) + ': ' + escHtml(t)) : escHtml(p);
+                th.push('<th><code style="font-size:.7rem">' + label + '</code></th>');
             });
         }
-        th.push('<th>Expected</th>');
+        var expectedHeader = currentReturnType
+            ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
+            : 'Expected';
+        th.push('<th>' + expectedHeader + '</th>');
         th.push('<th>Hint (override)</th>');
         th.push('<th style="width:4rem"></th>');
         casesHeader.innerHTML = th.join('');
@@ -1610,19 +1658,113 @@ function checkUWDates(dateTimeValue, warningEl) {
         });
     }
 
-    /// Interprets a per-column cell value the way an instructor would expect:
-    ///   - `18.49`        → number 18.49
-    ///   - `true`/`false` → boolean
-    ///   - `null`         → null
+    /// Interprets a per-column cell value the way an instructor would expect
+    /// when we have no type information.  Accepts Python-style capitalised
+    /// literals (`True`/`False`/`None`) in addition to JSON.
+    ///   - `18.49`                → number 18.49
+    ///   - `true` / `True`        → boolean true
+    ///   - `false` / `False`      → boolean false
+    ///   - `null` / `None`        → null
     ///   - `[1, 2]` / `{"k": 1}` / `"quoted"` → parsed JSON
-    ///   - anything else  → taken as a literal string (so `underweight`
-    ///                      becomes "underweight" without requiring quotes)
-    /// This keeps the typed-column UI readable — users shouldn't have to
-    /// quote strings when each cell corresponds to a single parameter.
+    ///   - anything else          → literal string
     function parseTypedCellValue(raw) {
         var trimmed = String(raw == null ? '' : raw).trim();
+        switch (trimmed) {
+            case 'True':  return true;
+            case 'False': return false;
+            case 'None':  return null;
+        }
         try { return JSON.parse(trimmed); }
         catch (_) { return String(raw); }
+    }
+
+    /// Normalises a Python type annotation into a simple kind the coercer
+    /// knows how to handle.  Strips `Optional[T]` / `Union[T, None]` wrappers
+    /// (returns the inner type; callers treat empty cells as null
+    /// regardless).  Strips generic parameters (`list[int]` → `list`).
+    /// Returns null for unrecognised or nil types, which makes the caller
+    /// fall back to the generic parseTypedCellValue path.
+    function normaliseTypeHint(hint) {
+        if (hint == null) return null;
+        var t = String(hint).trim();
+        if (!t) return null;
+        // Union[T, None] or T | None → T
+        var unionMatch = t.match(/^Union\[\s*([^,\]]+)\s*,\s*None\s*\]$/i);
+        if (unionMatch) t = unionMatch[1].trim();
+        var pipeMatch = t.match(/^([^|]+?)\s*\|\s*None$/);
+        if (pipeMatch) t = pipeMatch[1].trim();
+        // Optional[T] → T
+        var optMatch = t.match(/^Optional\[\s*(.+?)\s*\]$/);
+        if (optMatch) t = optMatch[1].trim();
+        // Strip generic parameters: list[int] → list, dict[str,int] → dict.
+        var genMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\[/);
+        if (genMatch) t = genMatch[1];
+        // Collapse to the canonical lowercase name for matching.
+        return t.toLowerCase();
+    }
+
+    /// Type-aware coercion of a raw cell string into the right JSON shape
+    /// for the column's type annotation.  Falls back to the generic
+    /// `parseTypedCellValue` when the type is unknown, missing, or the raw
+    /// string doesn't plausibly fit the declared type (so the instructor
+    /// still sees their literal input round-trip rather than a silent
+    /// silent-coerce-to-something-wrong).
+    function coerceByType(raw, typeHint) {
+        var trimmed = String(raw == null ? '' : raw).trim();
+        var kind = normaliseTypeHint(typeHint);
+        if (!kind) return parseTypedCellValue(raw);
+
+        // Treat empty + Python None sentinel as null uniformly — every
+        // normalised type accepts the "missing" state.
+        if (trimmed === '' || trimmed === 'None' || trimmed === 'null') {
+            return null;
+        }
+
+        switch (kind) {
+            case 'bool': {
+                var lower = trimmed.toLowerCase();
+                if (lower === 'true'  || trimmed === 'True'  || trimmed === '1') return true;
+                if (lower === 'false' || trimmed === 'False' || trimmed === '0') return false;
+                return parseTypedCellValue(raw);  // couldn't coerce — keep raw
+            }
+            case 'int': {
+                // Accept negative, leading-zero-safe integer spellings.  Reject
+                // floats-that-look-like-ints to force an explicit int literal.
+                if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+                return parseTypedCellValue(raw);
+            }
+            case 'float': {
+                if (/^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(trimmed)) {
+                    return parseFloat(trimmed);
+                }
+                return parseTypedCellValue(raw);
+            }
+            case 'str':
+            case 'string': {
+                // Strip surrounding double quotes if the instructor typed JSON.
+                if (trimmed.length >= 2 && trimmed[0] === '"' && trimmed[trimmed.length - 1] === '"') {
+                    try { return JSON.parse(trimmed); } catch (_) { /* fall through */ }
+                }
+                // Single-quoted ('hello') → strip and return literal.
+                if (trimmed.length >= 2 && trimmed[0] === "'" && trimmed[trimmed.length - 1] === "'") {
+                    return trimmed.slice(1, -1);
+                }
+                return String(raw);
+            }
+            case 'list':
+            case 'tuple':
+            case 'dict':
+            case 'set': {
+                try {
+                    var parsed = JSON.parse(trimmed);
+                    return parsed;
+                } catch (_) {
+                    return parseTypedCellValue(raw);
+                }
+            }
+            default:
+                return parseTypedCellValue(raw);
+        }
     }
 
     /// Inverse of `parseTypedCellValue` for redisplaying an existing value
@@ -1667,12 +1809,17 @@ function checkUWDates(dateTimeValue, warningEl) {
                     var cell = row.querySelector('.pf-case-arg[data-arg-index="' + a + '"]');
                     var raw = cell ? cell.value : '';
                     if (raw.trim() === '') throw new Error('Case ' + caseNum + ': missing value for "' + paramNames[a] + '"');
-                    args.push(parseTypedCellValue(raw));
+                    // Use the parameter's declared type when we have it so
+                    // `True` stays a bool, `3.14` stays a float, etc.
+                    var paramTypeHint = currentParamTypes ? currentParamTypes[a] : null;
+                    args.push(coerceByType(raw, paramTypeHint));
                 }
             }
             var expected;
             if (rawExp === '') throw new Error('Case ' + caseNum + ': expected value is required');
-            expected = parseTypedCellValue(rawExp);
+            // Expected column uses the function's return-type annotation
+            // when we have one.
+            expected = coerceByType(rawExp, currentReturnType);
             if (!label) throw new Error('Case ' + caseNum + ': label is required');
             out.push({
                 key: caseNum,
@@ -2054,7 +2201,11 @@ function checkUWDates(dateTimeValue, warningEl) {
             var cell = row.querySelector('.pf-case-arg[data-arg-index="' + i + '"]');
             var raw = cell ? cell.value : '';
             if (raw.trim() === '') return;  // incomplete row — wait for more input
-            args.push(parseTypedCellValue(raw));
+            // Match readCasesFromTable's type-aware coercion so the Pyodide
+            // call receives the same JSON shape the server will ultimately
+            // validate against.
+            var paramTypeHint = currentParamTypes ? currentParamTypes[i] : null;
+            args.push(coerceByType(raw, paramTypeHint));
         }
 
         expectedEl.placeholder = 'computing…';

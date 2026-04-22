@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.88] - 2026-04-22
+
+### Added
+
+- **Type-aware coercion in the pattern family editor.**  `NotebookFunctionScanner` now returns per-parameter type annotations (`paramTypes: [String?]`) and the return-type annotation (`returnType: String?`) alongside the existing `paramNames`/`hasTypeHints`/`hasDocstring` fields (both decoded with `decodeIfPresent` so pre-v0.4.88 clients roundtrip unchanged).  The family editor uses them for two things:
+  - **Column headers show the type** — `bmi: float`, `exempt: bool`, `Expected: list[int]` — so the instructor sees what each cell expects without scrolling back to the solution notebook.
+  - **Cell values coerce to the declared type.**  A new `coerceByType(raw, typeHint)` client-side helper normalises `Optional[T]` / `Union[T, None]` / `T | None` down to `T`, strips generic parameters (`list[int]` → `list`), and dispatches by kind: `bool` (accepts `True`/`true`/`"True"`/`1` and their falsy counterparts), `int` (strict integer spellings), `float` (decimal + scientific), `str` (handles quoted literals), `list`/`tuple`/`dict`/`set` (JSON parse).  Unknown / missing type hints fall back to the existing `parseTypedCellValue` — so hint-free notebooks continue to work exactly as before.  Expected values coerce via `returnType`.  The same helper is used by the Pyodide auto-compute path so args flow to `fn(*args)` in the right shape.
+- **Python-style literal accepted in untyped cells.**  Even when no type annotation is available, typing `True` / `False` / `None` (Python's capitalised spellings, not JSON's lowercase) now parses as the corresponding boolean/null rather than falling through to a string.  Previously a `bool`-returning family test would fail with `expected 'True' got: True` because the expected value had been silently stored as the string `"True"` and rendered as `expected = "True"` in the generated script.
+
+### Changed
+
+- **Family editor disables shadowed function entries.**  When a function name is defined multiple times in the solution (common in pedagogical notebooks that extend a function across sections — e.g. Lab 3's `tax` with 1 arg then 3 args), only the LAST definition is callable at runtime.  The scanner now marks earlier occurrences with `isShadowed: true`.  The dropdown labels them `⚠ redefined later (will not be callable)` and sets `disabled` on the option so the instructor can't accidentally pick one.  `applyFunctionSelection` also prefers the non-shadowed match by name so edit-mode opens against the live definition.
+
 ## [0.4.87] - 2026-04-22
 
 ### Fixed

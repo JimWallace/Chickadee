@@ -89,6 +89,10 @@ struct NotebookFunctionScannerTests {
         #expect(fns[0].name == "bar")
         #expect(fns[0].paramNames == ["x", "y"])
         #expect(fns[0].hasTypeHints)
+        // Per-parameter type capture for the type-aware coercion in the
+        // family editor.
+        #expect(fns[0].paramTypes == ["int", "str"])
+        #expect(fns[0].returnType == "bool")
     }
 
     @Test func functionWithReturnTypeHintOnly() {
@@ -96,6 +100,35 @@ struct NotebookFunctionScannerTests {
         let fns = scanNotebookForFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].hasTypeHints)
+        #expect(fns[0].paramTypes == [nil])
+        #expect(fns[0].returnType == "list")
+    }
+
+    @Test func functionWithMixedAnnotations() {
+        // Partial type hints: `a: int` and `b` untyped, default on `b`.
+        let nb = notebook(code: "def mix(a: int, b = 5) -> float:\n    return float(a + b)\n")
+        let fns = scanNotebookForFunctions(nb)
+        #expect(fns.count == 1)
+        #expect(fns[0].paramNames == ["a", "b"])
+        #expect(fns[0].paramTypes == ["int", nil])
+        #expect(fns[0].returnType == "float")
+    }
+
+    @Test func functionWithDefaultKeepsType() {
+        // `x: int = 0` — type must survive even when a default value is present.
+        let nb = notebook(code: "def with_default(x: int = 0) -> int:\n    return x\n")
+        let fns = scanNotebookForFunctions(nb)
+        #expect(fns[0].paramTypes == ["int"])
+        #expect(fns[0].returnType == "int")
+    }
+
+    @Test func functionWithoutAnyAnnotations() {
+        // Baseline: no hints at all → paramTypes is [nil] per name, returnType nil.
+        let nb = notebook(code: "def plain(a, b):\n    return a + b\n")
+        let fns = scanNotebookForFunctions(nb)
+        #expect(fns[0].paramTypes == [nil, nil])
+        #expect(fns[0].returnType == nil)
+        #expect(!fns[0].hasTypeHints)
     }
 
     @Test func functionWithDocstring() {
@@ -110,6 +143,24 @@ struct NotebookFunctionScannerTests {
         let fns = scanNotebookForFunctions(nb)
         #expect(fns.count == 1)
         #expect(fns[0].name == "public_fn")
+    }
+
+    @Test func shadowedFunctionMarked() {
+        // Pedagogical notebooks often redefine a function to extend it.  Only
+        // the LAST definition is callable at runtime; the scanner must mark
+        // earlier ones as shadowed so the family editor can warn the
+        // instructor away from targeting them.
+        let nb = notebook(code:
+            "def tax(price: float) -> float:\n    return price * 1.13\n" +
+            "def tax(price: float, exempt: bool, extra: bool) -> float:\n    return price\n"
+        )
+        let fns = scanNotebookForFunctions(nb)
+        #expect(fns.count == 2)
+        #expect(fns[0].name == "tax" && fns[0].isShadowed)
+        #expect(fns[1].name == "tax" && !fns[1].isShadowed)
+        // Each entry retains its own paramTypes / returnType for the editor.
+        #expect(fns[0].paramTypes == ["float"])
+        #expect(fns[1].paramTypes == ["float", "bool", "bool"])
     }
 
     @Test func selfAndClsExcluded() {
