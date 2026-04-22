@@ -612,7 +612,9 @@ extension AssignmentRoutes {
 
 /// Extracts and validates the `:filename` route parameter.
 /// Rejects any value that contains path separators or traversal components.
-private func safeScriptFilename(from req: Request) throws -> String {
+/// File-internal (not private) so AssignmentRoutes+Draft.swift can reuse
+/// the same sanitisation for its draft-scoped `delete` handler.
+func safeScriptFilename(from req: Request) throws -> String {
     guard let raw = req.parameters.get("filename"), !raw.isEmpty else {
         throw Abort(.badRequest, reason: "Missing filename parameter")
     }

@@ -45,6 +45,16 @@ struct AssignmentRoutes: RouteCollection {
         r.get("new", use: newAssignmentPage)
         r.post("new", "draft", use: updateNewAssignmentDraft)
         r.get("new", "draft", "solution-notebook", use: draftSolutionNotebook)
+        // Draft-scoped suite / families / scripts endpoints.  Mirror the
+        // `:assignmentID`-scoped routes below, but identify the target
+        // `APITestSetup` via a `draftID` query parameter because the
+        // assignment hasn't been published yet.  Added in v0.4.91 so the
+        // Create Assignment page can author pattern families before save.
+        r.get("new", "draft", "suite",    use: getDraftSuite)
+        r.put("new", "draft", "suite",    use: putDraftSuite)
+        r.put("new", "draft", "families", use: putDraftPatternFamilies)
+        r.post("new", "draft", "scripts", use: createDraftScript)
+        r.delete("new", "draft", "scripts", ":filename", use: deleteDraftScript)
         r.post("new", "save", use: saveNewAssignment)
         r.post("reorder", use: reorderAssignments)
         r.post("sections", use: createSection)
@@ -503,6 +513,25 @@ struct AssignmentRoutes: RouteCollection {
         let dueAt = q?.dueAt ?? storedState.dueAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
 
+        // Pattern families + draftID JSON for the pattern-family editor
+        // module.  The module on this page wires to draft-scoped routes
+        // (`/instructor/new/draft/families?draftID=...`) instead of the
+        // assignment-scoped ones on the edit page.
+        let draftIDJSON: String = {
+            guard let id = setup?.id else { return "null" }
+            let encoder = JSONEncoder()
+            return (try? String(data: encoder.encode(id), encoding: .utf8)) ?? "null"
+        }()
+        let patternFamiliesJSON: String = {
+            guard let setup,
+                  let manifestData = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
+            else { return "[]" }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? String(data: encoder.encode(props.patternFamilies), encoding: .utf8)) ?? "[]"
+        }()
+
         let ctx = NewAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentName: assignmentName,
@@ -510,10 +539,12 @@ struct AssignmentRoutes: RouteCollection {
             sections: sections,
             preselectedSectionID: selectedSectionID,
             draftID: setup?.id,
+            draftIDJSON: draftIDJSON,
             assignmentNotebook: assignmentNotebook,
             solutionNotebook: solutionNotebook,
             suiteRows: suiteRows,
             hasSuiteRows: !suiteRows.isEmpty,
+            patternFamiliesJSON: patternFamiliesJSON,
             requiredPlatform: storedState.requiredPlatform,
             requiredArchitecture: storedState.requiredArchitecture,
             requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty
@@ -1040,10 +1071,25 @@ struct AssignmentRoutes: RouteCollection {
             sectionGradingMode = "worker"
         }
 
+        // Preserve the draft's pattern families across the manifest rebuild —
+        // same fix as v0.4.77 for saveEditedAssignment.  The draft may have
+        // accumulated families via `PUT /instructor/new/draft/families`;
+        // without this forward, `makeWorkerManifestJSON` would emit an
+        // empty `patternFamilies` field and the generated scripts would
+        // lose their family provenance on publish.
+        let existingFamilies: [PatternFamily] = {
+            guard let existingManifest = draftSetup?.manifest,
+                  let data = existingManifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return [] }
+            return props.patternFamilies
+        }()
+
         let manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
-            gradingMode: sectionGradingMode
+            gradingMode: sectionGradingMode,
+            patternFamilies: existingFamilies
         )
         let setup = draftSetup ?? APITestSetup(
             id: setupID,
@@ -1057,6 +1103,16 @@ struct AssignmentRoutes: RouteCollection {
         setup.notebookPath = notebookPath
         setup.courseID = courseID
         try await setup.save(on: req.db)
+
+        // Re-run applyPatternFamilies so the generated scripts survive the
+        // zip rebuild.  Mirrors v0.4.77's fix for the edit-save path.
+        if !existingFamilies.isEmpty {
+            _ = try await applyPatternFamilies(
+                to: setup,
+                nextFamilies: existingFamilies,
+                on: req.db
+            )
+        }
         extractSupportFilesToSharedDirectory(
             zipPath: zipPath,
             setupID: setupID,

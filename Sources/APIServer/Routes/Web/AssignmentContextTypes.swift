@@ -100,10 +100,19 @@ struct NewAssignmentContext: Encodable {
     let sections: [CourseSectionRow]    // available sections for the section picker
     let preselectedSectionID: String    // from ?sectionID= query param
     let draftID: String?
+    /// JSON-encoded `draftID` (quoted string or `null`) for embedding in an
+    /// inline script via `#rawJSON(...)`.  The pattern-family editor uses
+    /// this to skip initialisation before a solution notebook has been
+    /// uploaded (no draft exists yet → nothing to scan).
+    let draftIDJSON: String
     let assignmentNotebook: NewAssignmentNotebookContext?
     let solutionNotebook: NewAssignmentNotebookContext?
     let suiteRows: [EditableSuiteRow]
     let hasSuiteRows: Bool
+    /// Pattern families persisted in the draft's manifest, rendered as JSON
+    /// for the `pattern-families-seed` script tag.  `[]` when the draft has
+    /// no families (or no draft exists yet).
+    let patternFamiliesJSON: String
     let requiredPlatform: String
     let requiredArchitecture: String
     let requiredLanguagesCSV: String
