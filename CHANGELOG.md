@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.83] - 2026-04-22
+
+### Added
+
+- **Pattern family editor auto-computes the Expected column from the solution notebook.**  When the instructor picks a function and types per-parameter input args, the family editor lazy-loads Pyodide (first use only, ~10 MB one-time download from `cdn.jsdelivr.net/pyodide/v0.27.0`), fetches the solution notebook via the existing `GET /instructor/:assignmentID/files/solution` endpoint, extracts its code cells (skipping markdown + IPython `%`/`!` magic lines), and calls `fn(*args)` in-browser to fill the Expected cell.  Auto-filled cells are visually muted (grey text) with a "Auto-computed from solution notebook" tooltip; once the instructor types directly into the Expected cell, `data-manual="1"` is set and subsequent auto-compute won't clobber the value.  Clearing a manually-set cell re-enables auto-compute for that row.  Exceptions from the solution (e.g. `raises TypeError`) leave the cell empty and surface the error message in the cell's `title` tooltip.  Debounced 400 ms; runs only in typed-column mode (not the fallback JSON-args field).
+
+### Fixed
+
+- **Inline rename in the suite editor no longer loses focus after a short delay.**  The live `PUT /instructor/:assignmentID/suite` flow debounced a suite-list re-render after every keystroke via `renderTree()` → `body.innerHTML = …`, which blew away the `<input>` the instructor was still typing into.  `renderTree()` now captures the active element's row (by `data-id`) and cell class + caret position before the `innerHTML` rebuild and restores focus after, so keystroke-triggered pushes no longer interrupt mid-typing.  Also benefits the tier `<select>` and points `<input>` cells (less visible there because they use `change` events, but the same re-render path now preserves their state).
+
+### Changed
+
+- **"New Script" modal drops the tier and points inputs** — matching the New Family modal, which doesn't ask for either at authoring time.  New scripts default to `tier = public`, `points = 1`; the instructor tunes both via the inline suite-row controls after creation.  Server-side defaults were already in place (`normalizeTier(body.tier, isTest:)` and `max(1, body.points ?? 1)`), so the client simply stops sending the fields when the DOM elements are absent.
+
 ## [0.4.82] - 2026-04-21
 
 ### Fixed
