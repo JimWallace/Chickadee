@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.85] - 2026-04-22
+
+### Fixed
+
+- **CI hotfix**: `testAllTemplateInfos_pythonContainFunctionName` iterates every Python template returned by `allTemplateInfos()` and asserts each contains the supplied function name.  v0.4.84 added `.variableEquality` — a template that intentionally doesn't reference `functionName` (it targets a module-level variable, not a function call) — so the assertion began failing on both the `api-tests` and `api-tests-postgres` CI jobs.  The sibling `testAllPythonTemplateTypes_containFunctionName` was updated in v0.4.84 but this one was missed; now it filters the new kind out the same way.
+
 ## [0.4.84] - 2026-04-22
 
 ### Added

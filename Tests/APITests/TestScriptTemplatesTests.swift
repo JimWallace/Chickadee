@@ -302,7 +302,11 @@ final class TestScriptTemplatesTests: XCTestCase {
 
     func testAllTemplateInfos_pythonContainFunctionName() {
         let infos = allTemplateInfos(functionName: "special_fn", paramNames: ["x"])
-        let pythonInfos = infos.filter { $0.language == "python" }
+        // `variable_equality` is the one template that isn't function-scoped —
+        // it checks a module-level variable by name, so the function name is
+        // never substituted into its body.  Every other Python template
+        // should echo it.
+        let pythonInfos = infos.filter { $0.language == "python" && $0.id != PythonTestTemplateType.variableEquality.rawValue }
         for info in pythonInfos {
             XCTAssertTrue(info.content.contains("special_fn"),
                           "Python template \(info.id) should contain function name")
