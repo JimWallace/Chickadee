@@ -1781,6 +1781,48 @@ func enqueueRunnerValidationSubmission(
     return subID
 }
 
+/// Schedule a validation submission after a suite edit, best-effort.
+/// Looks up the most recent solution notebook (either the currently linked
+/// validation submission or the most recent validation for this setup) and
+/// enqueues a fresh validation so the runner picks up the new manifest.
+///
+/// Debounced: if there's already a pending (unclaimed) validation for this
+/// setup, we skip — the runner will pick that one up with the freshest
+/// manifest (the test setup download URL carries a hash of manifest bytes,
+/// so an in-flight submission still pulls the updated zip + manifest).
+///
+/// Errors are swallowed: this is a nice-to-have trigger from live-edit
+/// endpoints and must not block the edit save.
+func scheduleValidationAfterSuiteEdit(
+    req: Request,
+    assignment: APIAssignment
+) async {
+    do {
+        let existingPending = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .filter(\.$kind == APISubmission.Kind.validation)
+            .filter(\.$status == "pending")
+            .first()
+        if existingPending != nil { return }
+
+        guard let solution = try await loadExistingSolution(req: req, assignment: assignment)
+        else { return }
+
+        let subID = try await enqueueRunnerValidationSubmission(
+            req: req,
+            setupID: assignment.testSetupID,
+            solutionNotebookData: solution.data,
+            filename: solution.filename
+        )
+        assignment.validationSubmissionID = subID
+        assignment.validationStatus = "pending"
+        try await assignment.save(on: req.db)
+        await ensureValidationRunnerAvailability(req: req)
+    } catch {
+        req.logger.warning("scheduleValidationAfterSuiteEdit: \(error)")
+    }
+}
+
 func waitForRunnerValidation(
     req: Request,
     submissionID: String,

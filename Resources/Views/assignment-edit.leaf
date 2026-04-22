@@ -159,17 +159,20 @@
             #endfor
             #for(family in familyRows):
             <tr data-source="family" data-family-id="#(family.id)">
-                <td><div class="suite-name-cell suite-family-cell">
+                <td><div class="suite-name-cell">
                     <span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>
-                    <span class="suite-family-icon" title="Pattern family">⟳</span>
                     <div style="display:flex;flex-direction:column;gap:.15rem">
                         <strong style="font-size:.85rem">#(family.name)</strong>
-                        <span class="card-meta" style="font-size:.72rem">
-                            #(family.functionName)() · #(family.caseCountText)
-                        </span>
+                        <span class="card-meta" style="font-size:.72rem">#(family.caseCountText)</span>
                     </div>
                 </div></td>
-                <td><span class="card-meta" style="font-size:.75rem">#(family.tier)</span></td>
+                <td>
+                    <select class="form-input suite-family-tier" style="padding:.25rem .5rem;font-size:.8rem">
+                        <option value="public" #if(family.tier == "public"):selected#endif>public</option>
+                        <option value="secret" #if(family.tier == "secret"):selected#endif>secret</option>
+                        <option value="release" #if(family.tier == "release"):selected#endif>release</option>
+                    </select>
+                </td>
                 <td><span class="card-meta" style="font-size:.75rem">#(family.totalPoints)</span></td>
                 <td class="time">
                     <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
@@ -220,14 +223,6 @@
                     Family name (shown in UI)
                     <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
                            style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Default tier
-                    <select class="form-input" id="family-default-tier" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="public">public</option>
-                        <option value="release">release</option>
-                        <option value="secret">secret</option>
-                    </select>
                 </label>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
@@ -382,14 +377,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
 .suite-file-hint a { color: inherit; }
 #suite-config-table td { vertical-align: top; }
-tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); }
-.suite-family-cell { display: flex; align-items: center; gap: .5rem; }
-.suite-family-icon {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.4rem; height: 1.4rem; border-radius: 50%;
-    background: var(--hover-bg, #eef3f9); color: var(--blue, #0070c9);
-    font-size: .85rem; font-weight: 700; flex-shrink: 0;
-}
 </style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>
@@ -615,19 +602,19 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
         var defaultPoints = Math.max(1, parseInt(defaults.points) || 1);
         var tier = defaults.tier || 'public';
         return '<tr data-id="' + escAttr(item.id) + '" data-kind="family" data-source="family" data-family-id="' + escAttr(family.id || '') + '">'
-            + '<td' + indent + '><div class="suite-name-cell suite-family-cell">'
+            + '<td' + indent + '><div class="suite-name-cell">'
             +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
             +   connector
-            +   '<span class="suite-family-icon" title="Pattern family">⟳</span>'
             +   '<div style="display:flex;flex-direction:column;gap:.15rem">'
             +     '<strong style="font-size:.85rem">' + escHtml(family.name || family.id || '') + '</strong>'
-            +     '<span class="card-meta" style="font-size:.72rem">'
-            +       escHtml(family.functionName || '') + '() · ' + caseText
-            +     '</span>'
+            +     '<span class="card-meta" style="font-size:.72rem">' + caseText + '</span>'
             +   '</div>'
-            +   depBadgeHTML(item.dependsOn)
             + '</div></td>'
-            + '<td><span class="card-meta" style="font-size:.75rem">' + escHtml(tier) + '</span></td>'
+            + '<td><select class="form-input suite-family-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+            +   ['public','secret','release'].map(function (t) {
+                    return '<option value="' + t + '"' + (t === tier ? ' selected' : '') + '>' + t + '</option>';
+                }).join('')
+            + '</select></td>'
             + '<td><input type="number" class="form-input suite-family-points" min="1" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
             + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
             +   '<button class="btn action-btn family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
@@ -821,16 +808,15 @@ tr[data-source="family"] td:first-child { background: var(--hover-bg, #f5f8fc); 
         if (familyRow) {
             var fitem = findByID(familyRow.getAttribute('data-id'));
             if (!fitem || !fitem.family) return;
+            // Tier and points both mutate family.defaults — the family
+            // object is sent verbatim by buildPayload().
+            var tierEl = familyRow.querySelector('.suite-family-tier');
             var ptsEl2 = familyRow.querySelector('.suite-family-points');
-            if (ptsEl2) {
-                var newPts = Math.max(1, parseInt(ptsEl2.value) || 1);
-                // Mutate defaults.points in place — the family object is
-                // sent verbatim by buildPayload().
-                fitem.family = Object.assign({}, fitem.family, {
-                    defaults: Object.assign({}, fitem.family.defaults || {}, { points: newPts })
-                });
-                schedulePush();
-            }
+            var nextDefaults = Object.assign({}, fitem.family.defaults || {});
+            if (tierEl) nextDefaults.tier = tierEl.value;
+            if (ptsEl2) nextDefaults.points = Math.max(1, parseInt(ptsEl2.value) || 1);
+            fitem.family = Object.assign({}, fitem.family, { defaults: nextDefaults });
+            schedulePush();
         }
     });
 
@@ -1407,7 +1393,6 @@ function checkUWDates(dateTimeValue, warningEl) {
     var paramsInput      = document.getElementById('family-params');
     var fnSelect         = document.getElementById('family-function-select');
     var fnHint           = document.getElementById('family-function-hint');
-    var defaultTierSel   = document.getElementById('family-default-tier');
     var defaultHintInput = document.getElementById('family-default-hint');
     var toleranceInput   = document.getElementById('family-default-tolerance');
     var toleranceLabel   = document.getElementById('family-tolerance-label');
@@ -1421,6 +1406,11 @@ function checkUWDates(dateTimeValue, warningEl) {
     var statusEl         = document.getElementById('family-editor-status');
 
     var editingIndex = -1;   // index in familiesState; -1 when creating.
+    // The modal no longer asks for tier/points — the suite table row owns
+    // those.  On edit we keep the family's existing values; on create we
+    // default and the instructor adjusts from the row afterwards.
+    var editingTier = 'public';
+    var editingPoints = 1;
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -1700,7 +1690,8 @@ function checkUWDates(dateTimeValue, warningEl) {
             kindInput.value = family.kind || 'boundary_equality';
             fnInput.value = family.functionName || '';
             paramsInput.value = (family.paramNames || []).join(',');
-            defaultTierSel.value = (family.defaults && family.defaults.tier) || 'public';
+            editingTier = (family.defaults && family.defaults.tier) || 'public';
+            editingPoints = Math.max(1, parseInt(family.defaults && family.defaults.points) || 1);
             defaultHintInput.value = (family.defaults && family.defaults.hint) || '';
             var tol = family.defaults && family.defaults.tolerance;
             toleranceInput.value = (tol == null) ? '' : String(tol);
@@ -1715,7 +1706,8 @@ function checkUWDates(dateTimeValue, warningEl) {
             kindInput.value = 'boundary_equality';
             fnInput.value = '';
             paramsInput.value = '';
-            defaultTierSel.value = 'public';
+            editingTier = 'public';
+            editingPoints = 1;
             defaultHintInput.value = '';
             toleranceInput.value = '';
             rebuildCasesHeader([]);
@@ -1743,8 +1735,8 @@ function checkUWDates(dateTimeValue, warningEl) {
         var cases = readCasesFromTable(paramNames);
         var kind = kindInput.value || 'boundary_equality';
         var defaults = {
-            tier: defaultTierSel.value,
-            points: 1,
+            tier: editingTier,
+            points: editingPoints,
             hint: defaultHintInput.value.trim() || null
         };
         if (kind === 'approximate_equality') {

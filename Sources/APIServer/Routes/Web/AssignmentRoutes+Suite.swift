@@ -139,6 +139,10 @@ extension AssignmentRoutes {
             on: req.db
         )
 
+        // Re-kick validation so the runner picks up the edited manifest.
+        // Debounced: a no-op when a pending validation already exists.
+        await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
+
         let payload = buildSuitePayload(fromManifest: setup.manifest)
         return try await payload.encodeResponse(for: req)
     }
