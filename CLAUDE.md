@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.83**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.84**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -523,11 +523,20 @@ Post-8 work also complete:
   modal drops the tier/points inputs, matching the New Family modal —
   both default to public/1 and let the instructor tune from the inline
   row afterwards
+- v0.4.84 `.variableEquality` pattern kind for module-level variables
+  (e.g. `beats = 5`) — case args hold the variable name, Expected holds
+  the value, renderer emits a `getattr(..., _MISSING)` sentinel check;
+  family editor hides the function dropdown and uses a single "variable"
+  column when this kind is selected.  Also: "Variable Equality" New Script
+  template; all Python templates now start with `#!/usr/bin/env python3`
+  so extensionless filenames don't fall through to `/bin/sh`; guard tests
+  (`testAllPythonTemplateTypes_startWithPythonShebang`,
+  `testAllPythonTemplateTypes_doNotImportChickadee`)
 
 **Next work:** Gamification expansion (leaderboards, more badges beyond
 First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern
-kinds beyond `.boundaryEquality` / `.approximateEquality` (e.g. property-based,
-exception-expected); refresh token handling.
+kinds beyond `.boundaryEquality` / `.approximateEquality` / `.variableEquality`
+(e.g. exception-expected, type-check); refresh token handling.
 
 ---
 

@@ -77,6 +77,8 @@ private func renderCase(family: PatternFamily, case c: PatternCase, specHash: St
         source = renderBoundaryEquality(family: family, case: c, specHash: specHash)
     case .approximateEquality:
         source = renderApproximateEquality(family: family, case: c, specHash: specHash)
+    case .variableEquality:
+        source = renderVariableEquality(family: family, case: c, specHash: specHash)
     }
 
     let tier = c.resolvedTier(defaults: family.defaults)
@@ -240,6 +242,56 @@ private func renderApproximateEquality(family: PatternFamily, case c: PatternCas
         )
 
     passed(f"\(family.functionName)(\(callReprExpr)) returned {result!r} (within ±{tolerance})")
+    """
+}
+
+// MARK: - variableEquality
+
+/// Renders a single-variable equality check.  `family.functionName` and
+/// `family.paramNames` are ignored for this kind — the variable name lives
+/// in `case.args[0]` (validated by `ManifestValidation` to be a non-empty
+/// string) and the expected value in `case.expected`.  A sentinel default
+/// on `getattr` distinguishes "not defined at all" from "defined as None"
+/// so students get a useful error message in both cases.
+private func renderVariableEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+    // Validation guarantees args.count == 1 and args[0] is a non-empty
+    // string, but fall back to a sentinel name if somehow absent so the
+    // generated Python is still syntactically valid.
+    let variableName: String = {
+        guard let first = c.args.first, case .string(let name) = first else {
+            return "<unset>"
+        }
+        return name
+    }()
+    let nameLiteral = "\"" + escapeForPythonStringLiteral(variableName) + "\""
+    let resolvedHint = c.resolvedHint(defaults: family.defaults)
+    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+
+    return """
+    # Test: \(c.label)
+    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+
+    variable_name = \(nameLiteral)
+    expected      = \(c.expected.pythonLiteral)
+
+    _MISSING = object()
+    actual = getattr(student_module, variable_name, _MISSING)
+    if actual is _MISSING:
+        failed(
+            f"Variable `{variable_name}` is not defined\\n"
+            f"  expected: {expected!r}\\n"
+            \(hintLine)
+        )
+
+    if actual != expected:
+        failed(
+            f"Variable `{variable_name}` has the wrong value\\n"
+            f"  expected: {expected!r}\\n"
+            f"  got:      {actual!r}\\n"
+            \(hintLine)
+        )
+
+    passed(f"{variable_name} == {actual!r}")
     """
 }
 

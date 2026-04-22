@@ -103,9 +103,15 @@ func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuite
             throw Abort(.unprocessableEntity,
                 reason: "Duplicate pattern family id '\(family.id)'")
         }
-        guard isValidPythonIdentifier(family.functionName) else {
-            throw Abort(.unprocessableEntity,
-                reason: "Pattern family '\(family.id)': functionName '\(family.functionName)' is not a valid Python identifier")
+        // `functionName` is ignored for .variableEquality families (they
+        // check module-level variables, not function calls), so skip the
+        // identifier check in that case — an empty or placeholder value is
+        // acceptable.  Every other kind still requires a valid identifier.
+        if family.kind != .variableEquality {
+            guard isValidPythonIdentifier(family.functionName) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': functionName '\(family.functionName)' is not a valid Python identifier")
+            }
         }
         var seenParams: Set<String> = []
         for param in family.paramNames {
@@ -133,9 +139,31 @@ func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuite
                 throw Abort(.unprocessableEntity,
                     reason: "Pattern family '\(family.id)': case '\(c.key)' is missing a label")
             }
-            if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-                throw Abort(.unprocessableEntity,
-                    reason: "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+            switch family.kind {
+            case .variableEquality:
+                // Exactly one arg, which must be a non-empty string naming
+                // the module-level variable to check.  `paramNames` is
+                // ignored — for this kind it's purely a UI hint (column
+                // header), not something the renderer or validator cares
+                // about.
+                guard c.args.count == 1 else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' must have exactly one arg (the variable name); got \(c.args.count)")
+                }
+                guard case .string(let varName) = c.args[0],
+                      !varName.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)")
+                }
+                guard isValidPythonIdentifier(varName) else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name '\(varName)' is not a valid Python identifier")
+                }
+            case .boundaryEquality, .approximateEquality:
+                if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                }
             }
         }
 

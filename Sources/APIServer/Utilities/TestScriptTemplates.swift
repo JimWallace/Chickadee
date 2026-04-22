@@ -60,35 +60,38 @@ private struct RichTemplateArgs {
 
 /// Template types for Python test scripts.
 enum PythonTestTemplateType: String, CaseIterable {
-    case exists       = "exists"
-    case correctness  = "correctness"
-    case cornerCases  = "corner_cases"
-    case exception    = "exception"
-    case typeCheck    = "type_check"
-    case performance  = "performance"
-    case differential = "differential"
+    case exists           = "exists"
+    case correctness      = "correctness"
+    case cornerCases      = "corner_cases"
+    case exception        = "exception"
+    case typeCheck        = "type_check"
+    case performance      = "performance"
+    case differential     = "differential"
+    case variableEquality = "variable_equality"
 
     var displayName: String {
         switch self {
-        case .exists:       return "Function Exists"
-        case .correctness:  return "Correctness (input/output pairs)"
-        case .cornerCases:  return "Corner Cases"
-        case .exception:    return "Exception Handling"
-        case .typeCheck:    return "Return Type Check"
-        case .performance:  return "Performance / Runtime"
-        case .differential: return "Differential (reference solution)"
+        case .exists:           return "Function Exists"
+        case .correctness:      return "Correctness (input/output pairs)"
+        case .cornerCases:      return "Corner Cases"
+        case .exception:        return "Exception Handling"
+        case .typeCheck:        return "Return Type Check"
+        case .performance:      return "Performance / Runtime"
+        case .differential:     return "Differential (reference solution)"
+        case .variableEquality: return "Variable Equality"
         }
     }
 
     var templateDescription: String {
         switch self {
-        case .exists:       return "Checks that the function is defined and callable"
-        case .correctness:  return "Calls the function with specific inputs and checks the output"
-        case .cornerCases:  return "Tests edge cases: None, 0, empty list, empty string, negatives"
-        case .exception:    return "Verifies the function raises an expected exception type"
-        case .typeCheck:    return "Verifies the return type matches what is expected"
-        case .performance:  return "Measures execution time and checks it is within a threshold"
-        case .differential: return "Compares output against an inline reference implementation"
+        case .exists:           return "Checks that the function is defined and callable"
+        case .correctness:      return "Calls the function with specific inputs and checks the output"
+        case .cornerCases:      return "Tests edge cases: None, 0, empty list, empty string, negatives"
+        case .exception:        return "Verifies the function raises an expected exception type"
+        case .typeCheck:        return "Verifies the return type matches what is expected"
+        case .performance:      return "Measures execution time and checks it is within a threshold"
+        case .differential:     return "Compares output against an inline reference implementation"
+        case .variableEquality: return "Checks that a module-level variable is defined and equals an expected value"
         }
     }
 }
@@ -126,6 +129,14 @@ func pythonTestScript(
         return paramNames.map { _ in "None  # TODO: replace" }.joined(separator: ", ")
     }()
 
+    // Wrap the switch in a closure so every case can `return …` while we
+    // still prepend a Python shebang to the final result.  Without the
+    // shebang, an instructor who saves a test script under a filename
+    // that has no `.py` extension (e.g. "beats") falls through to
+    // `/bin/sh` on the runner and the Python body blows up as shell.
+    // Per v0.4.73 a `#!/usr/bin/env python3` shebang routes the script
+    // through the Python runtime regardless of extension.
+    let body: String = {
     switch type {
 
     case .exists:
@@ -306,7 +317,40 @@ func pythonTestScript(
         else:
             passed(f"All {len(test_inputs)} case(s) match reference")
         """
+
+    case .variableEquality:
+        return """
+        # Test: student_module defines a variable with the expected value
+        #
+        # Use this template when the assignment asks students to create a
+        # module-level variable (e.g. `answer = 42`) rather than a function.
+        # The NotebookExtractor preserves simple module-level assignments at
+        # import time, so the variable is readable on `student_module`.
+        variable_name = "target_variable"   # TODO: name of the variable the student must define
+        expected      = None                # TODO: expected value
+
+        _MISSING = object()
+        actual = getattr(student_module, variable_name, _MISSING)
+        if actual is _MISSING:
+            failed(
+                f"Variable `{variable_name}` is not defined\\n"
+                f"  expected: {expected!r}\\n"
+                f"Hint: create a variable named {variable_name} and assign it the expected value."
+            )
+
+        if actual != expected:
+            failed(
+                f"Variable `{variable_name}` has the wrong value\\n"
+                f"  expected: {expected!r}\\n"
+                f"  got:      {actual!r}\\n"
+                "Hint: check the value you assigned to this variable."
+            )
+
+        passed(f"{variable_name} == {expected!r}")
+        """
     }
+    }()
+    return "#!/usr/bin/env python3\n" + body
 }
 
 // MARK: - Shell template generation

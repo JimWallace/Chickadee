@@ -952,6 +952,114 @@ final class PatternFamilyTests: XCTestCase {
         try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
     }
 
+    // MARK: - variableEquality
+
+    /// Fixture: a 2-case variable-equality family.  `functionName` is
+    /// irrelevant (validation skips it) — we use a placeholder.
+    private func notebookVariablesFamily() -> PatternFamily {
+        PatternFamily(
+            id: "notebook_variables",
+            name: "Notebook Variables",
+            kind: .variableEquality,
+            functionName: "_",
+            paramNames: ["variable"],
+            defaults: PatternDefaults(tier: .pub, points: 1, hint: "Make sure you assigned the value to the variable with this exact name."),
+            cases: [
+                PatternCase(key: "01", label: "beats equals 5",
+                            args: [.string("beats")], expected: .int(5)),
+                PatternCase(key: "02", label: "note_name equals A",
+                            args: [.string("note_name")], expected: .string("A")),
+            ]
+        )
+    }
+
+    func testVariableEqualityRendererChecksModuleAttr() {
+        let rendered = renderPatternFamily(notebookVariablesFamily())
+        XCTAssertEqual(rendered.count, 2)
+        let src = rendered[0].source
+        XCTAssertTrue(src.hasPrefix("# Test: beats equals 5\n"))
+        XCTAssertTrue(src.contains("variable_name = \"beats\""))
+        XCTAssertTrue(src.contains("expected      = 5"))
+        XCTAssertTrue(src.contains("getattr(student_module, variable_name, _MISSING)"))
+        XCTAssertTrue(src.contains("is not defined"))
+        XCTAssertTrue(src.contains("has the wrong value"))
+        // Must NOT call any student function.
+        XCTAssertFalse(src.contains("student_module._"))
+        XCTAssertFalse(src.contains("(beats)"))
+    }
+
+    func testVariableEqualityRendererFilenameFormat() {
+        let rendered = renderPatternFamily(notebookVariablesFamily())
+        XCTAssertEqual(rendered[0].filename, "publictest_notebook_variables_01.py")
+        XCTAssertEqual(rendered[1].filename, "publictest_notebook_variables_02.py")
+    }
+
+    func testVariableEqualityRenderedSourceIsValidPython() throws {
+        let rendered = renderPatternFamily(notebookVariablesFamily())
+        for script in rendered {
+            try assertValidPythonSyntax(script.source, label: script.filename)
+        }
+    }
+
+    func testVariableEqualityValidation_acceptsGoodFamily() throws {
+        try validatePatternFamilies([notebookVariablesFamily()], testSuites: [])
+    }
+
+    func testVariableEqualityValidation_rejectsCaseWithMultipleArgs() {
+        let bad = PatternFamily(
+            id: "bad", name: "Bad", kind: .variableEquality,
+            functionName: "_", paramNames: ["variable"],
+            cases: [PatternCase(key: "01", label: "two args",
+                                args: [.string("x"), .string("y")],
+                                expected: .int(1))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+    }
+
+    func testVariableEqualityValidation_rejectsNonStringArg() {
+        let bad = PatternFamily(
+            id: "bad", name: "Bad", kind: .variableEquality,
+            functionName: "_", paramNames: ["variable"],
+            cases: [PatternCase(key: "01", label: "number arg",
+                                args: [.int(42)], expected: .int(1))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+    }
+
+    func testVariableEqualityValidation_rejectsEmptyVariableName() {
+        let bad = PatternFamily(
+            id: "bad", name: "Bad", kind: .variableEquality,
+            functionName: "_", paramNames: ["variable"],
+            cases: [PatternCase(key: "01", label: "empty name",
+                                args: [.string("")], expected: .int(1))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+    }
+
+    func testVariableEqualityValidation_rejectsNonIdentifierVariableName() {
+        let bad = PatternFamily(
+            id: "bad", name: "Bad", kind: .variableEquality,
+            functionName: "_", paramNames: ["variable"],
+            cases: [PatternCase(key: "01", label: "bad name",
+                                args: [.string("not a valid name")], expected: .int(1))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+    }
+
+    func testVariableEqualityValidation_allowsPlaceholderFunctionName() throws {
+        // `.variableEquality` families don't call a function, so functionName
+        // doesn't have to be a valid Python identifier.  Accept "_" or even
+        // empty — the renderer and runtime both ignore it.
+        let fam = PatternFamily(
+            id: "ok", name: "OK", kind: .variableEquality,
+            functionName: "",           // empty is fine
+            paramNames: ["variable"],
+            cases: [PatternCase(key: "01", label: "a",
+                                args: [.string("x")], expected: .int(1))]
+        )
+        try validatePatternFamilies([fam], testSuites: [])
+    }
+
     private func assertValidPythonSyntax(_ source: String, label: String,
                                          file: StaticString = #filePath,
                                          line: UInt = #line) throws {
