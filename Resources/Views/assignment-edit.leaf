@@ -310,20 +310,6 @@
                            placeholder="e.g. test_correctness.py"
                            style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
                 </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Tier
-                    <select id="new-file-tier" class="form-input" style="padding:.25rem .5rem;font-size:.875rem">
-                        <option value="public">public</option>
-                        <option value="secret">secret</option>
-                        <option value="release">release</option>
-                        <option value="support">support (not graded)</option>
-                    </select>
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Points
-                    <input type="number" id="new-file-points" class="form-input" min="1" max="100" value="1"
-                           style="width:4rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
                 <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
@@ -627,10 +613,42 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         return item.kind === 'family' ? familyRowHTML(item, depth) : scriptRowHTML(item, depth);
     }
 
+    /// Preserves which cell was focused (and where the caret sat) across the
+    /// `innerHTML` rebuild.  Without this, a debounced `PUT /suite` fired by
+    /// the previous keystroke wipes the `<input>` the user is still typing
+    /// into — dropping focus and caret position mid-rename.
+    function captureFocus() {
+        var el = document.activeElement;
+        if (!el || !body.contains(el)) return null;
+        var row = el.closest('tr[data-id]');
+        if (!row) return null;
+        var cls = (el.className || '').split(/\s+/).filter(function (c) {
+            return c && c.indexOf('form-') !== 0;
+        })[0];
+        if (!cls) return null;
+        var start = null, end = null;
+        try { start = el.selectionStart; end = el.selectionEnd; } catch (_) {}
+        return { dataID: row.getAttribute('data-id'), cls: cls, start: start, end: end };
+    }
+
+    function restoreFocus(snap) {
+        if (!snap) return;
+        var row = body.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
+        if (!row) return;
+        var el = row.querySelector('.' + snap.cls);
+        if (!el) return;
+        el.focus();
+        if (snap.start != null && snap.end != null) {
+            try { el.setSelectionRange(snap.start, snap.end); } catch (_) {}
+        }
+    }
+
     function renderTree() {
+        var focusSnap = captureFocus();
         var visual = visualOrder();
         body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
             + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+        restoreFocus(focusSnap);
     }
 
     // ── Persistence ──────────────────────────────────────────────────────
@@ -1555,6 +1573,12 @@ function checkUWDates(dateTimeValue, warningEl) {
         var tr = document.createElement('tr');
         tr.innerHTML = tds.join('');
         casesBody.appendChild(tr);
+        // Existing non-empty expected values are treated as author-set so the
+        // auto-computer doesn't overwrite them on first edit.
+        if (c.expected != null) {
+            var expCell = tr.querySelector('.pf-case-expected');
+            if (expCell && expCell.value.trim() !== '') expCell.dataset.manual = '1';
+        }
         renumberCases();
         updateCasesEmptyMessage();
     }
@@ -1825,6 +1849,161 @@ function checkUWDates(dateTimeValue, warningEl) {
             if (tr) tr.remove();
             renumberCases();
             updateCasesEmptyMessage();
+        }
+    });
+
+    // ── Pyodide auto-compute of Expected column ──────────────────────────
+    // When the instructor fills in a case's input args, we evaluate the
+    // selected function in the solution notebook against those args and
+    // populate the Expected cell.  Loaded lazily on first row edit so the
+    // ~10 MB Pyodide download doesn't happen if the instructor never uses
+    // a family.  Respects manual overrides: once the user types in the
+    // Expected cell we mark it `data-manual` and never clobber.
+    var _pyodidePromise = null;
+    var _solutionLoadedPromise = null;
+
+    function getPyodide() {
+        if (_pyodidePromise) return _pyodidePromise;
+        _pyodidePromise = new Promise(function (resolve, reject) {
+            if (window.loadPyodide) return resolve();
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error('Pyodide failed to load')); };
+            document.head.appendChild(s);
+        }).then(function () { return window.loadPyodide(); });
+        return _pyodidePromise;
+    }
+
+    function extractSolutionPython(nb) {
+        if (!nb || !Array.isArray(nb.cells)) return '';
+        var out = [];
+        nb.cells.forEach(function (cell) {
+            if (cell.cell_type !== 'code') return;
+            var src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+            // Strip IPython magic / shell lines — they don't execute under a
+            // bare Python interpreter (Pyodide's micropip etc. does, but we
+            // don't want notebook-UI affordances affecting the solution
+            // function's return value).
+            var lines = src.split('\n').filter(function (ln) {
+                var t = ln.replace(/^\s+/, '');
+                return t[0] !== '%' && t[0] !== '!';
+            });
+            out.push(lines.join('\n'));
+        });
+        return out.join('\n\n');
+    }
+
+    function ensureSolutionLoaded() {
+        if (_solutionLoadedPromise) return _solutionLoadedPromise;
+        _solutionLoadedPromise = fetch('/instructor/' + encodeURIComponent(assignmentID) + '/files/solution', {
+            headers: { 'x-csrf-token': csrfToken }
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('no-solution')); })
+        .then(function (nb) {
+            var code = extractSolutionPython(nb);
+            if (!code.trim()) return Promise.reject(new Error('empty-solution'));
+            return getPyodide().then(function (py) {
+                return py.runPythonAsync(code).then(function () { return py; });
+            });
+        });
+        // Don't cache failed promises — next open might have a solution.
+        _solutionLoadedPromise.catch(function () { _solutionLoadedPromise = null; });
+        return _solutionLoadedPromise;
+    }
+
+    /// Calls `fnName(*args)` on the loaded solution and returns the result
+    /// as a JSON-serialisable value, or an error summary if it throws.
+    function callSolution(fnName, args) {
+        return ensureSolutionLoaded().then(function (py) {
+            var argsJSON = JSON.stringify(args);
+            var pyCode = [
+                'import json as _json',
+                '_fn = globals().get(' + JSON.stringify(fnName) + ')',
+                'if _fn is None:',
+                '    raise NameError(' + JSON.stringify(fnName) + ' + " not defined in solution notebook")',
+                '_args = _json.loads(' + JSON.stringify(argsJSON) + ')',
+                '_result = _fn(*_args)',
+                // Round-trip through JSON so Pyodide's auto-conversion can't
+                // surprise us with PyProxy wrappers for dicts/lists.
+                '_json.dumps(_result, default=str)'
+            ].join('\n');
+            var resJson = py.runPython(pyCode);
+            return { ok: true, value: JSON.parse(resJson) };
+        }).catch(function (err) {
+            var msg = (err && err.message) ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop() : String(err);
+            return { ok: false, error: msg || 'error' };
+        });
+    }
+
+    var _autoComputeTimer = null;
+    var _autoComputeRow = null;
+
+    function scheduleAutoCompute(row) {
+        if (!row) return;
+        _autoComputeRow = row;
+        if (_autoComputeTimer) clearTimeout(_autoComputeTimer);
+        _autoComputeTimer = setTimeout(function () {
+            var r = _autoComputeRow; _autoComputeRow = null;
+            autoComputeRow(r);
+        }, 400);
+    }
+
+    function autoComputeRow(row) {
+        if (!row || !row.parentElement) return;
+        var fnName = (fnInput.value || '').trim();
+        if (!fnName) return;
+        var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        if (!paramNames.length) return;  // fallback JSON-args mode: no auto-compute
+
+        var expectedEl = row.querySelector('.pf-case-expected');
+        if (!expectedEl) return;
+        if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
+
+        var args = [];
+        for (var i = 0; i < paramNames.length; i++) {
+            var cell = row.querySelector('.pf-case-arg[data-arg-index="' + i + '"]');
+            var raw = cell ? cell.value : '';
+            if (raw.trim() === '') return;  // incomplete row — wait for more input
+            args.push(parseTypedCellValue(raw));
+        }
+
+        expectedEl.placeholder = 'computing…';
+        callSolution(fnName, args).then(function (res) {
+            if (!row.parentElement) return;
+            if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
+            expectedEl.placeholder = 'e.g. underweight';
+            if (res.ok) {
+                expectedEl.value = renderTypedCellValue(res.value);
+                expectedEl.dataset.autoComputed = '1';
+                expectedEl.title = 'Auto-computed from solution notebook';
+                expectedEl.style.color = 'var(--gray-500)';
+            } else {
+                expectedEl.title = 'Solution raised: ' + res.error;
+                // Leave the cell empty — instructor can override or fix solution.
+            }
+        });
+    }
+
+    casesBody.addEventListener('input', function (e) {
+        var t = e.target;
+        if (!t || !t.classList) return;
+        if (t.classList.contains('pf-case-arg')) {
+            scheduleAutoCompute(t.closest('tr'));
+        } else if (t.classList.contains('pf-case-expected')) {
+            // User is editing the Expected cell directly — mark as manual
+            // so auto-compute won't clobber.  If they clear it, un-mark so
+            // the next arg change can refill.
+            t.style.color = '';
+            t.title = '';
+            if (t.value.trim() === '') {
+                delete t.dataset.manual;
+                delete t.dataset.autoComputed;
+                scheduleAutoCompute(t.closest('tr'));
+            } else {
+                t.dataset.manual = '1';
+                delete t.dataset.autoComputed;
+            }
         }
     });
 

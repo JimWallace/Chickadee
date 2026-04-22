@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.82**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.83**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -513,6 +513,16 @@ Post-8 work also complete:
   `StuckSubmissionReaperMonitor` reclaims `assigned` submissions whose
   `assigned_at` is older than 10 minutes (startup sweep + 60 s periodic,
   registered via `StuckSubmissionReaperLifecycleHandler`)
+- v0.4.83 pattern family editor auto-computes the Expected column by
+  evaluating the solution notebook's function against the instructor's
+  entered args in-browser via Pyodide (lazy-loaded on first row edit;
+  debounced 400 ms; respects `data-manual` overrides; surfaces solution
+  exceptions in the cell's tooltip); suite-editor inline rename preserves
+  focus + caret across the debounced `PUT /suite` re-render
+  (`captureFocus()` / `restoreFocus()` in `renderTree()`); "New Script"
+  modal drops the tier/points inputs, matching the New Family modal —
+  both default to public/1 and let the instructor tune from the inline
+  row afterwards
 
 **Next work:** Gamification expansion (leaderboards, more badges beyond
 First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern
