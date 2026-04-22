@@ -347,9 +347,7 @@ extension AdminRoutes {
             .filter(\.$courseID == courseID)
             .sort(\.$dueAt)
             .all()
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .short
+        let df = waterlooDateTimeFormatter()
         let assignments = assignmentModels.map { a in
             AdminCourseAssignmentRow(
                 id:     a.publicID,

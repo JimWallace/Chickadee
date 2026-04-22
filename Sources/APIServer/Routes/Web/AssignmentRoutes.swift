@@ -136,9 +136,7 @@ struct AssignmentRoutes: RouteCollection {
             uniquingKeysWith: { first, _ in first }
         )
 
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
+        let fmt = waterlooDateTimeFormatter()
         let isoFormatter = ISO8601DateFormatter()
 
         let decoder = JSONDecoder()
@@ -1278,9 +1276,7 @@ struct AssignmentRoutes: RouteCollection {
             return props.testSuites.count
         }()
 
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
+        let fmt = waterlooDateTimeFormatter()
 
         let ctx = ValidateContext(
             currentUser:  req.currentUserContext,

@@ -248,6 +248,10 @@ h2 { font-size: 1rem;   margin-bottom: .4rem; }
     max-width: 620px;
 }
 
+.form--wide {
+    max-width: none;
+}
+
 .form-label {
     display: flex;
     flex-direction: column;

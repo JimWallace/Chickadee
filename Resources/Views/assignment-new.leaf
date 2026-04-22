@@ -16,7 +16,7 @@ Create Assignment
 </div>
 #endif
 
-<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
+<form class="form form--wide" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
     #csrfFormField()
     #if(draftID):
     <input type="hidden" name="draftID" value="#(draftID)">

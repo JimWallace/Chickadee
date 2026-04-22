@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.82] - 2026-04-21
+
+### Fixed
+
+- **Assignment due dates now render in America/Toronto on every page**: the instructor dashboard, student dashboard, validate page, submission history, and admin course detail all constructed a `DateFormatter` without setting `timeZone`, so due dates were formatted in the server's local timezone (UTC in production) while the edit form correctly used Toronto time via `dueAtLocalInputString()`.  Each of the five sites now calls the existing `waterlooDateTimeFormatter()` helper (`America/Toronto`, `en_CA`, medium/short), matching the value the instructor typed into the edit form.
+- **Older runners no longer crash decoding manifests that contain new `PatternKind` cases**: `TestProperties.patternFamilies` was being shipped verbatim in the `Job` payload to runners, even though the runner never uses it (families expand into concrete `.py` files server-side before the zip is built).  That coupled every runner binary to every `PatternKind` case the server had ever introduced — adding `.approximateEquality` in v0.4.80 made v0.4.75/v0.4.79 runners throw on `JSONDecoder().decode(TestProperties.self, ...)`, leaving claimed validation submissions stuck in `assigned` with no result ever reported.  `TestProperties.runnerSanitized()` now returns a manifest with `patternFamilies: []`, and `POST /worker/request` uses it when building the job payload, restoring rolling-deployment safety.
+- **Stuck `assigned` submissions are now reclaimed automatically**: previously, a runner that claimed a job and then crashed, vanished, or failed to report results left the submission permanently pinned to `status = "assigned"` — no server-side sweep ever returned it to the pending queue.  New `StuckSubmissionReaperMonitor` (mirrors the `AssignmentDeadlineMonitor` lifecycle pattern: startup sweep + 60 s periodic task, registered via `StuckSubmissionReaperLifecycleHandler`) scans for submissions in `assigned` whose `assigned_at` is older than the configurable max-age (default 10 minutes) and resets them to `pending` with `worker_id` and `assigned_at` cleared, logging a warning with the previous worker ID.
+
+### Changed
+
+- **Assignment edit, new-assignment, and submit pages now use the full 900px page width**: `.form` applies a 620px cap intended for narrow inline sub-forms (publish form, login, register), but three top-level page forms were inheriting it and rendering noticeably narrower than the instructor/admin dashboards.  A new `.form--wide` modifier cancels the max-width cap; `assignment-edit.leaf`, `assignment-new.leaf`, and `submit.leaf` adopt `class="form form--wide"` so their content uses the full `.main` container width.  Login and register stay narrow.
+
 ## [0.4.81] - 2026-04-21
 
 ### Changed

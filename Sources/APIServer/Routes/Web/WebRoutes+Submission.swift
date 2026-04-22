@@ -131,9 +131,7 @@ extension WebRoutes {
             throw Abort(.notFound)
         }
 
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
+        let fmt = waterlooDateTimeFormatter()
 
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)

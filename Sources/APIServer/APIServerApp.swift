@@ -150,6 +150,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     try app.autoMigrate().wait()
     app.lifecycle.use(ObservabilityLifecycleHandler())
     app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
+    app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
 
     if authMode != .local {
         if !nonSSOModesEnabled {

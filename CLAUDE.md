@@ -99,6 +99,38 @@ automatically if `.local-runner-autostart` exists (or is toggled via the admin
 dashboard). This is a development convenience; production runs the runner
 separately.
 
+**Pattern-generated test families (v0.4.75+).** Instructors can define a
+`PatternFamily` (Core/) — one function, shared defaults, a table of cases —
+and Chickadee expands each enabled case into an ordinary Python test script
+at save time. Families live in `TestProperties.patternFamilies`; generated
+entries in `testSuites` carry `generatedBy: <familyID>` so the raw-script edit
+endpoints refuse to mutate them (you edit the family instead). Two kinds
+ship: `.boundaryEquality` (single-arg equality) and `.approximateEquality`
+(float tolerance, v0.4.80). Generated filenames are deterministic
+(`{tier}test_{familyID}_{caseKey}.py`) and embed a `spec_hash` header so
+manifest bytes change when any case changes.
+
+**Server-authoritative suite editor (v0.4.79+).** The instructor assignment
+edit page is wired to `PUT /instructor/:assignmentID/suite` and
+`PUT /instructor/:assignmentID/families` — drag-reorder, tier/points edits,
+and family edits persist live with the server returning the reconciled state.
+The legacy client-side `#suite-config-field` JSON blob and the
+`/edit/save` suite-rebuild path are gone; the main Save button only handles
+name, due date, notebook uploads, and the validation enqueue. Dependencies
+accept `family:<id>` tokens which the server expands to concrete filenames
+before persistence; cycle detection runs on the authored graph.
+
+**Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
+unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
+the canonical `/testsetups/:id/submit` handlers remain active for
+compatibility.
+
+**Runner-side LRU test setup cache (v0.4.41).** `TestSetupCache` (Swift actor,
+default 16 entries) keeps fully-prepared test setup directories keyed by
+`testSetupID`. Cache key hashes manifest + zip content, so any suite edit
+busts the entry. Concurrent jobs for the same setup share one in-flight
+population task.
+
 ---
 
 ## Test Script Contract
@@ -193,8 +225,22 @@ Stored as `test.properties.json` inside the instructor-uploaded test setup zip.
   "requiredFiles": ["warmup.py"],
   "testSuites": [
     { "tier": "public",  "script": "test_bit_count.sh"  },
-    { "tier": "release", "script": "test_first_digit.sh" },
+    { "tier": "release", "script": "test_first_digit.sh",
+      "dependsOn": ["family:bmi"] },
+    { "tier": "public",  "script": "publictest_bmi_01.py",
+      "generatedBy": "bmi" },
     { "tier": "student", "script": "test_student.sh" }
+  ],
+  "patternFamilies": [
+    {
+      "id": "bmi",
+      "function": "classify_bmi",
+      "kind": "boundaryEquality",
+      "defaults": { "tier": "public", "points": 1 },
+      "cases": [
+        { "key": "01", "args": [18.49], "expected": "underweight" }
+      ]
+    }
   ],
   "timeLimitSeconds": 10,
   "makefile": null
@@ -204,6 +250,12 @@ Stored as `test.properties.json` inside the instructor-uploaded test setup zip.
 `makefile` is optional. When present, a `make` step runs before the test
 scripts. If `target` is `null`, bare `make` is invoked; otherwise
 `make <target>` is used.
+
+`patternFamilies` is the canonical spec for generated test families; each
+enabled case expands to a `testSuites` entry with `generatedBy: <familyID>`.
+`dependsOn` entries in authored form accept `family:<id>` tokens, which the
+server expands to the family's concrete generated filenames before
+persisting.
 
 ---
 
@@ -229,6 +281,11 @@ GET  /api/v1/submissions/:id/results    — Full TestOutcomeCollection (?tiers= 
 
 # Web / browser results
 GET  /results/:id                       — Browser-rendered result view
+
+# Instructor suite editor (server-authoritative, v0.4.79+)
+GET  /instructor/:assignmentID/suite    — Author-facing view of the ordered suite list
+PUT  /instructor/:assignmentID/suite    — Persist drag-reorder, tier/points/displayName edits
+PUT  /instructor/:assignmentID/families — Save a pattern family (add/edit/delete)
 ```
 
 Web routes (Leaf-rendered, session auth required) live under `/` and handle
@@ -249,10 +306,11 @@ Three roles in ascending order of privilege: `student` < `instructor` < `admin`.
 - **Instructor+:** assignment CRUD, submission intake, test setup management
 - **Admin:** admin panel, worker secret/autostart management, runner dashboard
 
-Session auth uses Vapor's `SessionAuthenticator`. Sessions are in-memory
-(swap to `.fluent` for multi-process deployments). Session cookie is
-`HttpOnly; SameSite=Lax`; `Secure` flag is set automatically when
-`PUBLIC_BASE_URL` is `https://` or `AUTH_MODE` is non-local.
+Session auth uses Vapor's `SessionAuthenticator`. Sessions are persisted
+via the Fluent driver (v0.4.46), so they survive restarts and work across
+multi-process deployments. Session cookie is `HttpOnly; SameSite=Lax`; `Secure`
+flag is set automatically when `PUBLIC_BASE_URL` is `https://` or `AUTH_MODE`
+is non-local.
 
 ---
 
@@ -291,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.36**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.82**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -366,10 +424,100 @@ Post-8 work also complete:
 - v0.4.33 poll-loop retry backoff now honors `RUNNER_RETRY_*` env settings
 - v0.4.34 instructor student submission drilldown; course-scoped student submissions page
 - v0.4.36 submission IDs on runner detail page are clickable; UI consistency pass
+- v0.4.37 architecture docs (`docs/architecture.md`); SSO token revocation on logout
+  (RFC 7009 + `end_session_endpoint` redirect); configurable OIDC claim names
+  (`OIDC_USERNAME_CLAIM`, `OIDC_EMAIL_CLAIM`, flexible `extraClaims`); large source
+  splits (`RunnerDaemon.swift`, `AdminRoutes.swift`, `AssignmentRoutes.swift`)
+- v0.4.38 Python test bootstrap now sets `sys.argv[0]` correctly; `chickadee.py`
+  exit 3 maps to `fail`; `NotebookExtractor` wraps bare module-level code in
+  `if __name__ == "__main__":` and strips IPython `%`/`!` lines to prevent
+  import-time failures
+- v0.4.39–v0.4.44 OIDC claim generalization follow-ups (compile fixes, test
+  coverage for custom-claim first-login, stale-username repair, `user_id` not
+  clobbered by username claim, Docker Compose env forwarding)
+- v0.4.41 runner-side LRU test setup cache (`TestSetupCache` actor, content-hashed
+  cache key, shared in-flight population)
+- v0.4.45 re-test wait time measured from retest click (`retested_at` column,
+  `queueWaitMs`/`turnaroundMs` baseline switched)
+- v0.4.46 Fluent-backed sessions (survive restarts, multi-process safe);
+  automatic cache-buster from `ChickadeeVersion.current`; runner stage timing
+  metrics (`job_execution_metrics`) persisted and surfaced on runner detail
+- v0.4.47 poll-time 401/403 treated as retryable so long-lived runners recover
+  from transient auth windows
+- v0.4.48 instructor dashboard activity cards (recent logins, submissions,
+  active assignments, queued attempts, no-submission students); assignment
+  summary cards; drag thumb beside assignment name
+- v0.4.49 browser-mode guard: `runner-submit` rejects browser-graded setups
+  server-side; instructor queue card counts only worker-eligible submissions
+- v0.4.50 draft-backed notebook authoring on new-assignment page (hidden
+  drafts, JupyterLite launch, reopen-for-edit, finalize); runner requirements
+  auto-detected and pre-filled during creation
+- v0.4.51 First-Try Perfect badge (100% first submission); submission output
+  table redesigned (pass-only collapsible, diagnostics in full-width rows)
+- v0.4.52 automated deadline auto-close (startup sweep + periodic runtime
+  sweep, late-submission guard across web/browser endpoints, instructor
+  manual-reopen override); GitHub release workflow
+- v0.4.56 worker backstop for browser-graded submissions (native `python3`
+  grades stuck browser-mode jobs, matching Pyodide semantics)
+- v0.4.57 JSON footer stripped from student-visible test output;
+  `:latest` Docker tag now pushed on version tag releases
+- v0.4.58 create-assignment page redesigned to match edit page
+  (compact `results-table` layout, editable display names, CodeMirror 6
+  modal, inline runner requirements)
+- v0.4.60 notebook sync preserves unsaved edits; submit button disabled until
+  notebook loaded; worker queue depth excludes browser-graded submissions
+- v0.4.61 syntax errors in student submissions now surfaced in `longResult`
+  with full traceback
+- v0.4.63 notebook upload draft endpoint wiring fixed for Safari; admin user
+  Delete button
+- v0.4.67 raw submission filenames sanitized before storage/runner staging;
+  empty draft-only notebook upload parts ignored on validation
+- v0.4.69–v0.4.70 student action icons (edit/upload); submit page uses
+  assignment title
+- v0.4.71 stable per-course assignment slugs; student dashboard links prefer
+  `/:courseCode/:assignmentSlug` routes
+- v0.4.72 new-script validation uses active manifest-backed suite; setup
+  download version includes manifest+zip metadata hash
+- v0.4.73 generated/uploaded tests persist from visible suite list;
+  extensionless Python scripts with shebang dispatched as Python
+- v0.4.75 pattern-generated test families (#375): `PatternFamily`,
+  `PatternCase`, `PatternKind` in Core; `.boundaryEquality` v1 template;
+  deterministic filenames + `spec_hash` header; raw-script endpoints return
+  409 on generated entries
+- v0.4.76 pattern family editor UX redesign (rows inside Test Suite table,
+  function dropdown from scanned notebook, auto-generated case keys,
+  typed per-parameter columns)
+- v0.4.77 pattern families survive assignment Save (manifest rebuild forwards
+  `patternFamilies` and re-runs `applyPatternFamilies`); each generated case
+  produces a distinct `TestOutcome`
+- v0.4.78 pattern family cells accept bare-typed values (numbers, booleans,
+  null, arrays/objects, bare strings); family rows stay visible during
+  client-side suite-list rebuild
+- v0.4.79 assignment suite editor unified around server-authoritative model:
+  `PUT /instructor/:assignmentID/suite`, `GET /instructor/:assignmentID/suite`,
+  `family:<id>` dependency tokens, authored-graph cycle detection.
+  `#suite-config-field` hidden input and `/edit/save` suite-rebuild path removed
+- v0.4.80 `.approximateEquality` pattern kind (float tolerance, default 1e-6,
+  failure messages include delta); editable Pts on family rows; authored
+  order preserved through `topologicallySorted`
+- v0.4.81 pattern family row visual polish (matches script rows); Visibility
+  column is an inline `<select>`; family row position survives modal save
+  (legacy `applyPatternFamilies` now reconstructs authored ordering); suite
+  edits re-trigger validation (debounced by pending-submission check)
+- v0.4.82 due-date timezone fix across five display sites (all now use
+  `waterlooDateTimeFormatter()` / `America/Toronto`, matching the edit form);
+  `.form--wide` modifier so the assignment edit, new-assignment, and submit
+  pages use the full 900px `.main` width instead of the 620px `.form` cap;
+  `TestProperties.runnerSanitized()` strips `patternFamilies` from the `Job`
+  payload so older runners don't crash decoding new `PatternKind` cases;
+  `StuckSubmissionReaperMonitor` reclaims `assigned` submissions whose
+  `assigned_at` is older than 10 minutes (startup sweep + 60 s periodic,
+  registered via `StuckSubmissionReaperLifecycleHandler`)
 
-**Next work:** Gamification (attempt tracking, leaderboards), multi-provider SSO
-(generalize `OIDCIDTokenClaims` claim names beyond UWaterloo DUO), refresh token
-handling / IdP token revocation on logout.
+**Next work:** Gamification expansion (leaderboards, more badges beyond
+First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern
+kinds beyond `.boundaryEquality` / `.approximateEquality` (e.g. property-based,
+exception-expected); refresh token handling.
 
 ---
 
