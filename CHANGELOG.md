@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.87] - 2026-04-22
+
+### Fixed
+
+- **Inline display-name rename in the suite editor no longer loses focus or drops characters mid-typing.**  The v0.4.83 fix preserved caret position across the `renderTree()` rebuild, but the underlying race wasn't actually in `renderTree()` — it was that the `input` event listener fired a debounced `PUT /suite` on every keystroke.  If a 300 ms debounced PUT happened to land while the user was still typing, the server's echoed response overwrote `items[]` with the older value, `renderTree()` rebuilt the row with that stale value, and everything the user had typed *after* the PUT fired was silently lost.  The tier `<select>` and points `<input>` cells never had this bug because they use `change` events (commit on blur).  Display-name now follows the same pattern: `input` still updates the in-memory `items[]` entry so other actions (drag, tier change) send the current typed value, but the actual `PUT /suite` is deferred to `change` (blur / Enter), eliminating the typing/response race.
+
 ## [0.4.86] - 2026-04-22
 
 ### Added
