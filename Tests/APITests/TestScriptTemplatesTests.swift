@@ -200,6 +200,28 @@ final class TestScriptTemplatesTests: XCTestCase {
         XCTAssertTrue(s.contains("Hint:"))
     }
 
+    func testStructuralCheckTemplate_hasExpectedShape() {
+        let s = pythonTestScript(type: .structuralCheck, functionName: "compute_bmi", paramNames: ["weight_kg", "height_m"])
+        // AST-based template — no function call.
+        XCTAssertTrue(s.contains("import ast"))
+        XCTAssertTrue(s.contains("inspect.getsource(student_module)"))
+        XCTAssertTrue(s.contains("ast.parse(source)"))
+        // All the knobs are present as TODO-friendly placeholders.
+        XCTAssertTrue(s.contains("parameter_count"))
+        XCTAssertTrue(s.contains("typed_parameters"))
+        XCTAssertTrue(s.contains("return_type_hint"))
+        XCTAssertTrue(s.contains("has_docstring"))
+        XCTAssertTrue(s.contains("min_asserts_in_body"))
+        XCTAssertTrue(s.contains("min_module_asserts"))
+        // Per-function check uses the provided functionName.
+        XCTAssertTrue(s.contains("target_function     = \"compute_bmi\""))
+        // Rich-feedback shape.
+        XCTAssertTrue(s.contains("Structural check(s) failed"))
+        XCTAssertTrue(s.contains("passed"))
+        // Counts module-level asserts even when quarantined.
+        XCTAssertTrue(s.contains("ast.iter_child_nodes"))
+    }
+
     func testAllPythonTemplateTypes_nonEmpty() {
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
@@ -243,6 +265,37 @@ final class TestScriptTemplatesTests: XCTestCase {
             let s = pythonTestScript(type: type, functionName: "mySpecialFunc", paramNames: ["a"])
             XCTAssertTrue(s.contains("mySpecialFunc"),
                           "Template \(type.rawValue) should contain the function name")
+        }
+    }
+
+    /// Parses every Python template through python3's `ast.parse` to catch
+    /// any indentation / syntax regression in the generated source.  Skipped
+    /// on machines where `python3` isn't on PATH (rare in CI but possible
+    /// locally — the test reports a clear skip message rather than failing).
+    func testAllPythonTemplateTypes_parseAsValidPython() throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/python3")
+           || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")
+           || FileManager.default.fileExists(atPath: "/usr/local/bin/python3") else {
+            throw XCTSkip("python3 not available on PATH — skipping syntax check.")
+        }
+        for type in PythonTestTemplateType.allCases {
+            let source = pythonTestScript(type: type, functionName: "sample_fn", paramNames: ["x", "y"])
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            p.arguments = ["python3", "-c", "import ast, sys; ast.parse(sys.stdin.read())"]
+            let stdin = Pipe()
+            let stderr = Pipe()
+            p.standardInput = stdin
+            p.standardError = stderr
+            p.standardOutput = Pipe()
+            try p.run()
+            stdin.fileHandleForWriting.write(Data(source.utf8))
+            try stdin.fileHandleForWriting.close()
+            p.waitUntilExit()
+            if p.terminationStatus != 0 {
+                let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                XCTFail("Template \(type.rawValue) generated invalid Python:\n\(err)\n--- source ---\n\(source)")
+            }
         }
     }
 

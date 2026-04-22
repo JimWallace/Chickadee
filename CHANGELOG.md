@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.86] - 2026-04-22
+
+### Added
+
+- **"Structural Check" script template** for verifying properties of the student's source code via AST introspection.  Useful when the assignment rubric requires *how* the student wrote the code, not just *what it returns* — parameter count, type hints on parameters, return-type annotation, docstring, minimum assert-count inside a function body, minimum module-level assert-count.  Each check is a toggle in the generated script (set to `None` to skip, or a value to enable).  Module-level asserts are counted even when `NotebookExtractor` has quarantined them inside an `if __name__ == "__main__":` block (the walker descends into compound statement bodies).  Renders via `import ast; import inspect; tree = ast.parse(inspect.getsource(student_module))` — no extra student module evaluation, just static analysis.
+
+### Fixed
+
+- **Performance template no longer emits invalid Python** when the function under test takes parameters.  The placeholder call args used to render as `student_module.fn(None  # TODO: replace, None  # TODO: replace)`, which `ast.parse` rejects because the inline `#` comment swallows the rest of the line (including the closing `)` and second argument).  Placeholder args are now plain `None` values; the TODO guidance moved to a separate comment line above the call.  New `testAllPythonTemplateTypes_parseAsValidPython` regression test pipes every rendered template through `python3 -c 'ast.parse(...)'` so a future template can't regress the same way.
+
 ## [0.4.85] - 2026-04-22
 
 ### Fixed
