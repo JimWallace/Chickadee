@@ -1529,13 +1529,34 @@ function checkUWDates(dateTimeValue, warningEl) {
     /// the hidden id/function/params fields and rebuild the per-arg columns
     /// in the cases table.  Optionally preserves existing case rows (edit mode).
     function applyFunctionSelection(fnName, preserveCases) {
-        // When a name is defined multiple times, pick the LAST (non-shadowed)
+        var fn = null;
+
+        // Edit mode: if an existing family already has paramNames, pick the
+        // scanner entry whose arity matches.  Without this the non-shadowed
+        // preference below swaps a 1-arg family onto the 3-arg overload
+        // (and vice versa) the instant the modal reopens — the columns
+        // silently change under the saved cases.
+        var desiredParamCount = null;
+        if (preserveCases && editingIndex >= 0) {
+            var family = familiesState[editingIndex];
+            if (family && family.paramNames) desiredParamCount = family.paramNames.length;
+        }
+        if (desiredParamCount != null) {
+            (scannedFunctions || []).forEach(function (f) {
+                if (f.name !== fnName) return;
+                if ((f.paramNames || []).length !== desiredParamCount) return;
+                fn = f;
+            });
+        }
+
+        // New-family (or no-matching-arity) path: pick the LAST (non-shadowed)
         // occurrence — that's the version Python actually exposes at runtime.
         // `Array.find` would return the first, which is the shadowed one.
-        var fn = null;
-        (scannedFunctions || []).forEach(function (f) {
-            if (f.name === fnName && !f.isShadowed) fn = f;
-        });
+        if (!fn) {
+            (scannedFunctions || []).forEach(function (f) {
+                if (f.name === fnName && !f.isShadowed) fn = f;
+            });
+        }
         if (!fn) {
             // Fallback: no live definition (only shadowed ones) — fall through
             // to first match so the editor still populates, but the dropdown
@@ -2106,25 +2127,35 @@ function checkUWDates(dateTimeValue, warningEl) {
         return _pyodidePromise;
     }
 
-    function extractSolutionPython(nb) {
-        if (!nb || !Array.isArray(nb.cells)) return '';
+    /// Splits a notebook into its code cells' source, skipping markdown,
+    /// stripping IPython magic (`%`) and shell (`!`) lines.  Each cell is
+    /// returned as a separate string so the caller can run them
+    /// independently and tolerate per-cell failures.
+    function extractSolutionCells(nb) {
+        if (!nb || !Array.isArray(nb.cells)) return [];
         var out = [];
         nb.cells.forEach(function (cell) {
             if (cell.cell_type !== 'code') return;
             var src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
-            // Strip IPython magic / shell lines — they don't execute under a
-            // bare Python interpreter (Pyodide's micropip etc. does, but we
-            // don't want notebook-UI affordances affecting the solution
-            // function's return value).
             var lines = src.split('\n').filter(function (ln) {
                 var t = ln.replace(/^\s+/, '');
                 return t[0] !== '%' && t[0] !== '!';
             });
-            out.push(lines.join('\n'));
+            var code = lines.join('\n');
+            if (code.trim()) out.push(code);
         });
-        return out.join('\n\n');
+        return out;
     }
 
+    /// Loads the solution notebook into Pyodide's global namespace, cell by
+    /// cell, catching per-cell errors so one failing statement doesn't stop
+    /// later cells from defining their functions.  This matters for
+    /// pedagogical notebooks that call a function mid-way through before a
+    /// later cell redefines it — e.g. Lab 3 asserts `tax(1.00, False, False)`
+    /// before `tax` is redefined to take 3 args, which raises TypeError and
+    /// would otherwise abandon every subsequent function definition (like
+    /// `needsWarningLabel`).  Since we only need the *final* function
+    /// definitions for auto-compute, swallowing usage-code failures is safe.
     function ensureSolutionLoaded() {
         if (_solutionLoadedPromise) return _solutionLoadedPromise;
         _solutionLoadedPromise = fetch('/instructor/' + encodeURIComponent(assignmentID) + '/files/solution', {
@@ -2132,13 +2163,21 @@ function checkUWDates(dateTimeValue, warningEl) {
         })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('no-solution')); })
         .then(function (nb) {
-            var code = extractSolutionPython(nb);
-            if (!code.trim()) return Promise.reject(new Error('empty-solution'));
+            var cells = extractSolutionCells(nb);
+            if (!cells.length) return Promise.reject(new Error('empty-solution'));
             return getPyodide().then(function (py) {
-                return py.runPythonAsync(code).then(function () { return py; });
+                return cells.reduce(function (chain, cellSrc) {
+                    return chain.then(function () {
+                        return py.runPythonAsync(cellSrc).catch(function () {
+                            // Intentionally swallow — usage-code failures in
+                            // a cell don't prevent later cells' definitions
+                            // from landing in the namespace.
+                        });
+                    });
+                }, Promise.resolve()).then(function () { return py; });
             });
         });
-        // Don't cache failed promises — next open might have a solution.
+        // Don't cache a rejected promise — next open might have a solution.
         _solutionLoadedPromise.catch(function () { _solutionLoadedPromise = null; });
         return _solutionLoadedPromise;
     }

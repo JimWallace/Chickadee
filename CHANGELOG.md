@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.89] - 2026-04-22
+
+### Fixed
+
+- **Editing an existing family no longer swaps onto the wrong overload's columns.**  v0.4.88's `applyFunctionSelection` preferred the non-shadowed (runtime-live) match by name, which meant reopening a family that had been authored against an earlier arity (e.g. a `tax(stickerPrice)` family in a notebook that later redefines `tax(stickerPrice, exempt, extra)`) silently rewrote the case table to 3 columns, orphaning the saved 1-arg cases.  Edit mode now first tries to match a scanner entry whose paramName count equals the family's saved `paramNames.length`.  If none matches, it still falls back to the non-shadowed pick + name-only pick, preserving the v0.4.88 behaviour for new families.
+- **Pyodide auto-compute no longer dies on a mid-notebook exception.**  `ensureSolutionLoaded` used to concatenate every code cell and `runPython` the result as one block, so the first failing statement killed the entire load — which meant a pedagogical notebook with `assert abs(tax(1.00, False, False) - 1.13) < 0.001` that runs *before* `tax` gets redefined to take 3 args would raise TypeError, reject the solution-load promise, and prevent `needsWarningLabel` (defined in a later cell) from ever landing in Pyodide's namespace.  Auto-compute for families targeting `needsWarningLabel` then silently failed to populate the Expected column.  Cells now run one-at-a-time with a per-cell catch that swallows usage-code failures — only the *final* function definitions matter for auto-compute, so dropping assertion failures is safe.
+
 ## [0.4.88] - 2026-04-22
 
 ### Added
