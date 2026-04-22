@@ -222,7 +222,7 @@ struct WorkerJobRoutes: RouteCollection {
             attemptNumber:      submission.attemptNumber ?? 1,
             submissionURL:      URL(string: "\(base)/api/v1/worker/submissions/\(submission.id!)/download")!,
             testSetupURL:       URL(string: "\(base)/api/v1/worker/testsetups/\(setup.id!)/download?v=\(setupDownloadVersion)")!,
-            manifest:           manifest,
+            manifest:           manifest.runnerSanitized(),
             submissionFilename: submission.filename
         )
 

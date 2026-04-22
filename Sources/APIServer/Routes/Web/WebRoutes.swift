@@ -61,9 +61,7 @@ struct WebRoutes: RouteCollection {
         }
 
         let decoder = JSONDecoder()
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
+        let fmt = waterlooDateTimeFormatter()
 
         // Load assignments, filtering by active course when one is resolved.
         let allAssignments: [APIAssignment]

@@ -115,4 +115,24 @@ public struct TestProperties: Codable, Equatable, Sendable {
         starterNotebook  = try c.decodeIfPresent(String.self,           forKey: .starterNotebook)
         patternFamilies  = try c.decodeIfPresent([PatternFamily].self,  forKey: .patternFamilies)  ?? []
     }
+
+    /// Manifest view shipped to runners.  Pattern families are a save-time
+    /// authoring concern — by the time the zip reaches the runner every
+    /// generated `.py` is already an ordinary test script — so the field is
+    /// stripped before encode.  Keeping `patternFamilies` in the payload
+    /// would force every runner binary to know every `PatternKind` case the
+    /// server ever introduces (a new raw value crashes the enum decoder),
+    /// defeating rolling deployments.
+    public func runnerSanitized() -> TestProperties {
+        TestProperties(
+            schemaVersion:    schemaVersion,
+            gradingMode:      gradingMode,
+            requiredFiles:    requiredFiles,
+            testSuites:       testSuites,
+            timeLimitSeconds: timeLimitSeconds,
+            makefile:         makefile,
+            starterNotebook:  starterNotebook,
+            patternFamilies:  []
+        )
+    }
 }

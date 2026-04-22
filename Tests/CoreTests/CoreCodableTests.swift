@@ -217,6 +217,32 @@ struct CoreCodableTests {
         #expect(decoded.submissionFilename == nil)
     }
 
+    @Test func runnerSanitizedStripsPatternFamilies() throws {
+        let family = PatternFamily(
+            id: "bmi",
+            name: "BMI boundaries",
+            kind: .boundaryEquality,
+            functionName: "classify_bmi"
+        )
+        let manifest = TestProperties(
+            schemaVersion: 1,
+            testSuites: [TestSuiteEntry(tier: .pub, script: "test_a.py")],
+            timeLimitSeconds: 7,
+            patternFamilies: [family]
+        )
+
+        let sanitized = manifest.runnerSanitized()
+        #expect(sanitized.patternFamilies.isEmpty)
+        #expect(sanitized.testSuites == manifest.testSuites)
+        #expect(sanitized.timeLimitSeconds == 7)
+
+        let roundTripped = try decoder.decode(
+            TestProperties.self,
+            from: try encoder.encode(sanitized)
+        )
+        #expect(roundTripped.patternFamilies.isEmpty)
+    }
+
     // MARK: - WorkerActivityPayload
 
     @Test func workerActivityPayloadRoundTrip() throws {
