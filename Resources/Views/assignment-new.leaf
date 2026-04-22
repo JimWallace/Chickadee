@@ -168,6 +168,7 @@ Create Assignment
                         <option value="py:type_check">Return Type Check</option>
                         <option value="py:performance">Performance / Runtime</option>
                         <option value="py:differential">Differential (reference solution)</option>
+                        <option value="py:variable_equality">Variable Equality</option>
                     </select>
                 </label>
             </div>
@@ -286,6 +287,7 @@ Create Assignment
                         <option value="py:type_check">Return Type Check</option>
                         <option value="py:performance">Performance / Runtime</option>
                         <option value="py:differential">Differential (reference solution)</option>
+                        <option value="py:variable_equality">Variable Equality</option>
                     </optgroup>
                     <optgroup label="Shell">
                         <option value="sh:always_pass">Always Pass (placeholder)</option>

@@ -212,7 +212,7 @@
 
         <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                <label id="family-function-label" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
                     Function
                     <select class="form-input" id="family-function-select" style="padding:.3rem .5rem;font-size:.85rem">
                         <option value="">— Scanning solution notebook… —</option>
@@ -231,6 +231,7 @@
                     <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
                         <option value="boundary_equality">Exact equality (== comparison)</option>
                         <option value="approximate_equality">Approximate equality (float tolerance)</option>
+                        <option value="variable_equality">Variable equality (module-level variable)</option>
                     </select>
                 </label>
                 <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">
@@ -323,6 +324,7 @@
                         <option value="py:type_check">Return Type Check</option>
                         <option value="py:performance">Performance / Runtime</option>
                         <option value="py:differential">Differential (reference solution)</option>
+                        <option value="py:variable_equality">Variable Equality</option>
                     </optgroup>
                     <optgroup label="Shell">
                         <option value="sh:always_pass">Always Pass (placeholder)</option>
@@ -1695,9 +1697,55 @@ function checkUWDates(dateTimeValue, warningEl) {
 
     // ── Modal open/close ───────────────────────────────────────────────────
 
-    function updateToleranceVisibility() {
-        if (!toleranceLabel) return;
-        toleranceLabel.style.display = (kindInput.value === 'approximate_equality') ? 'flex' : 'none';
+    var functionLabel = document.getElementById('family-function-label');
+
+    function updateKindVisibility() {
+        var kind = kindInput.value;
+        if (toleranceLabel) {
+            toleranceLabel.style.display = (kind === 'approximate_equality') ? 'flex' : 'none';
+        }
+        // Variable-equality families don't target a function — hide the
+        // function dropdown entirely and replace its role in the data model
+        // with `paramNames = ["variable"]` (single free-form name column).
+        if (functionLabel) {
+            functionLabel.style.display = (kind === 'variable_equality') ? 'none' : 'flex';
+        }
+    }
+
+    /// Applies the data-model defaults that go with a given kind.  Switching
+    /// between non-variable kinds leaves cases alone (their args shape is
+    /// identical).  Switching to/from variable_equality changes the case
+    /// column layout, so we rebuild the rows.
+    function applyKindDefaults(newKind, previousKind) {
+        if (newKind === previousKind) return;
+        var switchedIntoVar   = (newKind      === 'variable_equality');
+        var switchedOutOfVar  = (previousKind === 'variable_equality');
+        if (!switchedIntoVar && !switchedOutOfVar) return;
+
+        if (switchedIntoVar) {
+            // Variable families use a single "variable" column holding the
+            // module-level name.  functionName is ignored by both the
+            // renderer and the validator for this kind, so a placeholder
+            // underscore is fine.
+            fnInput.value = '_';
+            paramsInput.value = 'variable';
+            rebuildCasesHeader(['variable']);
+            casesBody.innerHTML = '';
+            addCaseRow(null, ['variable']);
+        } else {
+            // Switching back to a function-targeting kind — clear the
+            // variable-only scaffolding and prompt the instructor to pick
+            // a function again.
+            fnInput.value = '';
+            paramsInput.value = '';
+            rebuildCasesHeader([]);
+            casesBody.innerHTML = '';
+            addCaseRow(null, []);
+            if (fnSelect) {
+                fnSelect.value = '';
+            }
+        }
+        updateCasesEmptyMessage();
     }
 
     function openEditor(familyIdx) {
@@ -1736,7 +1784,7 @@ function checkUWDates(dateTimeValue, warningEl) {
             toleranceInput.value = '';
             rebuildCasesHeader([]);
         }
-        updateToleranceVisibility();
+        updateKindVisibility();
 
         overlay.style.display = 'flex';
         updateCasesEmptyMessage();
@@ -1758,6 +1806,16 @@ function checkUWDates(dateTimeValue, warningEl) {
         var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
         var cases = readCasesFromTable(paramNames);
         var kind = kindInput.value || 'boundary_equality';
+        // For variable-equality families there's no function to derive the
+        // family id from (the `family-function-select` dropdown is hidden),
+        // so fall back to a sanitised version of the family name.
+        if (kind === 'variable_equality' && !idInput.value.trim()) {
+            var derivedID = sanitizeFamilyID(nameInput.value);
+            if (!derivedID) {
+                throw new Error('Family name is required (used to derive the family id for variable-equality families).');
+            }
+            idInput.value = derivedID;
+        }
         var defaults = {
             tier: editingTier,
             points: editingPoints,
@@ -1836,7 +1894,15 @@ function checkUWDates(dateTimeValue, warningEl) {
         applyFunctionSelection(fnSelect.value, /*preserveCases=*/true);
     });
 
-    if (kindInput) kindInput.addEventListener('change', updateToleranceVisibility);
+    if (kindInput) {
+        var _previousKind = kindInput.value;
+        kindInput.addEventListener('change', function () {
+            var newKind = kindInput.value;
+            applyKindDefaults(newKind, _previousKind);
+            _previousKind = newKind;
+            updateKindVisibility();
+        });
+    }
 
     if (addCaseBtn) addCaseBtn.addEventListener('click', function () {
         var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
@@ -1951,6 +2017,11 @@ function checkUWDates(dateTimeValue, warningEl) {
 
     function autoComputeRow(row) {
         if (!row || !row.parentElement) return;
+        // Variable-equality families don't call a function — the "arg" is
+        // the variable name, and auto-compute would mean reading
+        // student_module.<name>.  That's doable but the flow is cleanest
+        // when the instructor types the expected value directly, so skip.
+        if (kindInput && kindInput.value === 'variable_equality') return;
         var fnName = (fnInput.value || '').trim();
         if (!fnName) return;
         var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);

@@ -176,6 +176,30 @@ final class TestScriptTemplatesTests: XCTestCase {
         XCTAssertTrue(s.contains("_reference_square"))
     }
 
+    func testVariableEqualityTemplate_hasExpectedShape() {
+        let s = pythonTestScript(type: .variableEquality)
+        // Bare builtins from the injected test runtime — NOT imported from a
+        // `chickadee` module (which doesn't exist on the Python path).
+        XCTAssertFalse(s.contains("from chickadee"),
+                       "Template must not import from a `chickadee` module — passed()/failed() are injected as builtins.")
+        XCTAssertFalse(s.contains("import chickadee"),
+                       "Template must not import `chickadee` — builtins only.")
+        XCTAssertTrue(s.contains("passed"))
+        XCTAssertTrue(s.contains("failed"))
+        // Reads a module-level attribute off `student_module` with a
+        // sentinel default so "not defined" is distinguishable from
+        // "defined as None".
+        XCTAssertTrue(s.contains("getattr(student_module, variable_name"))
+        XCTAssertTrue(s.contains("_MISSING"))
+        // Placeholder variable name + expected value the instructor edits.
+        XCTAssertTrue(s.contains("variable_name = \"target_variable\""))
+        XCTAssertTrue(s.contains("expected"))
+        // Rich-feedback shape matches the other single-case templates.
+        XCTAssertTrue(s.contains("is not defined"))
+        XCTAssertTrue(s.contains("wrong value"))
+        XCTAssertTrue(s.contains("Hint:"))
+    }
+
     func testAllPythonTemplateTypes_nonEmpty() {
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
@@ -184,8 +208,38 @@ final class TestScriptTemplatesTests: XCTestCase {
         }
     }
 
-    func testAllPythonTemplateTypes_containFunctionName() {
+    func testAllPythonTemplateTypes_startWithPythonShebang() {
+        // Instructors sometimes name test scripts without a `.py` extension
+        // (e.g. "beats").  Without a shebang the runner falls through to
+        // `/bin/sh` and the Python body blows up as shell.  Per v0.4.73 a
+        // `#!/usr/bin/env python3` shebang routes the script through the
+        // Python runtime regardless of filename.
         for type in PythonTestTemplateType.allCases {
+            let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
+            XCTAssertTrue(s.hasPrefix("#!/usr/bin/env python3"),
+                          "Template \(type.rawValue) must begin with a `#!/usr/bin/env python3` shebang")
+        }
+    }
+
+    func testAllPythonTemplateTypes_doNotImportChickadee() {
+        // passed(), failed(), errored(), require_function() are injected as
+        // builtins by the test runtime — they are NOT importable from a
+        // `chickadee` module (which doesn't exist on sys.path).  Guard
+        // against a future template regressing to `from chickadee import …`.
+        for type in PythonTestTemplateType.allCases {
+            let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
+            XCTAssertFalse(s.contains("from chickadee"),
+                           "Template \(type.rawValue) must not import from a `chickadee` module")
+            XCTAssertFalse(s.contains("import chickadee"),
+                           "Template \(type.rawValue) must not import `chickadee`")
+        }
+    }
+
+    func testAllPythonTemplateTypes_containFunctionName() {
+        // `.variableEquality` is the one template that isn't function-scoped —
+        // it tests a module-level variable by name, so `functionName` is not
+        // relevant.  Every other template should echo the function name.
+        for type in PythonTestTemplateType.allCases where type != .variableEquality {
             let s = pythonTestScript(type: type, functionName: "mySpecialFunc", paramNames: ["a"])
             XCTAssertTrue(s.contains("mySpecialFunc"),
                           "Template \(type.rawValue) should contain the function name")

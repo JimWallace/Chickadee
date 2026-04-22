@@ -24,6 +24,11 @@ import Foundation
 public enum PatternKind: String, Codable, Sendable, Equatable {
     case boundaryEquality = "boundary_equality"
     case approximateEquality = "approximate_equality"
+    /// Checks that a module-level variable exists on `student_module` and
+    /// equals the expected value.  Unlike the equality kinds above this
+    /// doesn't call a function — each case's `args` holds a single string
+    /// (the variable name), and `functionName` / `paramNames` are ignored.
+    case variableEquality = "variable_equality"
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,

@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.84] - 2026-04-22
+
+### Added
+
+- **`.variableEquality` pattern-family kind** for assignments that ask students to define module-level variables (e.g. `beats = 5`) rather than functions.  The instructor picks "Variable equality (module-level variable)" from the family editor's kind dropdown; the Function dropdown is hidden; the cases table takes a single "variable" column (variable name) plus the Expected column — no per-parameter args and no function signature scan.  Each enabled case renders a generated test that looks up `getattr(student_module, variable_name, _MISSING)` with a sentinel default so "not defined at all" is distinguishable from "defined as None", and falls through to an equality check against the case's expected value.  The `NotebookExtractor` already preserves simple module-level assignments at import time (per v0.4.38), so `student_module.beats` is readable by the generated test.
+  - New `PatternKind.variableEquality` Core enum case; decoded with `decodeIfPresent … ?? nil` so legacy manifests roundtrip unchanged.
+  - `ManifestValidation.validatePatternFamilies` gains kind-specific rules for variable families: each case's `args` must be exactly `[.string(name)]` where `name` is a non-empty valid Python identifier.  Skips the otherwise-required `isValidPythonIdentifier(functionName)` check since variable families don't call a function.
+  - Renderer `renderVariableEquality` in `PatternFamilyRenderer.swift` emits the `getattr` sentinel pattern, labelled rich-feedback messages, and the family hint — matching the shape of `renderBoundaryEquality` / `renderApproximateEquality`.
+  - Editor UI in `assignment-edit.leaf` adds `updateKindVisibility()` to hide the function dropdown when the kind is variable-equality, and `applyKindDefaults()` to reset the case-table layout when the instructor switches kinds.  Family id auto-derives from the family name (since there's no function name to derive from).  Pyodide auto-compute of the Expected column is skipped for variable families — the instructor types the expected value directly.
+- **"Variable Equality" single-script template** in the New Script modal for instructors who prefer a one-off test over a family.  Generates boilerplate around the same `getattr` + sentinel check.
+
+### Fixed
+
+- **Python script templates now start with a `#!/usr/bin/env python3` shebang.**  Extensionless filenames (e.g. a test script saved as "beats" without `.py`) were being dispatched through `/bin/sh` on the runner and failing cryptically — `variable_name: not found`, `Syntax error: "(" unexpected` — because shell can't read Python.  Per v0.4.73 a Python shebang routes the script through the Python runtime regardless of filename.  All eight Python templates (`exists`, `correctness`, `cornerCases`, `exception`, `typeCheck`, `performance`, `differential`, `variableEquality`) now emit the shebang as their first line; new `testAllPythonTemplateTypes_startWithPythonShebang` regression test guards against future templates forgetting it.  Also added `testAllPythonTemplateTypes_doNotImportChickadee` to catch any template that tries `from chickadee import …` (the `passed`/`failed`/`errored`/`require_function` builtins are injected by the test runtime, not importable).
+
 ## [0.4.83] - 2026-04-22
 
 ### Added
