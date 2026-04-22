@@ -124,11 +124,38 @@ func applyPatternFamilies(
                     dependsOn: e.dependsOn
                 )
             }
-        // Fallback ordering: raw scripts in their existing order, then each
-        // family in `nextFamilies` order at the end.
-        itemsForOrdering =
-            authoredRawEntries.map { .script($0) }
-            + nextFamilies.map { .family(id: $0.id) }
+        // Reconstruct authored ordering from the existing manifest: walk
+        // testSuites in order, emit a script item for each raw entry and
+        // one family item at the position of each family's first generated
+        // entry.  Families present in `nextFamilies` but absent from the
+        // old manifest (i.e. newly added) are appended at the end.  This
+        // preserves the instructor's hand-placed position across a family
+        // modal save, which goes through the legacy (authoredItems == nil)
+        // path.
+        let nextFamilyIDs = Set(nextFamilies.map(\.id))
+        var rebuilt: [AuthoredSuiteItem] = []
+        var seenFamilyIDs: Set<String> = []
+        for entry in props.testSuites {
+            if let fid = entry.generatedBy {
+                guard !seenFamilyIDs.contains(fid) else { continue }
+                seenFamilyIDs.insert(fid)
+                if nextFamilyIDs.contains(fid) {
+                    rebuilt.append(.family(id: fid))
+                }
+            } else {
+                rebuilt.append(.script(AuthoredRawScript(
+                    script: entry.script,
+                    tier: entry.tier,
+                    points: entry.points,
+                    displayName: entry.name,
+                    dependsOn: entry.dependsOn
+                )))
+            }
+        }
+        for f in nextFamilies where !seenFamilyIDs.contains(f.id) {
+            rebuilt.append(.family(id: f.id))
+        }
+        itemsForOrdering = rebuilt
     }
 
     // ── 2. Validate: family spec + family-ref dependency tokens ─────────

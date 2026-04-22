@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.81] - 2026-04-21
+
+### Changed
+
+- **Pattern-family rows now match script rows visually**: the ⟳ badge is gone, the name column no longer prefixes the case count with `functionName()`, the `↳` dependency badge is suppressed on family rows (the dependency is already expressed by the indent/connector), and the first-cell blue background is removed.  The **Visibility** column on a family row is now a `<select>` — editing it updates `family.defaults.tier` and fires a live `PUT /suite`, matching the inline editing experience of raw scripts.  The "Default tier" field is removed from the Pattern Family Editor modal.
+
+### Fixed
+
+- **Family row position survives a modal save.**  Saving edits from the pattern-family modal hits `PUT /instructor/:id/families`, which previously ran the legacy `applyPatternFamilies` ordering path and appended every family at the end of `testSuites`, clobbering the instructor's hand-placed drag-drop position.  The legacy path now reconstructs authored ordering from the existing manifest: each family is emitted at the position of its first existing generated entry, and only brand-new families are appended at the end.
+- **Suite edits re-trigger validation.**  `PUT /suite` and `PUT /families` now enqueue a fresh validation submission when a solution notebook is available, matching the pre-v0.4.79 behaviour where every suite save ran the solution against the new manifest.  Debounced server-side: a new submission is skipped when a pending (unclaimed) validation already exists for the setup, since the runner's manifest-hash cache key means the in-flight submission already pulls the updated zip + manifest on download.
+
 ## [0.4.80] - 2026-04-21
 
 ### Added

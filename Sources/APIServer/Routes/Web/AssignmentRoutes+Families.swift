@@ -82,6 +82,10 @@ extension AssignmentRoutes {
             on: req.db
         )
 
+        // Re-kick validation so the runner picks up the edited manifest.
+        // Debounced: a no-op when a pending validation already exists.
+        await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
+
         // Return the applied list so the client can reconcile state without
         // a second round-trip.
         let encoder = JSONEncoder()
