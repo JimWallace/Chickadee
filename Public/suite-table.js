@@ -419,7 +419,20 @@
             var relY = (e.clientY - rect.top) / rect.height;
 
             if (relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildren(dragID)) {
+                // Adopt: set the dep AND re-position the dragged row
+                // immediately after its new parent in `items[]`.  Before
+                // v0.4.95 we only touched `dependsOn`, which left a
+                // newly-created test (appended to the bottom of
+                // `items[]`) still at the bottom — `visualOrder()`
+                // grouped it under its parent for the tree view, but
+                // the manifest (and thus submission view) saw it at the
+                // tail because `items[]` is what PUT /suite serializes.
+                // Moving the row here keeps the tree view and the
+                // manifest in sync.
                 dragItem.dependsOn = [tid];
+                items = items.filter(function (it) { return it.id !== dragID; });
+                var aIdx = items.findIndex(function (it) { return it.id === tid; });
+                items.splice(aIdx + 1, 0, dragItem);
             } else {
                 dragItem.dependsOn = [];
                 items = items.filter(function (it) { return it.id !== dragID; });
