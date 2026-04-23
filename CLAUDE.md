@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.91**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.92**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -532,6 +532,16 @@ Post-8 work also complete:
   so extensionless filenames don't fall through to `/bin/sh`; guard tests
   (`testAllPythonTemplateTypes_startWithPythonShebang`,
   `testAllPythonTemplateTypes_doNotImportChickadee`)
+- v0.4.92 assignment editor bug-fix pass for pattern families: (1) Create
+  publish preserves each family's draft position instead of dumping every
+  family at the bottom of the suite — `saveNewAssignment` now reconstructs
+  `[AuthoredSuiteItem]` from the draft's manifest and passes it to
+  `applyPatternFamilies` (new helper `authoredSuiteItemsFromDraftManifest`);
+  (2) the family modal no longer substitutes `null` for bare-string cell
+  values on reopen (`readCasesFromTableRaw` now uses the same type-aware
+  `coerceByType` as the strict save path); (3) `readFamilyFromEditor`
+  carries forward the family's `dependsOn` so family-level prerequisites
+  survive a modal save
 
 **Next work:** Gamification expansion (leaderboards, more badges beyond
 First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern

@@ -1065,6 +1065,66 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
     }
 }
 
+/// Builds an `[AuthoredSuiteItem]` list from a draft test setup's manifest,
+/// reconciling it with the raw-script list that `createRunnerSetupZip` just
+/// produced for publish.  Walks the draft's `testSuites` in order, emitting
+/// a `.script` for each non-generated entry that still exists in the new zip
+/// (carrying the newly-computed tier/points/dependsOn) and a `.family`
+/// marker at the position of each family's first generated entry.  Any raw
+/// scripts present in the new zip but absent from the draft manifest (e.g.
+/// fresh form uploads) are appended at the end.
+///
+/// Used by `saveNewAssignment` so the publish-time re-apply of pattern
+/// families preserves each family's draft position instead of dumping every
+/// family at the end of the suite.
+func authoredSuiteItemsFromDraftManifest(
+    draftProps: TestProperties?,
+    newRawEntries: [ConfiguredSuiteEntry]
+) -> [AuthoredSuiteItem] {
+    guard let draftProps else {
+        return newRawEntries.map { .script(AuthoredRawScript(
+            script: $0.script,
+            tier: TestTier(rawValue: $0.tier) ?? .pub,
+            points: $0.points,
+            displayName: $0.displayName,
+            dependsOn: $0.dependsOn
+        )) }
+    }
+    let newByScript: [String: ConfiguredSuiteEntry] = Dictionary(
+        uniqueKeysWithValues: newRawEntries.map { ($0.script, $0) }
+    )
+    var items: [AuthoredSuiteItem] = []
+    var seenFamilies: Set<String> = []
+    var seenScripts:  Set<String> = []
+    for entry in draftProps.testSuites {
+        if let fid = entry.generatedBy {
+            guard !seenFamilies.contains(fid) else { continue }
+            seenFamilies.insert(fid)
+            items.append(.family(id: fid))
+        } else {
+            guard let newEntry = newByScript[entry.script] else { continue }
+            seenScripts.insert(entry.script)
+            items.append(.script(AuthoredRawScript(
+                script: newEntry.script,
+                tier: TestTier(rawValue: newEntry.tier) ?? .pub,
+                points: newEntry.points,
+                displayName: newEntry.displayName,
+                dependsOn: newEntry.dependsOn
+            )))
+        }
+    }
+    for newEntry in newRawEntries where !seenScripts.contains(newEntry.script) {
+        items.append(.script(AuthoredRawScript(
+            script: newEntry.script,
+            tier: TestTier(rawValue: newEntry.tier) ?? .pub,
+            points: newEntry.points,
+            displayName: newEntry.displayName,
+            dependsOn: newEntry.dependsOn
+        )))
+    }
+    return items
+}
+
 /// Returns one `FamilySuiteRow` per pattern family declared on this setup.
 /// Used to populate the family rows in the assignment editor's suite table.
 func familySuiteRowsForSetup(_ setup: APITestSetup) -> [FamilySuiteRow] {

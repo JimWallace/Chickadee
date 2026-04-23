@@ -880,6 +880,149 @@ final class PatternFamilyTests: XCTestCase {
         ])
     }
 
+    /// The `PUT /families` path invokes `applyPatternFamilies` with
+    /// `authoredItems == nil` (the legacy branch).  When the family
+    /// already has generated entries in the existing manifest, the legacy
+    /// branch must keep the family anchored at its first-generated-entry
+    /// position and must NOT dump it at the end of the suite.  Regression
+    /// guard for v0.4.81's position-preservation fix and for the "family
+    /// gets pushed to bottom when I edit its cases" user-reported bug.
+    func testApply_editingExistingFamilyPreservesMiddlePosition() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_a.py", content: "passed('a')\n"
+        )
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_b.py", content: "passed('b')\n"
+        )
+        let a = AuthoredRawScript(
+            script: "publictest_a.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        let b = AuthoredRawScript(
+            script: "publictest_b.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        // Seed: publish with family in the middle via explicit authoredItems.
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [bmiFamily()],
+            authoredItems: [.script(a), .family(id: "bmi_category"), .script(b)],
+            on: fixture.app.db
+        )
+
+        // Now simulate `PUT /families` editing the family: mutate case 02
+        // to have a different expected value and re-apply *without*
+        // authoredItems (that's how the family-editor modal save wires up).
+        var edited = bmiFamily().cases
+        edited[1] = PatternCase(
+            key: edited[1].key, label: edited[1].label,
+            args: edited[1].args, expected: .string("normal (edited)")
+        )
+        let editedFamily = PatternFamily(
+            id: "bmi_category", name: "BMI Category Boundaries",
+            kind: .boundaryEquality, functionName: "bmi_category",
+            paramNames: ["bmi"],
+            defaults: PatternDefaults(tier: .pub, points: 1,
+                                      hint: "values below 18.5 should be 'underweight'"),
+            cases: edited
+        )
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [editedFamily],
+            authoredItems: nil,
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.testSuites.map(\.script), [
+            "publictest_a.py",
+            "publictest_bmi_category_01.py",
+            "publictest_bmi_category_02.py",
+            "publictest_bmi_category_03.py",
+            "publictest_b.py",
+        ], "Editing a family's cases via the PUT /families legacy path must keep the family at its original middle position — not push it to the end of the suite.")
+    }
+
+    /// The Create-page publish flow (`saveNewAssignment`) rebuilds the
+    /// manifest from the form's raw-script list (no generated entries)
+    /// and then re-runs `applyPatternFamilies` to regenerate them.
+    /// Without passing `authoredItems`, the legacy branch sees no
+    /// generatedBy markers and dumps every family at the end of the
+    /// suite — which cascades into the submission view showing every
+    /// family's test outcomes at the bottom.  This exercise the helper
+    /// that reconstructs authoredItems from the draft's original
+    /// manifest so family positions survive publish.
+    func testApply_createPublishPreservesFamilyPosition() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_a.py", content: "passed('a')\n"
+        )
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_b.py", content: "passed('b')\n"
+        )
+        let a = AuthoredRawScript(
+            script: "publictest_a.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        let b = AuthoredRawScript(
+            script: "publictest_b.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        // Draft state: family positioned in the middle.
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [bmiFamily()],
+            authoredItems: [.script(a), .family(id: "bmi_category"), .script(b)],
+            on: fixture.app.db
+        )
+        let draftProps = try decodeManifest(fixture.setup.manifest)
+
+        // Simulate `saveNewAssignment`'s manifest rebuild: strip
+        // generated entries, keep raw entries only.
+        let newRawEntries: [ConfiguredSuiteEntry] = [
+            ConfiguredSuiteEntry(script: "publictest_a.py", tier: "public",
+                                 order: 1, dependsOn: [], points: 1, displayName: nil),
+            ConfiguredSuiteEntry(script: "publictest_b.py", tier: "public",
+                                 order: 2, dependsOn: [], points: 1, displayName: nil),
+        ]
+        fixture.setup.manifest = try makeWorkerManifestJSON(
+            testSuites: newRawEntries, includeMakefile: false,
+            patternFamilies: draftProps.patternFamilies
+        )
+        try await fixture.setup.save(on: fixture.app.db)
+
+        // Re-apply with authoredItems reconstructed from the draft
+        // manifest — this is the publish-path fix.
+        let authored = authoredSuiteItemsFromDraftManifest(
+            draftProps: draftProps,
+            newRawEntries: newRawEntries
+        )
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: draftProps.patternFamilies,
+            authoredItems: authored,
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.testSuites.map(\.script), [
+            "publictest_a.py",
+            "publictest_bmi_category_01.py",
+            "publictest_bmi_category_02.py",
+            "publictest_bmi_category_03.py",
+            "publictest_b.py",
+        ], "Create-publish must preserve the draft's family position; otherwise every published family ends up at the bottom.")
+    }
+
     // MARK: - Fixture plumbing
 
     private struct Fixture {
