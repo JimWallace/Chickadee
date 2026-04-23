@@ -369,32 +369,187 @@
         // Variables are family-scoped named values (lists, dicts, scalars)
         // that get prepended as module-level assignments to every generated
         // test in the family.  Editor UI lives above the Cases table; arg
-        // cells reference them with `$name`.  v0.4.94.
+        // cells reference them with `$name`.  v0.4.94; live-validation
+        // and cross-wiring into the arg-cell highlighter + Pyodide
+        // resolver added in v0.4.95.
 
         var variablesBody  = document.getElementById('family-variables-body');
         var variablesEmpty = document.getElementById('family-variables-empty');
         var addVariableBtn = document.getElementById('add-family-variable-btn');
+
+        var PYTHON_KEYWORDS = new Set([
+            'False','None','True','and','as','assert','async','await','break',
+            'class','continue','def','del','elif','else','except','finally',
+            'for','from','global','if','import','in','is','lambda','nonlocal',
+            'not','or','pass','raise','return','try','while','with','yield'
+        ]);
+
+        /// Is `s` a syntactically valid Python identifier (and not a
+        /// reserved keyword)?  Mirrors `isValidPythonIdentifier` in
+        /// `ManifestValidation.swift` so the client's pre-save check
+        /// matches the server's rejection criteria.
+        function isValidPythonIdentifier(s) {
+            if (!s) return false;
+            if (PYTHON_KEYWORDS.has(s)) return false;
+            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
+        }
+
+        /// Tries to parse `raw` the same way the server / renderer will:
+        /// JSON first, then Python-capitalised scalars, then bare string.
+        /// Returns `{ ok, value, kind, strict }` where `strict` is true
+        /// when `JSON.parse` succeeded (so the parse round-trips exactly)
+        /// and false when we fell back to a bare string.  Used by the
+        /// inline validator to distinguish "nice typed value" from
+        /// "interpreting as a string literal" for the instructor.
+        function tryParseVarValue(raw) {
+            var trimmed = String(raw == null ? '' : raw).trim();
+            if (trimmed === '') return { ok: false, value: undefined, kind: 'empty', strict: false };
+            switch (trimmed) {
+                case 'True':  return { ok: true, value: true,  kind: 'bool',   strict: false };
+                case 'False': return { ok: true, value: false, kind: 'bool',   strict: false };
+                case 'None':  return { ok: true, value: null,  kind: 'null',   strict: false };
+            }
+            try {
+                var v = JSON.parse(trimmed);
+                var kind =
+                    Array.isArray(v) ? 'list' :
+                    (v === null) ? 'null' :
+                    (typeof v === 'object') ? 'dict' :
+                    (typeof v === 'boolean') ? 'bool' :
+                    (typeof v === 'number') ? 'number' :
+                    (typeof v === 'string') ? 'string' : 'scalar';
+                return { ok: true, value: v, kind: kind, strict: true };
+            } catch (_) {
+                return { ok: true, value: String(raw), kind: 'string', strict: false };
+            }
+        }
 
         function renderVariablesTable() {
             if (!variablesBody) return;
             variablesBody.innerHTML = '';
             familyVariables.forEach(function (v, i) {
                 var tr = document.createElement('tr');
+                tr.setAttribute('data-var-index', String(i));
                 tr.innerHTML =
-                    '<td><input type="text" class="form-input pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
-                  + '<td><input type="text" class="form-input pf-var-value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : (typeof v.value === 'string' ? JSON.stringify(v.value) : JSON.stringify(v.value))) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
-                  + '<td><button type="button" class="btn action-btn action-danger pf-var-remove" data-var-index="' + i + '" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>';
+                    '<td style="vertical-align:top">'
+                  +   '<input type="text" class="form-input pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace">'
+                  +   '<span class="pf-var-status pf-var-status-name" style="display:block;font-size:.68rem;margin-top:.15rem;color:var(--meta)"></span>'
+                  + '</td>'
+                  + '<td style="vertical-align:top">'
+                  +   '<input type="text" class="form-input pf-var-value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : JSON.stringify(v.value)) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace">'
+                  +   '<span class="pf-var-status pf-var-status-value" style="display:block;font-size:.68rem;margin-top:.15rem;color:var(--meta)"></span>'
+                  + '</td>'
+                  + '<td style="vertical-align:top"><button type="button" class="btn action-btn action-danger pf-var-remove" data-var-index="' + i + '" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>';
                 variablesBody.appendChild(tr);
+                refreshVarRowStatus(tr);
             });
             if (variablesEmpty) {
                 variablesEmpty.style.display = familyVariables.length ? 'none' : '';
+            }
+            // Variable set may have changed → refresh every arg cell's
+            // `$name` highlighting so broken refs show up immediately.
+            refreshAllArgCellVarHighlighting();
+        }
+
+        /// Paint a single variable row's two status lines based on the
+        /// current input values.  Called on init, on input events, and
+        /// whenever the row list changes.  Kept idempotent so keystrokes
+        /// don't thrash other state.
+        function refreshVarRowStatus(row) {
+            if (!row) return;
+            var nameEl   = row.querySelector('.pf-var-name');
+            var valueEl  = row.querySelector('.pf-var-value');
+            var nameSts  = row.querySelector('.pf-var-status-name');
+            var valueSts = row.querySelector('.pf-var-status-value');
+            if (!nameEl || !valueEl || !nameSts || !valueSts) return;
+
+            var name   = nameEl.value.trim();
+            var rawVal = valueEl.value;
+
+            // Name status.
+            if (!name) {
+                nameSts.textContent = 'Name required (Python identifier).';
+                nameSts.style.color = 'var(--meta)';
+                nameEl.style.borderColor = '';
+            } else if (!isValidPythonIdentifier(name)) {
+                nameSts.textContent = 'Not a valid Python identifier.';
+                nameSts.style.color = 'var(--red,#c0392b)';
+                nameEl.style.borderColor = 'var(--red,#c0392b)';
+            } else {
+                // Check duplicate with other rows.
+                var allNames = Array.from(variablesBody.querySelectorAll('.pf-var-name'))
+                    .map(function (el) { return el.value.trim(); });
+                var dup = allNames.filter(function (n) { return n === name; }).length > 1;
+                if (dup) {
+                    nameSts.textContent = 'Duplicate — each variable needs a unique name.';
+                    nameSts.style.color = 'var(--red,#c0392b)';
+                    nameEl.style.borderColor = 'var(--red,#c0392b)';
+                } else {
+                    nameSts.textContent = '✓ referenced as $' + name;
+                    nameSts.style.color = 'var(--green,#2d8f47)';
+                    nameEl.style.borderColor = '';
+                }
+            }
+
+            // Value status.
+            var parsed = tryParseVarValue(rawVal);
+            if (parsed.kind === 'empty') {
+                valueSts.textContent = 'Value required.';
+                valueSts.style.color = 'var(--meta)';
+                valueEl.style.borderColor = '';
+            } else if (parsed.strict) {
+                var preview = JSON.stringify(parsed.value);
+                if (preview.length > 60) preview = preview.slice(0, 57) + '…';
+                valueSts.textContent = '✓ parsed as ' + parsed.kind + ' — ' + preview;
+                valueSts.style.color = 'var(--green,#2d8f47)';
+                valueEl.style.borderColor = '';
+            } else {
+                // Fell back to bare string — usually a typo in the JSON.
+                valueSts.textContent = 'Treated as a bare string. Wrap in quotes for JSON string, or check the syntax for list/dict.';
+                valueSts.style.color = 'var(--amber,#b38600)';
+                valueEl.style.borderColor = 'var(--amber,#b38600)';
+            }
+        }
+
+        /// Paint every case-table arg cell to reflect whether its
+        /// current text resolves to a declared variable.  Green = valid
+        /// ref, red = `$name` with no matching variable, default styling
+        /// for plain literals / empty cells.  Cheap enough to run on
+        /// every keystroke.
+        function refreshAllArgCellVarHighlighting() {
+            var declaredVarNames = new Set(Array.from(variablesBody ? variablesBody.querySelectorAll('.pf-var-name') : [])
+                .map(function (el) { return el.value.trim(); })
+                .filter(function (n) { return n.length > 0 && isValidPythonIdentifier(n); }));
+            Array.from(casesBody ? casesBody.querySelectorAll('.pf-case-arg') : []).forEach(function (cell) {
+                refreshArgCellHighlight(cell, declaredVarNames);
+            });
+        }
+
+        function refreshArgCellHighlight(cell, declaredNames) {
+            var raw = (cell.value || '').trim();
+            var match = raw.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+            cell.style.fontStyle = '';
+            cell.style.color = '';
+            cell.style.borderColor = '';
+            cell.title = '';
+            if (!match) return;
+            var name = match[1];
+            if (declaredNames && declaredNames.has(name)) {
+                cell.style.fontStyle = 'italic';
+                cell.style.color = 'var(--green,#2d8f47)';
+                cell.title = 'Bound to family variable $' + name;
+            } else {
+                cell.style.color = 'var(--red,#c0392b)';
+                cell.style.borderColor = 'var(--red,#c0392b)';
+                cell.title = 'No variable named $' + name + ' is declared in the Variables table.';
             }
         }
 
         /// Reads the Variables-table inputs back into `familyVariables`
         /// (call before `readFamilyFromEditor` so the two stay in sync).
-        /// Strict mode: throws when a value doesn't parse as JSON.  Empty
-        /// rows are dropped.  Name validation happens server-side.
+        /// Strict mode: throws on empty/invalid rows.  Non-strict: tries
+        /// to preserve what it can so live-edit flows don't clobber
+        /// partial state.
         function syncFamilyVariablesFromTable(opts) {
             opts = opts || {};
             if (!variablesBody) return;
@@ -410,16 +565,26 @@
                     if (opts.strict) throw new Error('Variable row ' + (i + 1) + ': name is required.');
                     return;
                 }
+                if (opts.strict && !isValidPythonIdentifier(name)) {
+                    throw new Error('Variable "' + name + '": not a valid Python identifier.');
+                }
                 if (rawVal === '') {
                     if (opts.strict) throw new Error('Variable "' + name + '": value is required.');
                     return;
                 }
-                var parsed;
-                // Accept JSON or Python-capitalised scalars (True/False/None).
-                // Falls back to treating a bare string as a JSON string.
-                parsed = parseTypedCellValue(rawVal);
-                out.push({ name: name, value: parsed });
+                var parsed = tryParseVarValue(rawVal);
+                out.push({ name: name, value: parsed.value });
             });
+            // Duplicate-name check mirrors server-side validation.
+            if (opts.strict) {
+                var seen = new Set();
+                for (var j = 0; j < out.length; j++) {
+                    if (seen.has(out[j].name)) {
+                        throw new Error('Duplicate variable name: "' + out[j].name + '". Each variable needs a unique name.');
+                    }
+                    seen.add(out[j].name);
+                }
+            }
             familyVariables = out;
         }
 
@@ -451,6 +616,20 @@
                     familyVariables.splice(idx, 1);
                     renderVariablesTable();
                 }
+            });
+            // Live validation: every keystroke refreshes the row's two
+            // status lines + re-highlights every arg cell so a rename or
+            // typo-fix in a variable is visible immediately.  Also
+            // re-schedules auto-compute for every case row that
+            // references a variable — when the instructor finishes
+            // typing the variable's value, the Expected column for
+            // `$name` cells picks up the resolution automatically.
+            variablesBody.addEventListener('input', function (e) {
+                var row = e.target && e.target.closest('tr[data-var-index]');
+                if (!row) return;
+                refreshVarRowStatus(row);
+                refreshAllArgCellVarHighlighting();
+                rescheduleAutoComputeForVariableRefCases();
             });
         }
 
@@ -1038,6 +1217,26 @@
             }, 400);
         }
 
+        /// When a variable is declared / renamed / retyped, kick off
+        /// auto-compute on every case row that references *any* variable
+        /// (i.e. has an arg cell starting with `$`).  Cheap enough: one
+        /// Pyodide call per such row, debounced the same way as typing.
+        function rescheduleAutoComputeForVariableRefCases() {
+            if (!casesBody) return;
+            Array.from(casesBody.querySelectorAll('tr')).forEach(function (row) {
+                var hasVarRef = Array.from(row.querySelectorAll('.pf-case-arg'))
+                    .some(function (cell) {
+                        var v = (cell.value || '').trim();
+                        return /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(v);
+                    });
+                if (!hasVarRef) return;
+                // Don't clobber the instructor's manual expected value.
+                var expectedEl = row.querySelector('.pf-case-expected');
+                if (expectedEl && expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
+                scheduleAutoCompute(row);
+            });
+        }
+
         function autoComputeRow(row) {
             if (!row || !row.parentElement) return;
             // Variable-equality families don't call a function — skip.
@@ -1051,11 +1250,41 @@
             if (!expectedEl) return;
             if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
 
+            // Pull the latest variable values straight from the DOM so
+            // `$name` refs in arg cells resolve to what the instructor
+            // typed in the Variables table without needing a click Save
+            // first.  Only well-formed, valid-identifier rows count.
+            var varsNow = {};
+            if (variablesBody) {
+                Array.from(variablesBody.querySelectorAll('tr')).forEach(function (vrow) {
+                    var n = (vrow.querySelector('.pf-var-name') || {}).value;
+                    var v = (vrow.querySelector('.pf-var-value') || {}).value;
+                    if (!n) return;
+                    n = n.trim();
+                    if (!isValidPythonIdentifier(n)) return;
+                    var parsed = tryParseVarValue(v);
+                    if (parsed.kind === 'empty') return;
+                    varsNow[n] = parsed.value;
+                });
+            }
+
             var args = [];
             for (var i = 0; i < paramNames.length; i++) {
                 var cell = row.querySelector('.pf-case-arg[data-arg-index="' + i + '"]');
                 var raw = cell ? cell.value : '';
-                if (raw.trim() === '') return;
+                if (raw.trim() === '') {
+                    // Optional param with a default: skip it so the
+                    // solution picks up its own default value, the same
+                    // way the runner-side test will.
+                    if (currentParamHasDefault && currentParamHasDefault[i]) continue;
+                    return;
+                }
+                var varMatch = raw.trim().match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                if (varMatch) {
+                    if (!(varMatch[1] in varsNow)) return; // unresolved ref — skip until valid
+                    args.push(varsNow[varMatch[1]]);
+                    continue;
+                }
                 var paramTypeHint = currentParamTypes ? currentParamTypes[i] : null;
                 args.push(coerceByType(raw, paramTypeHint));
             }
@@ -1080,6 +1309,14 @@
             var t = e.target;
             if (!t || !t.classList) return;
             if (t.classList.contains('pf-case-arg')) {
+                // Live-highlight the `$name` binding state so the
+                // instructor can see whether their ref resolves.
+                if (variablesBody) {
+                    var declaredNames = new Set(Array.from(variablesBody.querySelectorAll('.pf-var-name'))
+                        .map(function (el) { return el.value.trim(); })
+                        .filter(function (n) { return n.length > 0 && isValidPythonIdentifier(n); }));
+                    refreshArgCellHighlight(t, declaredNames);
+                }
                 scheduleAutoCompute(t.closest('tr'));
             } else if (t.classList.contains('pf-case-expected')) {
                 // User is editing the Expected cell directly — mark as

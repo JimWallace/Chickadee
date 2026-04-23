@@ -1764,17 +1764,30 @@ func makeWorkerManifestJSON(
     return String(data: data, encoding: .utf8) ?? "{}"
 }
 
-/// Returns `entries` in topological order (prerequisites before dependents).
-/// Entries with no dependencies are emitted first in their original relative order.
-/// If the graph has no cycles (guaranteed by upload-time validation), this
-/// always produces a valid ordering.
+/// Returns `entries` in topological order (prerequisites before dependents)
+/// while honouring authored position as tightly as the dependency graph
+/// allows.
+///
+/// Uses Kahn's algorithm but with an **authored-position priority queue**
+/// instead of FIFO.  At each step we emit the ready node (inDegree == 0)
+/// with the smallest original index.  This preserves the instructor's
+/// suite-editor order whenever the dependency graph doesn't force a
+/// different ordering — e.g. a family that depends on `publictest_a.py`
+/// and is authored right after it stays right after it, rather than
+/// being demoted to the tail by a FIFO queue that processes trailing
+/// no-dep scripts before satisfied dependents re-enter.
+///
+/// Regression guard: `testApply_familyWithDependencyStaysInlineAfterPrereq`
+/// (v0.4.95).
 private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [ConfiguredSuiteEntry] {
-    var inDegree: [String: Int] = [:]
+    var inDegree:   [String: Int] = [:]
     var dependents: [String: [String]] = [:]
-    var byScript: [String: ConfiguredSuiteEntry] = [:]
+    var byScript:   [String: ConfiguredSuiteEntry] = [:]
+    var origIdx:    [String: Int] = [:]
 
-    for entry in entries {
+    for (i, entry) in entries.enumerated() {
         byScript[entry.script] = entry
+        origIdx[entry.script]  = i
         inDegree[entry.script, default: 0] += 0
         for dep in entry.dependsOn {
             dependents[dep, default: []].append(entry.script)
@@ -1782,29 +1795,30 @@ private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [Configur
         }
     }
 
-    // Maintain original relative order among entries with equal in-degree.
-    var queue = entries.filter { inDegree[$0.script, default: 0] == 0 }
+    var ready: Set<String> = Set(
+        entries.filter { inDegree[$0.script, default: 0] == 0 }.map(\.script)
+    )
     var result: [ConfiguredSuiteEntry] = []
-    while !queue.isEmpty {
-        let node = queue.removeFirst()
-        result.append(node)
-        let children = (dependents[node.script] ?? [])
-            .compactMap { byScript[$0] }
-            .sorted { lhs, rhs in
-                // Preserve original order among siblings.
-                let li = entries.firstIndex(where: { $0.script == lhs.script }) ?? 0
-                let ri = entries.firstIndex(where: { $0.script == rhs.script }) ?? 0
-                return li < ri
-            }
-        for child in children {
-            inDegree[child.script, default: 1] -= 1
-            if inDegree[child.script, default: 0] == 0 {
-                queue.append(child)
+    result.reserveCapacity(entries.count)
+    while !ready.isEmpty {
+        // Pop the ready node with the smallest authored index — that's
+        // what keeps a family in-line with its prereq rather than
+        // letting downstream no-dep scripts jump ahead of it.
+        guard let nodeName = ready.min(by: {
+            (origIdx[$0] ?? 0) < (origIdx[$1] ?? 0)
+        }), let entry = byScript[nodeName] else { break }
+        ready.remove(nodeName)
+        result.append(entry)
+        for dependent in dependents[nodeName] ?? [] {
+            inDegree[dependent, default: 1] -= 1
+            if inDegree[dependent, default: 0] == 0 {
+                ready.insert(dependent)
             }
         }
     }
-    // Fall back to original order if cycle somehow slipped through.
-    return result.isEmpty ? entries : result
+    // Fall back to original order if a cycle somehow slipped through
+    // upstream validation.
+    return result.count == entries.count ? result : entries
 }
 
 func enqueueRunnerValidationSubmission(
