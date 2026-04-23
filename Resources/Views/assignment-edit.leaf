@@ -113,83 +113,18 @@
     <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
         <h2 style="margin:0">Test Suite</h2>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn action-btn" type="button" id="add-section-btn">+ Section</button>
             <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
             <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
             <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
         </div>
     </div>
-    <table class="results-table" id="suite-config-table">
-        <thead>
-            <tr>
-                <th title="Student-facing name (edit to override the filename)">Name</th>
-                <th>Visibility</th>
-                <th title="Grade point weight for this test (default 1)">Pts</th>
-                <th class="time">Action</th>
-            </tr>
-        </thead>
-        <tbody id="suite-config-body">
-            #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td><div class="suite-name-cell">
-                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
-                    <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                </div></td>
-                <td>
-                    <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
-                        <option value="support" #if(row.tier == "support"):selected#endif>support</option>
-                        <option value="public" #if(row.tier == "public"):selected#endif>public</option>
-                        <option value="secret" #if(row.tier == "secret"):selected#endif>secret</option>
-                        <option value="release" #if(row.tier == "release"):selected#endif>release</option>
-                    </select>
-                </td>
-                <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
-                <td class="time">
-                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
-                        <button class="btn action-btn suite-edit-btn" type="button" data-filename="#(row.name)"
-                                title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                        </button>
-                        <button class="btn action-btn action-danger suite-delete-btn" type="button"
-                                title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            #endfor
-            #for(family in familyRows):
-            <tr data-source="family" data-family-id="#(family.id)">
-                <td><div class="suite-name-cell">
-                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>
-                    <div style="display:flex;flex-direction:column;gap:.15rem">
-                        <strong style="font-size:.85rem">#(family.name)</strong>
-                        <span class="card-meta" style="font-size:.72rem">#(family.caseCountText)</span>
-                    </div>
-                </div></td>
-                <td>
-                    <select class="form-input suite-family-tier" style="padding:.25rem .5rem;font-size:.8rem">
-                        <option value="public" #if(family.tier == "public"):selected#endif>public</option>
-                        <option value="secret" #if(family.tier == "secret"):selected#endif>secret</option>
-                        <option value="release" #if(family.tier == "release"):selected#endif>release</option>
-                    </select>
-                </td>
-                <td><span class="card-meta" style="font-size:.75rem">#(family.totalPoints)</span></td>
-                <td class="time">
-                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
-                        <button class="btn action-btn family-edit-btn" type="button" data-family-id="#(family.id)"
-                                title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                        </button>
-                        <button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="#(family.id)"
-                                title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            #endfor
-        </tbody>
-    </table>
+    <!-- Mount point for the suite-table.js module.  When `sections` is empty
+         the module renders one unlabelled .section-block containing every
+         item; once the instructor adds a section, additional labelled
+         blocks appear and the trailing "Ungrouped" block holds any items
+         not yet assigned to a section. -->
+    <div id="suite-sections"></div>
 </form>
 
 <!-- Seed data: current suite state (scripts + families in authored form)

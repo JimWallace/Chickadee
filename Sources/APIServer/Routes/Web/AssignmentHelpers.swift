@@ -57,10 +57,11 @@ struct ConfiguredSuiteEntry {
     let points: Int            // grade weight; 1 = default (unweighted)
     let displayName: String?   // optional human-readable name shown to students
     let generatedBy: String?   // pattern family id; nil for hand-written scripts
+    let sectionID: String?     // id into TestProperties.sections; nil = ungrouped
 
     init(script: String, tier: String, order: Int,
          dependsOn: [String], points: Int, displayName: String?,
-         generatedBy: String? = nil) {
+         generatedBy: String? = nil, sectionID: String? = nil) {
         self.script = script
         self.tier = tier
         self.order = order
@@ -68,6 +69,7 @@ struct ConfiguredSuiteEntry {
         self.points = points
         self.displayName = displayName
         self.generatedBy = generatedBy
+        self.sectionID = sectionID
     }
 }
 
@@ -1716,7 +1718,8 @@ func makeWorkerManifestJSON(
     includeMakefile: Bool,
     gradingMode: String = "worker",
     starterNotebook: String? = "assignment.ipynb",
-    patternFamilies: [PatternFamily] = []
+    patternFamilies: [PatternFamily] = [],
+    sections: [TestSuiteSection] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -1735,6 +1738,9 @@ func makeWorkerManifestJSON(
         }
         if let fid = entry.generatedBy, !fid.isEmpty {
             dict["generatedBy"] = fid
+        }
+        if let sid = entry.sectionID, !sid.isEmpty {
+            dict["sectionID"] = sid
         }
         return dict
     }
@@ -1759,6 +1765,9 @@ func makeWorkerManifestJSON(
         if let parsed = try JSONSerialization.jsonObject(with: familyData) as? [Any] {
             manifest["patternFamilies"] = parsed
         }
+    }
+    if !sections.isEmpty {
+        manifest["sections"] = sections.map { ["id": $0.id, "name": $0.name] }
     }
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"

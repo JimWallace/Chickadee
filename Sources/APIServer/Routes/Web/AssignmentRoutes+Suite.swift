@@ -29,6 +29,8 @@ extension AssignmentRoutes {
         /// family spec too, but we echo them here at the row level for
         /// editor-UI convenience.
         var dependsOn: [String]?
+        /// Id into `SuitePayload.sections` (both kinds).  Nil = ungrouped.
+        var sectionID: String?
     }
 
     struct ScriptDTO: Content {
@@ -39,8 +41,32 @@ extension AssignmentRoutes {
         var dependsOn: [String]          // may contain "family:<id>" tokens
     }
 
+    /// Name + opaque id of a single section.  Order of `SuitePayload.sections`
+    /// is authoritative for display order in the editor and the student view.
+    struct TestSuiteSectionDTO: Content {
+        var id: String
+        var name: String
+    }
+
     struct SuitePayload: Content {
         var items: [SuiteItemDTO]
+        /// Ordered list of sections.  Clients predating v0.4.96 may omit
+        /// this field; it decodes to `[]` in that case.  Always populated
+        /// on GET responses.
+        var sections: [TestSuiteSectionDTO]
+
+        init(items: [SuiteItemDTO], sections: [TestSuiteSectionDTO] = []) {
+            self.items = items
+            self.sections = sections
+        }
+
+        enum CodingKeys: String, CodingKey { case items, sections }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            items    = try c.decodeIfPresent([SuiteItemDTO].self,         forKey: .items)    ?? []
+            sections = try c.decodeIfPresent([TestSuiteSectionDTO].self,  forKey: .sections) ?? []
+        }
     }
 
     // MARK: - GET /instructor/:assignmentID/suite
@@ -105,7 +131,8 @@ extension AssignmentRoutes {
                     tier: s.tier,
                     points: s.points,
                     displayName: s.displayName,
-                    dependsOn: s.dependsOn
+                    dependsOn: s.dependsOn,
+                    sectionID: item.sectionID
                 )))
             case "family":
                 guard var f = item.family else {
@@ -124,7 +151,7 @@ extension AssignmentRoutes {
                         dependsOn: rowDeps
                     )
                 }
-                authored.append(.family(id: f.id))
+                authored.append(.family(id: f.id, sectionID: item.sectionID))
                 nextFamilies.append(f)
             default:
                 throw Abort(.badRequest,
@@ -132,10 +159,15 @@ extension AssignmentRoutes {
             }
         }
 
+        let nextSections = body.sections.map {
+            TestSuiteSection(id: $0.id, name: $0.name)
+        }
+
         _ = try await applyPatternFamilies(
             to: setup,
             nextFamilies: nextFamilies,
             authoredItems: authored,
+            sections: nextSections,
             on: req.db
         )
 
@@ -157,7 +189,7 @@ extension AssignmentRoutes {
 func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuitePayload {
     guard let data = manifest.data(using: .utf8),
           let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
-        return AssignmentRoutes.SuitePayload(items: [])
+        return AssignmentRoutes.SuitePayload(items: [], sections: [])
     }
 
     let familyByID = Dictionary(uniqueKeysWithValues: props.patternFamilies.map { ($0.id, $0) })
@@ -191,7 +223,9 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
     // Walk testSuites in order, emitting one item per script or, on the
     // first generated entry for a family, one family row.  Family rows'
     // `dependsOn` comes from the PatternFamily spec (already in author
-    // form) rather than from the expanded per-case entries.
+    // form) rather than from the expanded per-case entries.  Each row
+    // carries the underlying entry's `sectionID` so the client can
+    // rebuild its grouped view.
     var items: [AssignmentRoutes.SuiteItemDTO] = []
     var emittedFamilyIDs: Set<String> = []
     for entry in props.testSuites {
@@ -202,7 +236,8 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
                 kind: "family",
                 script: nil,
                 family: family,
-                dependsOn: family.dependsOn
+                dependsOn: family.dependsOn,
+                sectionID: entry.sectionID
             ))
         } else {
             items.append(AssignmentRoutes.SuiteItemDTO(
@@ -215,12 +250,16 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
                     dependsOn:   collapseDeps(entry.dependsOn)
                 ),
                 family: nil,
-                dependsOn: nil
+                dependsOn: nil,
+                sectionID: entry.sectionID
             ))
         }
     }
 
-    return AssignmentRoutes.SuitePayload(items: items)
+    let sections = props.sections.map {
+        AssignmentRoutes.TestSuiteSectionDTO(id: $0.id, name: $0.name)
+    }
+    return AssignmentRoutes.SuitePayload(items: items, sections: sections)
 }
 
 /// Convenience: full `GET /suite` payload as sorted-keys JSON string.
