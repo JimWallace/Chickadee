@@ -1336,8 +1336,13 @@
         });
 
         // Suite table: handle Edit/Delete on family rows (script rows are
-        // handled by the suite-table IIFE elsewhere on the page).
-        var suiteBody = document.getElementById('suite-config-body');
+        // handled by the suite-table IIFE elsewhere on the page).  The
+        // container changed from `#suite-config-body` (a single tbody) to
+        // `#suite-sections` (the multi-tbody sections mount) in v0.4.96 —
+        // either id is accepted so older pages still work if this module
+        // loads first.
+        var suiteBody = document.getElementById('suite-sections')
+                     || document.getElementById('suite-config-body');
         if (suiteBody) {
             suiteBody.addEventListener('click', function (e) {
                 var editBtn = e.target && e.target.closest('.family-edit-btn');

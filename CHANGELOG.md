@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.97] - 2026-04-23
+
+### Fixed
+
+- **Typing into the new section's name input no longer gets wiped by the debounced `PUT /suite` response.**  When the instructor clicked "+ Section" and immediately started typing a name, the debounced PUT fired 300ms later with whatever had been typed so far; the server echoed that value, and the post-PUT re-render overwrote the input with the echoed value — losing every keystroke the user made during the network round-trip.  Characters that "appeared then disappeared" is exactly what this looked like.  The re-render now captures the focused input's live value before normalising local state, re-applies it afterwards, and (when the live value differs from the server echo) schedules another push so the latest typing actually reaches the server.  Same guard protects `suite-display-name` edits on script rows.
+- **Pattern family Edit / Delete buttons on suite rows work again on the v0.4.96 section-aware editor.**  `pattern-family-editor.js` bound its click handler to `#suite-config-body`, the single-tbody element that v0.4.96 replaced with the multi-section `#suite-sections` mount.  The handler silently skipped attachment because the element was gone — clicking the pencil or trash icon on a family row did nothing.  Accept either id now.
+
 ## [0.4.96] - 2026-04-23
 
 ### Added

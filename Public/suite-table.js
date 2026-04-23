@@ -433,6 +433,55 @@
             pushTimer = setTimeout(doPush, 300);
         }
 
+        /// Snapshots the value of the currently-focused section-name or
+        /// display-name input so we can restore it after a PUT response
+        /// overwrites local state.  Without this, mid-typing text gets
+        /// wiped every time the debounced `PUT /suite` returns.
+        function captureLiveEdit() {
+            var el = document.activeElement;
+            if (!el || !container.contains(el) || !el.classList) return null;
+            if (el.classList.contains('suite-section-name-input')) {
+                return {
+                    kind: 'section',
+                    sectionID: el.getAttribute('data-section-id'),
+                    value: el.value
+                };
+            }
+            if (el.classList.contains('suite-display-name')) {
+                var row = el.closest('tr[data-kind="script"]');
+                if (!row) return null;
+                return {
+                    kind: 'display-name',
+                    itemID: row.getAttribute('data-id'),
+                    value: el.value
+                };
+            }
+            return null;
+        }
+
+        /// Re-applies a live edit captured before `normaliseSections` /
+        /// `normaliseItems` overwrote the user's in-progress typing.
+        /// Sets `snap.changed` when the server's echoed value differs
+        /// from the user's current value — the caller schedules another
+        /// push so the latest typing persists.
+        function applyLiveEdit(snap) {
+            if (!snap) return;
+            if (snap.kind === 'section') {
+                var sec = findSectionByID(snap.sectionID);
+                if (!sec) return;
+                if (sec.name !== snap.value) { sec.name = snap.value; snap.changed = true; }
+            } else if (snap.kind === 'display-name') {
+                var it = findByID(snap.itemID);
+                if (!it) return;
+                var trimmed = (snap.value || '').trim();
+                var newDisplay = (trimmed && trimmed !== stemOf(it.script)) ? trimmed : '';
+                if ((it.displayName || '') !== newDisplay) {
+                    it.displayName = newDisplay;
+                    snap.changed = true;
+                }
+            }
+        }
+
         function doPush() {
             if (pushInFlight) { pushPending = true; return; }
             pushInFlight = true;
@@ -446,10 +495,24 @@
                 return r.json();
             })
             .then(function (payload) {
+                // Preserve in-progress typing across the re-render.  If
+                // the user is focused in a section-name or display-name
+                // input, the payload we get back echoes the NAME we sent
+                // at PUT-fire time — so re-normalising would wipe any
+                // keystrokes the user made during the ~300ms debounce +
+                // network round-trip window.  Capture the focused input's
+                // live value here, apply it after normalisation, so the
+                // user's text survives.
+                var liveEdit = captureLiveEdit();
                 sections = normaliseSections(payload.sections || []);
                 items    = normaliseItems(payload.items || []);
                 items    = sortItemsBySection(items);
+                applyLiveEdit(liveEdit);
                 renderTree();
+                // If the live edit differed from what the server echoed,
+                // schedule another push so the user's latest typing
+                // persists without requiring a blur.
+                if (liveEdit && liveEdit.changed) schedulePush();
             })
             .catch(function (err) {
                 console.error('Suite save failed:', err);
