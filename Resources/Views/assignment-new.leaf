@@ -289,15 +289,32 @@ Create Assignment
                            placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
                 </label>
             </div>
-            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                Default hint (used when a case omits its own)
-                <textarea class="form-input" id="family-default-hint" rows="2"
-                          style="padding:.3rem .5rem;font-size:.85rem"></textarea>
-            </label>
-
             <input type="hidden" id="family-id">
             <input type="hidden" id="family-function">
             <input type="hidden" id="family-params">
+            <input type="hidden" id="family-default-hint" value="">
+
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+                    <strong style="font-size:.85rem">Variables (shared across all cases)</strong>
+                    <button class="btn action-btn" type="button" id="add-family-variable-btn" style="padding:.2rem .6rem;font-size:.8rem">
+                        + Add variable
+                    </button>
+                </div>
+                <table class="results-table" id="family-variables-table" style="font-size:.8rem">
+                    <thead>
+                        <tr>
+                            <th style="width:12rem">Name</th>
+                            <th>Value (JSON / Python literal)</th>
+                            <th style="width:4rem"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="family-variables-body"></tbody>
+                </table>
+                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--meta)">
+                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.
+                </p>
+            </div>
 
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
@@ -312,7 +329,6 @@ Create Assignment
                             <th style="width:2.25rem">#</th>
                             <th>Label</th>
                             <th class="pf-case-expected-col">Expected</th>
-                            <th>Hint (override)</th>
                             <th style="width:4rem"></th>
                         </tr>
                     </thead>

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.94] - 2026-04-23
+
+### Added
+
+- **Family-scoped variables in pattern families.**  Each family gets a Variables table above the Cases table where the instructor declares shared named values (dicts, lists, scalars) that every generated test in the family sees as a module-level assignment.  Arg cells reference them by typing `$name` — the renderer emits the bare identifier instead of the literal.  Keeps the patient-database / lookup-table pattern ergonomic without duplicating JSON across every case.  The spec hash includes `variables`, so editing one triggers the v0.4.93 auto-retest loop just like editing a case would.  New Core types: `FamilyVariable` plus parallel `PatternCase.argVarRefs: [String?]`.  Validation: variable names must be valid Python identifiers, unique within a family, and must not collide with any `paramName`; every `$name` reference must resolve to a declared variable.
+- **Optional (defaulted) parameters in family cases.**  The scanner now records a parallel `paramHasDefault: [Bool]` flag per function parameter; the family editor renders those columns with a `— Python default —` placeholder and accepts empty cells.  The renderer switches from positional to kwarg form the moment a cell is left empty, so `def check(dob: str, currentDate: str = "20260301")` can be called with just `dob` — Python's own default binds at test time.  Spec encoding adds `argsProvided: [Bool]` on `PatternCase` (parallel to `args`); empty array preserves the pre-v0.4.94 "every arg required" behaviour so existing manifests round-trip unchanged.
+
+### Fixed
+
+- **Scan-notebook endpoint now forwards every field the scanner produces.**  The `FunctionResult` DTO dropped `paramTypes`, `returnType`, `isShadowed`, and the new `paramHasDefault` field, so the family-editor client saw them all as `undefined`.  That meant `coerceByType` fell back to strict `JSON.parse` on every cell, silently turning a bare `20260422` in a `str` column into `int(20260422)` — and the subsequent save generated a Python literal that failed validation against the function's `str` signature.  The root cause of the instructor-reported DOB-check family bug.  Regression guard: `testScanNotebookForwardsParamTypesReturnTypeAndDefaults`.
+- **Reloading an edited family no longer silently drops string-typed values.**  Same root cause as above: with `paramTypes` now flowing, `renderTypedCellValue` displays string args unquoted and the subsequent readback coerces them back as strings (not `null`).
+
+### Changed
+
+- **"Hint (override)" column and "Default hint" textarea removed from the pattern family editor modal.**  Per-case hint text was noisy and under-used; the UI is simpler without it.  The underlying `PatternCase.hint` / `PatternDefaults.hint` fields stay in the Core model so already-deployed manifests round-trip unchanged and the renderer still emits a `Hint: ...` line in generated tests when the fields are non-nil.
+- **Instructor assignments list — Status column tightened** from `min-width: 7.5rem` to `5.5rem` so the Name and Actions columns can breathe on narrower viewports.
+
 ## [0.4.93] - 2026-04-23
 
 ### Added

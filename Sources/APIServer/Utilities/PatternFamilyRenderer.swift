@@ -95,33 +95,125 @@ private func renderCase(family: PatternFamily, case c: PatternCase, specHash: St
 
 // MARK: - boundaryEquality
 
-private func renderBoundaryEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
-    // Variable names: prefer paramNames when provided, fall back to arg_1,
-    // arg_2, …  Validation guarantees args.count == paramNames.count when
-    // paramNames is non-empty.
+/// Per-case call context: a bundle of the four Python fragments every kind
+/// needs when rendering a function call with optional omitted parameters.
+/// Empty cells on defaulted params are skipped in the declarations and
+/// omitted from the call; the call switches from positional to keyword
+/// form after the first gap so Python's argument-binding rules hold.
+private struct CallContext {
+    /// One line per provided arg: `name = <pythonLiteral>`.  Omitted args
+    /// get no declaration.
+    let declLines: String
+    /// The parenthesised arg list as it appears inside
+    /// `student_module.func(<here>)`.  Leading contiguous provided args are
+    /// positional; anything after a gap becomes a kwarg.  Empty when the
+    /// instructor provided no args at all.
+    let callArgs: String
+    /// Python expression interpolated into the `input: …` f-string at the
+    /// top of every failure message.  Only provided args appear.
+    let inputLineLiteral: String
+    /// Expression interpolated into the `passed(...)` / `... returned`
+    /// success message to echo the arg values back to the student.
+    let callReprExpr: String
+}
+
+private func callContext(for family: PatternFamily, case c: PatternCase) -> CallContext {
     let argNames: [String] = {
         if !family.paramNames.isEmpty { return family.paramNames }
         return c.args.indices.map { "arg_\($0 + 1)" }
     }()
 
-    let declLines = zip(argNames, c.args)
-        .map { "\($0.0) = \($0.1.pythonLiteral)" }
-        .joined(separator: "\n")
+    // argsProvided == [] (empty) means pre-v0.4.94 behaviour: every arg
+    // was provided.  Non-empty must match args.count (enforced by the
+    // PatternCase initialiser).  Pad defensively to `argNames.count` in
+    // case paramNames and args have drifted apart (validation would
+    // normally catch that, but failing closed is cheaper than crashing).
+    let provided: [Bool] = {
+        guard !c.argsProvided.isEmpty else {
+            return Array(repeating: true, count: argNames.count)
+        }
+        if c.argsProvided.count == argNames.count { return c.argsProvided }
+        return (0..<argNames.count).map { i in
+            i < c.argsProvided.count ? c.argsProvided[i] : true
+        }
+    }()
 
-    let callArgs = argNames.joined(separator: ", ")
+    // argVarRefs == [] (empty) means "no variable references" — the
+    // pre-v0.4.94 shape where every arg is a literal.  A non-nil entry
+    // at position `i` names a family variable to pass instead of the
+    // literal.  Padded defensively for the same reason as `provided`.
+    let varRefs: [String?] = {
+        guard !c.argVarRefs.isEmpty else {
+            return Array(repeating: nil, count: argNames.count)
+        }
+        if c.argVarRefs.count == argNames.count { return c.argVarRefs }
+        return (0..<argNames.count).map { i in
+            i < c.argVarRefs.count ? c.argVarRefs[i] : nil
+        }
+    }()
 
-    let inputLineLiteral: String
-    if argNames.isEmpty {
-        inputLineLiteral = #""  input:    (no input)\n""#
-    } else {
-        let preview = argNames.map { "\($0)={\($0)!r}" }.joined(separator: ", ")
-        inputLineLiteral = "f\"  input:    \(preview)\\n\""
+    var declLineList:     [String] = []
+    var callArgsParts:    [String] = []
+    var previewParts:     [String] = []
+    var reprParts:        [String] = []
+    var sawOmission = false
+    for (idx, name) in argNames.enumerated() {
+        let isProvided = idx < provided.count ? provided[idx] : true
+        if !isProvided {
+            sawOmission = true
+            continue
+        }
+        // Variable reference: assign the param name directly from the
+        // family variable (no local literal declaration needed — the
+        // variable already lives at module scope, prepended by
+        // `familyVariableDecls()`).
+        let varRef = idx < varRefs.count ? varRefs[idx] : nil
+        if let refName = varRef {
+            declLineList.append("\(name) = \(refName)")
+        } else if idx < c.args.count {
+            declLineList.append("\(name) = \(c.args[idx].pythonLiteral)")
+        }
+        // Switch to kwargs the moment we pass any omitted arg — Python
+        // forbids positional-after-keyword, and `fn(a, c=...)` is how we
+        // tell Python "pass a positionally, skip b, fill c".
+        callArgsParts.append(sawOmission ? "\(name)=\(name)" : name)
+        previewParts.append("\(name)={\(name)!r}")
+        reprParts.append("{\(name)!r}")
     }
 
-    let callReprExpr = argNames.map { "{\($0)!r}" }.joined(separator: ", ")
+    let inputLineLiteral: String
+    if previewParts.isEmpty {
+        inputLineLiteral = #""  input:    (no input)\n""#
+    } else {
+        inputLineLiteral = "f\"  input:    \(previewParts.joined(separator: ", "))\\n\""
+    }
+
+    return CallContext(
+        declLines:        declLineList.joined(separator: "\n"),
+        callArgs:         callArgsParts.joined(separator: ", "),
+        inputLineLiteral: inputLineLiteral,
+        callReprExpr:     reprParts.joined(separator: ", ")
+    )
+}
+
+/// Renders the `name = <pythonLiteral>` preamble for every family
+/// variable, one per line.  Empty string when the family has no
+/// variables — callers use `isEmpty` to decide whether to emit the
+/// `# Variables:` section header and the blank separator line.
+private func familyVariableDecls(_ family: PatternFamily) -> String {
+    family.variables
+        .map { "\($0.name) = \($0.value.pythonLiteral)" }
+        .joined(separator: "\n")
+}
+
+private func renderBoundaryEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+    let ctx = callContext(for: family, case: c)
 
     let resolvedHint = c.resolvedHint(defaults: family.defaults)
     let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+
+    let variableDecls = familyVariableDecls(family)
+    let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     // The `# Test:` line comes FIRST so test_runtime's _first_comment_label()
     // picks up the case label.  Provenance comes second — a reader opening
@@ -131,15 +223,15 @@ private func renderBoundaryEquality(family: PatternFamily, case c: PatternCase, 
     # Test: \(c.label)
     # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    \(declLines.isEmpty ? "# (no input arguments)" : declLines)
+    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
     expected = \(c.expected.pythonLiteral)
 
     try:
-        result = student_module.\(family.functionName)(\(callArgs))
+        result = student_module.\(family.functionName)(\(ctx.callArgs))
     except Exception as ex:
         failed(
             "unexpected exception\\n"
-            \(inputLineLiteral)
+            \(ctx.inputLineLiteral)
             f"  expected: {expected!r}\\n"
             f"  error:    {type(ex).__name__}: {ex}\\n"
             \(hintLine)
@@ -148,13 +240,13 @@ private func renderBoundaryEquality(family: PatternFamily, case c: PatternCase, 
     if result != expected:
         failed(
             "wrong value\\n"
-            \(inputLineLiteral)
+            \(ctx.inputLineLiteral)
             f"  expected: {expected!r}\\n"
             f"  got:      {result!r}\\n"
             \(hintLine)
         )
 
-    passed(f"\(family.functionName)(\(callReprExpr)) returned {result!r}")
+    passed(f"\(family.functionName)(\(ctx.callReprExpr)) returned {result!r}")
     """
 }
 
@@ -173,26 +265,7 @@ private let defaultApproxTolerance: Double = 1e-6
 /// includes the tolerance and the actual delta so students see exactly
 /// how far off they are.
 private func renderApproximateEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
-    let argNames: [String] = {
-        if !family.paramNames.isEmpty { return family.paramNames }
-        return c.args.indices.map { "arg_\($0 + 1)" }
-    }()
-
-    let declLines = zip(argNames, c.args)
-        .map { "\($0.0) = \($0.1.pythonLiteral)" }
-        .joined(separator: "\n")
-
-    let callArgs = argNames.joined(separator: ", ")
-
-    let inputLineLiteral: String
-    if argNames.isEmpty {
-        inputLineLiteral = #""  input:    (no input)\n""#
-    } else {
-        let preview = argNames.map { "\($0)={\($0)!r}" }.joined(separator: ", ")
-        inputLineLiteral = "f\"  input:    \(preview)\\n\""
-    }
-
-    let callReprExpr = argNames.map { "{\($0)!r}" }.joined(separator: ", ")
+    let ctx = callContext(for: family, case: c)
 
     let resolvedHint = c.resolvedHint(defaults: family.defaults)
     let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
@@ -202,20 +275,23 @@ private func renderApproximateEquality(family: PatternFamily, case c: PatternCas
     // as floats (e.g. 1.0, not 1) — keeps the comparison well-typed.
     let toleranceLiteral = JSONValue.double(tolerance).pythonLiteral
 
+    let variableDecls = familyVariableDecls(family)
+    let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
+
     return """
     # Test: \(c.label)
     # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    \(declLines.isEmpty ? "# (no input arguments)" : declLines)
+    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
     expected = \(c.expected.pythonLiteral)
     tolerance = \(toleranceLiteral)
 
     try:
-        result = student_module.\(family.functionName)(\(callArgs))
+        result = student_module.\(family.functionName)(\(ctx.callArgs))
     except Exception as ex:
         failed(
             "unexpected exception\\n"
-            \(inputLineLiteral)
+            \(ctx.inputLineLiteral)
             f"  expected: {expected!r} (±{tolerance})\\n"
             f"  error:    {type(ex).__name__}: {ex}\\n"
             \(hintLine)
@@ -224,7 +300,7 @@ private func renderApproximateEquality(family: PatternFamily, case c: PatternCas
     if not isinstance(result, (int, float)) or isinstance(result, bool):
         failed(
             "wrong return type\\n"
-            \(inputLineLiteral)
+            \(ctx.inputLineLiteral)
             f"  expected: a number close to {expected!r}\\n"
             f"  got:      {result!r} (type {type(result).__name__})\\n"
             \(hintLine)
@@ -234,14 +310,14 @@ private func renderApproximateEquality(family: PatternFamily, case c: PatternCas
     if delta > tolerance:
         failed(
             "value outside tolerance\\n"
-            \(inputLineLiteral)
+            \(ctx.inputLineLiteral)
             f"  expected: {expected!r} (±{tolerance})\\n"
             f"  got:      {result!r}\\n"
             f"  delta:    {delta}\\n"
             \(hintLine)
         )
 
-    passed(f"\(family.functionName)(\(callReprExpr)) returned {result!r} (within ±{tolerance})")
+    passed(f"\(family.functionName)(\(ctx.callReprExpr)) returned {result!r} (within ±{tolerance})")
     """
 }
 

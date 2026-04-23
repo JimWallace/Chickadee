@@ -122,6 +122,23 @@ struct NotebookFunctionScannerTests {
         #expect(fns[0].returnType == "int")
     }
 
+    @Test func paramHasDefaultRecorded() {
+        // v0.4.94: a parallel `paramHasDefault` array so the family editor
+        // can mark defaulted columns as optional (empty cell ⇒ use Python
+        // default at test time).
+        let nb = notebook(code: "def check(dob: str, currentDate: str = \"20260301\") -> bool:\n    return True\n")
+        let fns = scanNotebookForFunctions(nb)
+        #expect(fns.count == 1)
+        #expect(fns[0].paramHasDefault == [false, true])
+        #expect(fns[0].paramTypes == ["str", "str"])
+    }
+
+    @Test func paramHasDefaultEmptyWhenNoParams() {
+        let nb = notebook(code: "def nothing():\n    return 1\n")
+        let fns = scanNotebookForFunctions(nb)
+        #expect(fns[0].paramHasDefault == [])
+    }
+
     @Test func functionWithoutAnyAnnotations() {
         // Baseline: no hints at all → paramTypes is [nil] per name, returnType nil.
         let nb = notebook(code: "def plain(a, b):\n    return a + b\n")

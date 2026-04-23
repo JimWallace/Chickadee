@@ -21,6 +21,12 @@ public struct NotebookFunctionInfo: Codable, Sendable {
     /// by the family editor to coerce typed cell values into the right
     /// JSON shape before sending them to the server.
     public let paramTypes: [String?]
+    /// `true` at position `i` when parameter `i` has a default value in the
+    /// signature (i.e. `foo: str = "x"`).  Length matches `paramNames`.
+    /// Used by the family editor to let the instructor leave those cells
+    /// empty and have the renderer fall through to the function's own
+    /// default at test time, rather than forcing a value for every param.
+    public let paramHasDefault: [Bool]
     /// The `-> X` return type annotation, `nil` when absent.  Used by the
     /// family editor to coerce the Expected cell into the right shape.
     public let returnType: String?
@@ -40,6 +46,7 @@ public struct NotebookFunctionInfo: Codable, Sendable {
     public init(name: String,
                 paramNames: [String],
                 paramTypes: [String?] = [],
+                paramHasDefault: [Bool] = [],
                 returnType: String? = nil,
                 hasTypeHints: Bool,
                 hasDocstring: Bool,
@@ -51,6 +58,9 @@ public struct NotebookFunctionInfo: Codable, Sendable {
         self.paramTypes = paramTypes.count == paramNames.count
             ? paramTypes
             : Array(repeating: nil, count: paramNames.count)
+        self.paramHasDefault = paramHasDefault.count == paramNames.count
+            ? paramHasDefault
+            : Array(repeating: false, count: paramNames.count)
         self.returnType = returnType
         self.hasTypeHints = hasTypeHints
         self.hasDocstring = hasDocstring
@@ -68,6 +78,10 @@ public struct NotebookFunctionInfo: Codable, Sendable {
         paramTypes   = decodedParamTypes.count == paramNames.count
             ? decodedParamTypes
             : Array(repeating: nil, count: paramNames.count)
+        let decodedParamHasDefault = try c.decodeIfPresent([Bool].self, forKey: .paramHasDefault) ?? []
+        paramHasDefault = decodedParamHasDefault.count == paramNames.count
+            ? decodedParamHasDefault
+            : Array(repeating: false, count: paramNames.count)
         returnType   = try c.decodeIfPresent(String.self,     forKey: .returnType)
     }
 }
@@ -105,6 +119,7 @@ public func scanNotebookForFunctions(_ notebookData: Data) -> [NotebookFunctionI
             name: info.name,
             paramNames: info.paramNames,
             paramTypes: info.paramTypes,
+            paramHasDefault: info.paramHasDefault,
             returnType: info.returnType,
             hasTypeHints: info.hasTypeHints,
             hasDocstring: info.hasDocstring,
@@ -167,10 +182,11 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
     let paramsRaw = String(line[paramsRange])
 
     let hasTypeHints = paramsRaw.contains(":") || line.contains("->")
-    let parsedParams = parseParams(from: paramsRaw)
-    let paramNames   = parsedParams.map(\.name)
-    let paramTypes   = parsedParams.map(\.type)
-    let returnType   = parseReturnType(from: line)
+    let parsedParams    = parseParams(from: paramsRaw)
+    let paramNames      = parsedParams.map(\.name)
+    let paramTypes      = parsedParams.map(\.type)
+    let paramHasDefault = parsedParams.map(\.hasDefault)
+    let returnType      = parseReturnType(from: line)
     let hasDocstring = bodyLines.prefix(5).contains {
         let t = $0.trimmingCharacters(in: .whitespaces)
         return t.hasPrefix("\"\"\"") || t.hasPrefix("'''")
@@ -180,21 +196,27 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
         name: name,
         paramNames: paramNames,
         paramTypes: paramTypes,
+        paramHasDefault: paramHasDefault,
         returnType: returnType,
         hasTypeHints: hasTypeHints,
         hasDocstring: hasDocstring
     )
 }
 
-/// A single parsed parameter: name plus optional type annotation.
+/// A single parsed parameter: name, optional type annotation, and a flag
+/// recording whether the signature provides a default value (the expression
+/// itself is dropped — the family renderer falls through to Python's own
+/// default at runtime instead of embedding the literal).
 private struct ParsedParam {
     let name: String
     let type: String?
+    let hasDefault: Bool
 }
 
 /// Parses a raw parameter list string (the content between `(` and `)`) into
-/// a list of `(name, type?)` pairs, stripping default values and ignoring
-/// `self`, `cls`, `*args`, `**kwargs`, and `/`.
+/// a list of `(name, type?, hasDefault)` triples, stripping the default-value
+/// expression but recording its presence, and ignoring `self`, `cls`,
+/// `*args`, `**kwargs`, and the keyword-only `/` marker.
 private func parseParams(from raw: String) -> [ParsedParam] {
     let trimmed = raw.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
@@ -204,8 +226,12 @@ private func parseParams(from raw: String) -> [ParsedParam] {
         .compactMap { part -> ParsedParam? in
             var chunk = part.trimmingCharacters(in: .whitespaces)
 
-            // Strip default value: "x = 0" or "x: int = 0" → type survives
+            // Strip default value: "x = 0" or "x: int = 0" → type survives,
+            // and record the presence of `=` so the editor can mark this
+            // column as optional.
+            var hasDefault = false
             if let eqIdx = chunk.firstIndex(of: "=") {
+                hasDefault = true
                 chunk = String(chunk[..<eqIdx]).trimmingCharacters(in: .whitespaces)
             }
             // Split name / type at first `:`.
@@ -225,7 +251,7 @@ private func parseParams(from raw: String) -> [ParsedParam] {
                 paramName.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" })
             else { return nil }
 
-            return ParsedParam(name: paramName, type: paramType)
+            return ParsedParam(name: paramName, type: paramType, hasDefault: hasDefault)
         }
 }
 

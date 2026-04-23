@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.93**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.94**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -553,6 +553,19 @@ Post-8 work also complete:
   toolbar button on every open/closed assignment row (`Resources/Views/assignments.leaf`).
   New columns: `submissions.retested_by_user_id` (who triggered the retest)
   and `test_setups.last_retested_manifest_hash` (dedup key)
+- v0.4.94 pattern family editor follow-through: (1) scan-notebook DTO now
+  forwards `paramTypes`/`returnType`/`isShadowed`/`paramHasDefault` so the
+  editor coerces cells by type (fixes the "bare `20260422` in a `str`
+  column becomes `int`" bug); (2) defaulted params treated as optional —
+  parallel `argsProvided: [Bool]` on `PatternCase` + kwarg-after-gap
+  rendering lets cases omit defaulted args and rely on Python's own
+  default at test time; (3) family-scoped Variables table for shared
+  values (dicts, lists, scalars) referenced from arg cells via `$name`
+  — new `PatternFamily.variables: [FamilyVariable]` + parallel
+  `PatternCase.argVarRefs: [String?]`, validated for identifier safety
+  and name uniqueness; (4) Hint field removed from the modal (underlying
+  `PatternCase.hint` / `PatternDefaults.hint` stay for manifest back-compat);
+  (5) instructor assignments list Status column tightened to 5.5rem
 
 **Next work:** Gamification expansion (leaderboards, more badges beyond
 First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern

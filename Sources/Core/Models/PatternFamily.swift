@@ -72,6 +72,25 @@ public struct PatternCase: Codable, Equatable, Sendable {
     /// Arguments passed to the function, in parameter order.  Array length
     /// must match the family's `paramNames` count.
     public let args: [JSONValue]
+    /// Parallel to `args`: `false` at position `i` means the instructor
+    /// intentionally left the cell empty so Python's own default value for
+    /// that parameter should be used at test time (the renderer omits the
+    /// argument from the function call).  Empty `[]` means "all provided"
+    /// — the pre-v0.4.94 behaviour.  Length, when non-empty, must match
+    /// `args.count`.  Distinguishing "omitted" from "None" via a parallel
+    /// flag keeps `args[i]` faithful to the literal the instructor typed
+    /// (a case genuinely passing `None` round-trips correctly).
+    public let argsProvided: [Bool]
+    /// Parallel to `args`: when non-nil at position `i`, the instructor
+    /// wrote `$<name>` in the cell and wants the generated test to pass
+    /// the family variable `<name>` (bare identifier) instead of the
+    /// literal in `args[i]`.  The literal slot still carries a
+    /// placeholder value (typically `.null`) so the array shape stays
+    /// aligned with `paramNames`, but the renderer ignores it when
+    /// `argVarRefs[i]` is set.  Empty `[]` means "no variable refs" —
+    /// the pre-v0.4.94 behaviour.  Length, when non-empty, must match
+    /// `args.count`.
+    public let argVarRefs: [String?]
     /// Value compared with `==` against the function's return.
     public let expected: JSONValue
     /// Per-case hint shown at the end of every failure message.  When nil,
@@ -85,11 +104,14 @@ public struct PatternCase: Codable, Equatable, Sendable {
     public let enabled: Bool
 
     public init(key: String, label: String, args: [JSONValue], expected: JSONValue,
+                argsProvided: [Bool] = [], argVarRefs: [String?] = [],
                 hint: String? = nil, tier: TestTier? = nil, points: Int? = nil,
                 enabled: Bool = true) {
         self.key = key
         self.label = label
         self.args = args
+        self.argsProvided = argsProvided.count == args.count ? argsProvided : []
+        self.argVarRefs   = argVarRefs.count   == args.count ? argVarRefs   : []
         self.expected = expected
         self.hint = hint
         self.tier = tier
@@ -102,11 +124,37 @@ public struct PatternCase: Codable, Equatable, Sendable {
         key      = try c.decode(String.self, forKey: .key)
         label    = try c.decode(String.self, forKey: .label)
         args     = try c.decodeIfPresent([JSONValue].self, forKey: .args) ?? []
+        let decodedProvided = try c.decodeIfPresent([Bool].self, forKey: .argsProvided) ?? []
+        argsProvided = decodedProvided.count == args.count ? decodedProvided : []
+        let decodedVarRefs = try c.decodeIfPresent([String?].self, forKey: .argVarRefs) ?? []
+        argVarRefs   = decodedVarRefs.count == args.count ? decodedVarRefs : []
         expected = try c.decode(JSONValue.self, forKey: .expected)
         hint     = try c.decodeIfPresent(String.self,   forKey: .hint)
         tier     = try c.decodeIfPresent(TestTier.self, forKey: .tier)
         points   = try c.decodeIfPresent(Int.self,      forKey: .points)
         enabled  = try c.decodeIfPresent(Bool.self,     forKey: .enabled) ?? true
+    }
+}
+
+/// A family-scoped named value (dict / list / scalar) that is prepended as
+/// a Python assignment to every generated test in this family.  Case args
+/// can reference a variable by typing `$name` — the renderer emits the
+/// bare identifier (e.g. `patient_database`) instead of the literal.
+///
+/// Scope is per-family in v0.4.94; if a setup-level variable table becomes
+/// useful we can promote this struct onto `TestProperties` without a
+/// breaking change to the per-family spec.
+public struct FamilyVariable: Codable, Equatable, Sendable {
+    /// Python identifier.  Validated against keywords + identifier syntax
+    /// in `ManifestValidation`.  Must be unique within the family.
+    public let name: String
+    /// The value bound to `name` in the generated test.  Any JSON-expressible
+    /// Python literal (scalar, list, dict) works; nesting is free.
+    public let value: JSONValue
+
+    public init(name: String, value: JSONValue) {
+        self.name  = name
+        self.value = value
     }
 }
 
@@ -127,6 +175,13 @@ public struct PatternFamily: Codable, Equatable, Sendable {
     public let paramNames: [String]
     public let defaults: PatternDefaults
     public let cases: [PatternCase]
+    /// Family-scoped variables prepended to every generated test.  Each
+    /// `FamilyVariable` emits one `name = <pythonLiteral>` line before
+    /// the case's declarations; arg cells may reference these by name
+    /// (via the `$name` editor syntax, which round-trips as a
+    /// `PatternArg.variable` in `PatternCase.args`… once the wire format
+    /// switches over — see v0.4.94's migration path in v0.4.95+).
+    public let variables: [FamilyVariable]
     /// Family-level prerequisites.  Each entry is either a raw script filename
     /// or a `family:<otherId>` token referring to another family by id.  Every
     /// generated case inherits these dependencies.  When the manifest is
@@ -139,6 +194,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
                 functionName: String, paramNames: [String] = [],
                 defaults: PatternDefaults = PatternDefaults(),
                 cases: [PatternCase] = [],
+                variables: [FamilyVariable] = [],
                 dependsOn: [String] = []) {
         self.id = id
         self.name = name
@@ -147,6 +203,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         self.paramNames = paramNames
         self.defaults = defaults
         self.cases = cases
+        self.variables = variables
         self.dependsOn = dependsOn
     }
 
@@ -159,6 +216,7 @@ public struct PatternFamily: Codable, Equatable, Sendable {
         paramNames   = try c.decodeIfPresent([String].self, forKey: .paramNames) ?? []
         defaults     = try c.decodeIfPresent(PatternDefaults.self, forKey: .defaults) ?? PatternDefaults()
         cases        = try c.decodeIfPresent([PatternCase].self,   forKey: .cases)    ?? []
+        variables    = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
         dependsOn    = try c.decodeIfPresent([String].self,        forKey: .dependsOn) ?? []
     }
 }

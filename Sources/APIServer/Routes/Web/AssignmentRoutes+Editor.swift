@@ -552,12 +552,23 @@ extension AssignmentRoutes {
 
         let functions = scanNotebookForFunctions(notebookData)
 
+        // Forward ALL fields the scanner produces — not just a hand-picked
+        // subset.  Pre-v0.4.94 this DTO dropped `paramTypes`, `returnType`,
+        // `isShadowed`, and `paramHasDefault`, so the family-editor client
+        // always saw them as undefined, which made `coerceByType` fall
+        // back to untyped JSON.parse — a bare `20260422` in a `str` column
+        // became `int(20260422)` and the renderer emitted a generated
+        // test that then failed validation.
         struct FunctionResult: Content {
             var name: String
             var paramNames: [String]
             var paramCount: Int
+            var paramTypes: [String?]
+            var paramHasDefault: [Bool]
+            var returnType: String?
             var hasTypeHints: Bool
             var hasDocstring: Bool
+            var isShadowed: Bool
             var templates: [TestTemplateInfo]
         }
 
@@ -566,8 +577,12 @@ extension AssignmentRoutes {
                 name: fn.name,
                 paramNames: fn.paramNames,
                 paramCount: fn.paramCount,
+                paramTypes: fn.paramTypes,
+                paramHasDefault: fn.paramHasDefault,
+                returnType: fn.returnType,
                 hasTypeHints: fn.hasTypeHints,
                 hasDocstring: fn.hasDocstring,
+                isShadowed: fn.isShadowed,
                 templates: allTemplateInfos(functionName: fn.name, paramNames: fn.paramNames)
             )
         }

@@ -109,7 +109,19 @@
         // paramNames; each entry is either a string (Python type annotation
         // as written — `int`, `bool`, `list[int]`, `Optional[str]`) or null.
         var currentParamTypes = [];
+        // Parallel to paramNames.  `true` means this parameter has a default
+        // value in the signature (e.g. `currentDate: str = "..."`), which
+        // lets the instructor leave the cell empty and have the renderer
+        // omit the arg from the call so Python's own default binds.
+        var currentParamHasDefault = [];
         var currentReturnType = null;
+
+        // v0.4.94: in-memory family variables [{name, value}] displayed in
+        // the Variables table above the Cases table.  Arg cells can
+        // reference these by typing `$name` (mirrored by `argVarRefs` in
+        // each saved case).  The table is separate from `cases` because
+        // variables are family-wide, not case-scoped.
+        var familyVariables = [];
 
         function escHtml(s) {
             return String(s == null ? '' : s)
@@ -221,8 +233,12 @@
             // of cell values.  Fall back to an all-null array when the scanner
             // didn't report paramTypes (older clients or hint-free notebooks).
             var scannedTypes = fn ? (fn.paramTypes || []) : [];
+            var scannedHasDefault = fn ? (fn.paramHasDefault || []) : [];
             currentParamTypes = paramNames.map(function (_, i) {
                 return scannedTypes[i] != null ? scannedTypes[i] : null;
+            });
+            currentParamHasDefault = paramNames.map(function (_, i) {
+                return scannedHasDefault[i] === true;
             });
             currentReturnType = fn ? (fn.returnType || null) : null;
             fnInput.value = fnName || '';
@@ -264,17 +280,22 @@
                     // Show the type annotation alongside the param name when
                     // we know it — `bmi: float`, `exempt: bool` — so the
                     // instructor sees what the column expects without
-                    // scrolling back to the solution.
-                    var t = currentParamTypes && currentParamTypes[i];
-                    var label = t ? (escHtml(p) + ': ' + escHtml(t)) : escHtml(p);
-                    th.push('<th><code style="font-size:.7rem">' + label + '</code></th>');
+                    // scrolling back to the solution.  Optional (defaulted)
+                    // params get a dimmed `?` suffix so the instructor
+                    // knows they can be skipped.
+                    var t  = currentParamTypes && currentParamTypes[i];
+                    var hd = currentParamHasDefault && currentParamHasDefault[i];
+                    var labelBase = t ? (escHtml(p) + ': ' + escHtml(t)) : escHtml(p);
+                    var labelFull = hd
+                        ? (labelBase + '<span style="color:var(--meta);font-weight:normal"> ?</span>')
+                        : labelBase;
+                    th.push('<th><code style="font-size:.7rem">' + labelFull + '</code></th>');
                 });
             }
             var expectedHeader = currentReturnType
                 ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
                 : 'Expected';
             th.push('<th>' + expectedHeader + '</th>');
-            th.push('<th>Hint (override)</th>');
             th.push('<th style="width:4rem"></th>');
             casesHeader.innerHTML = th.join('');
         }
@@ -287,7 +308,9 @@
 
         function addCaseRow(initial, paramNames) {
             paramNames = paramNames || [];
-            var c = initial || { label: '', args: [], expected: null, hint: '' };
+            var c = initial || { label: '', args: [], expected: null };
+            var argsProvided = Array.isArray(c.argsProvided) ? c.argsProvided : [];
+            var argVarRefs   = Array.isArray(c.argVarRefs)   ? c.argVarRefs   : [];
             var tds = [];
             // Column 1: auto-numbered sequence (readonly, regenerated on reorder).
             tds.push('<td class="pf-case-num" style="text-align:center;color:var(--meta);font-size:.75rem"></td>');
@@ -298,12 +321,27 @@
                 tds.push('<td><input type="text" class="form-input pf-case-args" value="' + escHtml(JSON.stringify(c.args || [])) + '" placeholder="[18.49]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
             } else {
                 paramNames.forEach(function (_, i) {
-                    var val = (c.args && c.args[i] !== undefined) ? renderTypedCellValue(c.args[i]) : '';
-                    tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="e.g. 18.49 or underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+                    // Display precedence: variable reference (`$name`) > literal
+                    // > blank (omitted / use Python default).
+                    var varName = argVarRefs[i] || null;
+                    var wasProvided = (argsProvided.length === 0) ? true : !!argsProvided[i];
+                    var val;
+                    if (varName) {
+                        val = '$' + varName;
+                    } else if (!wasProvided) {
+                        val = '';
+                    } else {
+                        val = (c.args && c.args[i] !== undefined) ? renderTypedCellValue(c.args[i]) : '';
+                    }
+                    // Placeholder signals "— default —" for optional params,
+                    // so the instructor can tell at a glance which cells
+                    // can be left empty.
+                    var hasDefault = currentParamHasDefault && currentParamHasDefault[i];
+                    var placeholder = hasDefault ? '— Python default —' : 'e.g. 18.49 or underweight';
+                    tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="' + escHtml(placeholder) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
                 });
             }
             tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(c.expected == null ? '' : renderTypedCellValue(c.expected)) + '" placeholder="e.g. underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
-            tds.push('<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
             tds.push('<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>');
 
             var tr = document.createElement('tr');
@@ -323,6 +361,96 @@
             Array.from(casesBody.querySelectorAll('.pf-case-num')).forEach(function (td, i) {
                 var n = i + 1;
                 td.textContent = (n < 10 ? '0' + n : String(n));
+            });
+        }
+
+        // ── Family variables ────────────────────────────────────────────────
+        //
+        // Variables are family-scoped named values (lists, dicts, scalars)
+        // that get prepended as module-level assignments to every generated
+        // test in the family.  Editor UI lives above the Cases table; arg
+        // cells reference them with `$name`.  v0.4.94.
+
+        var variablesBody  = document.getElementById('family-variables-body');
+        var variablesEmpty = document.getElementById('family-variables-empty');
+        var addVariableBtn = document.getElementById('add-family-variable-btn');
+
+        function renderVariablesTable() {
+            if (!variablesBody) return;
+            variablesBody.innerHTML = '';
+            familyVariables.forEach(function (v, i) {
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><input type="text" class="form-input pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
+                  + '<td><input type="text" class="form-input pf-var-value" data-var-index="' + i + '" value="' + escHtml(v.value == null ? '' : (typeof v.value === 'string' ? JSON.stringify(v.value) : JSON.stringify(v.value))) + '" placeholder="{&quot;p01&quot;: {...}} or [1, 2, 3]" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>'
+                  + '<td><button type="button" class="btn action-btn action-danger pf-var-remove" data-var-index="' + i + '" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>';
+                variablesBody.appendChild(tr);
+            });
+            if (variablesEmpty) {
+                variablesEmpty.style.display = familyVariables.length ? 'none' : '';
+            }
+        }
+
+        /// Reads the Variables-table inputs back into `familyVariables`
+        /// (call before `readFamilyFromEditor` so the two stay in sync).
+        /// Strict mode: throws when a value doesn't parse as JSON.  Empty
+        /// rows are dropped.  Name validation happens server-side.
+        function syncFamilyVariablesFromTable(opts) {
+            opts = opts || {};
+            if (!variablesBody) return;
+            var rows = Array.from(variablesBody.querySelectorAll('tr'));
+            var out = [];
+            rows.forEach(function (row, i) {
+                var nameEl  = row.querySelector('.pf-var-name');
+                var valueEl = row.querySelector('.pf-var-value');
+                var name    = (nameEl  ? nameEl.value  : '').trim();
+                var rawVal  = (valueEl ? valueEl.value : '').trim();
+                if (!name && !rawVal) return; // empty row — drop silently
+                if (!name) {
+                    if (opts.strict) throw new Error('Variable row ' + (i + 1) + ': name is required.');
+                    return;
+                }
+                if (rawVal === '') {
+                    if (opts.strict) throw new Error('Variable "' + name + '": value is required.');
+                    return;
+                }
+                var parsed;
+                // Accept JSON or Python-capitalised scalars (True/False/None).
+                // Falls back to treating a bare string as a JSON string.
+                parsed = parseTypedCellValue(rawVal);
+                out.push({ name: name, value: parsed });
+            });
+            familyVariables = out;
+        }
+
+        if (addVariableBtn) {
+            addVariableBtn.addEventListener('click', function () {
+                // Pull any edits from the DOM first so we don't clobber
+                // in-progress typing when we re-render.
+                try { syncFamilyVariablesFromTable({ strict: false }); } catch (_) {}
+                familyVariables.push({ name: '', value: null });
+                renderVariablesTable();
+                // Focus the new row's name input.
+                var rows = variablesBody ? variablesBody.querySelectorAll('tr') : [];
+                var last = rows[rows.length - 1];
+                if (last) {
+                    var nameInputNew = last.querySelector('.pf-var-name');
+                    if (nameInputNew) nameInputNew.focus();
+                }
+            });
+        }
+        if (variablesBody) {
+            variablesBody.addEventListener('click', function (e) {
+                var btn = e.target && e.target.closest('.pf-var-remove');
+                if (!btn) return;
+                // Sync first so the other rows' in-progress edits don't
+                // disappear when we drop this one.
+                try { syncFamilyVariablesFromTable({ strict: false }); } catch (_) {}
+                var idx = parseInt(btn.getAttribute('data-var-index'), 10);
+                if (isFinite(idx) && idx >= 0 && idx < familyVariables.length) {
+                    familyVariables.splice(idx, 1);
+                    renderVariablesTable();
+                }
             });
         }
 
@@ -427,8 +555,21 @@
         /// required for the fallback single-args field (when no parameters
         /// are detected); per-column cells accept bare values.  Throws with
         /// a readable message on required-field or structural failures.
+        ///
+        /// Per v0.4.94, each arg cell may hold one of three things:
+        ///   1. A literal value (e.g. `20260422`, `"underweight"`) — parsed
+        ///      via `coerceByType` using the scanner-reported type hint.
+        ///   2. A variable reference `$name` — resolves at render time to
+        ///      the bare identifier `name` in the generated test.  Must
+        ///      match a declared family variable; validation rejects
+        ///      dangling refs.
+        ///   3. Empty — only allowed when the scanner reported the param
+        ///      has a default value (`paramHasDefault[i]`), in which case
+        ///      the renderer omits the arg from the call and Python's
+        ///      default value applies.
         function readCasesFromTable(paramNames) {
             paramNames = paramNames || [];
+            var declaredVarNames = new Set(familyVariables.map(function (v) { return v.name; }));
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             var out = [];
             for (var i = 0; i < rows.length; i++) {
@@ -436,9 +577,10 @@
                 var label = row.querySelector('.pf-case-label').value.trim();
                 var rawExp = row.querySelector('.pf-case-expected').value;
                 if (rawExp.trim() === '') rawExp = '';
-                var hint   = row.querySelector('.pf-case-hint').value.trim();
                 var caseNum = (i + 1 < 10 ? '0' + (i + 1) : String(i + 1));
                 var args = [];
+                var argsProvided = [];
+                var argVarRefs   = [];
                 if (paramNames.length === 0) {
                     var rawArgs = (row.querySelector('.pf-case-args') || {}).value || '';
                     rawArgs = rawArgs.trim();
@@ -447,13 +589,41 @@
                         catch (e) { throw new Error('Case ' + caseNum + ': args must be valid JSON (' + e.message + ')'); }
                         if (!Array.isArray(args)) throw new Error('Case ' + caseNum + ': args must be a JSON array');
                     }
+                    argsProvided = args.map(function () { return true; });
+                    argVarRefs   = args.map(function () { return null; });
                 } else {
                     for (var a = 0; a < paramNames.length; a++) {
                         var cell = row.querySelector('.pf-case-arg[data-arg-index="' + a + '"]');
                         var raw = cell ? cell.value : '';
-                        if (raw.trim() === '') throw new Error('Case ' + caseNum + ': missing value for "' + paramNames[a] + '"');
+                        var trimmed = raw.trim();
                         var paramTypeHint = currentParamTypes ? currentParamTypes[a] : null;
+                        if (trimmed === '') {
+                            // Empty cell: allowed only if the scanner saw a default.
+                            var hasDefault = currentParamHasDefault && currentParamHasDefault[a];
+                            if (!hasDefault) {
+                                throw new Error('Case ' + caseNum + ': missing value for "' + paramNames[a] + '"');
+                            }
+                            args.push(null);                   // placeholder; renderer ignores
+                            argsProvided.push(false);
+                            argVarRefs.push(null);
+                            continue;
+                        }
+                        // Variable reference: `$ident` (not `$"...$"` quoted).
+                        var varMatch = trimmed.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                        if (varMatch) {
+                            var varName = varMatch[1];
+                            if (!declaredVarNames.has(varName)) {
+                                throw new Error('Case ' + caseNum + ': "' + paramNames[a] + '" references unknown variable "$' + varName + '" — declare it in the Variables table.');
+                            }
+                            args.push(null);                   // placeholder; renderer uses the ref
+                            argsProvided.push(true);
+                            argVarRefs.push(varName);
+                            continue;
+                        }
+                        // Literal: coerce by type hint.
                         args.push(coerceByType(raw, paramTypeHint));
+                        argsProvided.push(true);
+                        argVarRefs.push(null);
                     }
                 }
                 var expected;
@@ -464,8 +634,9 @@
                     key: caseNum,
                     label: label,
                     args: args,
+                    argsProvided: argsProvided,
+                    argVarRefs: argVarRefs,
                     expected: expected,
-                    hint: hint || null,
                     enabled: true
                 });
             }
@@ -476,33 +647,58 @@
         /// preserves what we can but doesn't throw on parse errors.  Uses
         /// the same type-aware coercion as the strict save path so bare
         /// strings (like `"underweight"`) round-trip without being
-        /// nullified by strict `JSON.parse`.  Regression guard for the
-        /// "cells reappear as null on reopen" symptom.
+        /// nullified by strict `JSON.parse`.  Also preserves variable
+        /// references (`$name`) and "omitted" state across a header
+        /// rebuild so the instructor doesn't silently lose data when
+        /// adding a case, changing tolerance, etc.
         function readCasesFromTableRaw(argCount) {
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             return rows.map(function (row) {
                 var label = row.querySelector('.pf-case-label').value;
                 var rawExp = row.querySelector('.pf-case-expected').value;
-                var hint = row.querySelector('.pf-case-hint').value;
                 var args = [];
+                var argsProvided = [];
+                var argVarRefs   = [];
                 var cells = row.querySelectorAll('.pf-case-arg');
                 if (cells.length) {
                     Array.from(cells).forEach(function (c, idx) {
                         var raw = c.value;
-                        if (String(raw).trim() === '') { args.push(null); return; }
+                        if (String(raw).trim() === '') {
+                            args.push(null);
+                            argsProvided.push(false);
+                            argVarRefs.push(null);
+                            return;
+                        }
+                        var varMatch = String(raw).trim().match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                        if (varMatch) {
+                            args.push(null);
+                            argsProvided.push(true);
+                            argVarRefs.push(varMatch[1]);
+                            return;
+                        }
                         var typeHint = currentParamTypes ? currentParamTypes[idx] : null;
                         args.push(coerceByType(raw, typeHint));
+                        argsProvided.push(true);
+                        argVarRefs.push(null);
                     });
                 } else {
                     var single = row.querySelector('.pf-case-args');
                     if (single) {
                         try { args = JSON.parse(single.value); if (!Array.isArray(args)) args = []; } catch (_) { args = []; }
+                        argsProvided = args.map(function () { return true; });
+                        argVarRefs   = args.map(function () { return null; });
                     }
                 }
                 var expected = rawExp.trim() === ''
                     ? null
                     : coerceByType(rawExp, currentReturnType);
-                return { label: label, args: args, expected: expected, hint: hint };
+                return {
+                    label: label,
+                    args: args,
+                    argsProvided: argsProvided,
+                    argVarRefs: argVarRefs,
+                    expected: expected
+                };
             });
         }
 
@@ -568,6 +764,9 @@
                 var tol = family.defaults && family.defaults.tolerance;
                 toleranceInput.value = (tol == null) ? '' : String(tol);
                 preselectedFn = family.functionName || '';
+                familyVariables = Array.isArray(family.variables)
+                    ? family.variables.map(function (v) { return { name: v.name, value: v.value }; })
+                    : [];
                 rebuildCasesHeader(family.paramNames || []);
                 (family.cases || []).forEach(function (c) { addCaseRow(c, family.paramNames || []); });
                 if (!(family.cases || []).length) addCaseRow(null, family.paramNames || []);
@@ -582,8 +781,10 @@
                 editingPoints = 1;
                 defaultHintInput.value = '';
                 toleranceInput.value = '';
+                familyVariables = [];
                 rebuildCasesHeader([]);
             }
+            renderVariablesTable();
             updateKindVisibility();
 
             overlay.style.display = 'flex';
@@ -603,6 +804,9 @@
         function closeEditor() { overlay.style.display = 'none'; }
 
         function readFamilyFromEditor() {
+            // Pull Variables-table edits first; readCasesFromTable checks
+            // `$name` refs against the synced `familyVariables` list.
+            syncFamilyVariablesFromTable({ strict: true });
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
             var cases = readCasesFromTable(paramNames);
             var kind = kindInput.value || 'boundary_equality';
@@ -649,6 +853,7 @@
                 paramNames: paramNames,
                 defaults: defaults,
                 cases: cases,
+                variables: familyVariables.slice(),
                 dependsOn: existingDependsOn
             };
         }
