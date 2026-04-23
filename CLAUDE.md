@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.92**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.93**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -542,6 +542,17 @@ Post-8 work also complete:
   `coerceByType` as the strict save path); (3) `readFamilyFromEditor`
   carries forward the family's `dependsOn` so family-level prerequisites
   survive a modal save
+- v0.4.93 assignment-revision retest loop.  When the instructor Saves an
+  edited assignment whose manifest bytes changed, every student submission
+  on that setup is re-queued for the worker so it regrades against the
+  new test suite (`retestAllSubmissionsForSetup`).  Gated on a manifest-hash
+  compare (`test_setups.last_retested_manifest_hash`) so cosmetic saves
+  don't fan out.  Excludes `kind = validation`; browser-graded submissions
+  flip to pending and get picked up by the v0.4.56 worker backstop.  New
+  manual `POST /instructor/:assignmentID/retest` endpoint + refresh-arrow
+  toolbar button on every open/closed assignment row (`Resources/Views/assignments.leaf`).
+  New columns: `submissions.retested_by_user_id` (who triggered the retest)
+  and `test_setups.last_retested_manifest_hash` (dedup key)
 
 **Next work:** Gamification expansion (leaderboards, more badges beyond
 First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern

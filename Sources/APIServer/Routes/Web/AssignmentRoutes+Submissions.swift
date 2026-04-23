@@ -443,6 +443,7 @@ extension AssignmentRoutes {
             var returnTo: String?
         }
 
+        let user = try req.auth.require(APIUser.self)
         let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
@@ -465,11 +466,58 @@ extension AssignmentRoutes {
             submission.workerID = nil
             submission.assignedAt = nil
             submission.retestedAt = Date()
+            submission.retestedByUserID = user.id
             try await submission.save(on: req.db)
         }
 
         let body = try? req.content.decode(RetestBody.self)
         let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body?.returnTo,
+            assignmentIDRaw: assignmentIDRaw,
+            fallbackPath: fallbackPath
+        )
+        return req.redirect(to: redirectPath)
+    }
+
+    // MARK: - POST /instructor/:assignmentID/retest
+    //
+    // "Retest all" — fans out a retest to every student submission on the
+    // assignment's test setup.  The manual sibling of the auto-retest
+    // trigger in `saveEditedAssignment`.  Always runs with `force = true`
+    // so an instructor click re-enqueues even the submissions currently
+    // being worked on (the queue can safely collapse duplicates at claim
+    // time; we'd rather over-trigger than silently skip on a retry).
+    //
+    // Bumps `setup.lastRetestedManifestHash` on success so a subsequent
+    // cosmetic Save doesn't duplicate the work.
+
+    @Sendable
+    func retestAllSubmissions(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard
+            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        let count = try await retestAllSubmissionsForSetup(
+            setupID: setup.id!,
+            triggeredBy: user.id,
+            on: req.db,
+            force: true
+        )
+
+        setup.lastRetestedManifestHash = manifestHash(setup.manifest)
+        try await setup.save(on: req.db)
+
+        req.logger.info("retest_all_triggered assignment=\(assignmentIDRaw) count=\(count) by=\(user.id?.uuidString ?? "nil")")
+
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        struct RetestAllBody: Content { var returnTo: String? }
+        let body = try? req.content.decode(RetestAllBody.self)
         let redirectPath = sanitizedAssignmentReturnPath(
             body?.returnTo,
             assignmentIDRaw: assignmentIDRaw,

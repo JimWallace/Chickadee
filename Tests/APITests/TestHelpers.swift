@@ -126,6 +126,8 @@ private func registerBaseTestMigrations(on app: Application) {
     app.migrations.add(AddSubmissionRetestedAt())
     app.migrations.add(AddAssignmentDeadlineOverrideActive())
     app.migrations.add(CreateClassAchievements())
+    app.migrations.add(AddSubmissionRetestedByUserID())
+    app.migrations.add(AddTestSetupLastRetestedManifestHash())
 }
 
 private func registerObservabilityTestMigrations(on app: Application) {

@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.93] - 2026-04-23
+
+### Added
+
+- **Auto-retest every student submission when the assignment's test suite changes.**  When an instructor revises an assignment — fixes a bug in a test script, tightens a pattern family's expected value, adds a case — every prior submission against that setup is automatically re-queued for the worker to regrade against the revised manifest.  Trigger lives on the assignment Save button (`POST /instructor/:assignmentID/edit/save`) and is gated on a manifest-hash compare against the new `test_setups.last_retested_manifest_hash` column, so cosmetic-only saves (renaming the assignment, moving the due date, swapping the notebook) don't fire a 150-row re-grade for nothing.  Excludes `kind = validation` submissions (the instructor's solution notebook follows its own `scheduleValidationAfterSuiteEdit` path).  Browser-graded submissions are handled automatically by the existing v0.4.56 worker backstop — flipping `status = "pending"` is enough to get them re-graded server-side via native `python3`.
+- **`POST /instructor/:assignmentID/retest` endpoint and toolbar button.**  Manual sibling of the auto-trigger: a new refresh-arrow icon beside each open/closed assignment's Edit/Delete buttons re-grades every submission on demand.  Uses `force: true` so it works even when the auto-retest has already queued the same submissions (e.g. the instructor wants to re-run after an infrastructure blip, not after a suite edit).  Confirmation dialog inline so a misclick doesn't burn 10 minutes of worker time.
+- **`retested_by_user_id` on submissions.**  Nullable UUID stamped on every retest — manual and auto — so the admin submission view can show "retested by <instructor> at <time>".  Existing `retested_at` column now has a paired actor column.
+- **Shared `retestAllSubmissionsForSetup` helper** in `AssignmentHelpers.swift`, plus `manifestHash()` utility, used by both the endpoint and the auto-save trigger so the two paths can't drift.
+
+### Fixed
+
+- **Per-submission retest now stamps the instructor who clicked.**  The existing `POST /instructor/:assignmentID/submissions/:submissionID/retest` handler updates `retested_by_user_id` alongside `retested_at` for audit parity with the new batch path.
+
 ## [0.4.92] - 2026-04-23
 
 ### Fixed
