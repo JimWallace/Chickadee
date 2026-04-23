@@ -174,6 +174,38 @@ func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuite
                     reason: "Pattern family '\(family.id)': tolerance must be a non-negative finite number.")
             }
         }
+
+        // v0.4.94: family-scoped variables.  Each name must be a valid
+        // Python identifier, unique within the family, and not collide
+        // with a parameter name (the renderer would shadow it at call
+        // time, silently breaking the test).  Any `$name` reference in
+        // a case arg cell must resolve to a declared variable.
+        var seenVarNames: Set<String> = []
+        let paramNameSet = Set(family.paramNames)
+        for v in family.variables {
+            guard isValidPythonIdentifier(v.name) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid Python identifier")
+            }
+            guard seenVarNames.insert(v.name).inserted else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': duplicate variable name '\(v.name)'")
+            }
+            if paramNameSet.contains(v.name) {
+                throw Abort(.unprocessableEntity,
+                    reason: "Pattern family '\(family.id)': variable name '\(v.name)' collides with a parameter name; the generated test would shadow the family variable.")
+            }
+        }
+        for c in family.cases {
+            for (i, maybeRef) in c.argVarRefs.enumerated() {
+                guard let ref = maybeRef else { continue }
+                guard seenVarNames.contains(ref) else {
+                    let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'")
+                }
+            }
+        }
     }
 
     // 2. Filename collisions: no generated filename may match a hand-written

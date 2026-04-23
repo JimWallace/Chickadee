@@ -195,6 +195,181 @@ final class PatternFamilyTests: XCTestCase {
         }
     }
 
+    // MARK: - v0.4.94 — default-valued parameters (argsProvided)
+
+    /// When a case leaves a defaulted param empty (`argsProvided[i] == false`),
+    /// the generated Python must:
+    ///   1. NOT declare a variable for that param (Python's own default is used)
+    ///   2. Call the function positionally while the leading run is contiguous,
+    ///      switch to kwargs the moment an arg is omitted.
+    /// Regression guard for the "every arg required" pre-v0.4.94 behaviour
+    /// and the user-reported `def f(dob: str, currentDate: str = "...")` case.
+    func testRenderer_defaultedTrailingArgOmitted_positionalCall() throws {
+        let family = PatternFamily(
+            id: "dobcheck", name: "DOB Check", kind: .boundaryEquality,
+            functionName: "check_dob", paramNames: ["dob", "currentDate"],
+            defaults: PatternDefaults(tier: .pub, points: 1),
+            cases: [
+                PatternCase(
+                    key: "01", label: "default currentDate",
+                    args: [.string("20260422"), .null],
+                    expected: .bool(true),
+                    argsProvided: [true, false]
+                )
+            ]
+        )
+        let rendered = renderPatternFamily(family)
+        XCTAssertEqual(rendered.count, 1)
+        let src = rendered[0].source
+
+        XCTAssertTrue(src.contains("dob = \"20260422\""),
+                      "Provided arg must be declared: \(src)")
+        XCTAssertFalse(src.contains("currentDate ="),
+                       "Omitted defaulted arg must NOT be declared: \(src)")
+        XCTAssertTrue(src.contains("check_dob(dob)"),
+                      "Call should be positional over the leading run: \(src)")
+        XCTAssertFalse(src.contains("check_dob(dob, currentDate)"),
+                       "Call must not reference an undeclared local: \(src)")
+        try assertValidPythonSyntax(src, label: rendered[0].filename)
+    }
+
+    /// Middle-arg omission must switch subsequent provided args to kwargs,
+    /// otherwise Python rejects the call as "positional after keyword".
+    func testRenderer_defaultedMiddleArgOmitted_usesKwargs() throws {
+        let family = PatternFamily(
+            id: "middlemissing", name: "Middle missing", kind: .boundaryEquality,
+            functionName: "three_args", paramNames: ["a", "b", "c"],
+            defaults: PatternDefaults(tier: .pub, points: 1),
+            cases: [
+                PatternCase(
+                    key: "01", label: "skip middle",
+                    args: [.int(1), .null, .int(3)],
+                    expected: .int(4),
+                    argsProvided: [true, false, true]
+                )
+            ]
+        )
+        let rendered = renderPatternFamily(family)
+        let src = rendered[0].source
+        XCTAssertTrue(src.contains("three_args(a, c=c)"),
+                      "Expected kwarg form after middle gap: \(src)")
+        XCTAssertFalse(src.contains("b ="),
+                       "Omitted middle arg must not be declared: \(src)")
+        try assertValidPythonSyntax(src, label: rendered[0].filename)
+    }
+
+    /// Pre-v0.4.94 families have no `argsProvided` array in their spec.
+    /// The decoder lands them with an empty `argsProvided`, and the
+    /// renderer must treat that as "all args provided" — same output as
+    /// before.  No behaviour change for existing families.
+    func testRenderer_emptyArgsProvided_behavesAsAllProvided() throws {
+        let rendered = renderPatternFamily(bmiFamily())
+        let src = rendered[0].source
+        XCTAssertTrue(src.contains("bmi = 18.49"))
+        XCTAssertTrue(src.contains("bmi_category(bmi)"))
+    }
+
+    // MARK: - v0.4.94 — family variables
+
+    /// A family with one dict variable: the rendered test prepends the
+    /// assignment, and a case referencing the variable via argVarRefs
+    /// emits the bare identifier (no literal) in the param declaration.
+    func testRenderer_familyVariable_prependedAndReferencedInCase() throws {
+        let patients: JSONValue = .object([
+            "p01": .object(["dob": .string("20000101"), "exempt": .bool(false)]),
+            "p02": .object(["dob": .string("19950515"), "exempt": .bool(true)])
+        ])
+        let family = PatternFamily(
+            id: "lookup", name: "Patient lookup", kind: .boundaryEquality,
+            functionName: "lookup", paramNames: ["db", "pid"],
+            defaults: PatternDefaults(tier: .pub, points: 1),
+            cases: [
+                PatternCase(
+                    key: "01", label: "known patient",
+                    args: [.null, .string("p01")],
+                    expected: .string("20000101"),
+                    argsProvided: [true, true],
+                    argVarRefs:   ["patients", nil]
+                )
+            ],
+            variables: [FamilyVariable(name: "patients", value: patients)]
+        )
+        let rendered = renderPatternFamily(family)
+        XCTAssertEqual(rendered.count, 1)
+        let src = rendered[0].source
+
+        XCTAssertTrue(src.contains("patients = {"),
+                      "Family variable must be declared at module scope: \(src)")
+        XCTAssertTrue(src.contains("db = patients"),
+                      "Arg cell $ref must emit a bare identifier assignment: \(src)")
+        XCTAssertTrue(src.contains("pid = \"p01\""),
+                      "Literal arg must still render as a literal: \(src)")
+        XCTAssertTrue(src.contains("lookup(db, pid)"),
+                      "Call site must use the declared param names: \(src)")
+        try assertValidPythonSyntax(src, label: rendered[0].filename)
+    }
+
+    /// The validator rejects a case arg that references a variable name
+    /// the family doesn't declare.  Prevents dangling `$foo` refs from
+    /// sneaking into generated Python as a NameError.
+    func testValidation_rejectsUnknownVariableReference() {
+        let family = PatternFamily(
+            id: "f", name: "f", kind: .boundaryEquality,
+            functionName: "f", paramNames: ["x"],
+            cases: [
+                PatternCase(
+                    key: "01", label: "case",
+                    args: [.null], expected: .int(0),
+                    argsProvided: [true],
+                    argVarRefs:   ["does_not_exist"]
+                )
+            ],
+            variables: []
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
+            let msg = "\(err)"
+            XCTAssertTrue(msg.contains("does_not_exist") && msg.contains("unknown"),
+                          "Expected unknown-var error, got: \(msg)")
+        }
+    }
+
+    /// Variable names must be valid Python identifiers + not collide with
+    /// any param name (otherwise the generated test would shadow the
+    /// variable when it assigns the per-case arg).
+    func testValidation_rejectsVariableCollidingWithParamName() {
+        let family = PatternFamily(
+            id: "f", name: "f", kind: .boundaryEquality,
+            functionName: "f", paramNames: ["x"],
+            cases: [
+                PatternCase(key: "01", label: "case", args: [.int(1)], expected: .int(1))
+            ],
+            variables: [FamilyVariable(name: "x", value: .int(99))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
+            XCTAssertTrue("\(err)".contains("collides with a parameter name"),
+                          "Expected collision error, got: \(err)")
+        }
+    }
+
+    /// Spec-hash must change when the family's variables change so the
+    /// regeneration diff flips every generated file — ensuring the
+    /// auto-retest loop picks up variable edits.
+    func testVariables_affectSpecHash() {
+        let base = PatternFamily(
+            id: "f", name: "f", kind: .boundaryEquality,
+            functionName: "f", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
+        )
+        let withVar = PatternFamily(
+            id: "f", name: "f", kind: .boundaryEquality,
+            functionName: "f", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))],
+            variables: [FamilyVariable(name: "lookup", value: .object(["k": .int(1)]))]
+        )
+        XCTAssertNotEqual(patternFamilySpecHash(base), patternFamilySpecHash(withVar),
+                          "Adding a family variable must bust the spec hash")
+    }
+
     // MARK: - Validation
 
     func testValidation_rejectsDuplicateFamilyID() {

@@ -234,6 +234,72 @@ final class NotebookScanRoutesTests: XCTestCase {
         )
     }
 
+    /// The scan-notebook endpoint used to drop `paramTypes`, `returnType`,
+    /// `isShadowed`, and `paramHasDefault` from the DTO it emitted, so the
+    /// family-editor client always saw them as `undefined` — and
+    /// `coerceByType` fell back to strict `JSON.parse` on every cell,
+    /// silently turning `20260422` in a `str` column into an `int`.
+    /// Regression guard for v0.4.94's fix (the bug the instructor
+    /// reported on their DOB-check pattern family).
+    func testScanNotebookForwardsParamTypesReturnTypeAndDefaults() async throws {
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+
+        let notebook = """
+        {
+          "cells": [
+            {
+              "cell_type": "code",
+              "metadata": {},
+              "source": "def check_dob(dob: str, currentDate: str = \\"20260301\\") -> bool:\\n    return dob < currentDate\\n"
+            }
+          ],
+          "metadata": {}, "nbformat": 4, "nbformat_minor": 5
+        }
+        """
+
+        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: notebook)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = res.body.string
+
+                // paramTypes forwarded — the client needs these to pick the
+                // right coercion for each cell.
+                XCTAssertTrue(body.contains("\"paramTypes\""),
+                              "paramTypes missing from DTO: \(body.prefix(500))")
+                XCTAssertTrue(body.contains("\"str\""),
+                              "Expected param type 'str' in forwarded paramTypes: \(body.prefix(500))")
+
+                // returnType forwarded — drives Expected-column coercion.
+                XCTAssertTrue(body.contains("\"returnType\""),
+                              "returnType missing from DTO: \(body.prefix(500))")
+                XCTAssertTrue(body.contains("\"bool\""),
+                              "Expected returnType 'bool' forwarded: \(body.prefix(500))")
+
+                // paramHasDefault forwarded — the editor uses this to let
+                // the instructor leave that cell empty so Python's default
+                // binds at test time.
+                XCTAssertTrue(body.contains("\"paramHasDefault\""),
+                              "paramHasDefault missing from DTO: \(body.prefix(500))")
+                // First param has no default, second does — verify the
+                // array is [false,true] (serialization may include
+                // whitespace, so both common forms pass).
+                XCTAssertTrue(body.contains("[false,true]") || body.contains("[ false, true ]") || body.contains("[false, true]"),
+                              "Expected paramHasDefault [false, true]: \(body.prefix(500))")
+
+                // isShadowed forwarded — client disables overload options
+                // that Python would silently skip at runtime.
+                XCTAssertTrue(body.contains("\"isShadowed\""),
+                              "isShadowed missing from DTO: \(body.prefix(500))")
+            }
+        )
+    }
+
     func testScanNotebookIgnoresPrivateFunctions() async throws {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
