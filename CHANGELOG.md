@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.92] - 2026-04-23
+
+### Fixed
+
+- **Pattern families no longer get pushed to the bottom of the suite on publish from the Create Assignment page.**  `saveNewAssignment` rebuilds the test setup manifest from the form's raw-script list (which has no `generatedBy` markers by design) and then re-runs `applyPatternFamilies` to regenerate the family entries.  The re-run was invoked without `authoredItems`, so `applyPatternFamilies` hit the legacy branch, found no generated entries to anchor families against, and appended every family at the end of the suite via the "defensive" fallback loop.  Every family published from `/instructor/new` therefore landed below all raw scripts — and every submission's family-generated test outcomes rendered at the bottom of the Submission view, because outcome order mirrors `testSuites` order.  The publish flow now reconstructs `authoredItems` from the draft's original manifest (via new helper `authoredSuiteItemsFromDraftManifest`) and passes them to `applyPatternFamilies`, preserving each family's draft position.  Regression guard: `testApply_createPublishPreservesFamilyPosition` + `testApply_editingExistingFamilyPreservesMiddlePosition`.
+- **Pattern family modal no longer shows `null` in cells when reopening an existing family.**  `readCasesFromTableRaw` — the lossy re-reader used when `applyFunctionSelection(preserveCases: true)` rebuilds the cases table — used strict `JSON.parse` to parse cell text.  Bare strings (`underweight`) and Python-literal sentinels (`True`, `None`) aren't valid JSON, so the reader silently substituted `null` for them, and then `addCaseRow` rendered `null` back into the cells.  The first save after reopen would then either overwrite the instructor's original values with `null` or throw a "missing value" validation error on the string columns.  `readCasesFromTableRaw` now uses the same type-aware `coerceByType` coercion as the strict save path, so string-valued cells round-trip correctly.
+- **Family-level `dependsOn` survives a modal save.**  `readFamilyFromEditor` was constructing a fresh `PatternFamily` object without the `dependsOn` field — the modal doesn't expose it, but the server-side spec carries family-level prerequisites that propagate to every generated case.  Every modal save therefore wiped the family's deps.  `readFamilyFromEditor` now carries forward the existing family's `dependsOn` in edit mode.
+
 ## [0.4.91] - 2026-04-22
 
 ### Added

@@ -473,7 +473,11 @@
         }
 
         /// Lossy read used when switching between function selections —
-        /// preserves what we can but doesn't throw on parse errors.
+        /// preserves what we can but doesn't throw on parse errors.  Uses
+        /// the same type-aware coercion as the strict save path so bare
+        /// strings (like `"underweight"`) round-trip without being
+        /// nullified by strict `JSON.parse`.  Regression guard for the
+        /// "cells reappear as null on reopen" symptom.
         function readCasesFromTableRaw(argCount) {
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             return rows.map(function (row) {
@@ -483,8 +487,11 @@
                 var args = [];
                 var cells = row.querySelectorAll('.pf-case-arg');
                 if (cells.length) {
-                    Array.from(cells).forEach(function (c) {
-                        try { args.push(JSON.parse(c.value)); } catch (_) { args.push(null); }
+                    Array.from(cells).forEach(function (c, idx) {
+                        var raw = c.value;
+                        if (String(raw).trim() === '') { args.push(null); return; }
+                        var typeHint = currentParamTypes ? currentParamTypes[idx] : null;
+                        args.push(coerceByType(raw, typeHint));
                     });
                 } else {
                     var single = row.querySelector('.pf-case-args');
@@ -492,8 +499,9 @@
                         try { args = JSON.parse(single.value); if (!Array.isArray(args)) args = []; } catch (_) { args = []; }
                     }
                 }
-                var expected = null;
-                try { expected = rawExp.trim() === '' ? null : JSON.parse(rawExp); } catch (_) {}
+                var expected = rawExp.trim() === ''
+                    ? null
+                    : coerceByType(rawExp, currentReturnType);
                 return { label: label, args: args, expected: expected, hint: hint };
             });
         }
@@ -622,6 +630,17 @@
                     defaults.tolerance = tol;
                 }
             }
+            // Carry forward the existing family-level dependsOn when
+            // editing (the modal doesn't expose it).  Without this, every
+            // modal save wipes any prerequisites the instructor set on the
+            // family via the suite-table row — which would cause the
+            // generated cases to lose their inherited deps on the next
+            // apply.
+            var existingDependsOn = [];
+            if (editingIndex >= 0 && familiesState[editingIndex]
+                && Array.isArray(familiesState[editingIndex].dependsOn)) {
+                existingDependsOn = familiesState[editingIndex].dependsOn.slice();
+            }
             return {
                 id: idInput.value.trim(),
                 name: nameInput.value.trim(),
@@ -629,7 +648,8 @@
                 functionName: fnInput.value.trim(),
                 paramNames: paramNames,
                 defaults: defaults,
-                cases: cases
+                cases: cases,
+                dependsOn: existingDependsOn
             };
         }
 

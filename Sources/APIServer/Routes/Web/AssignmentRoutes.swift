@@ -1077,13 +1077,12 @@ struct AssignmentRoutes: RouteCollection {
         // without this forward, `makeWorkerManifestJSON` would emit an
         // empty `patternFamilies` field and the generated scripts would
         // lose their family provenance on publish.
-        let existingFamilies: [PatternFamily] = {
+        let draftProps: TestProperties? = {
             guard let existingManifest = draftSetup?.manifest,
-                  let data = existingManifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
-            else { return [] }
-            return props.patternFamilies
+                  let data = existingManifest.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(TestProperties.self, from: data)
         }()
+        let existingFamilies: [PatternFamily] = draftProps?.patternFamilies ?? []
 
         let manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
@@ -1106,10 +1105,24 @@ struct AssignmentRoutes: RouteCollection {
 
         // Re-run applyPatternFamilies so the generated scripts survive the
         // zip rebuild.  Mirrors v0.4.77's fix for the edit-save path.
+        //
+        // Passing `authoredItems` preserves each family's position from the
+        // draft manifest — without this, every family published from the
+        // Create page lands at the bottom of the suite (and every
+        // generated test outcome renders at the end of the submission
+        // view), because the legacy `authoredItems == nil` path can't
+        // infer positions after `makeWorkerManifestJSON` above strips the
+        // generated entries.  Regression guard:
+        // `testApply_createPublishPreservesFamilyPosition`.
         if !existingFamilies.isEmpty {
+            let authoredItems = authoredSuiteItemsFromDraftManifest(
+                draftProps: draftProps,
+                newRawEntries: setupPackage.testSuites
+            )
             _ = try await applyPatternFamilies(
                 to: setup,
                 nextFamilies: existingFamilies,
+                authoredItems: authoredItems,
                 on: req.db
             )
         }
