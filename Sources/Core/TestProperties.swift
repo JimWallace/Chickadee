@@ -39,16 +39,18 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let dependsOn: [String]  // script names of prerequisites; empty == no deps
     public let points: Int          // grade weight; 1 = default (unweighted)
     public let generatedBy: String? // pattern family id, nil for hand-written scripts
+    public let sectionID: String?   // id into TestProperties.sections, or nil = ungrouped
 
     public init(tier: TestTier, script: String, name: String? = nil,
                 dependsOn: [String] = [], points: Int = 1,
-                generatedBy: String? = nil) {
+                generatedBy: String? = nil, sectionID: String? = nil) {
         self.tier        = tier
         self.script      = script
         self.name        = name
         self.dependsOn   = dependsOn
         self.points      = points
         self.generatedBy = generatedBy
+        self.sectionID   = sectionID
     }
 
     public init(from decoder: Decoder) throws {
@@ -59,6 +61,21 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         dependsOn   = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
         points      = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
         generatedBy = try c.decodeIfPresent(String.self, forKey: .generatedBy)
+        sectionID   = try c.decodeIfPresent(String.self, forKey: .sectionID)
+    }
+}
+
+/// A named grouping of test suite entries.  Sections have no effect on
+/// test behaviour or dependency semantics — they only drive visual
+/// grouping in the instructor suite editor and the student submission
+/// results page.  `id` is opaque (UUID generated in the browser), so
+/// renames are free.
+public struct TestSuiteSection: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public init(id: String, name: String) {
+        self.id   = id
+        self.name = name
     }
 }
 
@@ -85,6 +102,13 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// a save-time authoring concern; by the time the zip reaches the runner
     /// every generated `.py` is an ordinary test script.
     public let patternFamilies: [PatternFamily]
+    /// Ordered list of sections that group `testSuites` for display only.
+    /// Empty = "no grouping"; the student and instructor UIs render
+    /// identically to the pre-sections layout.  Entries in `testSuites`
+    /// reference a section by `sectionID`; the run order is still the
+    /// order of `testSuites` itself (the server is responsible for
+    /// keeping items with the same `sectionID` in a contiguous block).
+    public let sections: [TestSuiteSection]
 
     public init(schemaVersion: Int = 1,
                 gradingMode: GradingMode = .worker,
@@ -93,7 +117,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 timeLimitSeconds: Int = 10,
                 makefile: MakefileConfig? = nil,
                 starterNotebook: String? = nil,
-                patternFamilies: [PatternFamily] = []) {
+                patternFamilies: [PatternFamily] = [],
+                sections: [TestSuiteSection] = []) {
         self.schemaVersion    = schemaVersion
         self.gradingMode      = gradingMode
         self.requiredFiles    = requiredFiles
@@ -102,6 +127,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.makefile         = makefile
         self.starterNotebook  = starterNotebook
         self.patternFamilies  = patternFamilies
+        self.sections         = sections
     }
 
     public init(from decoder: Decoder) throws {
@@ -114,6 +140,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         makefile         = try c.decodeIfPresent(MakefileConfig.self,   forKey: .makefile)
         starterNotebook  = try c.decodeIfPresent(String.self,           forKey: .starterNotebook)
         patternFamilies  = try c.decodeIfPresent([PatternFamily].self,  forKey: .patternFamilies)  ?? []
+        sections         = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections)       ?? []
     }
 
     /// Manifest view shipped to runners.  Pattern families are a save-time
@@ -132,7 +159,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
             timeLimitSeconds: timeLimitSeconds,
             makefile:         makefile,
             starterNotebook:  starterNotebook,
-            patternFamilies:  []
+            patternFamilies:  [],
+            sections:         sections
         )
     }
 }

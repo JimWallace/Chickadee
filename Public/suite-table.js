@@ -1,48 +1,36 @@
 // Chickadee — Suite Table editor
 //
-// Browser-side module that drives the unified suite table on the
-// instructor assignment authoring pages.  Factored out of
-// Resources/Views/assignment-edit.leaf in v0.4.91 so the Create and Edit
-// pages share one implementation of drag/drop reorder, dependency adopt,
-// tier / points / display-name inline edits, and `PUT /suite`
-// persistence.
+// Browser-side module that drives the multi-section suite editor on the
+// instructor assignment edit page.  Factored out of
+// Resources/Views/assignment-edit.leaf in v0.4.91; extended in v0.4.96
+// to group items into Sections (one table per section, drag across
+// tables, add/rename/delete section).  When the assignment has no
+// sections the module renders one unlabelled block that looks
+// identical to the pre-sections layout.
 //
-// The table HTML stays in the Leaf template (see the `suite-config-table`
-// markup block).  This module assumes the following DOM IDs / classes:
+// DOM contract (assignment-edit.leaf):
 //
-//   tbody#suite-config-body          — rows live here
+//   div#suite-sections               — mount point; JS owns all markup inside
 //   input#suite-files-input          — optional upload input
-//   button#add-test-btn              — optional "Add Tests" trigger
-//   .suite-drag-handle               — drag grip inside each row
-//   .suite-display-name              — per-row display-name input
-//   .suite-tier / .suite-points      — per-row script controls
-//   .suite-family-tier / .suite-family-points — per-row family controls
-//   .suite-edit-btn / .suite-delete-btn        — script actions
-//   .family-edit-btn / .family-delete-btn      — family actions
-//                                      (wired by pattern-family-editor.js)
-//   .suite-root-drop                 — synthetic drop zone under the table
+//   button#add-test-btn              — optional "Upload" trigger
+//   button#add-section-btn           — optional "+ Section" trigger
 //   script#suite-state-seed          — JSON seed (same shape as GET /suite)
 //
 // Host wires the module via:
 //
 //   var suiteTable = window.initSuiteTable({
 //       assignmentID?: 'TWTFKZ',             // edit mode
-//       draftID?:      'setup_ab12...',      // future create-draft mode
+//       draftID?:      'setup_ab12...',      // reserved for future use
 //       csrfToken:     '<token>',
 //       formSelector:  'form.form',          // parent form for submit flush
 //       urls: {
-//           putSuite:     function () {...}, // PUT endpoint for items[]
+//           putSuite:     function () {...}, // PUT endpoint for items+sections
 //           deleteScript: function (name) {...}, // DELETE per-script
 //           uploadScript: function () {...}  // POST per-script upload
 //       }
 //   })
 //
 // Returns `{ syncFamilies(applied), addExistingScript(script), getItems() }`.
-// The host typically wires the two public hooks to globals so the existing
-// pattern-family-editor and script-editor modules keep working unchanged:
-//
-//   window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
-//   window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
 
 (function (global) {
     'use strict';
@@ -60,12 +48,14 @@
         }
 
         var filesInput  = document.getElementById('suite-files-input');
-        var body        = document.getElementById('suite-config-body');
+        var container   = document.getElementById('suite-sections');
         var form        = document.querySelector(formSelector);
-        if (!body) return noopAPI();
+        if (!container) return noopAPI();
 
-        var items = [];
-        var dragID = null;
+        var items    = [];
+        var sections = [];
+        var dragID        = null;   // row drag
+        var dragSectionID = null;   // section drag
         var pushTimer = null;
         var pushInFlight = false;
         var pushPending = false;
@@ -76,13 +66,25 @@
             var el = document.getElementById('suite-state-seed');
             if (!el) return;
             var payload;
-            try { payload = JSON.parse(el.textContent || '{"items":[]}'); }
-            catch (_) { payload = { items: [] }; }
-            items = normaliseItems(payload.items || []);
+            try { payload = JSON.parse(el.textContent || '{"items":[],"sections":[]}'); }
+            catch (_) { payload = { items: [], sections: [] }; }
+            sections = normaliseSections(payload.sections || []);
+            items    = normaliseItems(payload.items || []);
+            items    = sortItemsBySection(items);
         })();
 
+        function normaliseSections(raw) {
+            return (raw || []).map(function (s) {
+                return { id: String(s.id || ''), name: String(s.name || '') };
+            }).filter(function (s) { return s.id; });
+        }
+
         function normaliseItems(raw) {
+            var validSectionIDs = {};
+            sections.forEach(function (s) { validSectionIDs[s.id] = true; });
             return (raw || []).map(function (i) {
+                var sid = i.sectionID != null ? String(i.sectionID) : null;
+                if (sid && !validSectionIDs[sid]) sid = null;
                 if (i.kind === 'family' && i.family) {
                     var fid = i.family.id;
                     return {
@@ -92,7 +94,8 @@
                         family: i.family,
                         dependsOn: (i.dependsOn && i.dependsOn.length)
                             ? i.dependsOn.slice()
-                            : (i.family.dependsOn || []).slice()
+                            : (i.family.dependsOn || []).slice(),
+                        sectionID: sid
                     };
                 }
                 var s = i.script || {};
@@ -103,9 +106,31 @@
                     tier: s.tier || 'public',
                     points: Math.max(1, parseInt(s.points) || 1),
                     displayName: s.displayName == null ? '' : String(s.displayName),
-                    dependsOn: (s.dependsOn || []).slice()
+                    dependsOn: (s.dependsOn || []).slice(),
+                    sectionID: sid
                 };
             });
+        }
+
+        /// Produces a canonical item order: all section-A items (in their
+        /// authored order), then section-B items, ..., then ungrouped.
+        /// This is the order the server's contiguity check expects, and
+        /// the order we want both in `items[]` and in the PUT payload.
+        function sortItemsBySection(list) {
+            var sectionIndex = {};
+            sections.forEach(function (s, i) { sectionIndex[s.id] = i; });
+            var withOrder = list.map(function (it, origIndex) {
+                var sid = it.sectionID || null;
+                var rank = sid && sectionIndex.hasOwnProperty(sid)
+                    ? sectionIndex[sid]
+                    : sections.length; // ungrouped last
+                return { it: it, rank: rank, origIndex: origIndex };
+            });
+            withOrder.sort(function (a, b) {
+                if (a.rank !== b.rank) return a.rank - b.rank;
+                return a.origIndex - b.origIndex;
+            });
+            return withOrder.map(function (x) { return x.it; });
         }
 
         function escHtml(v) {
@@ -116,30 +141,59 @@
         function escAttr(v) { return String(v == null ? '' : v).replaceAll('"','&quot;'); }
 
         function findByID(id) { return items.find(function (it) { return it.id === id; }); }
-        function hasChildren(id) {
-            return items.some(function (it) { return it.dependsOn.indexOf(id) >= 0; });
+        function findSectionByID(id) {
+            for (var i = 0; i < sections.length; i++) {
+                if (sections[i].id === id) return sections[i];
+            }
+            return null;
+        }
+
+        function itemsInSection(sid) {
+            return items.filter(function (it) { return (it.sectionID || null) === (sid || null); });
+        }
+        function hasChildrenInSection(id, sid) {
+            return items.some(function (it) {
+                return (it.sectionID || null) === (sid || null) && it.dependsOn.indexOf(id) >= 0;
+            });
         }
         function isChild(id) {
             var it = findByID(id);
             return it ? (it.dependsOn && it.dependsOn.length > 0) : false;
         }
 
-        function visualOrder() {
-            // One-level parent/child tree keyed by item id.  Only the first
-            // element of dependsOn is used for the visual parent link; the
-            // actual dependency list (which can be multi-valued, including
-            // family refs) is preserved unchanged on the item.
+        function uniqueID() {
+            try {
+                if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+            } catch (_) {}
+            return 's-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+        }
+
+        /// Returns the visual-order list (with 1-level parent/child indent)
+        /// for items in a given section.  Only `dependsOn[0]` drives the
+        /// visual tree; the underlying `dependsOn` stays free-form.
+        function visualOrderForSection(sid) {
+            var sectionItems = itemsInSection(sid);
             var result = [];
+            var byID = {};
+            sectionItems.forEach(function (it) { byID[it.id] = it; });
             var childMap = {};
-            items.forEach(function (it) {
+            sectionItems.forEach(function (it) {
                 if (it.dependsOn && it.dependsOn.length > 0) {
                     var p = it.dependsOn[0];
-                    childMap[p] = childMap[p] || [];
-                    childMap[p].push(it);
+                    // Only treat as a child in the tree if the parent is
+                    // in the same section (cross-section deps don't
+                    // indent visually).
+                    if (byID[p]) {
+                        childMap[p] = childMap[p] || [];
+                        childMap[p].push(it);
+                    }
                 }
             });
-            items.filter(function (it) {
-                return !it.dependsOn || it.dependsOn.length === 0;
+            sectionItems.filter(function (it) {
+                if (!it.dependsOn || it.dependsOn.length === 0) return true;
+                // Treat as root within the section if its parent isn't
+                // in this section.
+                return !byID[it.dependsOn[0]];
             }).forEach(function (root) {
                 result.push({ item: root, depth: 0 });
                 (childMap[root.id] || []).forEach(function (child) {
@@ -234,29 +288,73 @@
             return item.kind === 'family' ? familyRowHTML(item, depth) : scriptRowHTML(item, depth);
         }
 
-        /// Preserves which cell was focused (and where the caret sat) across
-        /// the `innerHTML` rebuild.  Without this, a debounced `PUT /suite`
-        /// fired by the previous keystroke wipes the `<input>` the user is
-        /// still typing into — dropping focus and caret position mid-rename.
+        function tableHTMLForSection(sid) {
+            var visual = visualOrderForSection(sid);
+            var body = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('');
+            var dropZone = '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+            return '<table class="results-table" style="width:100%"><thead><tr>'
+                 + '<th title="Student-facing name (edit to override the filename)">Name</th>'
+                 + '<th>Visibility</th>'
+                 + '<th title="Grade point weight for this test (default 1)">Pts</th>'
+                 + '<th class="time">Action</th>'
+                 + '</tr></thead><tbody data-section-id="' + escAttr(sid || '') + '">'
+                 + body + dropZone
+                 + '</tbody></table>';
+        }
+
+        function sectionBlockHTML(section) {
+            var isUngrouped = !section;
+            var sid         = section ? section.id   : '';
+            var name        = section ? section.name : 'Ungrouped';
+            var header;
+            if (isUngrouped) {
+                header = '<div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">'
+                       +   '<strong class="suite-section-name-label" style="font-size:.9rem;color:var(--gray-600)">' + escHtml(name) + '</strong>'
+                       +   '<span class="card-meta" style="font-size:.72rem;color:var(--gray-500)">Tests not yet assigned to a section</span>'
+                       + '</div>';
+            } else {
+                header = '<div class="section-header" draggable="true" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">'
+                       +   '<span class="section-drag-handle" title="Drag to reorder section" style="cursor:grab;user-select:none;font-weight:700;color:var(--gray-500)">⋮⋮</span>'
+                       +   '<input type="text" class="form-input suite-section-name-input" data-section-id="' + escAttr(sid) + '" value="' + escAttr(name) + '" placeholder="Section name" style="flex:1;min-width:12rem;padding:.25rem .5rem;font-size:.9rem;font-weight:600">'
+                       +   '<button class="btn action-btn action-danger suite-section-delete-btn" type="button" data-section-id="' + escAttr(sid) + '" title="Delete section" aria-label="Delete section" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
+                       + '</div>';
+            }
+            return '<div class="section-block" data-section-id="' + escAttr(sid) + '" style="margin-bottom:1.25rem">'
+                 + header
+                 + tableHTMLForSection(sid || null)
+                 + '</div>';
+        }
+
+        /// Preserves which input (row-level or section-name) was focused
+        /// and where the caret sat, across `innerHTML` rebuilds triggered
+        /// by debounced `PUT /suite` responses.
         function captureFocus() {
             var el = document.activeElement;
-            if (!el || !body.contains(el)) return null;
-            var row = el.closest('tr[data-id]');
+            if (!el || !container.contains(el)) return null;
+            var start = null, end = null;
+            try { start = el.selectionStart; end = el.selectionEnd; } catch (_) {}
+            // Section-name input: keyed by its data-section-id.
+            if (el.classList && el.classList.contains('suite-section-name-input')) {
+                return { kind: 'section', sectionID: el.getAttribute('data-section-id'), start: start, end: end };
+            }
+            var row = el.closest && el.closest('tr[data-id]');
             if (!row) return null;
             var cls = (el.className || '').split(/\s+/).filter(function (c) {
                 return c && c.indexOf('form-') !== 0;
             })[0];
             if (!cls) return null;
-            var start = null, end = null;
-            try { start = el.selectionStart; end = el.selectionEnd; } catch (_) {}
-            return { dataID: row.getAttribute('data-id'), cls: cls, start: start, end: end };
+            return { kind: 'row', dataID: row.getAttribute('data-id'), cls: cls, start: start, end: end };
         }
 
         function restoreFocus(snap) {
             if (!snap) return;
-            var row = body.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
-            if (!row) return;
-            var el = row.querySelector('.' + snap.cls);
+            var el = null;
+            if (snap.kind === 'section') {
+                el = container.querySelector('.suite-section-name-input[data-section-id="' + (snap.sectionID || '').replace(/"/g, '\\"') + '"]');
+            } else if (snap.kind === 'row') {
+                var row = container.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
+                if (row) el = row.querySelector('.' + snap.cls);
+            }
             if (!el) return;
             el.focus();
             if (snap.start != null && snap.end != null) {
@@ -266,24 +364,52 @@
 
         function renderTree() {
             var focusSnap = captureFocus();
-            var visual = visualOrder();
-            body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-                + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+            // Always keep items[] in canonical order so drop handlers
+            // and the PUT payload agree.
+            items = sortItemsBySection(items);
+            var blocks = sections.map(sectionBlockHTML);
+            var anyUngrouped = items.some(function (it) {
+                var sid = it.sectionID || null;
+                return !sid || !findSectionByID(sid);
+            });
+            // The "Ungrouped" block renders in two cases:
+            //   1. There are items without a section (so we need somewhere
+            //      to show them), OR
+            //   2. There are no sections at all — in which case the
+            //      "Ungrouped" block is the ONLY block, but its header
+            //      reads "Ungrouped" which is misleading.  Use a slim
+            //      header-less presentation in that case.
+            if (anyUngrouped || sections.length === 0) {
+                blocks.push(sectionBlockHTML(null));
+            }
+            container.innerHTML = blocks.join('');
+            // Hide the "Ungrouped" header when no sections exist — the
+            // page should look identical to the pre-sections layout.
+            if (sections.length === 0) {
+                var lastBlock = container.querySelector('.section-block:last-child .section-header');
+                if (lastBlock) lastBlock.style.display = 'none';
+            }
             restoreFocus(focusSnap);
         }
 
         // ── Persistence ──────────────────────────────────────────────────
 
-        /// Builds the `PUT /suite` request body from the current `items[]`.
+        /// Builds the `PUT /suite` request body from the current items[]
+        /// and sections[].  Items are emitted in canonical (section, then
+        /// authored) order so the server's contiguity check always passes.
         function buildPayload() {
             return {
+                sections: sections.map(function (s) { return { id: s.id, name: s.name }; }),
                 items: items.map(function (item) {
                     if (item.kind === 'family') {
-                        // Stamp the row-level dependsOn onto the family spec
-                        // server-side too, so the payload is self-contained.
                         var family = Object.assign({}, item.family);
                         family.dependsOn = item.dependsOn ? item.dependsOn.slice() : [];
-                        return { kind: 'family', family: family, dependsOn: family.dependsOn.slice() };
+                        return {
+                            kind: 'family',
+                            family: family,
+                            dependsOn: family.dependsOn.slice(),
+                            sectionID: item.sectionID || null
+                        };
                     }
                     var display = item.displayName && item.displayName.trim();
                     if (display === '' || display === stemOf(item.script)) display = null;
@@ -295,7 +421,8 @@
                             points:      Math.max(1, parseInt(item.points) || 1),
                             displayName: display,
                             dependsOn:   (item.dependsOn || []).slice()
-                        }
+                        },
+                        sectionID: item.sectionID || null
                     };
                 })
             };
@@ -319,12 +446,13 @@
                 return r.json();
             })
             .then(function (payload) {
-                items = normaliseItems(payload.items || []);
+                sections = normaliseSections(payload.sections || []);
+                items    = normaliseItems(payload.items || []);
+                items    = sortItemsBySection(items);
                 renderTree();
             })
             .catch(function (err) {
                 console.error('Suite save failed:', err);
-                // Rehydrate from server so the UI doesn't stay on a rejected state.
                 window.location.reload();
             })
             .finally(function () {
@@ -348,29 +476,63 @@
         // ── Drag & drop ──────────────────────────────────────────────────
 
         function clearDropIndicators() {
-            body.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover').forEach(function (r) {
-                r.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
+            container.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover,.section-drop-before,.section-drop-after').forEach(function (r) {
+                r.classList.remove('drop-before','drop-after','drop-adopt','drop-hover','section-drop-before','section-drop-after');
             });
         }
 
-        body.addEventListener('dragstart', function (e) {
-            var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-            if (!handle) { e.preventDefault(); return; }
-            var row = handle.closest('tr[data-id]');
-            if (!row) { e.preventDefault(); return; }
-            dragID = row.getAttribute('data-id');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', dragID);
-            row.classList.add('suite-row-dragging');
+        container.addEventListener('dragstart', function (e) {
+            var t = e.target;
+            if (!t || !t.closest) { e.preventDefault(); return; }
+            var rowHandle = t.closest('.suite-drag-handle');
+            if (rowHandle) {
+                var row = rowHandle.closest('tr[data-id]');
+                if (!row) { e.preventDefault(); return; }
+                dragID = row.getAttribute('data-id');
+                dragSectionID = null;
+                e.dataTransfer.effectAllowed = 'move';
+                try { e.dataTransfer.setData('text/plain', dragID); } catch (_) {}
+                row.classList.add('suite-row-dragging');
+                return;
+            }
+            var sectionHandle = t.closest('.section-drag-handle');
+            var header = t.closest('.section-header');
+            if (sectionHandle && header) {
+                var block = header.closest('.section-block[data-section-id]');
+                if (!block) { e.preventDefault(); return; }
+                var sid = block.getAttribute('data-section-id');
+                if (!sid) { e.preventDefault(); return; }
+                dragSectionID = sid;
+                dragID = null;
+                e.dataTransfer.effectAllowed = 'move';
+                try { e.dataTransfer.setData('text/plain', 'section:' + sid); } catch (_) {}
+                block.classList.add('section-dragging');
+                return;
+            }
+            e.preventDefault();
         });
 
-        body.addEventListener('dragend', function () {
+        container.addEventListener('dragend', function () {
             dragID = null;
-            body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
+            dragSectionID = null;
+            container.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
+            container.querySelectorAll('.section-dragging').forEach(function (r) { r.classList.remove('section-dragging'); });
             clearDropIndicators();
         });
 
-        body.addEventListener('dragover', function (e) {
+        container.addEventListener('dragover', function (e) {
+            if (dragSectionID) {
+                e.preventDefault();
+                clearDropIndicators();
+                var overBlock = e.target.closest && e.target.closest('.section-block[data-section-id]');
+                if (!overBlock) return;
+                var overSid = overBlock.getAttribute('data-section-id');
+                if (!overSid || overSid === dragSectionID) return;
+                var brect = overBlock.getBoundingClientRect();
+                var afterBlock = e.clientY > brect.top + brect.height / 2;
+                overBlock.classList.add(afterBlock ? 'section-drop-after' : 'section-drop-before');
+                return;
+            }
             if (!dragID) return;
             e.preventDefault();
             clearDropIndicators();
@@ -380,32 +542,65 @@
             if (!target) return;
             var tid = target.getAttribute('data-id');
             if (tid === dragID) return;
+            var tbody = target.closest('tbody[data-section-id]');
+            var dragItem = findByID(dragID);
+            var targetSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
+            var sameSection = dragItem && ((dragItem.sectionID || '') === (targetSid || ''));
             var rect  = target.getBoundingClientRect();
             var relY  = (e.clientY - rect.top) / rect.height;
             if (relY < 0.3) {
                 target.classList.add('drop-before');
             } else if (relY > 0.7) {
                 target.classList.add('drop-after');
-            } else if (!isChild(tid) && !hasChildren(dragID)) {
+            } else if (sameSection && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)) {
+                // Adopt only inside the same section — cross-section visual
+                // parenting doesn't make sense.
                 target.classList.add('drop-adopt');
             } else {
                 target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
             }
         });
 
-        body.addEventListener('dragleave', function (e) {
+        container.addEventListener('dragleave', function (e) {
             var row = e.target.closest && e.target.closest('tr');
             if (row) row.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
+            var block = e.target.closest && e.target.closest('.section-block');
+            if (block) block.classList.remove('section-drop-before','section-drop-after');
         });
 
-        body.addEventListener('drop', function (e) {
+        container.addEventListener('drop', function (e) {
             e.preventDefault();
+            // Section-drag drop → reorder sections[].
+            if (dragSectionID) {
+                var overBlock = e.target.closest && e.target.closest('.section-block[data-section-id]');
+                if (!overBlock) return;
+                var overSid = overBlock.getAttribute('data-section-id');
+                if (!overSid || overSid === dragSectionID) return;
+                var fromIdx = sections.findIndex(function (s) { return s.id === dragSectionID; });
+                var toIdx   = sections.findIndex(function (s) { return s.id === overSid; });
+                if (fromIdx < 0 || toIdx < 0) return;
+                var brect2 = overBlock.getBoundingClientRect();
+                var afterBlock2 = e.clientY > brect2.top + brect2.height / 2;
+                var moving = sections.splice(fromIdx, 1)[0];
+                var insertAt = sections.findIndex(function (s) { return s.id === overSid; });
+                if (insertAt < 0) insertAt = sections.length;
+                sections.splice(afterBlock2 ? insertAt + 1 : insertAt, 0, moving);
+                renderTree(); schedulePush();
+                return;
+            }
             if (!dragID) return;
             var dragItem = findByID(dragID);
             if (!dragItem) return;
 
             var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
             if (rootZone) {
+                // Drop on a root-zone re-homes to that tbody's section and
+                // clears dependsOn.  (Per-section root zones let the
+                // instructor move an item into the Ungrouped block by
+                // dropping onto its root zone.)
+                var tbody = rootZone.closest('tbody[data-section-id]');
+                var newSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
+                dragItem.sectionID = newSid || null;
                 dragItem.dependsOn = [];
                 renderTree(); schedulePush(); return;
             }
@@ -415,26 +610,27 @@
             var tid = target.getAttribute('data-id');
             if (!tid || tid === dragID) return;
 
+            var tbodyEl = target.closest('tbody[data-section-id]');
+            var targetSid = tbodyEl ? (tbodyEl.getAttribute('data-section-id') || null) : null;
+            var sameSection = (dragItem.sectionID || '') === (targetSid || '');
+
             var rect = target.getBoundingClientRect();
             var relY = (e.clientY - rect.top) / rect.height;
 
-            if (relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildren(dragID)) {
-                // Adopt: set the dep AND re-position the dragged row
-                // immediately after its new parent in `items[]`.  Before
-                // v0.4.95 we only touched `dependsOn`, which left a
-                // newly-created test (appended to the bottom of
-                // `items[]`) still at the bottom — `visualOrder()`
-                // grouped it under its parent for the tree view, but
-                // the manifest (and thus submission view) saw it at the
-                // tail because `items[]` is what PUT /suite serializes.
-                // Moving the row here keeps the tree view and the
-                // manifest in sync.
+            if (sameSection && relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)) {
+                // Adopt within the same section.
                 dragItem.dependsOn = [tid];
                 items = items.filter(function (it) { return it.id !== dragID; });
                 var aIdx = items.findIndex(function (it) { return it.id === tid; });
                 items.splice(aIdx + 1, 0, dragItem);
             } else {
+                // Reorder (same section) or cross-section move.  Clear
+                // deps; preserving them across section boundaries can
+                // create visual-tree orphans.
                 dragItem.dependsOn = [];
+                if (!sameSection) {
+                    dragItem.sectionID = targetSid || null;
+                }
                 items = items.filter(function (it) { return it.id !== dragID; });
                 var tIdx = items.findIndex(function (it) { return it.id === tid; });
                 items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
@@ -442,9 +638,9 @@
             renderTree(); schedulePush();
         });
 
-        // ── Inline script edits ──────────────────────────────────────────
+        // ── Inline script / family edits ────────────────────────────────
 
-        body.addEventListener('change', function (e) {
+        container.addEventListener('change', function (e) {
             var scriptRow = e.target.closest && e.target.closest('tr[data-kind="script"]');
             if (scriptRow) {
                 var item = findByID(scriptRow.getAttribute('data-id'));
@@ -471,26 +667,56 @@
         });
 
         // Display-name edits use a two-phase model to avoid a race between
-        // live typing and the debounced `PUT /suite` response.  See v0.4.87.
-        body.addEventListener('input', function (e) {
+        // live typing and the debounced `PUT /suite` response.
+        container.addEventListener('input', function (e) {
             var target = e.target;
-            if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
-            var row = target.closest('tr[data-kind="script"]');
-            if (!row) return;
-            var item = findByID(row.getAttribute('data-id'));
-            if (!item) return;
-            var val = target.value.trim();
-            item.displayName = (val && val !== stemOf(item.script)) ? val : '';
+            if (!target || !target.classList) return;
+            if (target.classList.contains('suite-display-name')) {
+                var row = target.closest('tr[data-kind="script"]');
+                if (!row) return;
+                var item = findByID(row.getAttribute('data-id'));
+                if (!item) return;
+                var val = target.value.trim();
+                item.displayName = (val && val !== stemOf(item.script)) ? val : '';
+                return;
+            }
+            if (target.classList.contains('suite-section-name-input')) {
+                var sid = target.getAttribute('data-section-id');
+                var sec = findSectionByID(sid);
+                if (sec) sec.name = target.value;
+            }
         });
 
-        body.addEventListener('change', function (e) {
+        container.addEventListener('change', function (e) {
             var target = e.target;
-            if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
-            schedulePush();
+            if (!target || !target.classList) return;
+            if (target.classList.contains('suite-display-name')) {
+                schedulePush();
+            } else if (target.classList.contains('suite-section-name-input')) {
+                schedulePush();
+            }
         });
 
-        // Delete script row (family delete is handled by pattern-family-editor.js).
-        body.addEventListener('click', function (e) {
+        // Delete script row or delete section.
+        container.addEventListener('click', function (e) {
+            var secBtn = e.target.closest && e.target.closest('.suite-section-delete-btn');
+            if (secBtn) {
+                var sid = secBtn.getAttribute('data-section-id');
+                var sec = findSectionByID(sid);
+                if (!sec) return;
+                var affected = itemsInSection(sid).length;
+                var msg;
+                if (affected === 0) {
+                    msg = 'Delete section "' + sec.name + '"?';
+                } else {
+                    msg = 'Delete section "' + sec.name + '"? Its ' + affected + ' test' + (affected === 1 ? '' : 's') + ' will move to Ungrouped.';
+                }
+                if (!confirm(msg)) return;
+                sections = sections.filter(function (s) { return s.id !== sid; });
+                items.forEach(function (it) { if (it.sectionID === sid) it.sectionID = null; });
+                renderTree(); schedulePush();
+                return;
+            }
             var btn = e.target.closest && e.target.closest('.suite-delete-btn');
             if (!btn) return;
             var row = btn.closest('tr[data-kind="script"]');
@@ -562,6 +788,20 @@
             });
         }
 
+        var addSectionBtn = document.getElementById('add-section-btn');
+        if (addSectionBtn) {
+            addSectionBtn.addEventListener('click', function () {
+                sections.push({ id: uniqueID(), name: 'Untitled section' });
+                renderTree();
+                schedulePush();
+                // Focus the new section's name input so the instructor
+                // can rename it without a second click.
+                var inputs = container.querySelectorAll('.suite-section-name-input');
+                var last = inputs[inputs.length - 1];
+                if (last) { last.focus(); last.select(); }
+            });
+        }
+
         // Flush any pending suite-state push before letting the multipart
         // form submit.
         if (form) {
@@ -581,7 +821,9 @@
 
         /// Adds a newly-created script to the local items list and pushes
         /// the updated suite.  Public hook used by the Script Editor modal
-        /// when a brand-new file has been saved.
+        /// when a brand-new file has been saved.  New scripts land in the
+        /// Ungrouped bucket (sectionID = null); the instructor can drag
+        /// them into a section afterwards.
         function addExistingScript(script) {
             if (!script || !script.filename) return;
             items = items.filter(function (it) {
@@ -594,7 +836,8 @@
                 tier: script.tier || (script.isTest ? 'public' : 'support'),
                 points: Math.max(1, parseInt(script.points) || 1),
                 displayName: '',
-                dependsOn: []
+                dependsOn: [],
+                sectionID: null
             });
             renderTree();
             schedulePush();
@@ -619,7 +862,8 @@
                     id: 'family:' + f.id,
                     familyID: f.id,
                     family: f,
-                    dependsOn: (f.dependsOn || []).slice()
+                    dependsOn: (f.dependsOn || []).slice(),
+                    sectionID: item.sectionID || null
                 };
             }).filter(Boolean);
 
@@ -630,7 +874,8 @@
                     id: 'family:' + f.id,
                     familyID: f.id,
                     family: f,
-                    dependsOn: (f.dependsOn || []).slice()
+                    dependsOn: (f.dependsOn || []).slice(),
+                    sectionID: null
                 });
             });
 

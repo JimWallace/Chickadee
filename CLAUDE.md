@@ -349,7 +349,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.95**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.96**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -566,6 +566,22 @@ Post-8 work also complete:
   and name uniqueness; (4) Hint field removed from the modal (underlying
   `PatternCase.hint` / `PatternDefaults.hint` stay for manifest back-compat);
   (5) instructor assignments list Status column tightened to 5.5rem
+- v0.4.96 Sections for test suites.  Instructors group tests into named
+  sections on the assignment edit page (each section is its own
+  `.section-block` + `.results-table`, drag/drop works within and across
+  sections, "+ Section" button creates new ones).  Student submission
+  view renders one table per section with an `<h3>` heading so students
+  can tell which tests belong to which question.  New Core types:
+  `TestSuiteSection`, optional `sectionID` on `TestSuiteEntry`,
+  `sections: [TestSuiteSection]` on `TestProperties`.  Sections are
+  display-only — the runner still walks `testSuites[]` in order and the
+  dependency graph is unchanged.  `applyPatternFamilies` takes a
+  `sections:` parameter, normalises stale `sectionID` refs to nil, and
+  enforces that items sharing a `sectionID` form a contiguous block.
+  Pattern families inherit their section from the authored-item
+  position.  Items not in any section appear in a trailing "Ungrouped"
+  block (hidden when empty).  Legacy manifests with no `sections` key
+  decode with `decodeIfPresent` defaults so older runners stay compatible.
 
 **Next work:** Gamification expansion (leaderboards, more badges beyond
 First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern

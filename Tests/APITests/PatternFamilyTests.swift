@@ -1256,6 +1256,151 @@ final class PatternFamilyTests: XCTestCase {
         ], "Create-publish must preserve the draft's family position; otherwise every published family ends up at the bottom.")
     }
 
+    // MARK: - Sections (v0.4.96)
+
+    func testApply_familySectionStampsEveryGeneratedEntry() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        let sections = [TestSuiteSection(id: "sec-a", name: "Question 1")]
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [bmiFamily()],
+            authoredItems: [.family(id: "bmi_category", sectionID: "sec-a")],
+            sections: sections,
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.sections.map(\.id), ["sec-a"])
+        XCTAssertFalse(props.testSuites.isEmpty)
+        for entry in props.testSuites {
+            XCTAssertEqual(entry.sectionID, "sec-a",
+                "Every generated entry must inherit the family's authored sectionID; got \(entry.sectionID ?? "nil") for \(entry.script)")
+        }
+    }
+
+    func testApply_staleSectionIDRewrittenToNil() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        let sections = [TestSuiteSection(id: "sec-keep", name: "Kept")]
+        let authored: [AuthoredSuiteItem] = [
+            .script(AuthoredRawScript(
+                script: "publictest_a.py", tier: .pub, points: 1,
+                displayName: nil, dependsOn: [],
+                sectionID: "sec-gone"  // not in sections list → must be nil'd
+            )),
+        ]
+        // Need the script to exist in the zip first.
+        try applyScriptChangesToZip(
+            zipPath: fixture.setup.zipPath,
+            writes: ["publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n"],
+            deletions: []
+        )
+
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [],
+            authoredItems: authored,
+            sections: sections,
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.sections.map(\.id), ["sec-keep"])
+        XCTAssertEqual(props.testSuites.count, 1)
+        XCTAssertNil(props.testSuites.first?.sectionID,
+            "A sectionID pointing at a section not in the list must be rewritten to nil.")
+    }
+
+    func testApply_nonContiguousSectionsRejected() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try applyScriptChangesToZip(
+            zipPath: fixture.setup.zipPath,
+            writes: [
+                "publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n",
+                "publictest_b.py": "#!/usr/bin/env python3\nexit(0)\n",
+                "publictest_c.py": "#!/usr/bin/env python3\nexit(0)\n",
+            ],
+            deletions: []
+        )
+
+        let sections = [
+            TestSuiteSection(id: "sec-a", name: "A"),
+            TestSuiteSection(id: "sec-b", name: "B"),
+        ]
+        // Authored: [A, B, A] — A-items split across the B block.
+        let authored: [AuthoredSuiteItem] = [
+            .script(AuthoredRawScript(script: "publictest_a.py", tier: .pub, points: 1,
+                displayName: nil, dependsOn: [], sectionID: "sec-a")),
+            .script(AuthoredRawScript(script: "publictest_b.py", tier: .pub, points: 1,
+                displayName: nil, dependsOn: [], sectionID: "sec-b")),
+            .script(AuthoredRawScript(script: "publictest_c.py", tier: .pub, points: 1,
+                displayName: nil, dependsOn: [], sectionID: "sec-a")),
+        ]
+
+        do {
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [],
+                authoredItems: authored,
+                sections: sections,
+                on: fixture.app.db
+            )
+            XCTFail("Expected non-contiguous section arrangement to throw.")
+        } catch let abort as AbortError {
+            XCTAssertEqual(abort.status, .unprocessableEntity)
+            XCTAssertTrue(abort.reason.contains("contiguous"),
+                "Error should mention contiguity; got: \(abort.reason)")
+        }
+    }
+
+    func testApply_deletingSectionReHomesItemsToUngrouped() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try applyScriptChangesToZip(
+            zipPath: fixture.setup.zipPath,
+            writes: ["publictest_a.py": "#!/usr/bin/env python3\nexit(0)\n"],
+            deletions: []
+        )
+
+        // Save with one section, one item in it.
+        let initialSections = [TestSuiteSection(id: "sec-temp", name: "Temp")]
+        let authored: [AuthoredSuiteItem] = [
+            .script(AuthoredRawScript(
+                script: "publictest_a.py", tier: .pub, points: 1,
+                displayName: nil, dependsOn: [], sectionID: "sec-temp")),
+        ]
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [],
+            authoredItems: authored,
+            sections: initialSections,
+            on: fixture.app.db
+        )
+
+        // Delete the section — caller re-sends authored items with the
+        // same sectionID, and an empty sections list.  Server must
+        // re-home those items to Ungrouped.
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [],
+            authoredItems: authored,
+            sections: [],
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertTrue(props.sections.isEmpty)
+        XCTAssertEqual(props.testSuites.count, 1)
+        XCTAssertNil(props.testSuites.first?.sectionID,
+            "Items whose section was deleted must fall back to nil sectionID.")
+    }
+
     // MARK: - Fixture plumbing
 
     private struct Fixture {

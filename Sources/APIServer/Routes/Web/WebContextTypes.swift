@@ -113,6 +113,15 @@ struct OutcomeRow: Encodable {
     let pointsLabel: String?     // e.g. "2 pts" when assignment is weighted; nil otherwise
 }
 
+/// One section block on the student submission page.  `sectionName == nil`
+/// means "render these outcomes with no heading" — used for the legacy /
+/// ungrouped bucket so the page looks identical to the pre-sections layout
+/// when an assignment has no sections defined.
+struct SectionedOutcomes: Encodable {
+    let sectionName: String?
+    let outcomes: [OutcomeRow]
+}
+
 /// Input data used to compute per-submission achievement badges.
 struct BadgeContext {
     let attemptNumber: Int
@@ -244,6 +253,11 @@ struct SubmissionContext: Encodable {
     let hasWarnings: Bool
     let warnings: [String]
     let outcomes: [OutcomeRow]
+    /// Outcomes grouped into sections for the student view.  When a manifest
+    /// has no sections (or no outcome carries a sectionID) this is a single
+    /// bucket with `sectionName == nil`, which the template renders with no
+    /// header — behaviour identical to the pre-sections page.
+    let sectionedOutcomes: [SectionedOutcomes]
     let passCount: Int
     let totalTests: Int
     let gradePercent: Int

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.96] - 2026-04-23
+
+### Added
+
+- **Sections for test suites.**  Instructors can group the tests in an assignment into named sections ("Question 1", "Question 2", …) on the assignment edit page; each section renders as its own `.section-block` + `.results-table`, drag-drop works across sections, and an "+ Section" button creates new ones.  Sections have exactly one property — a name — and are purely a display-grouping concern: the runner still walks `testSuites[]` in order and the dependency graph is unchanged.  Student submission page groups results the same way, showing an `<h3>` heading above each section's result table so students can tell at a glance which tests belong to which question.  Assignments with no sections render identically to the pre-v0.4.96 layout (single unlabelled table on both the editor and the student page).  Items not yet assigned to a section appear in a trailing "Ungrouped" block — hidden when empty.  Deleting a non-empty section prompts a `confirm()` dialog and silently re-homes the items to Ungrouped.  New Core types: `TestSuiteSection` (id + name), optional `sectionID` on `TestSuiteEntry`, optional `sections: [TestSuiteSection]` on `TestProperties`.  `applyPatternFamilies` now takes a `sections:` parameter, rewrites stale `sectionID` references to `nil`, and enforces that items sharing a `sectionID` form a contiguous block in the authored array.  Pattern families inherit their section from the authored-item position — move the family row and every generated case follows.  Legacy manifests with no `sections` key decode with `decodeIfPresent` defaults so older runners remain compatible.
+
 ## [0.4.95] - 2026-04-23
 
 ### Fixed

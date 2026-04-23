@@ -32,15 +32,38 @@ struct AuthoredRawScript: Equatable {
     let points: Int
     let displayName: String?
     let dependsOn: [String]
+    let sectionID: String?
+
+    init(script: String, tier: TestTier, points: Int,
+         displayName: String?, dependsOn: [String], sectionID: String? = nil) {
+        self.script      = script
+        self.tier        = tier
+        self.points      = points
+        self.displayName = displayName
+        self.dependsOn   = dependsOn
+        self.sectionID   = sectionID
+    }
 }
 
 /// One position in the unified suite-edit list.  Either a raw script entry
 /// or a reference to one of the families in `nextFamilies`.  Array ordering
 /// is authoritative for UI order — a family's generated scripts occupy a
-/// contiguous block at the family's position.
+/// contiguous block at the family's position.  The optional `sectionID`
+/// carried on each item is a pure display-grouping concern: the server
+/// stamps it onto the resulting `TestSuiteEntry` so the student submission
+/// page can group results, but it doesn't influence the dependency graph
+/// or run order beyond the existing `testSuites[]` ordering.
 enum AuthoredSuiteItem: Equatable {
     case script(AuthoredRawScript)
-    case family(id: String)
+    case family(id: String, sectionID: String?)
+
+    /// Convenience for the pre-sections call sites that don't care about
+    /// sections.  Swift can't give enum associated values a default value,
+    /// but a same-name static function that forwards lets `.family(id:)`
+    /// keep resolving at old call sites without an audit.
+    static func family(id: String) -> AuthoredSuiteItem {
+        .family(id: id, sectionID: nil)
+    }
 }
 
 // MARK: - Family-ref helpers
@@ -95,6 +118,7 @@ func applyPatternFamilies(
     to setup: APITestSetup,
     nextFamilies: [PatternFamily],
     authoredItems: [AuthoredSuiteItem]? = nil,
+    sections: [TestSuiteSection]? = nil,
     on db: Database
 ) async throws -> PatternFamilyApplyResult {
 
@@ -104,14 +128,58 @@ func applyPatternFamilies(
         throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
     }
 
-    // ── 1. Figure out the authored raw-entry list + ordering ────────────
+    // ── 1. Resolve section list (caller wins; otherwise carry old manifest).
+    let resolvedSections: [TestSuiteSection] = sections ?? props.sections
+    var seenSectionIDs: Set<String> = []
+    for s in resolvedSections {
+        guard seenSectionIDs.insert(s.id).inserted else {
+            throw Abort(.unprocessableEntity,
+                reason: "Duplicate section id '\(s.id)'.")
+        }
+    }
+    let knownSectionIDs = seenSectionIDs
+
+    /// Silently rewrites stale `sectionID` references (pointing at a
+    /// section that's not in `resolvedSections`) to `nil`.  Defends
+    /// against the client-race where the editor deletes a section
+    /// locally but an in-flight PUT still references it.
+    func normaliseSectionID(_ sid: String?) -> String? {
+        guard let sid else { return nil }
+        return knownSectionIDs.contains(sid) ? sid : nil
+    }
+
+    // ── 2. Figure out the authored raw-entry list + ordering ────────────
     let authoredRawEntries: [AuthoredRawScript]
     let itemsForOrdering: [AuthoredSuiteItem]
     if let authoredItems {
         authoredRawEntries = authoredItems.compactMap { item in
-            if case .script(let s) = item { return s } else { return nil }
+            if case .script(let s) = item {
+                return AuthoredRawScript(
+                    script: s.script,
+                    tier: s.tier,
+                    points: s.points,
+                    displayName: s.displayName,
+                    dependsOn: s.dependsOn,
+                    sectionID: normaliseSectionID(s.sectionID)
+                )
+            }
+            return nil
         }
-        itemsForOrdering = authoredItems
+        itemsForOrdering = authoredItems.map { item in
+            switch item {
+            case .script(let s):
+                return .script(AuthoredRawScript(
+                    script: s.script,
+                    tier: s.tier,
+                    points: s.points,
+                    displayName: s.displayName,
+                    dependsOn: s.dependsOn,
+                    sectionID: normaliseSectionID(s.sectionID)
+                ))
+            case .family(let id, let sid):
+                return .family(id: id, sectionID: normaliseSectionID(sid))
+            }
+        }
     } else {
         authoredRawEntries = props.testSuites
             .filter { $0.generatedBy == nil }
@@ -121,7 +189,8 @@ func applyPatternFamilies(
                     tier: e.tier,
                     points: e.points,
                     displayName: e.name,
-                    dependsOn: e.dependsOn
+                    dependsOn: e.dependsOn,
+                    sectionID: normaliseSectionID(e.sectionID)
                 )
             }
         // Reconstruct authored ordering from the existing manifest: walk
@@ -140,7 +209,10 @@ func applyPatternFamilies(
                 guard !seenFamilyIDs.contains(fid) else { continue }
                 seenFamilyIDs.insert(fid)
                 if nextFamilyIDs.contains(fid) {
-                    rebuilt.append(.family(id: fid))
+                    rebuilt.append(.family(
+                        id: fid,
+                        sectionID: normaliseSectionID(entry.sectionID)
+                    ))
                 }
             } else {
                 rebuilt.append(.script(AuthoredRawScript(
@@ -148,14 +220,49 @@ func applyPatternFamilies(
                     tier: entry.tier,
                     points: entry.points,
                     displayName: entry.name,
-                    dependsOn: entry.dependsOn
+                    dependsOn: entry.dependsOn,
+                    sectionID: normaliseSectionID(entry.sectionID)
                 )))
             }
         }
         for f in nextFamilies where !seenFamilyIDs.contains(f.id) {
-            rebuilt.append(.family(id: f.id))
+            rebuilt.append(.family(id: f.id, sectionID: nil))
         }
         itemsForOrdering = rebuilt
+    }
+
+    // ── 2a. Enforce that items with the same sectionID form a contiguous
+    // block (nil / ungrouped counts too).  Clients are expected to group
+    // items[] before sending; enforcing it server-side catches UI bugs
+    // early instead of producing confusing manifests where the same
+    // section straddles another section.
+    do {
+        var seenCompleted: Set<String?> = []
+        var current: String? = nil
+        var haveStarted = false
+        for item in itemsForOrdering {
+            let sid: String? = {
+                switch item {
+                case .script(let s):        return s.sectionID
+                case .family(_, let sid):   return sid
+                }
+            }()
+            if !haveStarted {
+                current = sid
+                haveStarted = true
+                continue
+            }
+            if sid != current {
+                seenCompleted.insert(current)
+                if seenCompleted.contains(sid) {
+                    let label = sid ?? "<ungrouped>"
+                    throw Abort(.unprocessableEntity,
+                        reason: "Items with sectionID '\(label)' are not contiguous; " +
+                                "group all items of a section together before saving.")
+                }
+                current = sid
+            }
+        }
     }
 
     // ── 2. Validate: family spec + family-ref dependency tokens ─────────
@@ -274,10 +381,11 @@ func applyPatternFamilies(
                 dependsOn:   expandDeps(s.dependsOn),
                 points:      s.points,
                 displayName: s.displayName,
-                generatedBy: nil
+                generatedBy: nil,
+                sectionID:   s.sectionID
             ))
 
-        case .family(let fid):
+        case .family(let fid, let familySection):
             guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
             emittedFamilyIDs.insert(fid)
             let inherited = expandDeps(family.dependsOn)
@@ -298,7 +406,8 @@ func applyPatternFamilies(
                     dependsOn:   combined,
                     points:      generated.points,
                     displayName: generated.displayName,
-                    generatedBy: generated.familyID
+                    generatedBy: generated.familyID,
+                    sectionID:   familySection
                 ))
             }
         }
@@ -326,7 +435,8 @@ func applyPatternFamilies(
                 dependsOn:   combined,
                 points:      generated.points,
                 displayName: generated.displayName,
-                generatedBy: generated.familyID
+                generatedBy: generated.familyID,
+                sectionID:   nil
             ))
         }
     }
@@ -336,7 +446,8 @@ func applyPatternFamilies(
         includeMakefile: props.makefile != nil,
         gradingMode:     props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
-        patternFamilies: nextFamilies
+        patternFamilies: nextFamilies,
+        sections:        resolvedSections
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner

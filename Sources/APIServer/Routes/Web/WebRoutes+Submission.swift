@@ -8,6 +8,53 @@ import Fluent
 import Core
 import Foundation
 
+/// Groups a flat outcome list into per-section buckets for the student
+/// submission view.  Sections are emitted in `sections` order; an
+/// outcome whose originating entry had no `sectionID` (or a stale one)
+/// falls into a trailing bucket with `sectionName == nil`.  When every
+/// outcome is ungrouped and there are no sections, the result is one
+/// bucket with `sectionName == nil` — template renders it as a single
+/// unlabelled table, identical to the pre-sections layout.
+func groupOutcomesBySection(
+    _ outcomes: [OutcomeRow],
+    sections: [TestSuiteSection],
+    sectionIDByTestName: [String: String]
+) -> [SectionedOutcomes] {
+    let knownSectionIDs = Set(sections.map(\.id))
+    var bucketsByID: [String: [OutcomeRow]] = [:]
+    var ungrouped: [OutcomeRow] = []
+    for row in outcomes {
+        if let sid = sectionIDByTestName[row.testName],
+           knownSectionIDs.contains(sid) {
+            bucketsByID[sid, default: []].append(row)
+        } else {
+            ungrouped.append(row)
+        }
+    }
+    var result: [SectionedOutcomes] = []
+    for section in sections {
+        if let rows = bucketsByID[section.id], !rows.isEmpty {
+            result.append(SectionedOutcomes(sectionName: section.name, outcomes: rows))
+        }
+    }
+    if !ungrouped.isEmpty {
+        // Trailing bucket label: when sections exist, call it "Ungrouped"
+        // so students see why this block appears separately.  When no
+        // sections exist at all, emit it unlabelled to preserve the
+        // legacy single-table look.
+        let label: String? = sections.isEmpty ? nil : "Ungrouped"
+        result.append(SectionedOutcomes(sectionName: label, outcomes: ungrouped))
+    }
+    if result.isEmpty {
+        // Empty outcome list still needs one bucket so the template's
+        // `#for(sec in sectionedOutcomes)` has something to skip over
+        // gracefully.  An empty `outcomes` array renders as an empty
+        // tbody, just like today.
+        result.append(SectionedOutcomes(sectionName: nil, outcomes: []))
+    }
+    return result
+}
+
 extension WebRoutes {
 
     // MARK: - GET /testsetups/:id/submit
@@ -299,16 +346,32 @@ extension WebRoutes {
         //  - worker results that already use the display name directly
         //  - older worker results where testName is the filename stem
         //  - browser results where testName is the full script filename
+        //
+        // Also collect the manifest's section list + per-entry sectionID
+        // lookup used later to group outcomes for the student view.
         var displayNameMap: [String: String] = [:]
+        var manifestSections: [TestSuiteSection] = []
+        var sectionIDByTestName: [String: String] = [:]
         if let setup = try? await APITestSetup.find(submission.testSetupID, on: req.db),
            let manifestData = setup.manifest.data(using: .utf8),
            let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData) {
+            manifestSections = props.sections
             for entry in props.testSuites {
-                guard let displayName = entry.name,
-                      !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 let stem = (entry.script as NSString).deletingPathExtension
-                displayNameMap[entry.script] = displayName
-                displayNameMap[stem.isEmpty ? entry.script : stem] = displayName
+                let stemKey = stem.isEmpty ? entry.script : stem
+                if let displayName = entry.name,
+                   !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    displayNameMap[entry.script] = displayName
+                    displayNameMap[stemKey]      = displayName
+                }
+                if let sid = entry.sectionID {
+                    sectionIDByTestName[entry.script] = sid
+                    sectionIDByTestName[stemKey]      = sid
+                    if let displayName = entry.name,
+                       !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        sectionIDByTestName[displayName] = sid
+                    }
+                }
             }
         }
 
@@ -403,6 +466,12 @@ extension WebRoutes {
             .all()
         badges += classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
 
+        let sectionedOutcomes = groupOutcomesBySection(
+            outcomes,
+            sections: manifestSections,
+            sectionIDByTestName: sectionIDByTestName
+        )
+
         let hasDelta = !priorOutcomeMap.isEmpty
         let deltaHeaderText: String? = {
             guard hasDelta else { return nil }
@@ -430,6 +499,7 @@ extension WebRoutes {
             hasWarnings:       !warnings.isEmpty,
             warnings:          warnings,
             outcomes:          outcomes,
+            sectionedOutcomes: sectionedOutcomes,
             passCount:         passCount,
             totalTests:        totalTests,
             gradePercent:      gradePercent,
