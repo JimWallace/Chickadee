@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.95] - 2026-04-23
+
+### Fixed
+
+- **Pattern family test results now render in-line with their prerequisite** in both the suite editor and the submission-view outcome list.  `topologicallySorted` was a FIFO Kahn queue: when a family declared `dependsOn: [publictest_prereq.py]`, the family's generated entries were enqueued *after* every other no-dep script, so a trailing `publictest_tail.py` cut in line and the family rendered at the end of the suite even though the instructor had authored it directly after its prereq.  Swapped the FIFO queue for an authored-position priority queue: at each step we pop the ready node with the smallest original index, which keeps the family next to its prereq whenever topology doesn't force a different order.  Regression guard: `testApply_familyWithDependencyStaysInlineAfterPrereq`.
+
+### Added
+
+- **Live feedback on every variable row** in the pattern family editor.  Name input shows ✓ green "referenced as `$name`" when the identifier is valid, or red with a reason when it's not a Python identifier or duplicates another row.  Value input shows ✓ green "parsed as dict/list/…" with a preview when `JSON.parse` succeeds, or amber "Treated as a bare string — check your quotes" when the JSON falls back.  Instructors no longer have to save to find out whether they typed the dict correctly.
+- **Arg-cell `$name` references light up as variable bindings.**  Green italic when the ref resolves to a declared variable (with a tooltip "Bound to family variable $name"); red when the variable isn't in the table yet (tooltip explains the fix).  Resolves live on every keystroke on either the arg cell or the variable row so the instructor sees the wiring take hold as they type.
+- **Pyodide auto-compute resolves `$name` refs.**  Before: typing `$patients` in an arg cell broke auto-compute (the cell was passed as the literal string `"$patients"` to the solution).  Now the resolver reads the Variables table DOM at compute time, substitutes the declared value in, and calls the solution with the real dict / list.  When the instructor *finishes* typing the variable's value, auto-compute re-fires on every case row with an unresolved ref, so the Expected cell fills in without a manual refresh.  Empty defaulted-param cells are also correctly skipped during auto-compute so Python's own default binds in the solution call.
+
 ## [0.4.94] - 2026-04-23
 
 ### Added

@@ -1055,6 +1055,64 @@ final class PatternFamilyTests: XCTestCase {
         ])
     }
 
+    /// Regression guard for the v0.4.95 "family results render at the end
+    /// instead of in-line" bug.  Before the fix, `topologicallySorted` was
+    /// a FIFO Kahn that let trailing no-dep scripts "cut in line" ahead of
+    /// a family that the author had positioned *right* after its prereq —
+    /// because the family's generated entries re-enter the queue AFTER
+    /// every no-dep node already in it.  With authored-position priority,
+    /// the family stays next to its prerequisite, matching what the
+    /// instructor saw in the suite editor.
+    func testApply_familyWithDependencyStaysInlineAfterPrereq() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.cleanup() }
+
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_prereq.py", content: "passed('prereq')\n"
+        )
+        try updateScriptInZip(
+            zipPath: fixture.setup.zipPath,
+            filename: "publictest_tail.py", content: "passed('tail')\n"
+        )
+        let prereq = AuthoredRawScript(
+            script: "publictest_prereq.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        let tail = AuthoredRawScript(
+            script: "publictest_tail.py", tier: .pub, points: 1,
+            displayName: nil, dependsOn: []
+        )
+        let familyWithDep = PatternFamily(
+            id: "bmi_category", name: "BMI Category Boundaries",
+            kind: .boundaryEquality, functionName: "bmi_category",
+            paramNames: ["bmi"],
+            defaults: PatternDefaults(hint: "values below 18.5 should be 'underweight'"),
+            cases: bmiFamily().cases,
+            dependsOn: ["publictest_prereq.py"]
+        )
+
+        _ = try await applyPatternFamilies(
+            to: fixture.setup,
+            nextFamilies: [familyWithDep],
+            authoredItems: [
+                .script(prereq),
+                .family(id: familyWithDep.id),
+                .script(tail)
+            ],
+            on: fixture.app.db
+        )
+
+        let props = try decodeManifest(fixture.setup.manifest)
+        XCTAssertEqual(props.testSuites.map(\.script), [
+            "publictest_prereq.py",
+            "publictest_bmi_category_01.py",
+            "publictest_bmi_category_02.py",
+            "publictest_bmi_category_03.py",
+            "publictest_tail.py",
+        ], "Family-with-dep must render in-line with its prerequisite, not pushed to the end of the suite.")
+    }
+
     /// The `PUT /families` path invokes `applyPatternFamilies` with
     /// `authoredItems == nil` (the legacy branch).  When the family
     /// already has generated entries in the existing manifest, the legacy
