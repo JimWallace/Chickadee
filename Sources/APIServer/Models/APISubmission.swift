@@ -39,6 +39,14 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @OptionalField(key: "retested_at")
     var retestedAt: Date?
 
+    /// The instructor who triggered the most recent retest, or nil for the
+    /// original student submission.  Nil for auto-retests fired by the
+    /// assignment-revise path when the initiating user could not be
+    /// determined (should not happen in practice — the Save button is
+    /// gated by `RoleMiddleware`).
+    @OptionalField(key: "retested_by_user_id")
+    var retestedByUserID: UUID?
+
     @OptionalField(key: "attempt_number")
     var attemptNumber: Int?
 

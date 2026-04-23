@@ -7,6 +7,7 @@ import Vapor
 import Fluent
 import Core
 import Foundation
+import Crypto
 
 // MARK: - Helper-internal types
 
@@ -1881,6 +1882,69 @@ func scheduleValidationAfterSuiteEdit(
     } catch {
         req.logger.warning("scheduleValidationAfterSuiteEdit: \(error)")
     }
+}
+
+/// Re-queues every student submission for a test setup so the worker
+/// regrades them against the current manifest.  Introduced in v0.4.93 to
+/// close the loop on assignment revisions: after an instructor fixes a
+/// bug in the test suite (or edits a pattern family), every prior
+/// submission gets a fresh result computed against the new grading logic.
+///
+/// Scope decisions (from v0.4.93 design):
+/// - **Every submission**, not just the latest per student — the caller's
+///   call.  At ~1s/submission on two runners, 150 students × a few
+///   attempts = ~10 min total, acceptable queue latency for this use.
+/// - **Excludes `kind = .validation`.**  The instructor's solution
+///   notebook re-validates via `scheduleValidationAfterSuiteEdit`, which
+///   enqueues a fresh validation row; bumping the old one would
+///   double-enqueue.
+/// - **Browser-graded submissions get handled automatically** — the
+///   v0.4.56 worker backstop already treats any pending submission as a
+///   candidate, running the generated `.py` scripts natively via
+///   `python3`.  Flipping `status = "pending"` is enough.
+/// - **Idempotent against in-flight retests.**  Submissions already in
+///   `pending` / `assigned` are skipped unless `force = true`, so
+///   rapid-fire saves (or the manual "Retest all" button after an
+///   auto-retest already fired) don't double-queue the same row.
+/// - **Does not mutate `lastRetestedManifestHash` on the setup** — the
+///   caller owns that bookkeeping (the helper can be invoked for a
+///   setup-hash-unchanged save via the explicit button).
+///
+/// Returns the number of submissions whose status was flipped to pending.
+@discardableResult
+func retestAllSubmissionsForSetup(
+    setupID: String,
+    triggeredBy userID: UUID?,
+    on db: Database,
+    force: Bool = false
+) async throws -> Int {
+    let submissions = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+
+    let now = Date()
+    var touched = 0
+    for submission in submissions {
+        if !force && (submission.status == "pending" || submission.status == "assigned") {
+            continue
+        }
+        submission.status = "pending"
+        submission.workerID = nil
+        submission.assignedAt = nil
+        submission.retestedAt = now
+        submission.retestedByUserID = userID
+        try await submission.save(on: db)
+        touched += 1
+    }
+    return touched
+}
+
+/// SHA-256 hex digest of `setup.manifest`.  Used by the auto-retest
+/// trigger as the dedup key for "manifest unchanged since last retest".
+func manifestHash(_ manifestJSON: String) -> String {
+    let digest = SHA256.hash(data: Data(manifestJSON.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
 }
 
 func waitForRunnerValidation(

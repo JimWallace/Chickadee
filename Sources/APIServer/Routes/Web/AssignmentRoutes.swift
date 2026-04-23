@@ -42,6 +42,7 @@ struct AssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
+        r.post(":assignmentID", "retest", use: retestAllSubmissions)
         r.get("new", use: newAssignmentPage)
         r.post("new", "draft", use: updateNewAssignmentDraft)
         r.get("new", "draft", "solution-notebook", use: draftSolutionNotebook)

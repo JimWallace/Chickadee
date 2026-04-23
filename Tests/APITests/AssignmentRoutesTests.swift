@@ -1153,6 +1153,123 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
+    // MARK: - POST /instructor/:assignmentID/retest  (v0.4.93 "Retest all")
+
+    /// The "Retest all" button flips every student submission on the
+    /// assignment's test setup back to `pending` (so the worker regrades
+    /// against the current manifest) and stamps `retestedByUserID` with
+    /// the instructor who clicked.  Validation submissions for the same
+    /// setup are intentionally excluded — they follow their own
+    /// `scheduleValidationAfterSuiteEdit` path.
+    func testRetestAllRequeuesStudentSubmissionsAndSkipsValidation() async throws {
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await insertSetup(id: "setup_retest_all")
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_retest_all", title: "Lab Retest All", isOpen: true
+        )
+        let assignmentID = assignment.publicID
+        let student = try await insertStudent(username: "retest_all_student")
+
+        // Two student submissions: one complete, one already pending.  The
+        // "Retest all" button forces both into pending — the idempotent
+        // skip only applies to the auto-save path.
+        let subA = APISubmission(
+            id: "sub_retest_all_a",
+            testSetupID: "setup_retest_all",
+            zipPath: tmpDir + "submissions/sub_retest_all_a.zip",
+            attemptNumber: 1,
+            status: "complete",
+            userID: student.id
+        )
+        subA.workerID = "worker-x"
+        subA.assignedAt = Date()
+        try await subA.save(on: app.db)
+
+        let subB = APISubmission(
+            id: "sub_retest_all_b",
+            testSetupID: "setup_retest_all",
+            zipPath: tmpDir + "submissions/sub_retest_all_b.zip",
+            attemptNumber: 2,
+            status: "pending",
+            userID: student.id
+        )
+        try await subB.save(on: app.db)
+
+        // A validation submission on the same setup — must be untouched.
+        let validation = APISubmission(
+            id: "sub_retest_all_validation",
+            testSetupID: "setup_retest_all",
+            zipPath: tmpDir + "submissions/sub_retest_all_validation.zip",
+            attemptNumber: 1,
+            status: "complete",
+            userID: nil,
+            kind: APISubmission.Kind.validation
+        )
+        try await validation.save(on: app.db)
+
+        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/retest", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        let retestedA = try await APISubmission.find("sub_retest_all_a", on: app.db)
+        XCTAssertEqual(retestedA?.status, "pending")
+        XCTAssertNil(retestedA?.workerID)
+        XCTAssertNil(retestedA?.assignedAt)
+        XCTAssertNotNil(retestedA?.retestedAt)
+        XCTAssertNotNil(retestedA?.retestedByUserID,
+                        "Retest must stamp the instructor who clicked the button")
+
+        let retestedB = try await APISubmission.find("sub_retest_all_b", on: app.db)
+        XCTAssertEqual(retestedB?.status, "pending")
+        XCTAssertNotNil(retestedB?.retestedAt,
+                        "Manual Retest All forces every submission, even already-pending ones")
+
+        let validationAfter = try await APISubmission.find("sub_retest_all_validation", on: app.db)
+        XCTAssertEqual(validationAfter?.status, "complete",
+                       "Validation submissions must be excluded from the retest fan-out")
+        XCTAssertNil(validationAfter?.retestedAt)
+
+        // The fan-out stamps `lastRetestedManifestHash` on the setup so a
+        // subsequent cosmetic save won't re-trigger the same work.
+        let setupAfter = try await APITestSetup.find("setup_retest_all", on: app.db)
+        XCTAssertNotNil(setupAfter?.lastRetestedManifestHash)
+    }
+
+    /// The retest-all endpoint requires instructor role.  Students/guests
+    /// hitting it should get a 403.
+    func testRetestAllRequiresInstructorRole() async throws {
+        try await insertSetup(id: "setup_retest_forbidden")
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_retest_forbidden", title: "Lab RBAC", isOpen: true
+        )
+        let assignmentID = assignment.publicID
+        let studentCookie = try await loginUser(
+            username: "retest_rbac_student",
+            password: "pw",
+            role: "student",
+            on: app
+        )
+        let (csrf, sessionCookie) = try await csrfFields(
+            for: "/login", cookie: studentCookie, on: app
+        )
+
+        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/retest", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            // RoleMiddleware short-circuits non-instructors to 403 (or 302
+            // to login depending on the auth config).  Either way, the
+            // submission must not be flipped.
+            XCTAssertTrue(res.status == .forbidden
+                          || res.status.code >= 300 && res.status.code < 400,
+                          "Expected forbidden/redirect, got \(res.status)")
+        })
+    }
+
     func testAssignmentSubmissionsUsesDisplayNameAndWaterlooTime() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_submissions_display_name")
