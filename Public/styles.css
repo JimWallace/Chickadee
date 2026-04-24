@@ -166,6 +166,21 @@ a { color: var(--blue); }
     color: #97DFEF;  /* health-teal-light — AHS palette, pale teal on black */
 }
 
+/* Admin-only version badge in the top nav.  Shown next to the "Admin"
+   link so admins can see the running version on every page without
+   scrolling to the bottom of the admin dashboard.  Subtle enough not
+   to compete with the real nav items. */
+.nav-version {
+    font-size: .72rem;
+    font-weight: 500;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(255, 255, 255, .55);
+    padding: .15rem .4rem;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: .3rem;
+    letter-spacing: .02em;
+}
+
 /* ── AHS colour bar ──────────────────────────────────── */
 
 .colour-bar {
@@ -192,6 +207,31 @@ h2 { font-size: 1rem;   margin-bottom: .4rem; }
 /* ── Cards ───────────────────────────────────────────── */
 
 .card-meta  { font-size: .8rem; color: var(--gray-600); margin-top: .2rem; }
+
+/* Generic card surface — solid background + border so .card descendants
+   don't inherit whatever's behind them.  Historically only `.card-meta`
+   lived here; anything that reached for a plain `.card` class (e.g. the
+   `+ Add Section` popup on the instructor dashboard, and the v0.4.96
+   suite-editor popup) was transparent and unreadable. */
+.card {
+    background: var(--surface);
+    color: var(--gray-900);
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+}
+
+/* The `+ Section` popup inherits `.card`'s surface, and adds the
+   shadow/padding/size specifics that make it feel like a floating menu
+   rather than a page-level card.  Shared between the instructor
+   dashboard (`assignments.leaf`) and the suite editor
+   (`assignment-edit.leaf`). */
+.add-section-popup {
+    background: var(--surface);
+    color: var(--gray-900);
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
+}
 
 /* ── Buttons ─────────────────────────────────────────── */
 

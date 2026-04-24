@@ -827,8 +827,5 @@ tr.runner-row-offline {
     });
 })();
 </script>
-<p style="margin-top:2rem;text-align:right;font-size:.75rem;color:var(--gray-400)">
-    Chickadee v#(version)
-</p>
 #endexport
 #endextend
