@@ -28,11 +28,21 @@ struct GeneratedScript: Equatable {
 
 /// Top-level entry point.  Returns one `GeneratedScript` per **enabled** case
 /// in the family; disabled cases are skipped.  Ordering follows `family.cases`.
-func renderPatternFamily(_ family: PatternFamily) -> [GeneratedScript] {
-    let hash = patternFamilySpecHash(family)
+///
+/// `sectionVariables` (v0.4.100+) are prepended to every generated test
+/// before the family's own variables, so variables declared on the section
+/// are visible to each case's Python assignments.  A family variable with
+/// the same name as a section variable shadows it (standard Python "last
+/// assignment wins"); the spec_hash reflects both lists.
+func renderPatternFamily(
+    _ family: PatternFamily,
+    sectionVariables: [FamilyVariable] = []
+) -> [GeneratedScript] {
+    let hash = patternFamilySpecHash(family, sectionVariables: sectionVariables)
     return family.cases.compactMap { c in
         guard c.enabled else { return nil }
-        return renderCase(family: family, case: c, specHash: hash)
+        return renderCase(family: family, case: c,
+                          sectionVariables: sectionVariables, specHash: hash)
     }
 }
 
@@ -59,26 +69,43 @@ func generatedScriptFilename(familyID: String, caseKey: String, tier: TestTier) 
 /// 16-character hex prefix of a SHA-256 over the canonical JSON encoding of
 /// the family (sorted keys).  Stable for a given spec; changes when anything
 /// about the family changes.
-func patternFamilySpecHash(_ family: PatternFamily) -> String {
+func patternFamilySpecHash(
+    _ family: PatternFamily,
+    sectionVariables: [FamilyVariable] = []
+) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    let data = (try? encoder.encode(family)) ?? Data()
-    let digest = SHA256.hash(data: data)
+    let familyData = (try? encoder.encode(family)) ?? Data()
+    // Mix section variables into the hash so changing them busts the
+    // manifest cache the same way changing the family itself does.
+    let sectionVarsData = (try? encoder.encode(sectionVariables)) ?? Data()
+    var buf = Data()
+    buf.append(familyData)
+    buf.append(sectionVarsData)
+    let digest = SHA256.hash(data: buf)
     let hex = digest.map { String(format: "%02x", $0) }.joined()
     return String(hex.prefix(16))
 }
 
 // MARK: - Per-kind dispatch
 
-private func renderCase(family: PatternFamily, case c: PatternCase, specHash: String) -> GeneratedScript {
+private func renderCase(
+    family: PatternFamily,
+    case c: PatternCase,
+    sectionVariables: [FamilyVariable],
+    specHash: String
+) -> GeneratedScript {
     let source: String
     switch family.kind {
     case .boundaryEquality:
-        source = renderBoundaryEquality(family: family, case: c, specHash: specHash)
+        source = renderBoundaryEquality(family: family, case: c,
+                                         sectionVariables: sectionVariables, specHash: specHash)
     case .approximateEquality:
-        source = renderApproximateEquality(family: family, case: c, specHash: specHash)
+        source = renderApproximateEquality(family: family, case: c,
+                                            sectionVariables: sectionVariables, specHash: specHash)
     case .variableEquality:
-        source = renderVariableEquality(family: family, case: c, specHash: specHash)
+        source = renderVariableEquality(family: family, case: c,
+                                         sectionVariables: sectionVariables, specHash: specHash)
     }
 
     let tier = c.resolvedTier(defaults: family.defaults)
@@ -196,23 +223,33 @@ private func callContext(for family: PatternFamily, case c: PatternCase) -> Call
     )
 }
 
-/// Renders the `name = <pythonLiteral>` preamble for every family
-/// variable, one per line.  Empty string when the family has no
-/// variables — callers use `isEmpty` to decide whether to emit the
-/// `# Variables:` section header and the blank separator line.
-private func familyVariableDecls(_ family: PatternFamily) -> String {
-    family.variables
-        .map { "\($0.name) = \($0.value.pythonLiteral)" }
-        .joined(separator: "\n")
+/// Renders the `name = <pythonLiteral>` preamble for every variable in
+/// scope for this generated test: section variables first, then family
+/// variables.  Python's last-assignment-wins semantics means a family
+/// variable with the same name shadows the section variable — that's
+/// the intended precedence ("family > section").  Empty string when
+/// neither list has entries.
+private func combinedVariableDecls(
+    sectionVariables: [FamilyVariable],
+    family: PatternFamily
+) -> String {
+    let sectionLines = sectionVariables.map { "\($0.name) = \($0.value.pythonLiteral)" }
+    let familyLines  = family.variables.map { "\($0.name) = \($0.value.pythonLiteral)" }
+    return (sectionLines + familyLines).joined(separator: "\n")
 }
 
-private func renderBoundaryEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+private func renderBoundaryEquality(
+    family: PatternFamily,
+    case c: PatternCase,
+    sectionVariables: [FamilyVariable],
+    specHash: String
+) -> String {
     let ctx = callContext(for: family, case: c)
 
     let resolvedHint = c.resolvedHint(defaults: family.defaults)
     let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
 
-    let variableDecls = familyVariableDecls(family)
+    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     // The `# Test:` line comes FIRST so test_runtime's _first_comment_label()
@@ -264,7 +301,12 @@ private let defaultApproxTolerance: Double = 1e-6
 /// that rejects non-numeric returns cleanly.  The failure message
 /// includes the tolerance and the actual delta so students see exactly
 /// how far off they are.
-private func renderApproximateEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+private func renderApproximateEquality(
+    family: PatternFamily,
+    case c: PatternCase,
+    sectionVariables: [FamilyVariable],
+    specHash: String
+) -> String {
     let ctx = callContext(for: family, case: c)
 
     let resolvedHint = c.resolvedHint(defaults: family.defaults)
@@ -275,7 +317,7 @@ private func renderApproximateEquality(family: PatternFamily, case c: PatternCas
     // as floats (e.g. 1.0, not 1) — keeps the comparison well-typed.
     let toleranceLiteral = JSONValue.double(tolerance).pythonLiteral
 
-    let variableDecls = familyVariableDecls(family)
+    let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
@@ -329,7 +371,19 @@ private func renderApproximateEquality(family: PatternFamily, case c: PatternCas
 /// string) and the expected value in `case.expected`.  A sentinel default
 /// on `getattr` distinguishes "not defined at all" from "defined as None"
 /// so students get a useful error message in both cases.
-private func renderVariableEquality(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+private func renderVariableEquality(
+    family: PatternFamily,
+    case c: PatternCase,
+    sectionVariables: [FamilyVariable],
+    specHash: String
+) -> String {
+    // Section + family variables are declared as module-level globals in
+    // the generated test.  `variableEquality` is checking a STUDENT-module
+    // attribute (not a declared-in-this-file one), so the section/family
+    // variables don't interact with the check itself — but we still emit
+    // them so the Variables row (e.g. a shared `patients` list) is
+    // available if a future kind / hint references it.
+    _ = sectionVariables  // currently unused by this kind; keep the signature consistent
     // Validation guarantees args.count == 1 and args[0] is a non-empty
     // string, but fall back to a sentinel name if somehow absent so the
     // generated Python is still syntactically valid.

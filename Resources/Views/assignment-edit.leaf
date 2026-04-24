@@ -193,6 +193,57 @@
                             style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
                 </div>
             </div>
+
+            <!-- Section variables (v0.4.100).  Visible as a collapsible
+                 block below the header.  Every pattern family in the
+                 section can reference these by their $name in arg cells;
+                 family-level variables with the same name shadow the
+                 section's.  Submits the whole list in one POST. -->
+            <details class="section-vars-details" data-section-id="#(sec.sectionID)"
+                     #if(sec.hasVariables):open#endif
+                     style="margin:.25rem 0 .5rem">
+                <summary style="cursor:pointer;font-size:.78rem;color:var(--gray-600);user-select:none;padding:.2rem .4rem">
+                    Shared inputs#if(sec.hasVariables): (#count(sec.variables))#endif
+                </summary>
+                <form class="section-vars-form" method="post"
+                      action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
+                      style="margin:.35rem 0;padding:.4rem .5rem;border:1px solid var(--border);border-radius:.4rem;background:var(--surface)"
+                      data-section-id="#(sec.sectionID)">
+                    <p class="card-meta" style="font-size:.72rem;margin:0 0 .3rem">
+                        Declare once; reference from any pattern family in this section via <code>$name</code> in an arg cell.
+                    </p>
+                    <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
+                        <thead>
+                            <tr>
+                                <th style="width:2rem" aria-label="Valid"></th>
+                                <th style="width:10rem">Name</th>
+                                <th>Value (JSON / Python literal)</th>
+                                <th style="width:3.5rem"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="section-vars-body">
+                            #for(v in sec.variables):
+                            <tr class="section-var-row">
+                                <td class="section-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green,#2d8f47);font-size:1rem"></td>
+                                <td><input type="text" class="form-input section-var-name" value="#(v.name)"
+                                           style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
+                                <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)"
+                                           style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
+                                <td><button type="button" class="btn action-btn action-danger section-var-remove"
+                                            style="padding:.2rem .4rem;font-size:.72rem">Remove</button></td>
+                            </tr>
+                            #endfor
+                        </tbody>
+                    </table>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.35rem">
+                        <button type="button" class="btn action-btn section-var-add"
+                                data-section-id="#(sec.sectionID)"
+                                style="padding:.2rem .55rem;font-size:.75rem">+ Add variable</button>
+                        <button type="submit" class="btn btn-primary"
+                                style="padding:.25rem .6rem;font-size:.78rem">Save shared inputs</button>
+                    </div>
+                </form>
+            </details>
         #endif
             <table class="results-table" style="width:100%">
                 <thead>
@@ -279,6 +330,7 @@
                 <table class="results-table" id="family-variables-table" style="font-size:.8rem">
                     <thead>
                         <tr>
+                            <th style="width:2rem" aria-label="Valid"></th>
                             <th style="width:12rem">Name</th>
                             <th>Value (JSON / Python literal)</th>
                             <th style="width:4rem"></th>
@@ -501,6 +553,155 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     // save flows) keep working without API changes.
     window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
     window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
+})();
+</script>
+
+<!-- Section variables editor (v0.4.100).  Each section gets a
+     collapsible Shared Inputs table; rows are server-rendered, mutations
+     are client-side until Save, which serialises to JSON and POSTs. -->
+<script>
+(function () {
+    'use strict';
+
+    function csrf() {
+        var m = document.querySelector('meta[name="csrf-token"]');
+        return m ? m.getAttribute('content') : '';
+    }
+
+    function isValidPyIdent(s) {
+        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
+    }
+
+    function tryParseValue(raw) {
+        var t = String(raw == null ? '' : raw).trim();
+        if (!t) return { ok: false, empty: true };
+        // Python-ish shortcuts map onto JSON.
+        if (t === 'True')  return { ok: true, value: true,  strict: true };
+        if (t === 'False') return { ok: true, value: false, strict: true };
+        if (t === 'None')  return { ok: true, value: null,  strict: true };
+        try { return { ok: true, value: JSON.parse(t), strict: true }; }
+        catch (_) { return { ok: true, value: String(raw), strict: false }; }
+    }
+
+    function refreshRow(tr) {
+        var name = (tr.querySelector('.section-var-name') || {}).value || '';
+        var rawVal = (tr.querySelector('.section-var-value') || {}).value || '';
+        name = name.trim();
+        var nameOk = name && isValidPyIdent(name);
+        var nameEl = tr.querySelector('.section-var-name');
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red,#c0392b)';
+        // Duplicate check within the same section table.
+        if (nameOk) {
+            var others = Array.from(tr.parentNode.querySelectorAll('.section-var-name'))
+                .map(function (el) { return el.value.trim(); });
+            if (others.filter(function (n) { return n === name; }).length > 1) {
+                nameEl.style.borderColor = 'var(--red,#c0392b)';
+                nameOk = false;
+            }
+        }
+        var parsed = tryParseValue(rawVal);
+        var valueEl = tr.querySelector('.section-var-value');
+        var valueOk = parsed.ok && !parsed.empty && parsed.strict;
+        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber,#b38600)';
+        valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
+            ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.' : '';
+        var check = tr.querySelector('.section-var-row-valid');
+        if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
+    }
+
+    function refreshAllRows(tbody) {
+        Array.from(tbody.querySelectorAll('tr.section-var-row')).forEach(refreshRow);
+    }
+
+    function addEmptyRow(tbody) {
+        var tr = document.createElement('tr');
+        tr.className = 'section-var-row';
+        tr.innerHTML =
+            '<td class="section-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green,#2d8f47);font-size:1rem"></td>'
+          + '<td><input type="text" class="form-input section-var-name" value="" placeholder="e.g. patients" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
+          + '<td><input type="text" class="form-input section-var-value" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
+          + '<td><button type="button" class="btn action-btn action-danger section-var-remove" style="padding:.2rem .4rem;font-size:.72rem">Remove</button></td>';
+        tbody.appendChild(tr);
+        refreshRow(tr);
+        var input = tr.querySelector('.section-var-name');
+        if (input) input.focus();
+    }
+
+    // Wire every section-vars form on the page.
+    document.querySelectorAll('form.section-vars-form').forEach(function (form) {
+        var tbody = form.querySelector('tbody.section-vars-body');
+        if (!tbody) return;
+
+        refreshAllRows(tbody);
+
+        form.addEventListener('input', function (e) {
+            var tr = e.target.closest && e.target.closest('tr.section-var-row');
+            if (tr) refreshAllRows(tbody);  // duplicate-check needs all rows
+        });
+
+        form.addEventListener('click', function (e) {
+            if (e.target.classList && e.target.classList.contains('section-var-remove')) {
+                var tr = e.target.closest('tr.section-var-row');
+                if (tr) { tr.remove(); refreshAllRows(tbody); }
+            }
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var rows = Array.from(tbody.querySelectorAll('tr.section-var-row'));
+            var variables = [];
+            var errors = [];
+            for (var i = 0; i < rows.length; i++) {
+                var tr = rows[i];
+                var name = (tr.querySelector('.section-var-name').value || '').trim();
+                var rawVal = tr.querySelector('.section-var-value').value || '';
+                if (!name && !rawVal.trim()) continue;  // empty row — silently skipped
+                if (!isValidPyIdent(name)) {
+                    errors.push('Row ' + (i + 1) + ': name "' + name + '" is not a valid Python identifier.');
+                    continue;
+                }
+                var parsed = tryParseValue(rawVal);
+                if (parsed.empty) {
+                    errors.push('Row ' + (i + 1) + ' (' + name + '): value is required.');
+                    continue;
+                }
+                // Accept bare strings — they round-trip as JSONValue strings.
+                variables.push({ name: name, value: parsed.value });
+            }
+            if (errors.length) {
+                alert('Shared inputs save failed:\n\n' + errors.join('\n'));
+                return;
+            }
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                body: JSON.stringify({ variables: variables }),
+                redirect: 'follow'
+            })
+            .then(function (r) {
+                if (r.redirected) { window.location.href = r.url; return; }
+                if (!r.ok) return r.text().then(function (t) {
+                    var m = t.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
+                    throw new Error(m ? m[1].replace(/<[^>]+>/g, '').trim() : 'HTTP ' + r.status);
+                });
+                // Fallback: no redirect header (shouldn't happen, but handle)
+                window.location.reload();
+            })
+            .catch(function (err) {
+                alert('Shared inputs save failed: ' + (err.message || err));
+            });
+        });
+    });
+
+    // Wire "+ Add variable" buttons (one per section).
+    document.querySelectorAll('button.section-var-add').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var form = btn.closest('form.section-vars-form');
+            if (!form) return;
+            var tbody = form.querySelector('tbody.section-vars-body');
+            if (tbody) addEmptyRow(tbody);
+        });
+    });
 })();
 </script>
 

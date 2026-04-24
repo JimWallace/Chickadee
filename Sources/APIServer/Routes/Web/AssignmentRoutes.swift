@@ -108,6 +108,7 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "suite-sections", "reorder",           use: reorderSuiteSections)
         r.post(":assignmentID", "suite-sections", ":sectionID", "rename", use: renameSuiteSection)
         r.post(":assignmentID", "suite-sections", ":sectionID", "delete", use: deleteSuiteSection)
+        r.post(":assignmentID", "suite-sections", ":sectionID", "variables", use: updateSuiteSectionVariables)
     }
 
     // MARK: - GET /instructor
@@ -802,6 +803,27 @@ struct AssignmentRoutes: RouteCollection {
                 overwriteWith: normalized
             )
             formState.solutionNotebookName = notebookFilenameForStorage(uploadedName: solutionNotebookFile.filename, fallback: "solution.ipynb")
+
+            // v0.4.100: auto-scan the solution for `##` sections and
+            // top-level function defs, then scaffold one `publictest_
+            // exists_<fn>.py` per detected function, placed in the
+            // section whose `##` header most recently preceded it.
+            // One-shot: silently skips if the manifest already has
+            // sections / test entries.  Errors are swallowed — this is
+            // a nice-to-have that must not block the upload.
+            do {
+                let result = try await autoScaffoldFromSolutionNotebook(
+                    setup: setup,
+                    notebookData: normalized,
+                    zipPath: setup.zipPath,
+                    on: req.db
+                )
+                if result.functions > 0 {
+                    req.logger.info("auto_scaffold sections=\(result.sections) functions=\(result.functions) setup=\(setup.id ?? "?")")
+                }
+            } catch {
+                req.logger.warning("auto_scaffold_failed setup=\(setup.id ?? "?") error=\(error)")
+            }
         case "clear-solution-notebook":
             removeDraftNotebookFiles(
                 req: req,

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.100] - 2026-04-24
+
+### Added
+
+- **Section-level variables.**  Each test-suite Section can now declare shared variables (same syntax as family-scoped `$name` variables added in v0.4.94).  Variables live on the Section, are rendered as module-level Python assignments at the top of every generated test in that section, and are referenceable from any pattern family in the section via `$name`.  Family-level variables with the same name shadow section-level ones — standard Python "last assignment wins".  New endpoint `POST /instructor/:id/suite-sections/:sid/variables`; new inline "Shared inputs" expander in each section's header; family editor modal looks up the family's home-section variables from the DOM when opening, so auto-compute resolves `$patients`-style refs to real values and the Expected cell fills in automatically.  Unlocks the Assignment 3 Challenge pattern: declare `patients` once, reference it from five families (one per function) that all run against the same test data.
+- **Auto-scan create flow.**  When the instructor uploads a solution notebook on the Create page, the server now scans it for `## ` markdown headers and top-level function definitions, then scaffolds the test setup in one shot: one `TestSuiteSection` per header (in notebook order), one `publictest_exists_<fn>.py` per detected function (placed in the section whose `##` header most recently preceded the `def`).  One-shot — silently skips on a re-upload of the solution notebook if the manifest already has sections or tests.  Functions appearing before any `##` header land in the trailing Ungrouped block.  The manual "Scan for functions" button in the family editor still exists for ad-hoc scans after upload.  New scanner: `scanNotebookForSectionsAndFunctions` in Core; new helper `autoScaffoldFromSolutionNotebook` in AssignmentHelpers.
+
+### Changed
+
+- **Pattern family Variable-row UI tightened.**  Replaced the two verbose status lines beneath each row ("✓ referenced as $name", "✓ parsed as dict — {…}") with a single green `✓` in a leading indicator column when both name and value are valid.  Invalid inputs get a red outline + tooltip.  Much quieter by default.
+- **Auto-computed multi-line expecteds round-trip correctly.**  The Expected cell is a single-line `<input type="text">`, which silently strips newlines on `.value` assignment.  `renderTypedCellValue` now JSON-stringifies any string containing `\n`, `\r`, or `\t` so the escape sequences survive as literal text in the cell; reading back via `coerceByType` JSON-parses the quoted form, reconstructing the real string.  Unlocks the `mailingLabel` case from Assignment 3 where the solution returns `"NGUYEN, AVA\n12 KING ST W, WATERLOO, ON\nN2L3X2"`.
+
 ## [0.4.99] - 2026-04-24
 
 ### Fixed
