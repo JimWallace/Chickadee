@@ -174,6 +174,20 @@ struct SuiteSectionShellRow: Encodable {
     let sectionID: String
     let name: String
     let isUngrouped: Bool
+    /// Section-level variables as pre-serialised JSON strings so the
+    /// template can emit them into hidden inputs / editable rows without
+    /// re-encoding in Leaf (which doesn't handle JSONValue well).  One
+    /// `{name, valueJSON}` entry per variable.
+    let variables: [SuiteSectionVariableShellRow]
+    /// Empty-state flag so the template can hide the "Variables" block
+    /// when the section has none (keeps the header clean).
+    let hasVariables: Bool
+}
+
+struct SuiteSectionVariableShellRow: Encodable {
+    let name: String
+    /// JSON-encoded value, ready to stuff into an `<input value="">`.
+    let valueJSON: String
 }
 
 struct CurrentFileLink {

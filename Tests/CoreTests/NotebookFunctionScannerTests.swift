@@ -280,4 +280,128 @@ struct NotebookFunctionScannerTests {
         #expect(fns.count == 1)
         #expect(fns[0].name == "greet")
     }
+
+    // MARK: - scanNotebookForSectionsAndFunctions (v0.4.100)
+
+    /// Builds a notebook where cells alternate between markdown and code.
+    /// Each entry is either `("md", "## Section Title")` or `("code", source)`.
+    private func sectionedNotebook(_ cells: [(String, String)]) -> Data {
+        let cellsJSON = cells.map { kind, source -> String in
+            let escaped = source
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            return """
+            {
+              "cell_type": "\(kind == "md" ? "markdown" : "code")",
+              "metadata": {},
+              "source": "\(escaped)"
+            }
+            """
+        }.joined(separator: ",")
+        return Data("""
+        {
+          "cells": [\(cellsJSON)],
+          "metadata": {},
+          "nbformat": 4,
+          "nbformat_minor": 5
+        }
+        """.utf8)
+    }
+
+    @Test func sectionScanner_tagsFunctionsWithPreviousHeader() {
+        let nb = sectionedNotebook([
+            ("md",   "## Warm Up"),
+            ("code", "def foo(a):\n    return a\n"),
+            ("md",   "## Challenge"),
+            ("code", "def bar(b):\n    return b\n\ndef baz(c):\n    return c\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb)
+        #expect(r.sectionNames == ["Warm Up", "Challenge"])
+        #expect(r.functions.map(\.info.name) == ["foo", "bar", "baz"])
+        #expect(r.functions.map(\.sectionName) == ["Warm Up", "Challenge", "Challenge"])
+    }
+
+    @Test func sectionScanner_functionBeforeAnyHeaderHasNilSection() {
+        let nb = sectionedNotebook([
+            ("code", "def before_section():\n    pass\n"),
+            ("md",   "## Later Section"),
+            ("code", "def after_section():\n    pass\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb)
+        #expect(r.sectionNames == ["Later Section"])
+        #expect(r.functions.count == 2)
+        #expect(r.functions[0].sectionName == nil)
+        #expect(r.functions[1].sectionName == "Later Section")
+    }
+
+    @Test func sectionScanner_deduplicatesRepeatedHeaderNames() {
+        let nb = sectionedNotebook([
+            ("md",   "## Shared"),
+            ("code", "def a():\n    pass\n"),
+            ("md",   "## Shared"),   // same title used again later — dedupes
+            ("code", "def b():\n    pass\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb)
+        #expect(r.sectionNames == ["Shared"])
+        #expect(r.functions.map(\.sectionName) == ["Shared", "Shared"])
+    }
+
+    @Test func sectionScanner_ignoresHashOneAndHashThreePlusHeaders() {
+        // Only `## ` (exactly two) creates a section — single `#` is the
+        // document title, `###` is a subheading.  Keeps sections tied to
+        // the "question-level" structure of the notebook.
+        let nb = sectionedNotebook([
+            ("md",   "# Assignment Title"),
+            ("code", "def ignored_top():\n    pass\n"),
+            ("md",   "### Sub Heading"),
+            ("code", "def ignored_sub():\n    pass\n"),
+            ("md",   "## Real Section"),
+            ("code", "def actual():\n    pass\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb)
+        #expect(r.sectionNames == ["Real Section"])
+        // First two functions appear before any `## ` — no section.
+        #expect(r.functions.map(\.sectionName) == [nil, nil, "Real Section"])
+    }
+
+    @Test func sectionScanner_matchesAssignment3Layout() {
+        // Smoke-tests the user's Assignment 3 structure: three `## `
+        // sections ("Warm Up: Patient Record", "Warm Up II: Calculating
+        // Patient Age", "Challenge: Answering Questions with a Patient
+        // Database") with functions scattered across all three.  The
+        // scaffolder will turn this into one section per `##` header and
+        // an exists test per detected function.
+        let nb = sectionedNotebook([
+            ("md",   "# Assignment 3 — Electronic Health Records"),
+            ("md",   "## Warm Up: Patient Record as Dictionary"),
+            ("code", "def mailingLabel(record):\n    pass\n\ndef bmi(record):\n    pass\n"),
+            ("md",   "## Warm Up II: Calculating Patient Age"),
+            ("code", "def age(dob, currentDate=\"20260301\"):\n    pass\n"),
+            ("md",   "## Challenge: Answering Questions with a Patient Database"),
+            ("code", "def countPatients(patients):\n    pass\n"),
+            ("code", "def countAdults(patients):\n    pass\n"),
+            ("code", "def findPatientsByDiagnosis(patients, diagnosis):\n    pass\n"),
+            ("code", "def averageAge(patients):\n    pass\n"),
+            ("code", "def countOverWeightPatients(patients):\n    pass\n"),
+        ])
+        let r = scanNotebookForSectionsAndFunctions(nb)
+        #expect(r.sectionNames == [
+            "Warm Up: Patient Record as Dictionary",
+            "Warm Up II: Calculating Patient Age",
+            "Challenge: Answering Questions with a Patient Database",
+        ])
+        #expect(r.functions.map(\.info.name) == [
+            "mailingLabel", "bmi", "age",
+            "countPatients", "countAdults", "findPatientsByDiagnosis",
+            "averageAge", "countOverWeightPatients",
+        ])
+        // Each function is tagged with its preceding `##` header.
+        #expect(r.functions[0].sectionName == "Warm Up: Patient Record as Dictionary")
+        #expect(r.functions[1].sectionName == "Warm Up: Patient Record as Dictionary")
+        #expect(r.functions[2].sectionName == "Warm Up II: Calculating Patient Age")
+        for i in 3...7 {
+            #expect(r.functions[i].sectionName == "Challenge: Answering Questions with a Patient Database")
+        }
+    }
 }

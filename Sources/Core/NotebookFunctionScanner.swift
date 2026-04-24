@@ -93,6 +93,99 @@ public struct NotebookFunctionInfo: Codable, Sendable {
 /// - Parameter notebookData: Raw bytes of the `.ipynb` JSON file.
 /// - Returns: One `NotebookFunctionInfo` per public top-level function, in
 ///   encounter order across all code cells.
+/// Result of a section-aware notebook scan (v0.4.100+).  Pairs each
+/// detected function with the name of the `## `-level markdown section
+/// whose header most recently preceded it in the notebook.  Functions
+/// appearing before any `##` header get `sectionName == nil`.
+///
+/// `sectionNames` is the ordered, deduplicated list of `##` headers in
+/// first-appearance order — used by the create workflow to scaffold
+/// `TestSuiteSection` entries.
+public struct NotebookScanResult: Sendable {
+    public let sectionNames: [String]
+    public let functions: [NotebookFunctionScanEntry]
+    public init(sectionNames: [String], functions: [NotebookFunctionScanEntry]) {
+        self.sectionNames = sectionNames
+        self.functions = functions
+    }
+}
+
+public struct NotebookFunctionScanEntry: Sendable {
+    public let info: NotebookFunctionInfo
+    /// The `##` header text of the section containing this function.
+    /// `nil` when the function appears before any `##` header in the notebook.
+    public let sectionName: String?
+    public init(info: NotebookFunctionInfo, sectionName: String?) {
+        self.info = info
+        self.sectionName = sectionName
+    }
+}
+
+/// Walks the notebook cell-by-cell, tracking the current `## ` markdown
+/// section as it goes, and tags each detected function with that header.
+/// Deduplicates section names in first-appearance order.  Shares the
+/// single-cell function extractor with `scanNotebookForFunctions` so
+/// the two paths agree on what counts as a detected function.
+public func scanNotebookForSectionsAndFunctions(_ notebookData: Data) -> NotebookScanResult {
+    guard
+        let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],
+        let cells = notebook["cells"] as? [[String: Any]]
+    else { return NotebookScanResult(sectionNames: [], functions: []) }
+
+    var sectionsInOrder: [String] = []
+    var seenSections: Set<String> = []
+    var currentSection: String? = nil
+    var entries: [NotebookFunctionScanEntry] = []
+    var rawEntriesByName: [String: Int] = [:]  // for shadowing pass below
+
+    for cell in cells {
+        let cellType = cell["cell_type"] as? String
+        let source = cellSource(cell)
+        if cellType == "markdown" {
+            // First `##` line (not `###`+) becomes the current section.
+            for line in source.components(separatedBy: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("## ") && !trimmed.hasPrefix("### ") {
+                    let title = String(trimmed.dropFirst(3))
+                        .trimmingCharacters(in: .whitespaces)
+                    guard !title.isEmpty else { continue }
+                    currentSection = title
+                    if seenSections.insert(title).inserted {
+                        sectionsInOrder.append(title)
+                    }
+                    break  // one section set per cell; ignore subsequent #s
+                }
+            }
+        } else if cellType == "code" {
+            let fns = extractTopLevelFunctions(from: source)
+            for fn in fns {
+                rawEntriesByName[fn.name] = entries.count
+                entries.append(NotebookFunctionScanEntry(info: fn, sectionName: currentSection))
+            }
+        }
+    }
+
+    // Mark later redefinitions as shadowing earlier ones — same logic
+    // as `scanNotebookForFunctions`, just applied to our richer entry.
+    let shadowed: [NotebookFunctionScanEntry] = entries.enumerated().map { idx, entry in
+        let last = rawEntriesByName[entry.info.name] ?? idx
+        let info = entry.info
+        let withShadow = NotebookFunctionInfo(
+            name: info.name,
+            paramNames: info.paramNames,
+            paramTypes: info.paramTypes,
+            paramHasDefault: info.paramHasDefault,
+            returnType: info.returnType,
+            hasTypeHints: info.hasTypeHints,
+            hasDocstring: info.hasDocstring,
+            isShadowed: last != idx
+        )
+        return NotebookFunctionScanEntry(info: withShadow, sectionName: entry.sectionName)
+    }
+
+    return NotebookScanResult(sectionNames: sectionsInOrder, functions: shadowed)
+}
+
 public func scanNotebookForFunctions(_ notebookData: Data) -> [NotebookFunctionInfo] {
     guard
         let notebook = try? JSONSerialization.jsonObject(with: notebookData) as? [String: Any],

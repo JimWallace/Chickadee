@@ -272,7 +272,20 @@ func applyPatternFamilies(
             dependsOn: $0.dependsOn, points: $0.points, generatedBy: nil
         )
     }
-    try validatePatternFamilies(nextFamilies, testSuites: authoredAsTestSuites)
+    // v0.4.100: build familySectionID map so validator knows which
+    // family lives in which section for section-variable ref checking.
+    var familySectionIDForValidation: [String: String] = [:]
+    for item in itemsForOrdering {
+        if case .family(let fid, let sid) = item, let sid {
+            familySectionIDForValidation[fid] = sid
+        }
+    }
+    try validatePatternFamilies(
+        nextFamilies,
+        testSuites: authoredAsTestSuites,
+        sections: resolvedSections,
+        familySectionID: familySectionIDForValidation
+    )
 
     let knownFamilyIDs = Set(nextFamilies.map(\.id))
     for r in authoredRawEntries {
@@ -311,9 +324,28 @@ func applyPatternFamilies(
         props.patternFamilies.flatMap(patternFamilyAllGeneratedFilenames)
     )
 
+    // Build a familyID → sectionID map from the authored items, so we can
+    // look up each family's home section and prepend its variables.  If
+    // the authored ordering doesn't reference a family (defensive path
+    // below), that family renders with no section variables — which
+    // matches its "unanchored" status.
+    var familySectionID: [String: String] = [:]
+    for item in itemsForOrdering {
+        if case .family(let fid, let sid) = item, let sid {
+            familySectionID[fid] = sid
+        }
+    }
+    let sectionVarsByID: [String: [FamilyVariable]] = Dictionary(
+        uniqueKeysWithValues: resolvedSections.map { ($0.id, $0.variables) }
+    )
+    func sectionVars(forFamily fid: String) -> [FamilyVariable] {
+        guard let sid = familySectionID[fid] else { return [] }
+        return sectionVarsByID[sid] ?? []
+    }
+
     var renderedByFilename: [String: GeneratedScript] = [:]
     for family in nextFamilies {
-        for generated in renderPatternFamily(family) {
+        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id)) {
             renderedByFilename[generated.filename] = generated
         }
     }
@@ -389,7 +421,7 @@ func applyPatternFamilies(
             guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
             emittedFamilyIDs.insert(fid)
             let inherited = expandDeps(family.dependsOn)
-            for generated in renderPatternFamily(family) {
+            for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: fid)) {
                 order += 1
                 let prior = oldEntryByScript[generated.filename]
                 let perCase = expandDeps(prior?.dependsOn ?? [])
@@ -418,7 +450,7 @@ func applyPatternFamilies(
     // the caller forgot to include a newly added family).
     for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
         let inherited = expandDeps(family.dependsOn)
-        for generated in renderPatternFamily(family) {
+        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id)) {
             order += 1
             let prior = oldEntryByScript[generated.filename]
             let perCase = expandDeps(prior?.dependsOn ?? [])

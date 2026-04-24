@@ -114,6 +114,69 @@ extension AssignmentRoutes {
         return redirectToEdit(req: req)
     }
 
+    // MARK: - POST /instructor/:assignmentID/suite-sections/:sectionID/variables
+    //
+    // Replaces the section's variables list atomically.  Body is the full
+    // new list (same shape every call); the server doesn't diff.  Takes
+    // JSON so the editor can send structured `FamilyVariable` values
+    // directly — same shape the `PUT /families` endpoint already uses.
+    // Returns 303 so the browser reloads the edit page with the updated
+    // section block.
+
+    @Sendable
+    func updateSuiteSectionVariables(req: Request) async throws -> Response {
+        struct Body: Content { var variables: [FamilyVariable] }
+
+        let (_, _, setup) = try await resolveSuiteSectionContext(req)
+        guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
+            throw Abort(.notFound)
+        }
+        let body = try req.content.decode(Body.self)
+
+        // Validate: each name must be a valid Python identifier and
+        // unique within the list.  Mirrors the `validatePatternFamilies`
+        // checks so a bad section-variable save can't produce a test
+        // that won't render.
+        var seenNames: Set<String> = []
+        for v in body.variables {
+            guard isValidPythonIdentifier(v.name) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Section variable name '\(v.name)' is not a valid Python identifier.")
+            }
+            guard seenNames.insert(v.name).inserted else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Duplicate section variable name '\(v.name)'.")
+            }
+        }
+
+        // Encode the variables list via JSONEncoder so JSONValue fields
+        // (dict / list / scalar) round-trip through `mutateManifest`'s
+        // dictionary-of-Any representation.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let varData = try encoder.encode(body.variables)
+        guard let parsed = try JSONSerialization.jsonObject(with: varData) as? [Any] else {
+            throw Abort(.internalServerError, reason: "Failed to re-serialise section variables.")
+        }
+
+        try await mutateManifest(setup: setup, on: req.db) { dict in
+            guard var sections = dict["sections"] as? [[String: Any]] else {
+                throw Abort(.notFound, reason: "Section '\(sectionID)' not found.")
+            }
+            guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
+                throw Abort(.notFound, reason: "Section '\(sectionID)' not found.")
+            }
+            if parsed.isEmpty {
+                sections[idx].removeValue(forKey: "variables")
+            } else {
+                sections[idx]["variables"] = parsed
+            }
+            dict["sections"] = sections
+        }
+
+        return redirectToEdit(req: req)
+    }
+
     // MARK: - POST /instructor/:assignmentID/suite-sections/reorder
 
     @Sendable

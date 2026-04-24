@@ -290,10 +290,20 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
 func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellRow] {
     guard let data = manifest.data(using: .utf8),
           let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
-        return [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true)]
+        return [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
+                                      variables: [], hasVariables: false)]
     }
-    var rows: [SuiteSectionShellRow] = props.sections.map {
-        SuiteSectionShellRow(sectionID: $0.id, name: $0.name, isUngrouped: false)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    var rows: [SuiteSectionShellRow] = props.sections.map { section in
+        let vars: [SuiteSectionVariableShellRow] = section.variables.map { v in
+            let json = (try? encoder.encode(v.value)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+            return SuiteSectionVariableShellRow(name: v.name, valueJSON: json)
+        }
+        return SuiteSectionShellRow(sectionID: section.id, name: section.name,
+                                     isUngrouped: false,
+                                     variables: vars,
+                                     hasVariables: !vars.isEmpty)
     }
     let knownSectionIDs = Set(props.sections.map(\.id))
     let anyUngrouped = props.testSuites.contains { entry in
@@ -301,7 +311,8 @@ func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellR
         return !knownSectionIDs.contains(sid)
     }
     if anyUngrouped || props.sections.isEmpty {
-        rows.append(SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true))
+        rows.append(SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
+                                          variables: [], hasVariables: false))
     }
     return rows
 }

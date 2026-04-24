@@ -65,17 +65,34 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     }
 }
 
-/// A named grouping of test suite entries.  Sections have no effect on
-/// test behaviour or dependency semantics — they only drive visual
-/// grouping in the instructor suite editor and the student submission
-/// results page.  `id` is opaque (UUID generated in the browser), so
-/// renames are free.
+/// A named grouping of test suite entries.  Sections drive visual
+/// grouping on the instructor suite editor and the student submission
+/// results page, and (v0.4.100+) carry an optional list of
+/// section-scoped variables that every pattern family in the section
+/// can reference via the `$name` syntax.
+///
+/// `id` is opaque (UUID generated in the browser), so renames are free.
 public struct TestSuiteSection: Codable, Equatable, Sendable {
     public let id: String
     public let name: String
-    public init(id: String, name: String) {
-        self.id   = id
-        self.name = name
+    /// Variables available to every pattern family in this section.
+    /// Uses the same shape as `FamilyVariable` (name + JSON-expressible
+    /// value) so the `$name` resolver, validator, and auto-compute code
+    /// paths stay unchanged.  Family-level variables of the same name
+    /// shadow section-level ones in the generated test.
+    public let variables: [FamilyVariable]
+
+    public init(id: String, name: String, variables: [FamilyVariable] = []) {
+        self.id        = id
+        self.name      = name
+        self.variables = variables
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id        = try c.decode(String.self, forKey: .id)
+        name      = try c.decode(String.self, forKey: .name)
+        variables = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
     }
 }
 

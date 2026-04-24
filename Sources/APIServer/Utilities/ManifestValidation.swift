@@ -10,9 +10,22 @@ import Vapor
 /// `Abort(.unprocessableEntity)` with a student-friendly reason on any
 /// structural problem.
 func validateManifest(_ manifest: TestProperties) throws {
+    // Pass section data through so family cases that reference section-
+    // level `$variables` (v0.4.100) validate correctly.  Map each family
+    // to its section by finding the sectionID on its first generated
+    // testSuites entry; families with no generated entries default to
+    // no section (no extra variable names in scope).
+    var familySectionID: [String: String] = [:]
+    for entry in manifest.testSuites {
+        if let fid = entry.generatedBy, let sid = entry.sectionID, familySectionID[fid] == nil {
+            familySectionID[fid] = sid
+        }
+    }
     try validatePatternFamilies(
         manifest.patternFamilies,
-        testSuites: manifest.testSuites
+        testSuites: manifest.testSuites,
+        sections: manifest.sections,
+        familySectionID: familySectionID
     )
     try validateManifestDependencies(manifest)
 }
@@ -91,7 +104,23 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
 ///   doesn't spring a surprise.
 /// - no generated filename collides with a hand-written script in `testSuites`
 ///   (raw entries are those with `generatedBy == nil`).
-func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuiteEntry]) throws {
+func validatePatternFamilies(
+    _ families: [PatternFamily],
+    testSuites: [TestSuiteEntry],
+    sections: [TestSuiteSection] = [],
+    familySectionID: [String: String] = [:]
+) throws {
+    // v0.4.100: build a "extra names in scope for this family" set so
+    // each family can reference its home section's variables too.
+    let sectionVarsByID: [String: Set<String>] = Dictionary(
+        uniqueKeysWithValues: sections.map { sec in
+            (sec.id, Set(sec.variables.map(\.name)))
+        }
+    )
+    func sectionVarNames(forFamily fid: String) -> Set<String> {
+        guard let sid = familySectionID[fid] else { return [] }
+        return sectionVarsByID[sid] ?? []
+    }
     // 1. Per-family structural checks.
     var seenFamilyIDs: Set<String> = []
     for family in families {
@@ -196,10 +225,16 @@ func validatePatternFamilies(_ families: [PatternFamily], testSuites: [TestSuite
                     reason: "Pattern family '\(family.id)': variable name '\(v.name)' collides with a parameter name; the generated test would shadow the family variable.")
             }
         }
+        let sectionVarNamesHere = sectionVarNames(forFamily: family.id)
         for c in family.cases {
             for (i, maybeRef) in c.argVarRefs.enumerated() {
                 guard let ref = maybeRef else { continue }
-                guard seenVarNames.contains(ref) else {
+                // v0.4.100: a `$name` ref resolves if EITHER the family
+                // declares the variable OR the family's home section
+                // does.  Family-level shadows section-level at render
+                // time — so both are valid refs; only "declared in
+                // neither" is an error.
+                guard seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref) else {
                     let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
                     throw Abort(.unprocessableEntity,
                         reason: "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'")
@@ -228,7 +263,7 @@ private let pythonKeywords: Set<String> = [
     "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"
 ]
 
-private func isValidPythonIdentifier(_ s: String) -> Bool {
+func isValidPythonIdentifier(_ s: String) -> Bool {
     guard !s.isEmpty, !pythonKeywords.contains(s) else { return false }
     let chars = Array(s)
     let first = chars[0]
