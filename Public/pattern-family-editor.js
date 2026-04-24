@@ -75,30 +75,78 @@
 
         /// Reads section variables for the given family id out of the
         /// server-rendered `.section-vars-body` tbody in the family row's
-        /// enclosing section block.  Returns `[{ name, value }]`.  Picks
-        /// up any unsaved edits to the Shared Inputs table too — auto-
-        /// compute sees the live value the instructor just typed, same
-        /// way family variables already work.
-        function readSectionVariablesForFamily(familyID) {
+        /// enclosing section block.  Returns `{ vars, sectionName }`.
+        /// Picks up any unsaved edits to the Shared Inputs table too —
+        /// auto-compute sees the live value the instructor just typed,
+        /// same way family variables already work.
+        function readSectionContextForFamily(familyID) {
             var familyRow = document.querySelector(
                 'tr[data-kind="family"][data-family-id="' + String(familyID).replace(/"/g, '\\"') + '"]'
             );
-            if (!familyRow) return [];
+            if (!familyRow) return { vars: [], sectionName: null };
             var block = familyRow.closest('.section-block[data-section-id]');
-            if (!block) return [];
+            if (!block) return { vars: [], sectionName: null };
+            var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
             var varTbody = block.querySelector('tbody.section-vars-body');
-            if (!varTbody) return [];
-            return Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
+            if (!varTbody) return { vars: [], sectionName: sectionName };
+            var vars = Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
                 var name = (tr.querySelector('.section-var-name') || {}).value || '';
                 var raw  = (tr.querySelector('.section-var-value') || {}).value || '';
                 name = name.trim();
                 if (!name) return null;
-                // Parse value the same way section-vars JS does.
                 var parsed;
                 try { parsed = JSON.parse(raw.trim()); }
                 catch (_) { parsed = String(raw); }
                 return { name: name, value: parsed };
             }).filter(Boolean);
+            return { vars: vars, sectionName: sectionName };
+        }
+
+        /// Back-compat wrapper around `readSectionContextForFamily` for
+        /// sites that only need the variables list.
+        function readSectionVariablesForFamily(familyID) {
+            return readSectionContextForFamily(familyID).vars;
+        }
+
+        /// Paints the read-only "Shared inputs from section: X" block
+        /// inside the family editor modal from the given context.
+        /// Hides the block entirely when the family isn't in a section
+        /// or the section has no variables declared.  Not editable
+        /// here — instructor edits in the section's Inputs table
+        /// (prevents accidental drift from tests in other families
+        /// that rely on the same shared values).  v0.4.102+.
+        function renderReadOnlySectionVars(ctx) {
+            var box   = document.getElementById('family-section-vars-readonly');
+            var body  = document.getElementById('family-section-vars-readonly-body');
+            var label = document.getElementById('family-section-name-label');
+            if (!box || !body) return;
+            var vars = (ctx && ctx.vars) || [];
+            if (!vars.length) {
+                box.style.display = 'none';
+                body.innerHTML = '';
+                return;
+            }
+            if (label) label.textContent = (ctx && ctx.sectionName) || '';
+            // One row per variable: "$name" in first column, truncated
+            // value preview in second.  Shadowing by family-level same-
+            // named variable is noted inline so the instructor sees
+            // which values will actually reach the test.
+            var familyVarNames = new Set((familyVariables || []).map(function (v) { return v.name; }));
+            body.innerHTML = vars.map(function (v) {
+                var preview = '';
+                try { preview = JSON.stringify(v.value); }
+                catch (_) { preview = String(v.value); }
+                if (preview.length > 80) preview = preview.slice(0, 77) + '…';
+                var shadowed = familyVarNames.has(v.name);
+                var shadowNote = shadowed
+                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber,#b38600);margin-left:.4rem">shadowed by family variable</span>'
+                    : '';
+                return '<tr>'
+                     + '<td style="width:12rem;font-family:monospace;padding:.2rem .4rem"><code>$' + escHtml(v.name) + '</code>' + shadowNote + '</td>'
+                     + '<td style="font-family:monospace;padding:.2rem .4rem;color:var(--gray-600)">' + escHtml(preview) + '</td>'
+                     + '</tr>';
+            }).join('');
+            box.style.display = '';
         }
 
         var addFamilyBtn     = document.getElementById('add-family-btn');
@@ -999,7 +1047,9 @@
             var preselectedFn = '';
             if (editingIndex >= 0) {
                 var family = familiesState[editingIndex];
-                currentSectionVariables = readSectionVariablesForFamily(family.id);
+                var ctx = readSectionContextForFamily(family.id);
+                currentSectionVariables = ctx.vars;
+                renderReadOnlySectionVars(ctx);
                 titleEl.textContent = 'Edit Pattern Family';
                 idInput.value = family.id || '';
                 nameInput.value = family.name || '';
@@ -1034,6 +1084,7 @@
                 // come into scope once the family is saved and dragged
                 // into a section.  Empty until then.
                 currentSectionVariables = [];
+                renderReadOnlySectionVars({ vars: [], sectionName: null });
                 rebuildCasesHeader([]);
             }
             renderVariablesTable();

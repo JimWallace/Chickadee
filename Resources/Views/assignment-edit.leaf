@@ -229,6 +229,23 @@
                 </table>
             </form>
         #endif
+            <!-- Per-section create toolbar (v0.4.102).  Items created
+                 from these buttons auto-land in this section's tbody;
+                 the global toolbar above still works for ungrouped
+                 creates. -->
+            <div class="section-create-toolbar"
+                 data-section-id="#(sec.sectionID)"
+                 style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
+                <button type="button" class="btn action-btn section-new-script-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">+ New Script</button>
+                <button type="button" class="btn action-btn section-add-family-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">+ New Family</button>
+                <button type="button" class="btn action-btn section-upload-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">Upload</button>
+            </div>
             <table class="results-table" style="width:100%">
                 <tbody data-section-id="#(sec.sectionID)"></tbody>
             </table>
@@ -295,6 +312,21 @@
             <input type="hidden" id="family-function">
             <input type="hidden" id="family-params">
             <input type="hidden" id="family-default-hint" value="">
+
+            <!-- Read-only view of the section's shared inputs (v0.4.102).
+                 Shown only when this family lives in a section that has
+                 variables declared.  Reference by `$name` in any arg
+                 cell — family-level variables of the same name shadow.
+                 Not editable here; edit in the section's Inputs table. -->
+            <div id="family-section-vars-readonly" style="display:none">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+                    <strong style="font-size:.85rem">Shared inputs from section: <span id="family-section-name-label"></span></strong>
+                    <span class="card-meta" style="font-size:.72rem">Read-only — edit in the section's Inputs table.</span>
+                </div>
+                <table class="results-table" style="font-size:.8rem;opacity:.85">
+                    <tbody id="family-section-vars-readonly-body"></tbody>
+                </table>
+            </div>
 
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
@@ -733,6 +765,56 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             var tbody = form.querySelector('tbody.section-vars-body');
             if (tbody) addEmptyRow(tbody);
         });
+    });
+
+    // Per-section create toolbar (v0.4.102).  Each section block has
+    // its own "+ New Script" / "+ New Family" / "Upload" buttons that
+    // delegate to the existing global buttons but stash the target
+    // section id on `window.__chickadeeTargetSection` first.  The
+    // suite-table's `addExistingScript` + `syncFamilies` read that
+    // flag and stamp `sectionID` on the newly-created item.
+    //
+    // Persistence: the flag lives until the next button click resets
+    // it — global toolbar clicks below explicitly clear it so their
+    // creates still land ungrouped.  This means a single per-section
+    // Upload click followed by multi-file selection correctly places
+    // every uploaded script in the same section.
+    function delegateWithSection(sid, globalID) {
+        window.__chickadeeTargetSection = sid;
+        var btn = document.getElementById(globalID);
+        if (btn) btn.click();
+    }
+    document.querySelectorAll('button.section-new-script-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            delegateWithSection(btn.getAttribute('data-section-id') || '', 'new-script-btn');
+        });
+    });
+    document.querySelectorAll('button.section-add-family-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-family-btn');
+        });
+    });
+    document.querySelectorAll('button.section-upload-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-test-btn');
+        });
+    });
+
+    // Global-toolbar clicks clear the target section so their creates
+    // always land ungrouped — in case a user clicks a per-section
+    // button, cancels the modal, then clicks a global toolbar button.
+    // Uses `capture: true` so this listener fires BEFORE the original
+    // per-button handler reads the flag.
+    ['new-script-btn', 'add-family-btn', 'add-test-btn'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', function (e) {
+            // Only clear if this click originated as a direct user
+            // interaction on the global button — not a synthetic click
+            // we dispatched from a per-section delegator.
+            if (!e.isTrusted) return;
+            window.__chickadeeTargetSection = null;
+        }, true);
     });
 })();
 </script>

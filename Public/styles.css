@@ -166,19 +166,16 @@ a { color: var(--blue); }
     color: #97DFEF;  /* health-teal-light — AHS palette, pale teal on black */
 }
 
-/* Admin-only version badge in the top nav.  Shown next to the "Admin"
-   link so admins can see the running version on every page without
-   scrolling to the bottom of the admin dashboard.  Subtle enough not
-   to compete with the real nav items. */
-.nav-version {
-    font-size: .72rem;
-    font-weight: 500;
+/* Small version label at the top of the admin page — admin-page-only
+   per v0.4.102.  (The v0.4.99 nav-badge flavour was moved here so it
+   doesn't appear in the global nav for instructor/admin users on
+   non-admin pages.) */
+.admin-version-banner {
+    font-size: .75rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    color: rgba(255, 255, 255, .55);
-    padding: .15rem .4rem;
-    border: 1px solid rgba(255, 255, 255, .2);
-    border-radius: .3rem;
-    letter-spacing: .02em;
+    color: var(--gray-500);
+    margin: 0 0 .75rem 0;
+    text-align: right;
 }
 
 /* ── AHS colour bar ──────────────────────────────────── */
