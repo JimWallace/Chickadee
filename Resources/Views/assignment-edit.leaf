@@ -809,11 +809,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-family-btn');
         });
     });
-    document.querySelectorAll('button.section-upload-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-test-btn');
-        });
-    });
+    // (v0.4.103: per-section Upload button removed; the global Upload
+    // button at the page top still handles zip uploads.)
 
     // Global-toolbar clicks clear the target section so their creates
     // always land ungrouped — in case a user clicks a per-section

@@ -121,12 +121,27 @@
             var label = document.getElementById('family-section-name-label');
             if (!box || !body) return;
             var vars = (ctx && ctx.vars) || [];
-            if (!vars.length) {
+            var sectionName = (ctx && ctx.sectionName) || '';
+            // Hide entirely when the family isn't placed in any section
+            // (e.g. a + New Family that hasn't been dragged into one yet).
+            // Show whenever sectionName is known, even with zero variables,
+            // so the instructor sees which section the family is in and
+            // gets a clear "no shared inputs declared yet" placeholder
+            // instead of a silent empty UI (v0.4.103+).
+            if (!sectionName) {
                 box.style.display = 'none';
                 body.innerHTML = '';
                 return;
             }
-            if (label) label.textContent = (ctx && ctx.sectionName) || '';
+            if (label) label.textContent = sectionName;
+            if (!vars.length) {
+                body.innerHTML =
+                    '<tr><td colspan="2" style="padding:.4rem .5rem;color:var(--gray-500);font-style:italic">'
+                  + 'No shared inputs declared in this section. Add them in the section\'s Inputs table.'
+                  + '</td></tr>';
+                box.style.display = '';
+                return;
+            }
             // One row per variable: "$name" in first column, truncated
             // value preview in second.  Shadowing by family-level same-
             // named variable is noted inline so the instructor sees
