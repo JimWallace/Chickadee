@@ -807,10 +807,16 @@
             });
         }
 
-        /// Adds a newly-created script to the local items list and pushes.
-        /// Lands ungrouped; instructor can drag into a section after.
+        /// Adds a newly-created script to the local items list and
+        /// pushes.  v0.4.102: reads `window.__chickadeeTargetSection`
+        /// set by per-section "+ New Script" / "Upload" delegators and
+        /// stamps the new item's `sectionID`, so the new script lands
+        /// in the section the instructor clicked from.  Unset falls
+        /// back to ungrouped (global-toolbar behaviour).
         function addExistingScript(script) {
             if (!script || !script.filename) return;
+            var target = window.__chickadeeTargetSection;
+            var targetSid = (typeof target === 'string' && target) ? target : null;
             items = items.filter(function (it) {
                 return !(it.kind === 'script' && it.script === script.filename);
             });
@@ -822,7 +828,7 @@
                 points: Math.max(1, parseInt(script.points) || 1),
                 displayName: '',
                 dependsOn: [],
-                sectionID: null
+                sectionID: targetSid
             });
             renderTree();
             schedulePush();
@@ -850,6 +856,11 @@
                 };
             }).filter(Boolean);
 
+            // v0.4.102: newcomer families land in the section the
+            // instructor clicked "+ New Family" from (if any); existing
+            // families keep their current section via the map above.
+            var target = window.__chickadeeTargetSection;
+            var targetSid = (typeof target === 'string' && target) ? target : null;
             (nextFamilies || []).forEach(function (f) {
                 if (seen[f.id]) return;
                 items.push({
@@ -858,7 +869,7 @@
                     familyID: f.id,
                     family: f,
                     dependsOn: (f.dependsOn || []).slice(),
-                    sectionID: null
+                    sectionID: targetSid
                 });
             });
 

@@ -1853,7 +1853,19 @@ func makeWorkerManifestJSON(
         }
     }
     if !sections.isEmpty {
-        manifest["sections"] = sections.map { ["id": $0.id, "name": $0.name] }
+        // Route sections through JSONEncoder (same pattern patternFamilies
+        // uses above) so all fields — including `variables` (v0.4.100+)
+        // — round-trip through the manifest.  Pre-v0.4.102 we hand-
+        // rolled a minimal `[id, name]` dict that silently dropped the
+        // section's variables on every save, which meant any family
+        // CRUD or suite PUT wiped shared inputs the instructor had
+        // just declared.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let sectionData = try encoder.encode(sections)
+        if let parsed = try JSONSerialization.jsonObject(with: sectionData) as? [Any] {
+            manifest["sections"] = parsed
+        }
     }
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"

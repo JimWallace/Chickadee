@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.102] - 2026-04-24
+
+### Added
+
+- **Per-section create buttons.**  Each section block (including the trailing Ungrouped block) now renders its own inline `+ New Script` / `+ New Family` / `Upload` toolbar above its Tests table.  Items created via these buttons auto-land in that section — the per-section button stashes its `sectionID` on `window.__chickadeeTargetSection` and the suite-table's `addExistingScript` / `syncFamilies` read that flag to stamp the new item.  Global toolbar buttons still work for "I don't care which section" creates.
+- **Read-only section variables in the family edit modal.**  When the instructor opens a family that lives in a section with declared variables, the modal shows a compact read-only "Shared inputs from section: X" block above the family's own Variables table.  Lists each `$name` + a truncated preview of the value, and flags rows that a family variable would shadow.  Not editable here — edit in the section's Inputs table — so changing a shared value doesn't accidentally ripple through all the other tests in the section.
+
+### Changed
+
+- **Version badge moved from the global nav to the top of the admin page.**  Previously visible next to the Admin link on every page for admin users; now only appears on `/admin` itself.  Less visual noise for admins on instructor / student flows.
+
 ## [0.4.101] - 2026-04-24
 
 ### Fixed

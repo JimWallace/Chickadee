@@ -3,6 +3,7 @@
 Admin
 #endexport
 #export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
 <section class="admin-section admin-diagnostics">
     <div class="diagnostics-cards" id="diagnostics-cards">
         <article class="diagnostic-card">
