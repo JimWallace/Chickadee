@@ -194,66 +194,42 @@
                 </div>
             </div>
 
-            <!-- Section variables (v0.4.100).  Visible as a collapsible
-                 block below the header.  Every pattern family in the
-                 section can reference these by their $name in arg cells;
-                 family-level variables with the same name shadow the
-                 section's.  Submits the whole list in one POST. -->
-            <details class="section-vars-details" data-section-id="#(sec.sectionID)"
-                     #if(sec.hasVariables):open#endif
-                     style="margin:.25rem 0 .5rem">
-                <summary style="cursor:pointer;font-size:.78rem;color:var(--gray-600);user-select:none;padding:.2rem .4rem">
-                    Shared inputs#if(sec.hasVariables): (#count(sec.variables))#endif
-                </summary>
-                <form class="section-vars-form" method="post"
-                      action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
-                      style="margin:.35rem 0;padding:.4rem .5rem;border:1px solid var(--border);border-radius:.4rem;background:var(--surface)"
-                      data-section-id="#(sec.sectionID)">
-                    <p class="card-meta" style="font-size:.72rem;margin:0 0 .3rem">
-                        Declare once; reference from any pattern family in this section via <code>$name</code> in an arg cell.
-                    </p>
-                    <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
-                        <thead>
-                            <tr>
-                                <th style="width:2rem" aria-label="Valid"></th>
-                                <th style="width:10rem">Name</th>
-                                <th>Value (JSON / Python literal)</th>
-                                <th style="width:3.5rem"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="section-vars-body">
-                            #for(v in sec.variables):
-                            <tr class="section-var-row">
-                                <td class="section-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green,#2d8f47);font-size:1rem"></td>
-                                <td><input type="text" class="form-input section-var-name" value="#(v.name)"
-                                           style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
-                                <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)"
-                                           style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
-                                <td><button type="button" class="btn action-btn action-danger section-var-remove"
-                                            style="padding:.2rem .4rem;font-size:.72rem">Remove</button></td>
-                            </tr>
-                            #endfor
-                        </tbody>
-                    </table>
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.35rem">
-                        <button type="button" class="btn action-btn section-var-add"
-                                data-section-id="#(sec.sectionID)"
-                                style="padding:.2rem .55rem;font-size:.75rem">+ Add variable</button>
-                        <button type="submit" class="btn btn-primary"
-                                style="padding:.25rem .6rem;font-size:.78rem">Save shared inputs</button>
-                    </div>
-                </form>
-            </details>
+            <!-- Section variables (v0.4.100, restructured v0.4.101).
+                 Fixed Inputs table above the Tests table.  Every pattern
+                 family in the section can reference these via `$name`;
+                 family-level variables shadow same-named section vars.
+                 Auto-saves on change (debounced); explicit Save button
+                 removed — the whole list also flushes when the main
+                 Save & Validate button is clicked. -->
+            <form class="section-vars-form" method="post"
+                  action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
+                  style="margin:.25rem 0 .5rem"
+                  data-section-id="#(sec.sectionID)">
+                <div style="display:flex;justify-content:flex-start;align-items:center;margin-bottom:.25rem">
+                    <button type="button" class="btn action-btn section-var-add"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add input</button>
+                </div>
+                <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
+                    <tbody class="section-vars-body">
+                        #for(v in sec.variables):
+                        <tr class="section-var-row">
+                            <td style="width:14rem;white-space:nowrap">
+                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
+                                <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
+                                       style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                            </td>
+                            <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"
+                                       style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
+                            <td style="width:3.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove"
+                                        style="padding:.2rem .4rem;font-size:.72rem">Remove</button></td>
+                        </tr>
+                        #endfor
+                    </tbody>
+                </table>
+            </form>
         #endif
             <table class="results-table" style="width:100%">
-                <thead>
-                    <tr>
-                        <th title="Student-facing name (edit to override the filename)">Name</th>
-                        <th>Visibility</th>
-                        <th title="Grade point weight for this test (default 1)">Pts</th>
-                        <th class="time">Action</th>
-                    </tr>
-                </thead>
                 <tbody data-section-id="#(sec.sectionID)"></tbody>
             </table>
         </div>
@@ -617,83 +593,139 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var tr = document.createElement('tr');
         tr.className = 'section-var-row';
         tr.innerHTML =
-            '<td class="section-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green,#2d8f47);font-size:1rem"></td>'
-          + '<td><input type="text" class="form-input section-var-name" value="" placeholder="e.g. patients" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
+            '<td style="width:14rem;white-space:nowrap">'
+          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
+          +   '<input type="text" class="form-input section-var-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">'
+          + '</td>'
           + '<td><input type="text" class="form-input section-var-value" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
-          + '<td><button type="button" class="btn action-btn action-danger section-var-remove" style="padding:.2rem .4rem;font-size:.72rem">Remove</button></td>';
+          + '<td style="width:3.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove" style="padding:.2rem .4rem;font-size:.72rem">Remove</button></td>';
         tbody.appendChild(tr);
         refreshRow(tr);
         var input = tr.querySelector('.section-var-name');
         if (input) input.focus();
     }
 
-    // Wire every section-vars form on the page.
-    document.querySelectorAll('form.section-vars-form').forEach(function (form) {
+    /// Builds the `{variables: [...]}` payload for a given form, returning
+    /// `null` if any row has a validation error.  On error the row's
+    /// inputs are already outlined by `refreshRow`, so no extra UI is
+    /// needed — the form quietly waits for the user to fix it.  Empty
+    /// rows are skipped silently.
+    function buildPayload(form) {
         var tbody = form.querySelector('tbody.section-vars-body');
-        if (!tbody) return;
+        if (!tbody) return null;
+        var rows = Array.from(tbody.querySelectorAll('tr.section-var-row'));
+        var variables = [];
+        var valid = true;
+        for (var i = 0; i < rows.length; i++) {
+            var tr = rows[i];
+            var name = (tr.querySelector('.section-var-name').value || '').trim();
+            var rawVal = tr.querySelector('.section-var-value').value || '';
+            if (!name && !rawVal.trim()) continue;
+            if (!isValidPyIdent(name)) { valid = false; continue; }
+            var parsed = tryParseValue(rawVal);
+            if (parsed.empty) { valid = false; continue; }
+            variables.push({ name: name, value: parsed.value });
+        }
+        // Reject on duplicates too.
+        var seen = {};
+        for (var k = 0; k < variables.length; k++) {
+            if (seen[variables[k].name]) { valid = false; break; }
+            seen[variables[k].name] = true;
+        }
+        return valid ? { variables: variables } : null;
+    }
+
+    /// Auto-save state per section-vars form.  Debounces POSTs so the
+    /// user can type without a request per keystroke; tracks in-flight
+    /// + pending so rapid typing coalesces to one save at the end.  The
+    /// public `flush()` returns a Promise the main-form submit handler
+    /// awaits before letting the assignment save go through.
+    function wireAutoSave(form) {
+        var tbody = form.querySelector('tbody.section-vars-body');
+        if (!tbody) return { flush: function () { return Promise.resolve(); } };
+
+        var timer = null;
+        var inFlight = null;
+        var pending = false;
+
+        function doPost() {
+            var payload = buildPayload(form);
+            if (!payload) {
+                // Validation errors — row outlines already surface them;
+                // silently skip this save attempt.  Retry on next edit.
+                return Promise.resolve();
+            }
+            inFlight = fetch(form.action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                // Don't follow redirects — the 303 is for the sync form
+                // submit path.  For auto-save we just want to know it
+                // persisted.
+                redirect: 'manual',
+                body: JSON.stringify(payload)
+            }).then(function (r) {
+                // With redirect: 'manual', a 303 shows up as an opaque
+                // redirect (type === 'opaqueredirect').  Anything non-ok
+                // that isn't opaqueredirect is a real failure.
+                if (!r.ok && r.type !== 'opaqueredirect') {
+                    return r.text().catch(function () { return ''; }).then(function (t) {
+                        throw new Error('section-vars save failed: HTTP ' + r.status + ' ' + t.slice(0, 200));
+                    });
+                }
+            }).catch(function (err) {
+                console.error('section-vars auto-save failed:', err);
+            }).finally(function () {
+                inFlight = null;
+                if (pending) { pending = false; doPost(); }
+            });
+            return inFlight;
+        }
+
+        function schedule() {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(function () { timer = null; flushNow(); }, 500);
+        }
+
+        function flushNow() {
+            if (timer) { clearTimeout(timer); timer = null; }
+            if (inFlight) { pending = true; return inFlight; }
+            return doPost() || Promise.resolve();
+        }
 
         refreshAllRows(tbody);
 
         form.addEventListener('input', function (e) {
             var tr = e.target.closest && e.target.closest('tr.section-var-row');
-            if (tr) refreshAllRows(tbody);  // duplicate-check needs all rows
+            if (tr) {
+                refreshAllRows(tbody);   // duplicate-check needs all rows
+                schedule();
+            }
         });
-
         form.addEventListener('click', function (e) {
             if (e.target.classList && e.target.classList.contains('section-var-remove')) {
                 var tr = e.target.closest('tr.section-var-row');
-                if (tr) { tr.remove(); refreshAllRows(tbody); }
+                if (tr) { tr.remove(); refreshAllRows(tbody); schedule(); }
             }
         });
+        // Block the default synchronous form submit (e.g. from Enter
+        // inside a field) — auto-save handles persistence.
+        form.addEventListener('submit', function (e) { e.preventDefault(); flushNow(); });
 
-        form.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var rows = Array.from(tbody.querySelectorAll('tr.section-var-row'));
-            var variables = [];
-            var errors = [];
-            for (var i = 0; i < rows.length; i++) {
-                var tr = rows[i];
-                var name = (tr.querySelector('.section-var-name').value || '').trim();
-                var rawVal = tr.querySelector('.section-var-value').value || '';
-                if (!name && !rawVal.trim()) continue;  // empty row — silently skipped
-                if (!isValidPyIdent(name)) {
-                    errors.push('Row ' + (i + 1) + ': name "' + name + '" is not a valid Python identifier.');
-                    continue;
-                }
-                var parsed = tryParseValue(rawVal);
-                if (parsed.empty) {
-                    errors.push('Row ' + (i + 1) + ' (' + name + '): value is required.');
-                    continue;
-                }
-                // Accept bare strings — they round-trip as JSONValue strings.
-                variables.push({ name: name, value: parsed.value });
-            }
-            if (errors.length) {
-                alert('Shared inputs save failed:\n\n' + errors.join('\n'));
-                return;
-            }
-            fetch(form.action, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
-                body: JSON.stringify({ variables: variables }),
-                redirect: 'follow'
-            })
-            .then(function (r) {
-                if (r.redirected) { window.location.href = r.url; return; }
-                if (!r.ok) return r.text().then(function (t) {
-                    var m = t.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
-                    throw new Error(m ? m[1].replace(/<[^>]+>/g, '').trim() : 'HTTP ' + r.status);
-                });
-                // Fallback: no redirect header (shouldn't happen, but handle)
-                window.location.reload();
-            })
-            .catch(function (err) {
-                alert('Shared inputs save failed: ' + (err.message || err));
-            });
-        });
-    });
+        return { flush: flushNow };
+    }
 
-    // Wire "+ Add variable" buttons (one per section).
+    var forms = Array.from(document.querySelectorAll('form.section-vars-form')).map(wireAutoSave);
+
+    // Expose a global flush so the main form's submit handler can
+    // await every section-vars form before letting the assignment save
+    // go through.  Returns a Promise that resolves when all pending
+    // section-var POSTs have completed (or silently bailed on
+    // validation errors).
+    window.chickadeeFlushSectionVars = function () {
+        return Promise.all(forms.map(function (f) { return f.flush(); }));
+    };
+
+    // Wire "+ Add input" buttons (one per section).
     document.querySelectorAll('button.section-var-add').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var form = btn.closest('form.section-vars-form');

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.101] - 2026-04-24
+
+### Fixed
+
+- **Pattern family auto-compute now fills Expected on every case row that references a variable.**  The scheduler used a single-slot `_autoComputeRow`, so when the `rescheduleAutoComputeForVariableRefCases` loop queued up N rows that all reference `$patients`, only the LAST row survived the 400ms debounce — every other row sat with an empty Expected.  Replaced the single slot with a `Set<row>` that accumulates pending rows for the next tick; one shared timer processes them all.  Also covers the case where the instructor types `$var` in row 1, finishes, then types `$var` in row 2 while row 1's Expected is still computing.
+
+### Changed
+
+- **Section "Shared Inputs" is now a fixed table, not a collapsible expander.**  Each named section renders an Inputs table directly above its Tests table.  Removed the `<details>`/`<summary>` wrapper, the "Declare once; reference from any pattern family…" hint line, the explicit **Save inputs** button, and the old thead.  First-column placeholder reads **Input Name** so the purpose is obvious at a glance.  `+ Add input` sits above the table instead of beside the removed Save button.
+- **Inputs auto-save — no explicit Save button.**  Debounced POST fires 500ms after the last edit; also flushes via the **Save & Validate** button so any in-progress typing persists alongside the assignment save.  Invalid rows (bad identifier / unparseable value / duplicate name) skip the auto-save silently — the row's red outline already signals the problem, and the next valid edit retries.
+
 ## [0.4.100] - 2026-04-24
 
 ### Added
