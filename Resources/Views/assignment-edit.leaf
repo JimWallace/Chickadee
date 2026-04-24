@@ -105,27 +105,110 @@
             </tbody>
         </table>
     </div>
+</form>
 
-    <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
-    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+<!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
+     so its nested per-op <form> elements (Add Section, rename section,
+     delete section) parse correctly.  The browser strips nested <form>
+     tags, which is why v0.4.96's in-form `+ Section` JS button worked
+     but v0.4.98's server-rendered `+ Section` form would not.  Suite
+     edits go through dedicated endpoints (JS `PUT /suite` for items,
+     `POST /suite-sections/*` for section CRUD) — none of them rely on
+     the outer form. -->
 
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
+<label class="visually-hidden" for="suite-files-input">Add test suite files</label>
+<input class="form-input" id="suite-files-input" type="file" multiple style="display:none">
+
+<div style="margin-top:1.25rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
         <h2 style="margin:0">Test Suite</h2>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
-            <button class="btn action-btn" type="button" id="add-section-btn">+ Section</button>
+            <!-- Add Section — form POST + full page reload.  Mirrors the
+                 dashboard pattern (Resources/Views/assignments.leaf:29-51)
+                 so section CRUD doesn't ride the fragile whole-state
+                 `PUT /suite` pipeline. -->
+            <details class="add-section-details" id="add-suite-section-details" style="position:relative">
+                <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Section</summary>
+                <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
+                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form" style="margin:0;gap:.6rem">
+                        #csrfFormField()
+                        <label class="form-label" style="margin:0">
+                            Section name
+                            <input class="form-input" type="text" name="name" placeholder="e.g. Question 1" required
+                                   style="font-size:.85rem;padding:.3rem .5rem">
+                        </label>
+                        <button class="btn btn-primary" type="submit"
+                                style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                    </form>
+                </div>
+            </details>
             <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
             <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
             <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
         </div>
     </div>
-    <!-- Mount point for the suite-table.js module.  When `sections` is empty
-         the module renders one unlabelled .section-block containing every
-         item; once the instructor adds a section, additional labelled
-         blocks appear and the trailing "Ungrouped" block holds any items
-         not yet assigned to a section. -->
-    <div id="suite-sections"></div>
-</form>
+
+    <!-- Server-rendered section shells (v0.4.98).  Each .section-block owns
+         its own <table> shell; `suite-table.js` populates the `<tbody
+         data-section-id>` rows from the JSON seed and keeps them in sync
+         via the debounced `PUT /suite`.  Section CRUD (create / rename /
+         delete / reorder) goes through dedicated endpoints — see
+         AssignmentRoutes+SuiteSections.swift. -->
+    <div id="suite-sections">
+    #for(sec in suiteSectionRows):
+        <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
+        #if(!sec.isUngrouped):
+            <div class="section-header" draggable="true"
+                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
+                      style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
+
+                <!-- View mode -->
+                <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+                    <strong>#(sec.name)</strong>
+                    <button class="btn-link section-edit-toggle" type="button"
+                            title="Edit section" aria-label="Edit section"
+                            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                </div>
+
+                <!-- Edit mode (hidden by default) -->
+                <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
+                    <form class="section-rename-form" method="post"
+                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename"
+                          style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+                        #csrfFormField()
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required
+                               style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
+                        <button class="btn btn-primary" type="submit"
+                                style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+                    </form>
+                    <button class="btn action-btn action-danger section-delete-btn" type="button"
+                            data-action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/delete"
+                            data-name="#(sec.name)"
+                            style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
+                    <button class="btn-link section-edit-cancel" type="button"
+                            aria-label="Cancel" title="Cancel"
+                            style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                </div>
+            </div>
+        #endif
+            <table class="results-table" style="width:100%">
+                <thead>
+                    <tr>
+                        <th title="Student-facing name (edit to override the filename)">Name</th>
+                        <th>Visibility</th>
+                        <th title="Grade point weight for this test (default 1)">Pts</th>
+                        <th class="time">Action</th>
+                    </tr>
+                </thead>
+                <tbody data-section-id="#(sec.sectionID)"></tbody>
+            </table>
+        </div>
+    #endfor
+    </div>
+</div>
 
 <!-- Seed data: current suite state (scripts + families in authored form)
      and families as JSON.  rawJSON emits the string verbatim because the
@@ -321,6 +404,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
 .suite-file-hint a { color: inherit; }
 #suite-config-table td { vertical-align: top; }
+/* v0.4.98 — suite sections (mirrors assignments.leaf) */
+.add-section-details { margin: 0; padding: 0; }
+.add-section-details > summary { margin: 0; }
+.add-section-details > summary::-webkit-details-marker { display: none; }
+.add-section-details > summary::marker { content: ""; }
+.add-section-details[open] .add-section-popup { display: block; }
+.section-block.section-dragging { opacity: .55; }
 </style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>

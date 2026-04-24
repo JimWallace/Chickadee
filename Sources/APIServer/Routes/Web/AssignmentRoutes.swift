@@ -97,6 +97,17 @@ struct AssignmentRoutes: RouteCollection {
         // snapshot here and replaces its local state from the response.
         r.get(":assignmentID", "suite", use: getSuite)
         r.put(":assignmentID", "suite", use: putSuite)
+
+        // Suite-section CRUD — per-op, form-POST + redirect (v0.4.98).
+        // Mirrors the instructor-dashboard course-section pattern
+        // (`AssignmentRoutes+Sections.swift`) so section create / rename /
+        // delete / reorder don't have to ride the whole-state `PUT /suite`
+        // pipeline.  These handlers mutate `manifest.sections` directly —
+        // they do NOT rebuild the zip or re-run `applyPatternFamilies`.
+        r.post(":assignmentID", "suite-sections",                      use: createSuiteSection)
+        r.post(":assignmentID", "suite-sections", "reorder",           use: reorderSuiteSections)
+        r.post(":assignmentID", "suite-sections", ":sectionID", "rename", use: renameSuiteSection)
+        r.post(":assignmentID", "suite-sections", ":sectionID", "delete", use: deleteSuiteSection)
     }
 
     // MARK: - GET /instructor
@@ -1581,6 +1592,7 @@ struct AssignmentRoutes: RouteCollection {
             familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest),
+            suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             notice: q?.notice,
             error: q?.error
         )

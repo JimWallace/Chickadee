@@ -155,8 +155,25 @@ struct EditAssignmentContext: Encodable {
     /// items list; every subsequent mutation is a PUT whose response
     /// replaces this state.
     let suiteStateJSON: String
+    /// Server-rendered shell rows for the suite-sections view (v0.4.98).
+    /// One entry per named section (`isUngrouped = false`) in authored
+    /// order, plus one trailing `isUngrouped = true` block if any item
+    /// currently has no `sectionID` or there are no sections at all.  The
+    /// template uses these to render the `.section-block` + `<tbody
+    /// data-section-id>` shells that `suite-table.js` populates.
+    let suiteSectionRows: [SuiteSectionShellRow]
     let notice: String?
     let error: String?
+}
+
+/// One section block's server-rendered shell in the suite editor.  Named
+/// sections carry a non-empty `sectionID` and `name`; the trailing
+/// Ungrouped block has `isUngrouped == true`, a sentinel empty
+/// `sectionID`, and no name — the template renders no header for it.
+struct SuiteSectionShellRow: Encodable {
+    let sectionID: String
+    let name: String
+    let isUngrouped: Bool
 }
 
 struct CurrentFileLink {
