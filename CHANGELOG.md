@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.98] - 2026-04-24
+
+### Changed
+
+- **Test-suite sections refactored to mirror the instructor-dashboard pattern.**  v0.4.96 ran section CRUD through the whole-state `PUT /suite` endpoint, which means adding a section name had to ride the full `applyPatternFamilies` pipeline (validation → zip rebuild → family expansion → topological sort).  Any hiccup anywhere in that pipeline flipped the PUT to 4xx, the client's `.catch` reloaded the page, and the user's edit evaporated — exactly what users reported when "+ Section" caused the page to refresh before they could type a name.  Rebuilt around the proven per-operation pattern the dashboard's `AssignmentRoutes+Sections.swift` has used for weeks:
+  - New endpoints: `POST /instructor/:assignmentID/suite-sections{/create, /:sid/rename, /:sid/delete, /reorder}`.  Form-encoded bodies; 303 redirect back to `/edit` for write ops; JSON + 200 for the AJAX reorder.  Each handler mutates ONLY `manifest.sections` (and clears orphan `sectionID` on delete) — they do NOT call `applyPatternFamilies`, do NOT rebuild the zip, and do NOT kick validation or auto-retest.
+  - `assignment-edit.leaf` now server-renders the section shells (one `.section-block` per `manifest.sections` entry, plus a trailing Ungrouped block).  `+ Section` is a `<details>` popup with a classic `<form>` POST.  Section rename is the dashboard's inline `.section-view` / `.section-edit` toggle.  Section delete uses a JS `confirm()` + dynamically-built form POST.  Section drag-reorder is an AJAX POST to the reorder endpoint — no page reload.
+  - `suite-table.js` stripped: no more `sections[]` state, no more `renderTree` of section headers, no more `+ Section` JS button.  The module now owns only row-level behaviour (render rows into existing `<tbody data-section-id>`, within/cross-section drag, tier/points/displayName edits, debounced `PUT /suite` for item changes).
+  - `PUT /suite` no longer mutates `sections` — the body's `sections` field is accepted-and-ignored for client back-compat.  The manifest's existing sections are the source of truth.
+  - `captureLiveEdit` / `applyLiveEdit` guard extended from v0.4.97 stays: protects `suite-display-name` edits on script rows from being wiped by the debounced PUT echo.
+- **Typing into a newly-created section name no longer gets clobbered.**  Falls out of the refactor: section names persist through the `/suite-sections` create+rename endpoints that redirect to a full page reload, not the debounced PUT whose response wiped mid-typing text in v0.4.96/v0.4.97.
+- **Family Edit/Delete buttons (v0.4.97 patch held): pattern-family-editor.js accepts either `#suite-config-body` (pre-v0.4.96) or `#suite-sections` (v0.4.96+) as its click-delegate root.
+
+### Fixed
+
+- **`putSuite` rebuilt pattern families without `variables`.**  When the client sent back a family with non-empty `dependsOn` (e.g. after a drag-adopt), the handler reconstructed the `PatternFamily` via its memberwise init but forgot to pass `variables`, silently dropping all family-scoped variables (added in v0.4.94) on every save.  Cases whose `argVarRefs` referenced those variables then failed `validatePatternFamilies` on the next save, 422'd the PUT, and the client's `.catch` reloaded the page.  Init now passes `variables: f.variables`.
+- **`doPush` no longer reloads the page on save failure.**  A failed PUT now surfaces an `alert()` with the server's reason and keeps the user's unsaved edits in the DOM, so the instructor can see what went wrong and recover.  Reload hid the failure and wiped in-progress work; the new path matches the dashboard's behaviour for errors.
+
 ## [0.4.97] - 2026-04-23
 
 ### Fixed

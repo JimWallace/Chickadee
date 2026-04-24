@@ -1,36 +1,36 @@
 // Chickadee — Suite Table editor
 //
-// Browser-side module that drives the multi-section suite editor on the
-// instructor assignment edit page.  Factored out of
-// Resources/Views/assignment-edit.leaf in v0.4.91; extended in v0.4.96
-// to group items into Sections (one table per section, drag across
-// tables, add/rename/delete section).  When the assignment has no
-// sections the module renders one unlabelled block that looks
-// identical to the pre-sections layout.
+// Client side of the assignment suite editor.  Owns ROW-level behaviour
+// inside server-rendered section shells:
+//   - renders each row into an existing <tbody data-section-id> (the
+//     shell markup is emitted by `assignment-edit.leaf` from the
+//     `suiteSectionRows` context)
+//   - handles row drag within and across sections (cross-section drag
+//     updates item.sectionID; clears dependsOn to avoid orphan parents;
+//     debounced `PUT /suite` persists)
+//   - handles tier / points / display-name inline edits on rows
+//   - handles section rename toggle (.section-edit-toggle / -cancel),
+//     section delete (JS confirm + dynamic form POST), and section
+//     drag-reorder (AJAX `POST /suite-sections/reorder`)
 //
-// DOM contract (assignment-edit.leaf):
+// v0.4.98 refactor: section CRUD no longer runs through `PUT /suite`.
+// `+ Section` is a `<details>` popup with a classic form POST to
+// `/instructor/:id/suite-sections` (see AssignmentRoutes+SuiteSections.swift);
+// the page reloads on section create / rename / delete.  That mirrors the
+// instructor-dashboard course-section pattern and eliminates the v0.4.96
+// fragility where adding a section name had to ride the whole-state
+// save pipeline.
 //
-//   div#suite-sections               — mount point; JS owns all markup inside
-//   input#suite-files-input          — optional upload input
-//   button#add-test-btn              — optional "Upload" trigger
-//   button#add-section-btn           — optional "+ Section" trigger
-//   script#suite-state-seed          — JSON seed (same shape as GET /suite)
+// DOM contract:
+//   div#suite-sections                    — server-rendered shell container
+//   div.section-block[data-section-id]    — one per section (named + Ungrouped)
+//   div.section-header                    — named sections only (Ungrouped skips)
+//   tbody[data-section-id]                — where JS writes rows
+//   script#suite-state-seed               — JSON seed (same shape as GET /suite)
+//   input#suite-files-input               — optional upload input
+//   button#add-test-btn                   — Upload trigger
 //
-// Host wires the module via:
-//
-//   var suiteTable = window.initSuiteTable({
-//       assignmentID?: 'TWTFKZ',             // edit mode
-//       draftID?:      'setup_ab12...',      // reserved for future use
-//       csrfToken:     '<token>',
-//       formSelector:  'form.form',          // parent form for submit flush
-//       urls: {
-//           putSuite:     function () {...}, // PUT endpoint for items+sections
-//           deleteScript: function (name) {...}, // DELETE per-script
-//           uploadScript: function () {...}  // POST per-script upload
-//       }
-//   })
-//
-// Returns `{ syncFamilies(applied), addExistingScript(script), getItems() }`.
+// Host wires the module via `window.initSuiteTable({...})`.
 
 (function (global) {
     'use strict';
@@ -53,35 +53,43 @@
         if (!container) return noopAPI();
 
         var items    = [];
-        var sections = [];
         var dragID        = null;   // row drag
-        var dragSectionID = null;   // section drag
+        var dragSectionID = null;   // section header drag
         var pushTimer = null;
         var pushInFlight = false;
         var pushPending = false;
 
         // Seed from the server-rendered JSON blob — same shape as
-        // `GET /suite`.
+        // `GET /suite`.  Section membership flows through items' sectionID;
+        // the section shell list is server-rendered, not maintained here.
         (function seed() {
             var el = document.getElementById('suite-state-seed');
             if (!el) return;
             var payload;
-            try { payload = JSON.parse(el.textContent || '{"items":[],"sections":[]}'); }
-            catch (_) { payload = { items: [], sections: [] }; }
-            sections = normaliseSections(payload.sections || []);
-            items    = normaliseItems(payload.items || []);
-            items    = sortItemsBySection(items);
+            try { payload = JSON.parse(el.textContent || '{"items":[]}'); }
+            catch (_) { payload = { items: [] }; }
+            items = normaliseItems(payload.items || []);
         })();
 
-        function normaliseSections(raw) {
-            return (raw || []).map(function (s) {
-                return { id: String(s.id || ''), name: String(s.name || '') };
-            }).filter(function (s) { return s.id; });
+        function currentSectionIDs() {
+            return Array.from(container.querySelectorAll('.section-block[data-section-id]'))
+                .map(function (b) { return b.getAttribute('data-section-id'); });
+        }
+        function tbodyForSection(sid) {
+            var selector = sid
+                ? 'tbody[data-section-id="' + sid.replace(/"/g, '\\"') + '"]'
+                : 'tbody[data-section-id=""]';
+            return container.querySelector(selector);
+        }
+        function sectionIDsInOrder() {
+            return Array.from(container.querySelectorAll('.section-block[data-section-id]:not([data-ungrouped])'))
+                .map(function (b) { return b.getAttribute('data-section-id'); })
+                .filter(function (s) { return s; });
         }
 
         function normaliseItems(raw) {
             var validSectionIDs = {};
-            sections.forEach(function (s) { validSectionIDs[s.id] = true; });
+            currentSectionIDs().forEach(function (id) { validSectionIDs[id] = true; });
             return (raw || []).map(function (i) {
                 var sid = i.sectionID != null ? String(i.sectionID) : null;
                 if (sid && !validSectionIDs[sid]) sid = null;
@@ -112,27 +120,6 @@
             });
         }
 
-        /// Produces a canonical item order: all section-A items (in their
-        /// authored order), then section-B items, ..., then ungrouped.
-        /// This is the order the server's contiguity check expects, and
-        /// the order we want both in `items[]` and in the PUT payload.
-        function sortItemsBySection(list) {
-            var sectionIndex = {};
-            sections.forEach(function (s, i) { sectionIndex[s.id] = i; });
-            var withOrder = list.map(function (it, origIndex) {
-                var sid = it.sectionID || null;
-                var rank = sid && sectionIndex.hasOwnProperty(sid)
-                    ? sectionIndex[sid]
-                    : sections.length; // ungrouped last
-                return { it: it, rank: rank, origIndex: origIndex };
-            });
-            withOrder.sort(function (a, b) {
-                if (a.rank !== b.rank) return a.rank - b.rank;
-                return a.origIndex - b.origIndex;
-            });
-            return withOrder.map(function (x) { return x.it; });
-        }
-
         function escHtml(v) {
             return String(v == null ? '' : v)
                 .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
@@ -141,13 +128,6 @@
         function escAttr(v) { return String(v == null ? '' : v).replaceAll('"','&quot;'); }
 
         function findByID(id) { return items.find(function (it) { return it.id === id; }); }
-        function findSectionByID(id) {
-            for (var i = 0; i < sections.length; i++) {
-                if (sections[i].id === id) return sections[i];
-            }
-            return null;
-        }
-
         function itemsInSection(sid) {
             return items.filter(function (it) { return (it.sectionID || null) === (sid || null); });
         }
@@ -161,38 +141,32 @@
             return it ? (it.dependsOn && it.dependsOn.length > 0) : false;
         }
 
-        function uniqueID() {
-            try {
-                if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-            } catch (_) {}
-            return 's-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+        function stemOf(filename) {
+            var dot = filename.lastIndexOf('.');
+            return dot > 0 ? filename.slice(0, dot) : filename;
         }
 
-        /// Returns the visual-order list (with 1-level parent/child indent)
-        /// for items in a given section.  Only `dependsOn[0]` drives the
-        /// visual tree; the underlying `dependsOn` stays free-form.
+        /// Within-section visual tree: one-level parent/child indent keyed
+        /// by `dependsOn[0]`.  Parents must be in the same section to
+        /// indent — cross-section deps are allowed but don't render as
+        /// visual parenting (the indent would span tables).
         function visualOrderForSection(sid) {
             var sectionItems = itemsInSection(sid);
-            var result = [];
             var byID = {};
             sectionItems.forEach(function (it) { byID[it.id] = it; });
             var childMap = {};
             sectionItems.forEach(function (it) {
                 if (it.dependsOn && it.dependsOn.length > 0) {
                     var p = it.dependsOn[0];
-                    // Only treat as a child in the tree if the parent is
-                    // in the same section (cross-section deps don't
-                    // indent visually).
                     if (byID[p]) {
                         childMap[p] = childMap[p] || [];
                         childMap[p].push(it);
                     }
                 }
             });
+            var result = [];
             sectionItems.filter(function (it) {
                 if (!it.dependsOn || it.dependsOn.length === 0) return true;
-                // Treat as root within the section if its parent isn't
-                // in this section.
                 return !byID[it.dependsOn[0]];
             }).forEach(function (root) {
                 result.push({ item: root, depth: 0 });
@@ -207,11 +181,6 @@
             return ['support','public','secret','release'].map(function (t) {
                 return '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>';
             }).join('');
-        }
-
-        function stemOf(filename) {
-            var dot = filename.lastIndexOf('.');
-            return dot > 0 ? filename.slice(0, dot) : filename;
         }
 
         function depBadgeHTML(dependsOn) {
@@ -288,73 +257,30 @@
             return item.kind === 'family' ? familyRowHTML(item, depth) : scriptRowHTML(item, depth);
         }
 
-        function tableHTMLForSection(sid) {
-            var visual = visualOrderForSection(sid);
-            var body = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('');
-            var dropZone = '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
-            return '<table class="results-table" style="width:100%"><thead><tr>'
-                 + '<th title="Student-facing name (edit to override the filename)">Name</th>'
-                 + '<th>Visibility</th>'
-                 + '<th title="Grade point weight for this test (default 1)">Pts</th>'
-                 + '<th class="time">Action</th>'
-                 + '</tr></thead><tbody data-section-id="' + escAttr(sid || '') + '">'
-                 + body + dropZone
-                 + '</tbody></table>';
-        }
-
-        function sectionBlockHTML(section) {
-            var isUngrouped = !section;
-            var sid         = section ? section.id   : '';
-            var name        = section ? section.name : 'Ungrouped';
-            var header;
-            if (isUngrouped) {
-                header = '<div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">'
-                       +   '<strong class="suite-section-name-label" style="font-size:.9rem;color:var(--gray-600)">' + escHtml(name) + '</strong>'
-                       +   '<span class="card-meta" style="font-size:.72rem;color:var(--gray-500)">Tests not yet assigned to a section</span>'
-                       + '</div>';
-            } else {
-                header = '<div class="section-header" draggable="true" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">'
-                       +   '<span class="section-drag-handle" title="Drag to reorder section" style="cursor:grab;user-select:none;font-weight:700;color:var(--gray-500)">⋮⋮</span>'
-                       +   '<input type="text" class="form-input suite-section-name-input" data-section-id="' + escAttr(sid) + '" value="' + escAttr(name) + '" placeholder="Section name" style="flex:1;min-width:12rem;padding:.25rem .5rem;font-size:.9rem;font-weight:600">'
-                       +   '<button class="btn action-btn action-danger suite-section-delete-btn" type="button" data-section-id="' + escAttr(sid) + '" title="Delete section" aria-label="Delete section" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
-                       + '</div>';
-            }
-            return '<div class="section-block" data-section-id="' + escAttr(sid) + '" style="margin-bottom:1.25rem">'
-                 + header
-                 + tableHTMLForSection(sid || null)
-                 + '</div>';
-        }
-
-        /// Preserves which input (row-level or section-name) was focused
-        /// and where the caret sat, across `innerHTML` rebuilds triggered
-        /// by debounced `PUT /suite` responses.
+        /// Preserves which script-row input (display-name, tier, points)
+        /// was focused and where the caret sat, across the `innerHTML`
+        /// rebuilds triggered by a debounced `PUT /suite` response.
+        /// Section-name inputs don't need this any more — they live in
+        /// server-rendered forms that don't get touched by `PUT /suite`.
         function captureFocus() {
             var el = document.activeElement;
             if (!el || !container.contains(el)) return null;
-            var start = null, end = null;
-            try { start = el.selectionStart; end = el.selectionEnd; } catch (_) {}
-            // Section-name input: keyed by its data-section-id.
-            if (el.classList && el.classList.contains('suite-section-name-input')) {
-                return { kind: 'section', sectionID: el.getAttribute('data-section-id'), start: start, end: end };
-            }
             var row = el.closest && el.closest('tr[data-id]');
             if (!row) return null;
             var cls = (el.className || '').split(/\s+/).filter(function (c) {
                 return c && c.indexOf('form-') !== 0;
             })[0];
             if (!cls) return null;
-            return { kind: 'row', dataID: row.getAttribute('data-id'), cls: cls, start: start, end: end };
+            var start = null, end = null;
+            try { start = el.selectionStart; end = el.selectionEnd; } catch (_) {}
+            return { dataID: row.getAttribute('data-id'), cls: cls, start: start, end: end };
         }
 
         function restoreFocus(snap) {
             if (!snap) return;
-            var el = null;
-            if (snap.kind === 'section') {
-                el = container.querySelector('.suite-section-name-input[data-section-id="' + (snap.sectionID || '').replace(/"/g, '\\"') + '"]');
-            } else if (snap.kind === 'row') {
-                var row = container.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
-                if (row) el = row.querySelector('.' + snap.cls);
-            }
+            var row = container.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
+            if (!row) return;
+            var el = row.querySelector('.' + snap.cls);
             if (!el) return;
             el.focus();
             if (snap.start != null && snap.end != null) {
@@ -362,44 +288,46 @@
             }
         }
 
+        /// Write rows into every server-rendered tbody.  Items without a
+        /// sectionID (or with a stale one) land in the Ungrouped tbody
+        /// (data-section-id=""), which the server always renders when any
+        /// item is ungrouped.
         function renderTree() {
             var focusSnap = captureFocus();
-            // Always keep items[] in canonical order so drop handlers
-            // and the PUT payload agree.
-            items = sortItemsBySection(items);
-            var blocks = sections.map(sectionBlockHTML);
-            var anyUngrouped = items.some(function (it) {
-                var sid = it.sectionID || null;
-                return !sid || !findSectionByID(sid);
+            var tbodies = container.querySelectorAll('tbody[data-section-id]');
+            var bySection = {};
+            tbodies.forEach(function (tb) {
+                var sid = tb.getAttribute('data-section-id') || '';
+                bySection[sid] = tb;
             });
-            // The "Ungrouped" block renders in two cases:
-            //   1. There are items without a section (so we need somewhere
-            //      to show them), OR
-            //   2. There are no sections at all — in which case the
-            //      "Ungrouped" block is the ONLY block, but its header
-            //      reads "Ungrouped" which is misleading.  Use a slim
-            //      header-less presentation in that case.
-            if (anyUngrouped || sections.length === 0) {
-                blocks.push(sectionBlockHTML(null));
-            }
-            container.innerHTML = blocks.join('');
-            // Hide the "Ungrouped" header when no sections exist — the
-            // page should look identical to the pre-sections layout.
-            if (sections.length === 0) {
-                var lastBlock = container.querySelector('.section-block:last-child .section-header');
-                if (lastBlock) lastBlock.style.display = 'none';
+            var ungroupedKey = '';
+            Object.keys(bySection).forEach(function (sid) {
+                var body = bySection[sid];
+                var logical = sid || null;
+                var visual = visualOrderForSection(logical);
+                body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
+                    + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+            });
+            // Items whose sectionID doesn't resolve to any server-rendered
+            // tbody (shouldn't happen given `normaliseItems` nils orphans,
+            // but defensive) fall into Ungrouped.
+            var ungroupedBody = bySection[ungroupedKey];
+            if (ungroupedBody) {
+                var orphans = items.filter(function (it) {
+                    var sid = it.sectionID || '';
+                    return !bySection[sid];
+                });
+                if (orphans.length) {
+                    orphans.forEach(function (it) { it.sectionID = null; });
+                }
             }
             restoreFocus(focusSnap);
         }
 
-        // ── Persistence ──────────────────────────────────────────────────
+        // ── Persistence (items only; sections go through dedicated endpoints) ──
 
-        /// Builds the `PUT /suite` request body from the current items[]
-        /// and sections[].  Items are emitted in canonical (section, then
-        /// authored) order so the server's contiguity check always passes.
         function buildPayload() {
             return {
-                sections: sections.map(function (s) { return { id: s.id, name: s.name }; }),
                 items: items.map(function (item) {
                     if (item.kind === 'family') {
                         var family = Object.assign({}, item.family);
@@ -433,25 +361,15 @@
             pushTimer = setTimeout(doPush, 300);
         }
 
-        /// Snapshots the value of the currently-focused section-name or
-        /// display-name input so we can restore it after a PUT response
-        /// overwrites local state.  Without this, mid-typing text gets
-        /// wiped every time the debounced `PUT /suite` returns.
+        /// Snapshot a row display-name input's live value so a debounced
+        /// `PUT /suite` response doesn't wipe mid-typing text.
         function captureLiveEdit() {
             var el = document.activeElement;
             if (!el || !container.contains(el) || !el.classList) return null;
-            if (el.classList.contains('suite-section-name-input')) {
-                return {
-                    kind: 'section',
-                    sectionID: el.getAttribute('data-section-id'),
-                    value: el.value
-                };
-            }
             if (el.classList.contains('suite-display-name')) {
                 var row = el.closest('tr[data-kind="script"]');
                 if (!row) return null;
                 return {
-                    kind: 'display-name',
                     itemID: row.getAttribute('data-id'),
                     value: el.value
                 };
@@ -459,26 +377,15 @@
             return null;
         }
 
-        /// Re-applies a live edit captured before `normaliseSections` /
-        /// `normaliseItems` overwrote the user's in-progress typing.
-        /// Sets `snap.changed` when the server's echoed value differs
-        /// from the user's current value — the caller schedules another
-        /// push so the latest typing persists.
         function applyLiveEdit(snap) {
             if (!snap) return;
-            if (snap.kind === 'section') {
-                var sec = findSectionByID(snap.sectionID);
-                if (!sec) return;
-                if (sec.name !== snap.value) { sec.name = snap.value; snap.changed = true; }
-            } else if (snap.kind === 'display-name') {
-                var it = findByID(snap.itemID);
-                if (!it) return;
-                var trimmed = (snap.value || '').trim();
-                var newDisplay = (trimmed && trimmed !== stemOf(it.script)) ? trimmed : '';
-                if ((it.displayName || '') !== newDisplay) {
-                    it.displayName = newDisplay;
-                    snap.changed = true;
-                }
+            var it = findByID(snap.itemID);
+            if (!it) return;
+            var trimmed = (snap.value || '').trim();
+            var newDisplay = (trimmed && trimmed !== stemOf(it.script)) ? trimmed : '';
+            if ((it.displayName || '') !== newDisplay) {
+                it.displayName = newDisplay;
+                snap.changed = true;
             }
         }
 
@@ -495,28 +402,19 @@
                 return r.json();
             })
             .then(function (payload) {
-                // Preserve in-progress typing across the re-render.  If
-                // the user is focused in a section-name or display-name
-                // input, the payload we get back echoes the NAME we sent
-                // at PUT-fire time — so re-normalising would wipe any
-                // keystrokes the user made during the ~300ms debounce +
-                // network round-trip window.  Capture the focused input's
-                // live value here, apply it after normalisation, so the
-                // user's text survives.
                 var liveEdit = captureLiveEdit();
-                sections = normaliseSections(payload.sections || []);
-                items    = normaliseItems(payload.items || []);
-                items    = sortItemsBySection(items);
+                items = normaliseItems(payload.items || []);
                 applyLiveEdit(liveEdit);
                 renderTree();
-                // If the live edit differed from what the server echoed,
-                // schedule another push so the user's latest typing
-                // persists without requiring a blur.
                 if (liveEdit && liveEdit.changed) schedulePush();
             })
             .catch(function (err) {
+                // Surface the error rather than silently reloading (which
+                // would wipe the instructor's other unsaved mutations).
                 console.error('Suite save failed:', err);
-                window.location.reload();
+                var msg = (err && err.message) ? err.message : String(err);
+                alert('Suite save failed: ' + msg
+                    + '\n\nYour edit is still in the page — try again, or reload to recover.');
             })
             .finally(function () {
                 pushInFlight = false;
@@ -536,7 +434,7 @@
             return errBody.length > 200 ? errBody.substring(0, 200) + '…' : errBody;
         }
 
-        // ── Drag & drop ──────────────────────────────────────────────────
+        // ── Drag & drop: rows ──
 
         function clearDropIndicators() {
             container.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover,.section-drop-before,.section-drop-after').forEach(function (r) {
@@ -616,8 +514,6 @@
             } else if (relY > 0.7) {
                 target.classList.add('drop-after');
             } else if (sameSection && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)) {
-                // Adopt only inside the same section — cross-section visual
-                // parenting doesn't make sense.
                 target.classList.add('drop-adopt');
             } else {
                 target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
@@ -633,22 +529,21 @@
 
         container.addEventListener('drop', function (e) {
             e.preventDefault();
-            // Section-drag drop → reorder sections[].
+            // Section-drag: reorder server-rendered sections via AJAX.
+            // On 200, update DOM order (we already did client-side) and
+            // persist via a POST to /suite-sections/reorder.  No reload —
+            // the dashboard pattern doesn't reload on reorder either.
             if (dragSectionID) {
                 var overBlock = e.target.closest && e.target.closest('.section-block[data-section-id]');
                 if (!overBlock) return;
                 var overSid = overBlock.getAttribute('data-section-id');
                 if (!overSid || overSid === dragSectionID) return;
-                var fromIdx = sections.findIndex(function (s) { return s.id === dragSectionID; });
-                var toIdx   = sections.findIndex(function (s) { return s.id === overSid; });
-                if (fromIdx < 0 || toIdx < 0) return;
-                var brect2 = overBlock.getBoundingClientRect();
-                var afterBlock2 = e.clientY > brect2.top + brect2.height / 2;
-                var moving = sections.splice(fromIdx, 1)[0];
-                var insertAt = sections.findIndex(function (s) { return s.id === overSid; });
-                if (insertAt < 0) insertAt = sections.length;
-                sections.splice(afterBlock2 ? insertAt + 1 : insertAt, 0, moving);
-                renderTree(); schedulePush();
+                var draggedBlock = container.querySelector('.section-block[data-section-id="' + dragSectionID.replace(/"/g, '\\"') + '"]');
+                if (!draggedBlock) return;
+                var brect = overBlock.getBoundingClientRect();
+                var afterBlock = e.clientY > brect.top + brect.height / 2;
+                container.insertBefore(draggedBlock, afterBlock ? overBlock.nextSibling : overBlock);
+                persistSectionOrder();
                 return;
             }
             if (!dragID) return;
@@ -657,10 +552,6 @@
 
             var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
             if (rootZone) {
-                // Drop on a root-zone re-homes to that tbody's section and
-                // clears dependsOn.  (Per-section root zones let the
-                // instructor move an item into the Ungrouped block by
-                // dropping onto its root zone.)
                 var tbody = rootZone.closest('tbody[data-section-id]');
                 var newSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
                 dragItem.sectionID = newSid || null;
@@ -681,15 +572,11 @@
             var relY = (e.clientY - rect.top) / rect.height;
 
             if (sameSection && relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)) {
-                // Adopt within the same section.
                 dragItem.dependsOn = [tid];
                 items = items.filter(function (it) { return it.id !== dragID; });
                 var aIdx = items.findIndex(function (it) { return it.id === tid; });
                 items.splice(aIdx + 1, 0, dragItem);
             } else {
-                // Reorder (same section) or cross-section move.  Clear
-                // deps; preserving them across section boundaries can
-                // create visual-tree orphans.
                 dragItem.dependsOn = [];
                 if (!sameSection) {
                     dragItem.sectionID = targetSid || null;
@@ -701,7 +588,28 @@
             renderTree(); schedulePush();
         });
 
-        // ── Inline script / family edits ────────────────────────────────
+        /// Persist the current DOM section order to the server via the
+        /// dedicated reorder endpoint.  No page reload — the dashboard
+        /// pattern returns 200 and trusts the client to have the right
+        /// DOM state already.
+        function persistSectionOrder() {
+            var ids = sectionIDsInOrder();
+            var base = (urls.putSuite() || '').replace(/\/suite$/, '/suite-sections/reorder');
+            fetch(base, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                body: JSON.stringify({ sectionIDs: ids })
+            })
+            .then(function (r) {
+                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+            })
+            .catch(function (err) {
+                console.error('Section reorder failed:', err);
+                alert('Section reorder failed: ' + (err.message || err) + '\n\nReload the page to recover.');
+            });
+        }
+
+        // ── Inline row edits ──
 
         container.addEventListener('change', function (e) {
             var scriptRow = e.target.closest && e.target.closest('tr[data-kind="script"]');
@@ -729,57 +637,25 @@
             }
         });
 
-        // Display-name edits use a two-phase model to avoid a race between
-        // live typing and the debounced `PUT /suite` response.
         container.addEventListener('input', function (e) {
             var target = e.target;
-            if (!target || !target.classList) return;
-            if (target.classList.contains('suite-display-name')) {
-                var row = target.closest('tr[data-kind="script"]');
-                if (!row) return;
-                var item = findByID(row.getAttribute('data-id'));
-                if (!item) return;
-                var val = target.value.trim();
-                item.displayName = (val && val !== stemOf(item.script)) ? val : '';
-                return;
-            }
-            if (target.classList.contains('suite-section-name-input')) {
-                var sid = target.getAttribute('data-section-id');
-                var sec = findSectionByID(sid);
-                if (sec) sec.name = target.value;
-            }
+            if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
+            var row = target.closest('tr[data-kind="script"]');
+            if (!row) return;
+            var item = findByID(row.getAttribute('data-id'));
+            if (!item) return;
+            var val = target.value.trim();
+            item.displayName = (val && val !== stemOf(item.script)) ? val : '';
         });
 
         container.addEventListener('change', function (e) {
             var target = e.target;
-            if (!target || !target.classList) return;
-            if (target.classList.contains('suite-display-name')) {
-                schedulePush();
-            } else if (target.classList.contains('suite-section-name-input')) {
-                schedulePush();
-            }
+            if (!target || !target.classList || !target.classList.contains('suite-display-name')) return;
+            schedulePush();
         });
 
-        // Delete script row or delete section.
+        // Delete script row (family delete is handled by pattern-family-editor.js).
         container.addEventListener('click', function (e) {
-            var secBtn = e.target.closest && e.target.closest('.suite-section-delete-btn');
-            if (secBtn) {
-                var sid = secBtn.getAttribute('data-section-id');
-                var sec = findSectionByID(sid);
-                if (!sec) return;
-                var affected = itemsInSection(sid).length;
-                var msg;
-                if (affected === 0) {
-                    msg = 'Delete section "' + sec.name + '"?';
-                } else {
-                    msg = 'Delete section "' + sec.name + '"? Its ' + affected + ' test' + (affected === 1 ? '' : 's') + ' will move to Ungrouped.';
-                }
-                if (!confirm(msg)) return;
-                sections = sections.filter(function (s) { return s.id !== sid; });
-                items.forEach(function (it) { if (it.sectionID === sid) it.sectionID = null; });
-                renderTree(); schedulePush();
-                return;
-            }
             var btn = e.target.closest && e.target.closest('.suite-delete-btn');
             if (!btn) return;
             var row = btn.closest('tr[data-kind="script"]');
@@ -809,8 +685,58 @@
             });
         });
 
-        // Upload button: stream uploaded files straight through the per-script
-        // CRUD endpoint rather than queueing them.
+        // ── Section-header inline edit (rename toggle + delete) ──
+
+        container.addEventListener('click', function (e) {
+            var toggle = e.target.closest && e.target.closest('.section-edit-toggle');
+            if (toggle) {
+                var header = toggle.closest('.section-header');
+                if (!header) return;
+                var view = header.querySelector('.section-view');
+                var edit = header.querySelector('.section-edit');
+                if (view) view.style.display = 'none';
+                if (edit) {
+                    edit.style.display = 'flex';
+                    var inp = edit.querySelector('.section-name-input');
+                    if (inp) { inp.focus(); inp.select(); }
+                }
+                return;
+            }
+            var cancel = e.target.closest && e.target.closest('.section-edit-cancel');
+            if (cancel) {
+                var header2 = cancel.closest('.section-header');
+                if (!header2) return;
+                var view2 = header2.querySelector('.section-view');
+                var edit2 = header2.querySelector('.section-edit');
+                if (view2) view2.style.display = 'flex';
+                if (edit2) edit2.style.display = 'none';
+                return;
+            }
+            var del = e.target.closest && e.target.closest('.section-delete-btn');
+            if (del) {
+                var action = del.getAttribute('data-action');
+                var name = del.getAttribute('data-name') || 'this section';
+                var bodySid = del.closest('.section-block[data-section-id]');
+                var sid = bodySid ? bodySid.getAttribute('data-section-id') : '';
+                var affected = items.filter(function (it) { return it.sectionID === sid; }).length;
+                var msg = affected === 0
+                    ? 'Delete section "' + name + '"?'
+                    : 'Delete section "' + name + '"? Its ' + affected + ' test'
+                      + (affected === 1 ? '' : 's') + ' will move to Ungrouped.';
+                if (!confirm(msg)) return;
+                var f = document.createElement('form');
+                f.method = 'POST';
+                f.action = action;
+                var t = document.createElement('input');
+                t.type = 'hidden'; t.name = '_csrf'; t.value = csrfToken;
+                f.appendChild(t);
+                document.body.appendChild(f);
+                f.submit();
+            }
+        });
+
+        // ── Upload + file input ──
+
         if (filesInput) {
             filesInput.addEventListener('change', function () {
                 var files = Array.from(filesInput.files || []);
@@ -851,20 +777,6 @@
             });
         }
 
-        var addSectionBtn = document.getElementById('add-section-btn');
-        if (addSectionBtn) {
-            addSectionBtn.addEventListener('click', function () {
-                sections.push({ id: uniqueID(), name: 'Untitled section' });
-                renderTree();
-                schedulePush();
-                // Focus the new section's name input so the instructor
-                // can rename it without a second click.
-                var inputs = container.querySelectorAll('.suite-section-name-input');
-                var last = inputs[inputs.length - 1];
-                if (last) { last.focus(); last.select(); }
-            });
-        }
-
         // Flush any pending suite-state push before letting the multipart
         // form submit.
         if (form) {
@@ -882,11 +794,8 @@
             });
         }
 
-        /// Adds a newly-created script to the local items list and pushes
-        /// the updated suite.  Public hook used by the Script Editor modal
-        /// when a brand-new file has been saved.  New scripts land in the
-        /// Ungrouped bucket (sectionID = null); the instructor can drag
-        /// them into a section afterwards.
+        /// Adds a newly-created script to the local items list and pushes.
+        /// Lands ungrouped; instructor can drag into a section after.
         function addExistingScript(script) {
             if (!script || !script.filename) return;
             items = items.filter(function (it) {
@@ -907,9 +816,7 @@
         }
 
         /// Reconciles the local state with the full family list returned
-        /// from `PUT /families`.  Preserves positions + dependencies of
-        /// families that were already in the list; appends newcomers;
-        /// removes deleted ones (and drops their ids from dependsOn lists).
+        /// from `PUT /families`.
         function syncFamilies(nextFamilies) {
             var byID = {};
             (nextFamilies || []).forEach(function (f) { byID[f.id] = f; });
@@ -918,7 +825,7 @@
             items = items.map(function (item) {
                 if (item.kind !== 'family') return item;
                 var f = byID[item.familyID];
-                if (!f) return null; // family was removed
+                if (!f) return null;
                 seen[item.familyID] = true;
                 return {
                     kind: 'family',

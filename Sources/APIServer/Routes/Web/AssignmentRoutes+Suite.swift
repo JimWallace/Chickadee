@@ -142,12 +142,17 @@ extension AssignmentRoutes {
                 // Allow callers to carry the family's top-level dependsOn in
                 // either `family.dependsOn` or `item.dependsOn`; the row-
                 // level field wins so the UI can adopt a dep without
-                // rebuilding the whole family spec.
+                // rebuilding the whole family spec.  IMPORTANT: the
+                // rebuild must preserve `variables` (added in v0.4.94);
+                // otherwise any case that references a `$var` via
+                // `argVarRefs` would fail validation on the very next
+                // save, triggering a 422 and a full page reload.
                 if let rowDeps = item.dependsOn {
                     f = PatternFamily(
                         id: f.id, name: f.name, kind: f.kind,
                         functionName: f.functionName, paramNames: f.paramNames,
                         defaults: f.defaults, cases: f.cases,
+                        variables: f.variables,
                         dependsOn: rowDeps
                     )
                 }
@@ -159,15 +164,17 @@ extension AssignmentRoutes {
             }
         }
 
-        let nextSections = body.sections.map {
-            TestSuiteSection(id: $0.id, name: $0.name)
-        }
-
+        // Section CRUD (create/rename/delete/reorder) lives on dedicated
+        // endpoints as of v0.4.98 — `PUT /suite` only carries item-level
+        // edits now.  Pass `nil` so `applyPatternFamilies` falls through to
+        // the manifest's existing `sections` list; the client's body is
+        // allowed to include `sections` for back-compat but we don't act
+        // on it.
         _ = try await applyPatternFamilies(
             to: setup,
             nextFamilies: nextFamilies,
             authoredItems: authored,
-            sections: nextSections,
+            sections: nil,
             on: req.db
         )
 
@@ -271,4 +278,30 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
           let s = String(data: data, encoding: .utf8)
     else { return #"{"items":[]}"# }
     return s
+}
+
+/// Builds the server-rendered section shells the v0.4.98 edit page emits
+/// — one `.section-block` per named section (from `manifest.sections`)
+/// plus a trailing "Ungrouped" block when any item has no `sectionID`
+/// or no sections are defined at all.  The trailing block renders
+/// identically to the pre-sections layout when there are no sections
+/// (single unlabelled table), preserving back-compat with legacy
+/// assignments.
+func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellRow] {
+    guard let data = manifest.data(using: .utf8),
+          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+        return [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true)]
+    }
+    var rows: [SuiteSectionShellRow] = props.sections.map {
+        SuiteSectionShellRow(sectionID: $0.id, name: $0.name, isUngrouped: false)
+    }
+    let knownSectionIDs = Set(props.sections.map(\.id))
+    let anyUngrouped = props.testSuites.contains { entry in
+        guard let sid = entry.sectionID else { return true }
+        return !knownSectionIDs.contains(sid)
+    }
+    if anyUngrouped || props.sections.isEmpty {
+        rows.append(SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true))
+    }
+    return rows
 }
