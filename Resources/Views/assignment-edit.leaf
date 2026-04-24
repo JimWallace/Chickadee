@@ -171,6 +171,20 @@
                             style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </button>
+                    <!-- Inline section action buttons (v0.4.103).  Add Input
+                         lives inside section-view so it sits beside the
+                         name; the section-vars-form below just renders the
+                         tbody and keeps its action= for the auto-save POST. -->
+                    <span style="flex:1"></span>
+                    <button type="button" class="btn action-btn section-var-add"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
+                    <button type="button" class="btn action-btn section-new-script-btn"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ New Script</button>
+                    <button type="button" class="btn action-btn section-add-family-btn"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ New Family</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
@@ -205,11 +219,6 @@
                   action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
                   style="margin:.25rem 0 .5rem"
                   data-section-id="#(sec.sectionID)">
-                <div style="display:flex;justify-content:flex-start;align-items:center;margin-bottom:.25rem">
-                    <button type="button" class="btn action-btn section-var-add"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add input</button>
-                </div>
                 <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
                     <tbody class="section-vars-body">
                         #for(v in sec.variables):
@@ -228,11 +237,11 @@
                     </tbody>
                 </table>
             </form>
-        #endif
-            <!-- Per-section create toolbar (v0.4.102).  Items created
-                 from these buttons auto-land in this section's tbody;
-                 the global toolbar above still works for ungrouped
-                 creates. -->
+        #else:
+            <!-- Ungrouped block has no header to host inline buttons —
+                 keep a slim per-section toolbar (no Upload, v0.4.103).
+                 The global Upload button at the page top still handles
+                 zip uploads. -->
             <div class="section-create-toolbar"
                  data-section-id="#(sec.sectionID)"
                  style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
@@ -242,10 +251,8 @@
                 <button type="button" class="btn action-btn section-add-family-btn"
                         data-section-id="#(sec.sectionID)"
                         style="padding:.2rem .55rem;font-size:.75rem">+ New Family</button>
-                <button type="button" class="btn action-btn section-upload-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">Upload</button>
             </div>
+        #endif
             <table class="results-table" style="width:100%">
                 <tbody data-section-id="#(sec.sectionID)"></tbody>
             </table>
@@ -757,10 +764,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         return Promise.all(forms.map(function (f) { return f.flush(); }));
     };
 
-    // Wire "+ Add input" buttons (one per section).
+    // Wire "+ Add Input" buttons (one per section).  v0.4.103 moved
+    // these buttons into the section-header (inline with the section
+    // name), so `closest('form.section-vars-form')` no longer finds
+    // the form — look it up by data-section-id instead.
     document.querySelectorAll('button.section-var-add').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            var form = btn.closest('form.section-vars-form');
+            var sid = btn.getAttribute('data-section-id') || '';
+            var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
             if (!form) return;
             var tbody = form.querySelector('tbody.section-vars-body');
             if (tbody) addEmptyRow(tbody);

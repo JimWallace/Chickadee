@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.103] - 2026-04-24
+
+### Changed
+
+- **Section header now hosts the per-section action buttons inline.**  `+ Add Input`, `+ New Script`, and `+ New Family` were each on their own row above their respective tables — now they sit on the right side of the section header, beside the section name and edit pencil.  Eliminates two empty-margin rows per section.  Ungrouped block (which has no header) keeps its slim toolbar above its tests table.
+
+### Removed
+
+- **Per-section Upload button.**  Redundant with the global Upload button at the top of the page; instructors rarely upload script zips in the per-section context.  Global Upload still works.
+
 ## [0.4.102] - 2026-04-24
 
 ### Added
