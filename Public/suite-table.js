@@ -777,19 +777,32 @@
             });
         }
 
-        // Flush any pending suite-state push before letting the multipart
-        // form submit.
+        // Flush any pending suite-state push AND any pending
+        // section-vars auto-saves before letting the multipart form
+        // submit.  v0.4.101: also awaits `window.chickadeeFlushSectionVars`
+        // (wired by assignment-edit.leaf's section-vars IIFE) so the
+        // main "Save & Validate" button also persists any shared-inputs
+        // edits the instructor had in progress.
         if (form) {
             form.addEventListener('submit', function (e) {
                 if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+                var sectionVarsPromise = (typeof window.chickadeeFlushSectionVars === 'function')
+                    ? window.chickadeeFlushSectionVars()
+                    : Promise.resolve();
                 if (pushInFlight || pushPending) {
                     e.preventDefault();
                     var iv = setInterval(function () {
                         if (!pushInFlight && !pushPending) {
                             clearInterval(iv);
-                            form.submit();
+                            sectionVarsPromise.finally(function () { form.submit(); });
                         }
                     }, 50);
+                } else {
+                    // No suite PUT pending — still wait for section-vars
+                    // if they're in flight, since they might have been
+                    // triggered by the same keystroke that led here.
+                    e.preventDefault();
+                    sectionVarsPromise.finally(function () { form.submit(); });
                 }
             });
         }

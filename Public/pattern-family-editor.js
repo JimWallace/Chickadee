@@ -1278,15 +1278,27 @@
         }
 
         var _autoComputeTimer = null;
-        var _autoComputeRow = null;
+        // Pending rows to auto-compute on the next debounce tick.  Pre-
+        // v0.4.101 this was a single-slot `_autoComputeRow` — calling
+        // `scheduleAutoCompute(row2)` while row1 was still pending
+        // silently overwrote row1, so only the LAST row in a rapid
+        // sequence got computed.  That's why re-using a section variable
+        // across multiple case rows didn't fill the Expected on all of
+        // them (the `rescheduleAutoComputeForVariableRefCases` loop
+        // queued every affected row but only the last survived).
+        // Using a Set lets every scheduled row compute on the single
+        // shared tick without spawning a timer per row.
+        var _autoComputePending = new Set();
 
         function scheduleAutoCompute(row) {
             if (!row) return;
-            _autoComputeRow = row;
+            _autoComputePending.add(row);
             if (_autoComputeTimer) clearTimeout(_autoComputeTimer);
             _autoComputeTimer = setTimeout(function () {
-                var r = _autoComputeRow; _autoComputeRow = null;
-                autoComputeRow(r);
+                var rows = Array.from(_autoComputePending);
+                _autoComputePending = new Set();
+                _autoComputeTimer = null;
+                rows.forEach(autoComputeRow);
             }, 400);
         }
 
