@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.99] - 2026-04-24
+
+### Fixed
+
+- **`+ Section` / `+ Add Section` popup is no longer transparent.**  Both the suite-editor and instructor-dashboard popups declared `class="add-section-popup card"` but `.card` wasn't defined anywhere in the stylesheet — the popup inherited whatever was behind it, which on dark-mode admin pages made the Section-name input nearly invisible.  Added a `.card` rule (solid `var(--surface)` background + border + rounded corners) and an `.add-section-popup` rule that layers on the popup-specific shadow.  Dark-mode-aware via the existing palette variables.
+
+### Changed
+
+- **Version badge moved to the top nav (admin-only).**  Previously you had to scroll to the bottom of the admin dashboard to see the running Chickadee version; now a small monospaced `v0.4.99` pill sits next to the "Admin" link on every page.  Visible only when the current user is an admin.  Dropped the redundant `Chickadee v…` line at the foot of `admin.leaf`.
+
 ## [0.4.98] - 2026-04-24
 
 ### Changed

@@ -26,6 +26,7 @@
         #endif
         #if(currentUser.isAdmin):
             <a class="nav-link" href="/admin">Admin</a>
+            <span class="nav-version" title="Running Chickadee version">v#appVersion()</span>
         #endif
         <a class="nav-link nav-username" href="/account" aria-label="My account">
             #if(currentUser.preferredName):
