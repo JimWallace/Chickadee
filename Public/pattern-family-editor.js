@@ -143,15 +143,20 @@
             return { vars: vars, sectionName: sectionName, sectionID: sectionID };
         }
 
-        /// v0.4.108: returns the set of function names already used by
-        /// tests in the given section (raw scripts via filename
-        /// `publictest_exists_<X>.py` or displayName "<X> is defined
-        /// and callable", families via `family.functionName`).  Used
-        /// to filter the function dropdown so a "+ Add Family" in
-        /// "Warm Up" only offers `mailingLabel`, `bmi`, `age` instead
-        /// of every function the scan picked up.  Returns null when
-        /// the section can't be identified — caller falls back to
-        /// "show all".
+        /// v0.4.108 (widened in v0.4.110): returns the set of function
+        /// names plausibly covered by tests in the given section.
+        /// Walks the seeded suite state and pulls function names from:
+        ///   - family.functionName (for existing pattern families)
+        ///   - displayName: "<X> exists" (auto-scaffold, v0.4.100+),
+        ///                  "<X> is defined and callable" (legacy)
+        ///   - filename: any `\w+` token whose value matches a name
+        ///     in `scannedFunctions` (covers `publictest_exists_<X>.py`,
+        ///     `publictest_<X>.py`, `publictest_<X>_v2.py`, etc.)
+        /// The scanner-name cross-check is the wide-net rule that
+        /// rescued the Challenge / Warm Up / etc. cases where scripts
+        /// follow `publictest_<fn>.py` rather than the strict
+        /// `*_exists_<fn>.py` pattern.  Returns null when the section
+        /// can't be identified; caller falls back to "show all".
         function functionNamesInSection(sectionID) {
             if (!sectionID) return null;
             var seedEl = document.getElementById('suite-state-seed');
@@ -159,6 +164,9 @@
             var seed;
             try { seed = JSON.parse(seedEl.textContent); }
             catch (_) { return null; }
+            var knownFnNames = new Set(
+                (scannedFunctions || []).map(function (f) { return f.name; })
+            );
             var names = new Set();
             (seed.items || []).forEach(function (it) {
                 if (it.sectionID !== sectionID) return;
@@ -168,11 +176,20 @@
                 }
                 if (it.kind === 'script' && it.script) {
                     var dn = it.script.displayName || it.script.name || '';
-                    var m1 = dn.match(/^(\w+)\s+is defined and callable/);
-                    if (m1) { names.add(m1[1]); return; }
+                    var m1 = dn.match(/^(\w+)\s+(?:exists|is defined and callable)/);
+                    if (m1 && knownFnNames.has(m1[1])) { names.add(m1[1]); return; }
+                    // Wide-net filename tokenisation: split on any non-
+                    // word run and accept any token matching a scanned
+                    // function name.  Handles publictest_exists_X.py,
+                    // publictest_X.py, X.py, X_v2.py, etc.
                     var fn = it.script.script || '';
-                    var m2 = fn.match(/exists_(\w+)\.py$/i);
-                    if (m2) { names.add(m2[1]); return; }
+                    var tokens = fn.split(/[^A-Za-z0-9_]+/);
+                    for (var ti = 0; ti < tokens.length; ti++) {
+                        if (knownFnNames.has(tokens[ti])) {
+                            names.add(tokens[ti]);
+                            break;
+                        }
+                    }
                 }
             });
             return names;
