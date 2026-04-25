@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.110] - 2026-04-25
+
+### Fixed
+
+- **Function-dropdown filter no longer over-restricts** in sections whose tests don't follow the `publictest_exists_<X>.py` naming convention.  v0.4.108 looked for that exact pattern (or displayName "X is defined and callable"), so a Challenge section with `publictest_countPatients.py`, `publictest_countAdults.py`, … only matched whichever scripts already had a family attached — leaving the user unable to add families for the others.  Now widens detection to a token-tokenize-and-cross-check approach: split each script filename on non-word boundaries and accept any token that exactly matches a name in the solution-notebook scan.  Also adds the `<X> exists` displayName form (the auto-scaffold's actual format — v0.4.108 had it wrong).
+
 ## [0.4.109] - 2026-04-25
 
 ### Changed
