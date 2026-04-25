@@ -108,6 +108,33 @@
             return readSectionContextForFamily(familyID).vars;
         }
 
+        /// Reads section context by section id (rather than by family id).
+        /// Used for the "+ New Family" path: the per-section toolbar
+        /// stashes the target section on `window.__chickadeeTargetSection`
+        /// before opening the modal, so we can show the inherited shared
+        /// inputs even though the family hasn't been saved yet.
+        /// v0.4.106+.
+        function readSectionContextBySectionID(sectionID) {
+            if (!sectionID) return { vars: [], sectionName: null };
+            var safe = String(sectionID).replace(/"/g, '\\"');
+            var block = document.querySelector('.section-block[data-section-id="' + safe + '"]');
+            if (!block) return { vars: [], sectionName: null };
+            var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
+            var varTbody = block.querySelector('tbody.section-vars-body');
+            if (!varTbody) return { vars: [], sectionName: sectionName };
+            var vars = Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
+                var name = (tr.querySelector('.section-var-name') || {}).value || '';
+                var raw  = (tr.querySelector('.section-var-value') || {}).value || '';
+                name = name.trim();
+                if (!name) return null;
+                var parsed;
+                try { parsed = JSON.parse(raw.trim()); }
+                catch (_) { parsed = String(raw); }
+                return { name: name, value: parsed };
+            }).filter(Boolean);
+            return { vars: vars, sectionName: sectionName };
+        }
+
         /// Paints the read-only "Shared inputs from section: X" block
         /// inside the family editor modal from the given context.
         /// Hides the block entirely when the family isn't in a section
@@ -1095,11 +1122,21 @@
                 defaultHintInput.value = '';
                 toleranceInput.value = '';
                 familyVariables = [];
-                // New family: no section context yet — section variables
-                // come into scope once the family is saved and dragged
-                // into a section.  Empty until then.
-                currentSectionVariables = [];
-                renderReadOnlySectionVars({ vars: [], sectionName: null });
+                // New family: pull section context from the per-section
+                // "+ New Family" toolbar's stashed target id (set in
+                // assignment-edit.leaf's IIFE before the global button
+                // is click()ed).  v0.4.106 — previously this branch
+                // unconditionally cleared the read-only block, so a
+                // section's $patients-style shared input wasn't visible
+                // and `$patients` refs in arg cells couldn't auto-
+                // compute Expected.  When opened from the global "+
+                // New Family" button (`__chickadeeTargetSection` empty
+                // / unset), we still emit the empty-context render so
+                // the block hides cleanly.
+                var targetSid = window.__chickadeeTargetSection || '';
+                var newCtx = readSectionContextBySectionID(targetSid);
+                currentSectionVariables = newCtx.vars;
+                renderReadOnlySectionVars(newCtx);
                 rebuildCasesHeader([]);
             }
             renderVariablesTable();

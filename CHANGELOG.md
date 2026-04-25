@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.106] - 2026-04-25
+
+### Fixed
+
+- **New-family modal: section-wide shared inputs now visible + usable for auto-compute.**  Clicking `+ New Family` from a section's toolbar (Warm Up, Challenge, …) now reads that section's declared inputs into the read-only "Shared inputs from section: X" block — previously the new-family branch unconditionally cleared `currentSectionVariables`, so the block stayed empty and `$OnePatient`-style refs in arg cells silently bailed out of the Pyodide auto-compute path (line 1426: `if (!(varMatch[1] in varsNow)) return;`).  The fix reuses the per-section `__chickadeeTargetSection` flag the toolbar already stashes — no new wiring on the leaf side, just a sibling lookup function (`readSectionContextBySectionID`) that walks straight to the section block by id instead of working backwards from a not-yet-rendered family row.
+
 ## [0.4.105] - 2026-04-24
 
 ### Fixed
