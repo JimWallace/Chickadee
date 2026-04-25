@@ -575,13 +575,15 @@
             if (!variablesBody) return;
             variablesBody.innerHTML = '';
             // v0.4.108: section-level shared inputs render as locked
-            // rows at the top of the family Variables table — same
-            // shape, same column layout, but inputs disabled and the
-            // remove button replaced with a "from section" badge.
-            // Family-level rows (with the same name) shadow these at
-            // render time, so we mark shadowed section rows visually
-            // (struck through + amber note) so the instructor sees
-            // which value the test will actually use.
+            // rows at the top of the family Variables table — read-
+            // only `<code>`s in place of inputs, with no per-row
+            // chrome (no 🔒 icon, no "from section" label — the
+            // section name in the table title is sufficient context;
+            // v0.4.109 stripped both).  Family-level rows with the
+            // same name shadow at render time, so we mark shadowed
+            // section rows with a strike-through and an inline amber
+            // note so the instructor sees which value the test will
+            // actually use.
             (currentSectionVariables || []).forEach(function (v) {
                 var familyShadow = familyVariables.some(function (fv) {
                     return fv.name && fv.name.trim() === v.name;
@@ -597,10 +599,10 @@
                     ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber,#b38600);margin-left:.4rem">shadowed by family variable below</span>'
                     : '';
                 tr.innerHTML =
-                    '<td style="vertical-align:middle;text-align:center;color:var(--gray-500);font-size:.95rem" title="Inherited from section">🔒</td>'
+                    '<td></td>'
                   + '<td style="vertical-align:top;padding:.3rem .4rem"><code style="font-family:monospace;font-size:.8rem;text-decoration:' + textDeco + '">' + escHtml(v.name) + '</code>' + shadowNote + '</td>'
                   + '<td style="vertical-align:top;padding:.3rem .4rem;font-family:monospace;font-size:.78rem;color:var(--gray-600);text-decoration:' + textDeco + '">' + escHtml(preview) + '</td>'
-                  + '<td style="vertical-align:middle;font-size:.7rem;color:var(--gray-500);text-align:center">from section</td>';
+                  + '<td></td>';
                 variablesBody.appendChild(tr);
             });
             familyVariables.forEach(function (v, i) {

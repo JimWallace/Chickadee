@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.109] - 2026-04-25
+
+### Changed
+
+- **Locked section-variable rows in the family Variables table are quieter.**  Drop the leading 🔒 icon and the trailing "from section" label — the section name in the table title (`Variables — section: Challenge`) is enough context.  Read-only `<code>` styling + the shadowed-by-family note (when applicable) stay.
+
 ## [0.4.108] - 2026-04-25
 
 ### Fixed
