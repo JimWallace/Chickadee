@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.107] - 2026-04-25
+
+### Fixed
+
+- **Top-level "New Script" / "New Family" buttons now actually hidden.**  v0.4.104 added the `hidden` attribute on those buttons, but the author-level `.btn { display: inline-block }` rule beat the user-agent `[hidden] { display: none }`, so they kept rendering.  Pinned the attribute globally with `[hidden] { display: none !important }` in `styles.css` so future uses Just Work without per-element style hacks.
+
 ## [0.4.106] - 2026-04-25
 
 ### Fixed

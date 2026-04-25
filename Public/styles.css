@@ -230,6 +230,15 @@ h2 { font-size: 1rem;   margin-bottom: .4rem; }
     box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
 }
 
+/* The HTML `hidden` attribute applies via `[hidden] { display: none }`
+   in the UA stylesheet, but author-CSS rules like `.btn { display:
+   inline-block }` override that, so a button with `hidden` would still
+   render.  v0.4.104 hid the top-level New Script / New Family buttons
+   via the attribute — they kept showing up because of this CSS
+   collision.  Globally pin the attribute with !important so future
+   uses Just Work. */
+[hidden] { display: none !important; }
+
 /* ── Buttons ─────────────────────────────────────────── */
 
 .btn {
