@@ -6,7 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.4.107] - 2026-04-25
+## [0.4.108] - 2026-04-25
+
+### Fixed
+
+- **Saving a new family that references a `$sectionVar` no longer rejects with "references unknown variable".**  `validatePatternFamilies` was strict: it required the family's home section be known up-front, but a brand-new family being created via `PUT /families` doesn't have an authored sectionID yet (the per-section toolbar stamps that on the follow-up `PUT /suite`).  When the family had no known section, the validator now treats every declared section variable as in-scope; the strict per-section check still runs once the family is placed (the suite-save path passes `authoredItems` with the actual `sectionID`, so a family in section X using `$varInSectionY` correctly fails at suite-save time).
+
+### Changed
+
+- **Section-level shared inputs now render INSIDE the family's Variables table** instead of in a separate "Shared inputs from section: X" block above it.  Locked rows show at the top with a 🔒 indicator and a "from section" label in the Remove column; rows shadowed by a same-named family variable get a strike-through and an inline amber note.  Section name appears next to the table title (`Variables (shared across all cases) — section: Challenge`).
+- **Function dropdown in the family modal is filtered to functions used by tests in the family's section** — opens "+ Add Family" in Warm Up and you only see `mailingLabel`, `bmi`, `age`, not every function in the solution notebook.  Detection: family `functionName`s + raw scripts whose filename matches `*_exists_<X>.py` or whose displayName starts with `<X> is defined and callable` (the auto-scan scaffold's convention).  Currently-selected function is preserved across the filter so editing an existing family in a section that "owns" a different function still works.  Falls back to the full list when the section has no detected function names.
 
 ### Fixed
 

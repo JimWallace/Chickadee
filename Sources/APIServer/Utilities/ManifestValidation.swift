@@ -117,9 +117,25 @@ func validatePatternFamilies(
             (sec.id, Set(sec.variables.map(\.name)))
         }
     )
+    /// All section variable names across the manifest — used as the
+    /// permissive fallback when a family has no known home section yet
+    /// (i.e. it's a brand-new family being created via PUT /families
+    /// before the follow-up PUT /suite stamps its sectionID).  v0.4.108.
+    /// The strict per-section check still runs once the family is
+    /// placed: applyPatternFamilies is invoked again from the suite-
+    /// save path with `authoredItems` carrying the actual sectionID, so
+    /// a `$varInSectionY` ref on a family the user later drops into
+    /// section X correctly fails at suite-save time.
+    let allSectionVarNames: Set<String> = sectionVarsByID.values.reduce(into: Set<String>()) {
+        $0.formUnion($1)
+    }
     func sectionVarNames(forFamily fid: String) -> Set<String> {
-        guard let sid = familySectionID[fid] else { return [] }
-        return sectionVarsByID[sid] ?? []
+        if let sid = familySectionID[fid] {
+            return sectionVarsByID[sid] ?? []
+        }
+        // No known section yet → permissive: accept any declared
+        // section variable.  Strict check runs at suite-save.
+        return allSectionVarNames
     }
     // 1. Per-family structural checks.
     var seenFamilyIDs: Set<String> = []
