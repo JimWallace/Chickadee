@@ -325,24 +325,16 @@
             <input type="hidden" id="family-params">
             <input type="hidden" id="family-default-hint" value="">
 
-            <!-- Read-only view of the section's shared inputs (v0.4.102).
-                 Shown only when this family lives in a section that has
-                 variables declared.  Reference by `$name` in any arg
-                 cell — family-level variables of the same name shadow.
-                 Not editable here; edit in the section's Inputs table. -->
-            <div id="family-section-vars-readonly" style="display:none">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Shared inputs from section: <span id="family-section-name-label"></span></strong>
-                    <span class="card-meta" style="font-size:.72rem">Read-only — edit in the section's Inputs table.</span>
-                </div>
-                <table class="results-table" style="font-size:.8rem;opacity:.85">
-                    <tbody id="family-section-vars-readonly-body"></tbody>
-                </table>
-            </div>
-
+            <!-- v0.4.108: section-shared inputs were a separate read-only
+                 block above the Variables table.  Now merged INTO the
+                 Variables table as locked rows at the top, so the
+                 instructor sees one unified list of $names available
+                 across all cases.  Section name shown next to the table
+                 title; the legacy hidden span is kept so existing JS
+                 that writes to it doesn't break. -->
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Variables (shared across all cases)</strong>
+                    <strong style="font-size:.85rem">Variables (shared across all cases) <span id="family-section-name-label" style="font-weight:400;color:var(--gray-600)"></span></strong>
                     <button class="btn action-btn" type="button" id="add-family-variable-btn" style="padding:.2rem .6rem;font-size:.8rem">
                         + Add variable
                     </button>
@@ -359,7 +351,7 @@
                     <tbody id="family-variables-body"></tbody>
                 </table>
                 <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--meta)">
-                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.
+                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
                 </p>
             </div>
 

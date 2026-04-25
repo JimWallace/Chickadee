@@ -73,6 +73,13 @@
         // section, not just its own family-scoped variables.  v0.4.100+.
         var currentSectionVariables = [];
 
+        // Section ID for the family currently being edited (or for the
+        // section the new family is destined for, via the per-section
+        // toolbar's `__chickadeeTargetSection` flag).  Used by
+        // `populateFunctionSelect` to filter the dropdown to functions
+        // already covered by tests in this section.  v0.4.108+.
+        var currentSectionID = null;
+
         /// Reads section variables for the given family id out of the
         /// server-rendered `.section-vars-body` tbody in the family row's
         /// enclosing section block.  Returns `{ vars, sectionName }`.
@@ -83,12 +90,13 @@
             var familyRow = document.querySelector(
                 'tr[data-kind="family"][data-family-id="' + String(familyID).replace(/"/g, '\\"') + '"]'
             );
-            if (!familyRow) return { vars: [], sectionName: null };
+            if (!familyRow) return { vars: [], sectionName: null, sectionID: null };
             var block = familyRow.closest('.section-block[data-section-id]');
-            if (!block) return { vars: [], sectionName: null };
+            if (!block) return { vars: [], sectionName: null, sectionID: null };
+            var sectionID = block.getAttribute('data-section-id') || null;
             var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
             var varTbody = block.querySelector('tbody.section-vars-body');
-            if (!varTbody) return { vars: [], sectionName: sectionName };
+            if (!varTbody) return { vars: [], sectionName: sectionName, sectionID: sectionID };
             var vars = Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
                 var name = (tr.querySelector('.section-var-name') || {}).value || '';
                 var raw  = (tr.querySelector('.section-var-value') || {}).value || '';
@@ -99,7 +107,7 @@
                 catch (_) { parsed = String(raw); }
                 return { name: name, value: parsed };
             }).filter(Boolean);
-            return { vars: vars, sectionName: sectionName };
+            return { vars: vars, sectionName: sectionName, sectionID: sectionID };
         }
 
         /// Back-compat wrapper around `readSectionContextForFamily` for
@@ -115,13 +123,13 @@
         /// inputs even though the family hasn't been saved yet.
         /// v0.4.106+.
         function readSectionContextBySectionID(sectionID) {
-            if (!sectionID) return { vars: [], sectionName: null };
+            if (!sectionID) return { vars: [], sectionName: null, sectionID: null };
             var safe = String(sectionID).replace(/"/g, '\\"');
             var block = document.querySelector('.section-block[data-section-id="' + safe + '"]');
-            if (!block) return { vars: [], sectionName: null };
+            if (!block) return { vars: [], sectionName: null, sectionID: null };
             var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
             var varTbody = block.querySelector('tbody.section-vars-body');
-            if (!varTbody) return { vars: [], sectionName: sectionName };
+            if (!varTbody) return { vars: [], sectionName: sectionName, sectionID: sectionID };
             var vars = Array.from(varTbody.querySelectorAll('tr.section-var-row')).map(function (tr) {
                 var name = (tr.querySelector('.section-var-name') || {}).value || '';
                 var raw  = (tr.querySelector('.section-var-value') || {}).value || '';
@@ -132,7 +140,42 @@
                 catch (_) { parsed = String(raw); }
                 return { name: name, value: parsed };
             }).filter(Boolean);
-            return { vars: vars, sectionName: sectionName };
+            return { vars: vars, sectionName: sectionName, sectionID: sectionID };
+        }
+
+        /// v0.4.108: returns the set of function names already used by
+        /// tests in the given section (raw scripts via filename
+        /// `publictest_exists_<X>.py` or displayName "<X> is defined
+        /// and callable", families via `family.functionName`).  Used
+        /// to filter the function dropdown so a "+ Add Family" in
+        /// "Warm Up" only offers `mailingLabel`, `bmi`, `age` instead
+        /// of every function the scan picked up.  Returns null when
+        /// the section can't be identified — caller falls back to
+        /// "show all".
+        function functionNamesInSection(sectionID) {
+            if (!sectionID) return null;
+            var seedEl = document.getElementById('suite-state-seed');
+            if (!seedEl) return null;
+            var seed;
+            try { seed = JSON.parse(seedEl.textContent); }
+            catch (_) { return null; }
+            var names = new Set();
+            (seed.items || []).forEach(function (it) {
+                if (it.sectionID !== sectionID) return;
+                if (it.kind === 'family' && it.family && it.family.functionName) {
+                    names.add(it.family.functionName);
+                    return;
+                }
+                if (it.kind === 'script' && it.script) {
+                    var dn = it.script.displayName || it.script.name || '';
+                    var m1 = dn.match(/^(\w+)\s+is defined and callable/);
+                    if (m1) { names.add(m1[1]); return; }
+                    var fn = it.script.script || '';
+                    var m2 = fn.match(/exists_(\w+)\.py$/i);
+                    if (m2) { names.add(m2[1]); return; }
+                }
+            });
+            return names;
         }
 
         /// Paints the read-only "Shared inputs from section: X" block
@@ -142,53 +185,18 @@
         /// here — instructor edits in the section's Inputs table
         /// (prevents accidental drift from tests in other families
         /// that rely on the same shared values).  v0.4.102+.
+        /// v0.4.108: section vars are now rendered as locked rows at the
+        /// top of the family Variables table (see `renderVariablesTable`).
+        /// This function only updates the section-name label next to the
+        /// table title — call sites pass `{ sectionName }` from the
+        /// section-context lookup.  Kept as a function (not inlined)
+        /// because both the new-family and existing-family branches in
+        /// `openEditor` share it.
         function renderReadOnlySectionVars(ctx) {
-            var box   = document.getElementById('family-section-vars-readonly');
-            var body  = document.getElementById('family-section-vars-readonly-body');
             var label = document.getElementById('family-section-name-label');
-            if (!box || !body) return;
-            var vars = (ctx && ctx.vars) || [];
+            if (!label) return;
             var sectionName = (ctx && ctx.sectionName) || '';
-            // Hide entirely when the family isn't placed in any section
-            // (e.g. a + New Family that hasn't been dragged into one yet).
-            // Show whenever sectionName is known, even with zero variables,
-            // so the instructor sees which section the family is in and
-            // gets a clear "no shared inputs declared yet" placeholder
-            // instead of a silent empty UI (v0.4.103+).
-            if (!sectionName) {
-                box.style.display = 'none';
-                body.innerHTML = '';
-                return;
-            }
-            if (label) label.textContent = sectionName;
-            if (!vars.length) {
-                body.innerHTML =
-                    '<tr><td colspan="2" style="padding:.4rem .5rem;color:var(--gray-500);font-style:italic">'
-                  + 'No shared inputs declared in this section. Add them in the section\'s Inputs table.'
-                  + '</td></tr>';
-                box.style.display = '';
-                return;
-            }
-            // One row per variable: "$name" in first column, truncated
-            // value preview in second.  Shadowing by family-level same-
-            // named variable is noted inline so the instructor sees
-            // which values will actually reach the test.
-            var familyVarNames = new Set((familyVariables || []).map(function (v) { return v.name; }));
-            body.innerHTML = vars.map(function (v) {
-                var preview = '';
-                try { preview = JSON.stringify(v.value); }
-                catch (_) { preview = String(v.value); }
-                if (preview.length > 80) preview = preview.slice(0, 77) + '…';
-                var shadowed = familyVarNames.has(v.name);
-                var shadowNote = shadowed
-                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber,#b38600);margin-left:.4rem">shadowed by family variable</span>'
-                    : '';
-                return '<tr>'
-                     + '<td style="width:12rem;font-family:monospace;padding:.2rem .4rem"><code>$' + escHtml(v.name) + '</code>' + shadowNote + '</td>'
-                     + '<td style="font-family:monospace;padding:.2rem .4rem;color:var(--gray-600)">' + escHtml(preview) + '</td>'
-                     + '</tr>';
-            }).join('');
-            box.style.display = '';
+            label.textContent = sectionName ? '— section: ' + sectionName : '';
         }
 
         var addFamilyBtn     = document.getElementById('add-family-btn');
@@ -291,10 +299,24 @@
                 fnHint.textContent = 'Create or update the solution notebook so its top-level functions can be detected.';
                 return;
             }
+            // v0.4.108: filter the dropdown to functions already covered
+            // by tests in the family's section.  Keeps the currently-
+            // selected function visible even if it's not in the section's
+            // set, so editing an existing family doesn't lose its choice.
+            // Falls back to "show all" when the section has no detected
+            // function names (raw scripts not following the
+            // `publictest_exists_<X>` / "X is defined and callable"
+            // convention) — better than an empty list.
+            var allowed = functionNamesInSection(currentSectionID);
+            if (allowed && allowed.size === 0) allowed = null;
+            if (allowed && selectedName) allowed.add(selectedName);
             fnSelect.disabled = false;
-            fnHint.textContent = '';
+            fnHint.textContent = allowed
+                ? 'Showing functions used by tests in this section.'
+                : '';
             var options = ['<option value="">— Select a function —</option>'];
             scannedFunctions.forEach(function (fn) {
+                if (allowed && !allowed.has(fn.name)) return;
                 var label = fn.name + '(' + ((fn.paramNames || []).join(', ')) + ')';
                 // A shadowed definition is one the runtime will never see —
                 // Python's second `def <name>` replaces the first, so a family
@@ -552,6 +574,35 @@
         function renderVariablesTable() {
             if (!variablesBody) return;
             variablesBody.innerHTML = '';
+            // v0.4.108: section-level shared inputs render as locked
+            // rows at the top of the family Variables table — same
+            // shape, same column layout, but inputs disabled and the
+            // remove button replaced with a "from section" badge.
+            // Family-level rows (with the same name) shadow these at
+            // render time, so we mark shadowed section rows visually
+            // (struck through + amber note) so the instructor sees
+            // which value the test will actually use.
+            (currentSectionVariables || []).forEach(function (v) {
+                var familyShadow = familyVariables.some(function (fv) {
+                    return fv.name && fv.name.trim() === v.name;
+                });
+                var tr = document.createElement('tr');
+                tr.className = 'pf-var-section-row';
+                tr.setAttribute('data-section-var', '1');
+                var preview = '';
+                try { preview = JSON.stringify(v.value); }
+                catch (_) { preview = String(v.value); }
+                var textDeco = familyShadow ? 'line-through' : 'none';
+                var shadowNote = familyShadow
+                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber,#b38600);margin-left:.4rem">shadowed by family variable below</span>'
+                    : '';
+                tr.innerHTML =
+                    '<td style="vertical-align:middle;text-align:center;color:var(--gray-500);font-size:.95rem" title="Inherited from section">🔒</td>'
+                  + '<td style="vertical-align:top;padding:.3rem .4rem"><code style="font-family:monospace;font-size:.8rem;text-decoration:' + textDeco + '">' + escHtml(v.name) + '</code>' + shadowNote + '</td>'
+                  + '<td style="vertical-align:top;padding:.3rem .4rem;font-family:monospace;font-size:.78rem;color:var(--gray-600);text-decoration:' + textDeco + '">' + escHtml(preview) + '</td>'
+                  + '<td style="vertical-align:middle;font-size:.7rem;color:var(--gray-500);text-align:center">from section</td>';
+                variablesBody.appendChild(tr);
+            });
             familyVariables.forEach(function (v, i) {
                 var tr = document.createElement('tr');
                 tr.setAttribute('data-var-index', String(i));
@@ -1091,6 +1142,7 @@
                 var family = familiesState[editingIndex];
                 var ctx = readSectionContextForFamily(family.id);
                 currentSectionVariables = ctx.vars;
+                currentSectionID = ctx.sectionID;
                 renderReadOnlySectionVars(ctx);
                 titleEl.textContent = 'Edit Pattern Family';
                 idInput.value = family.id || '';
@@ -1136,6 +1188,7 @@
                 var targetSid = window.__chickadeeTargetSection || '';
                 var newCtx = readSectionContextBySectionID(targetSid);
                 currentSectionVariables = newCtx.vars;
+                currentSectionID = newCtx.sectionID;
                 renderReadOnlySectionVars(newCtx);
                 rebuildCasesHeader([]);
             }
