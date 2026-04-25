@@ -553,7 +553,14 @@ extension AssignmentRoutes {
             throw Abort(.badRequest, reason: "Notebook data is empty")
         }
 
-        let functions = scanNotebookForFunctions(notebookData)
+        // v0.4.111: switched from `scanNotebookForFunctions` to the
+        // section-aware variant so each function carries the `## `
+        // header it was defined under.  The family editor uses
+        // `sectionName` to filter the dropdown to functions belonging
+        // to the family's section — works on brand-new sections that
+        // don't yet have any tests, which the filename-token filter
+        // (v0.4.108–110) couldn't.
+        let scan = scanNotebookForSectionsAndFunctions(notebookData)
 
         // Forward ALL fields the scanner produces — not just a hand-picked
         // subset.  Pre-v0.4.94 this DTO dropped `paramTypes`, `returnType`,
@@ -572,11 +579,16 @@ extension AssignmentRoutes {
             var hasTypeHints: Bool
             var hasDocstring: Bool
             var isShadowed: Bool
+            /// The `##` markdown header the function was defined under
+            /// in the solution notebook.  `nil` when the function
+            /// appears before any `##` header.  v0.4.111+.
+            var sectionName: String?
             var templates: [TestTemplateInfo]
         }
 
-        let results = functions.map { fn in
-            FunctionResult(
+        let results = scan.functions.map { entry in
+            let fn = entry.info
+            return FunctionResult(
                 name: fn.name,
                 paramNames: fn.paramNames,
                 paramCount: fn.paramCount,
@@ -586,6 +598,7 @@ extension AssignmentRoutes {
                 hasTypeHints: fn.hasTypeHints,
                 hasDocstring: fn.hasDocstring,
                 isShadowed: fn.isShadowed,
+                sectionName: entry.sectionName,
                 templates: allTemplateInfos(functionName: fn.name, paramNames: fn.paramNames)
             )
         }

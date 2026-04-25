@@ -76,9 +76,16 @@
         // Section ID for the family currently being edited (or for the
         // section the new family is destined for, via the per-section
         // toolbar's `__chickadeeTargetSection` flag).  Used by
-        // `populateFunctionSelect` to filter the dropdown to functions
-        // already covered by tests in this section.  v0.4.108+.
+        // `populateFunctionSelect` to filter the dropdown.  v0.4.108+.
         var currentSectionID = null;
+        // Display name of the same section.  v0.4.111 switched the
+        // dropdown filter from "functions used by tests in this
+        // section" (filename-token match) to "functions defined under
+        // the matching `## ` header in the solution notebook"
+        // (scanner-emitted `sectionName` match).  The header-match
+        // approach works for brand-new sections that don't yet have
+        // any tests — the v0.4.108–110 token filter couldn't.
+        var currentSectionName = null;
 
         /// Reads section variables for the given family id out of the
         /// server-rendered `.section-vars-body` tbody in the family row's
@@ -316,20 +323,33 @@
                 fnHint.textContent = 'Create or update the solution notebook so its top-level functions can be detected.';
                 return;
             }
-            // v0.4.108: filter the dropdown to functions already covered
-            // by tests in the family's section.  Keeps the currently-
-            // selected function visible even if it's not in the section's
-            // set, so editing an existing family doesn't lose its choice.
-            // Falls back to "show all" when the section has no detected
-            // function names (raw scripts not following the
-            // `publictest_exists_<X>` / "X is defined and callable"
-            // convention) — better than an empty list.
-            var allowed = functionNamesInSection(currentSectionID);
-            if (allowed && allowed.size === 0) allowed = null;
+            // v0.4.111: filter the dropdown to functions defined under
+            // the family's section in the solution notebook (each
+            // scanned `def` carries the `##` header it was nested
+            // under, emitted by `scanNotebookForSectionsAndFunctions`).
+            // Match by section NAME — that's what the scanner knows;
+            // the editor's section ID isn't visible to it.  Keeps the
+            // currently-selected function in the dropdown even if it
+            // happens to belong to a different header (defensive for
+            // renamed sections).  Falls back to "show all" when:
+            //   - the section name is unknown (e.g. Ungrouped block,
+            //     or a fresh family before placement);
+            //   - no scanned function matched this section name (the
+            //     instructor renamed the section so it no longer
+            //     matches a `##` header — better to show everything
+            //     than block them).
+            var allowed = null;
+            if (currentSectionName) {
+                allowed = new Set();
+                scannedFunctions.forEach(function (fn) {
+                    if (fn.sectionName === currentSectionName) allowed.add(fn.name);
+                });
+                if (allowed.size === 0) allowed = null;
+            }
             if (allowed && selectedName) allowed.add(selectedName);
             fnSelect.disabled = false;
             fnHint.textContent = allowed
-                ? 'Showing functions used by tests in this section.'
+                ? 'Showing functions defined under this section in the solution notebook.'
                 : '';
             var options = ['<option value="">— Select a function —</option>'];
             scannedFunctions.forEach(function (fn) {
@@ -1162,6 +1182,7 @@
                 var ctx = readSectionContextForFamily(family.id);
                 currentSectionVariables = ctx.vars;
                 currentSectionID = ctx.sectionID;
+                currentSectionName = ctx.sectionName;
                 renderReadOnlySectionVars(ctx);
                 titleEl.textContent = 'Edit Pattern Family';
                 idInput.value = family.id || '';
@@ -1208,6 +1229,7 @@
                 var newCtx = readSectionContextBySectionID(targetSid);
                 currentSectionVariables = newCtx.vars;
                 currentSectionID = newCtx.sectionID;
+                currentSectionName = newCtx.sectionName;
                 renderReadOnlySectionVars(newCtx);
                 rebuildCasesHeader([]);
             }

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.111] - 2026-04-25
+
+### Fixed
+
+- **Function-dropdown filter switched from "tests in this section" to "functions defined under this section's `##` header in the solution notebook"** — works on brand-new sections that don't have any tests yet.  v0.4.108–110 looked at the manifest's testSuites entries to figure out which functions "belonged" to a section, which broke when:
+  - the section had only one promoted family (the user got stuck with just that one option, since other functions had no test entries to match against) — the v0.4.110 widening still required at least one matching test per function;
+  - the section had no tests at all — nothing to match.
+  Switched the scan endpoint to `scanNotebookForSectionsAndFunctions` so each function carries the `##` header it was defined under.  The editor filters by matching that header to the family's section name (read from the section block's `<strong>`).  Falls back to "show all" when the section name doesn't match any header (e.g. the instructor renamed it).
+
 ## [0.4.110] - 2026-04-25
 
 ### Fixed
