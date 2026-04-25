@@ -185,10 +185,10 @@
                             style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
                     <button type="button" class="btn action-btn section-new-script-btn"
                             data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ New Script</button>
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
                     <button type="button" class="btn action-btn section-add-family-btn"
                             data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ New Family</button>
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
@@ -252,10 +252,10 @@
                  style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
                 <button type="button" class="btn action-btn section-new-script-btn"
                         data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ New Script</button>
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
                 <button type="button" class="btn action-btn section-add-family-btn"
                         data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ New Family</button>
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
             </div>
         #endif
             <table class="results-table" style="width:100%">
@@ -787,7 +787,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     });
 
     // Per-section create toolbar (v0.4.102).  Each section block has
-    // its own "+ New Script" / "+ New Family" / "Upload" buttons that
+    // its own "+ Add Script" / "+ Add Family" / "Upload" buttons that
     // delegate to the existing global buttons but stash the target
     // section id on `window.__chickadeeTargetSection` first.  The
     // suite-table's `addExistingScript` + `syncFamilies` read that
