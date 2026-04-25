@@ -15,17 +15,25 @@ import Foundation
 /// outcome is ungrouped and there are no sections, the result is one
 /// bucket with `sectionName == nil` — template renders it as a single
 /// unlabelled table, identical to the pre-sections layout.
+///
+/// `sectionIDPerOutcome` is a parallel array: `sectionIDPerOutcome[i]`
+/// is the section id of the manifest entry that produced `outcomes[i]`
+/// (or nil when ungrouped).  Index correlation — not a testName lookup
+/// — because two pattern families in different sections can legally
+/// share a case label (e.g. both `bmi` and `age` having a "Test 1"
+/// case), and a name-keyed dict silently collapsed them onto the
+/// last-written section (v0.4.105 fix).
 func groupOutcomesBySection(
     _ outcomes: [OutcomeRow],
     sections: [TestSuiteSection],
-    sectionIDByTestName: [String: String]
+    sectionIDPerOutcome: [String?]
 ) -> [SectionedOutcomes] {
     let knownSectionIDs = Set(sections.map(\.id))
     var bucketsByID: [String: [OutcomeRow]] = [:]
     var ungrouped: [OutcomeRow] = []
-    for row in outcomes {
-        if let sid = sectionIDByTestName[row.testName],
-           knownSectionIDs.contains(sid) {
+    for (i, row) in outcomes.enumerated() {
+        let sid: String? = (i < sectionIDPerOutcome.count) ? sectionIDPerOutcome[i] : nil
+        if let sid, knownSectionIDs.contains(sid) {
             bucketsByID[sid, default: []].append(row)
         } else {
             ungrouped.append(row)
@@ -347,15 +355,18 @@ extension WebRoutes {
         //  - older worker results where testName is the filename stem
         //  - browser results where testName is the full script filename
         //
-        // Also collect the manifest's section list + per-entry sectionID
-        // lookup used later to group outcomes for the student view.
+        // Also collect the manifest's section list + the testSuites list
+        // so the call site below can build a parallel sectionIDPerOutcome
+        // array.  We can't do a name-keyed lookup because two families in
+        // different sections may legally share case labels (v0.4.105 bug).
         var displayNameMap: [String: String] = [:]
         var manifestSections: [TestSuiteSection] = []
-        var sectionIDByTestName: [String: String] = [:]
+        var manifestEntries: [TestSuiteEntry] = []
         if let setup = try? await APITestSetup.find(submission.testSetupID, on: req.db),
            let manifestData = setup.manifest.data(using: .utf8),
            let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData) {
             manifestSections = props.sections
+            manifestEntries  = props.testSuites
             for entry in props.testSuites {
                 let stem = (entry.script as NSString).deletingPathExtension
                 let stemKey = stem.isEmpty ? entry.script : stem
@@ -363,14 +374,6 @@ extension WebRoutes {
                    !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     displayNameMap[entry.script] = displayName
                     displayNameMap[stemKey]      = displayName
-                }
-                if let sid = entry.sectionID {
-                    sectionIDByTestName[entry.script] = sid
-                    sectionIDByTestName[stemKey]      = sid
-                    if let displayName = entry.name,
-                       !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        sectionIDByTestName[displayName] = sid
-                    }
                 }
             }
         }
@@ -466,10 +469,27 @@ extension WebRoutes {
             .all()
         badges += classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
 
+        // Worker emits exactly one outcome per manifest.testSuites entry,
+        // in the same order.  The student-visible outcomes are filtered
+        // by tier, so we filter `manifestEntries` by the same tier
+        // predicate to keep the parallel-index correlation aligned.
+        // Each `outcomes[i]` corresponds to `visibleEntries[i]`.
+        let visibleEntries = manifestEntries.filter { allowedTiers.contains($0.tier.rawValue) }
+        var sectionIDPerOutcome: [String?] = visibleEntries.map { $0.sectionID }
+        // Defensive: if the count drifts (e.g. browser-mode submissions
+        // emit a slightly different shape, or a manifest churn happened
+        // mid-flight), pad with nils so the bucketing falls into
+        // Ungrouped instead of misattributing outcomes.
+        if sectionIDPerOutcome.count < outcomes.count {
+            sectionIDPerOutcome.append(contentsOf:
+                Array(repeating: String?.none, count: outcomes.count - sectionIDPerOutcome.count))
+        } else if sectionIDPerOutcome.count > outcomes.count {
+            sectionIDPerOutcome = Array(sectionIDPerOutcome.prefix(outcomes.count))
+        }
         let sectionedOutcomes = groupOutcomesBySection(
             outcomes,
             sections: manifestSections,
-            sectionIDByTestName: sectionIDByTestName
+            sectionIDPerOutcome: sectionIDPerOutcome
         )
 
         let hasDelta = !priorOutcomeMap.isEmpty

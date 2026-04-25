@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.105] - 2026-04-24
+
+### Fixed
+
+- **Submission view: pattern-family case bled into the next section** when two families across different sections happened to use the same case label (e.g. both `bmi` (Warm Up) and `age` (Warm Up II) had a "Test 1" case).  `groupOutcomesBySection` was keyed by displayName, and the second entry silently overwrote the first, sending bmi's "Test 1" outcome under Warm Up II's heading.  Switched to parallel-index correlation: the helper now takes a `sectionIDPerOutcome: [String?]` array that matches `outcomes` 1:1 (built by zipping the tier-filtered manifest entries against the visible outcomes — both lists are walked in the same order by the worker).  Regression test added.
+
+### Changed
+
+- **Pattern-family pass message no longer echoes the full input dict.**  Previously: `mailingLabel({huge HL7 record}) returned 'NGUYEN, AVA\\n...'`.  Now: `Returned 'NGUYEN, AVA\\n...'`.  The row's case label already names the test, and the failure path still emits the full input alongside expected/got, so we only lose redundant context.  Applies to `.boundaryEquality` and `.approximateEquality` kinds.
+- **Pattern-family failure message includes the source line for the failing assertion.**  A bare `assert x == y` (no message) used to render as `error: AssertionError:` with no context.  We now walk the traceback's last frame and append a `source:` row (`source:   assert name == record["name"]["given"]`), so students see exactly which assertion failed even when the assertion text is empty.
+- **Allow 0-mark tests on the assignment edit page.**  Useful for "function exists" guards that purely short-circuit downstream tests without contributing to the grade.  Server clamping moved from `max(1, …)` to `max(0, …)` (in `AssignmentRoutes+Editor.createScript` and `AssignmentRoutes+Draft.createScript`); client-side `Math.max(1, …)` and `<input min="1">` similarly relaxed.
+
+### Removed
+
+- **Dependency badge ("↳ test_detect_marker.py") on the suite editor table.**  The parent/child indent + connector already conveys the dependency relationship visually; the trailing filename text added clutter without information.  `depBadgeHTML` is now a no-op (kept so callers don't need to change).
+
 ## [0.4.104] - 2026-04-24
 
 ### Changed
