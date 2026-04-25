@@ -142,8 +142,12 @@
                     </form>
                 </div>
             </details>
-            <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
-            <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
+            <!-- v0.4.104: top-level New Script / New Family hidden — every
+                 section (named + Ungrouped) has its own inline buttons now.
+                 Kept in the DOM (with `hidden`) so the per-section delegate
+                 click() in the IIFE below still routes to their handlers. -->
+            <button class="btn action-btn" type="button" id="new-script-btn" hidden>New Script</button>
+            <button class="btn action-btn" type="button" id="add-family-btn" hidden>New Family</button>
             <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
         </div>
     </div>

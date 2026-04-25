@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.104] - 2026-04-24
+
+### Changed
+
+- **Top-level "New Script" and "New Family" buttons hidden on the assignment edit page.**  Redundant — every section (including Ungrouped) has its own inline `+ New Script` / `+ New Family` buttons since v0.4.102.  The buttons are kept in the DOM (with the `hidden` attribute) so the per-section delegate's `btn.click()` still routes to their handlers.  `+ Section` and global `Upload` remain visible.  Create-assignment page is unchanged (it has no sections yet).
+
 ## [0.4.103] - 2026-04-24
 
 ### Changed
