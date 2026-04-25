@@ -112,7 +112,7 @@
                     id: s.script || '',
                     script: s.script || '',
                     tier: s.tier || 'public',
-                    points: Math.max(1, parseInt(s.points) || 1),
+                    points: Math.max(0, parseInt(s.points) || 0),
                     displayName: s.displayName == null ? '' : String(s.displayName),
                     dependsOn: (s.dependsOn || []).slice(),
                     sectionID: sid
@@ -183,20 +183,13 @@
             }).join('');
         }
 
-        function depBadgeHTML(dependsOn) {
-            if (!dependsOn || !dependsOn.length) return '';
-            var labels = dependsOn.map(function (d) {
-                if (d.indexOf('family:') === 0) {
-                    var fid = d.slice('family:'.length);
-                    var fitem = items.find(function (it) {
-                        return it.kind === 'family' && it.familyID === fid;
-                    });
-                    var name = fitem && fitem.family ? fitem.family.name : fid;
-                    return '⟳\u00a0' + escHtml(name);
-                }
-                return escHtml(d);
-            });
-            return '<span class="suite-dep-badge" title="Runs only after the listed prerequisites pass">↳ ' + labels.join(', ') + '</span>';
+        // v0.4.105: dependency badge ("↳ test_detect_marker.py") removed
+        // from the suite-table — the parent/child indent + connector
+        // already conveys the relationship visually, and the trailing
+        // filename text added clutter without information.  Function
+        // kept as a no-op so callers don't need to change.
+        function depBadgeHTML(_dependsOn) {
+            return '';
         }
 
         function scriptRowHTML(item, depth) {
@@ -214,7 +207,7 @@
                 + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
                 +   tierOptions(item.tier)
                 + '</select></td>'
-                + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
+                + '<td><input type="number" class="form-input suite-points" min="0" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
                 + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
                 +   '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.script) + '" title="Edit script" aria-label="Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
                 +   '<button class="btn action-btn action-danger suite-delete-btn" type="button" title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
@@ -229,7 +222,7 @@
             var caseCount = (family.cases || []).filter(function (c) { return c.enabled !== false; }).length;
             var caseText  = caseCount === 1 ? '1 case' : caseCount + ' cases';
             var defaults = family.defaults || {};
-            var defaultPoints = Math.max(1, parseInt(defaults.points) || 1);
+            var defaultPoints = Math.max(0, parseInt(defaults.points) || 1);
             var tier = defaults.tier || 'public';
             return '<tr data-id="' + escAttr(item.id) + '" data-kind="family" data-source="family" data-family-id="' + escAttr(family.id || '') + '">'
                 + '<td' + indent + '><div class="suite-name-cell">'
@@ -245,7 +238,7 @@
                         return '<option value="' + t + '"' + (t === tier ? ' selected' : '') + '>' + t + '</option>';
                     }).join('')
                 + '</select></td>'
-                + '<td><input type="number" class="form-input suite-family-points" min="1" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
+                + '<td><input type="number" class="form-input suite-family-points" min="0" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
                 + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
                 +   '<button class="btn action-btn family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
                 +   '<button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
@@ -346,7 +339,7 @@
                         script: {
                             script:      item.script,
                             tier:        item.tier,
-                            points:      Math.max(1, parseInt(item.points) || 1),
+                            points:      Math.max(0, parseInt(item.points) || 0),
                             displayName: display,
                             dependsOn:   (item.dependsOn || []).slice()
                         },
@@ -619,7 +612,7 @@
                 var tierEl = scriptRow.querySelector('.suite-tier');
                 var ptsEl  = scriptRow.querySelector('.suite-points');
                 if (tierEl) item.tier = tierEl.value;
-                if (ptsEl)  item.points = Math.max(1, parseInt(ptsEl.value) || 1);
+                if (ptsEl)  item.points = Math.max(0, parseInt(ptsEl.value) || 0);
                 schedulePush();
                 return;
             }
@@ -631,7 +624,7 @@
                 var ptsElF  = familyRow.querySelector('.suite-family-points');
                 var nextDefaults = Object.assign({}, fitem.family.defaults || {});
                 if (tierElF) nextDefaults.tier = tierElF.value;
-                if (ptsElF)  nextDefaults.points = Math.max(1, parseInt(ptsElF.value) || 1);
+                if (ptsElF)  nextDefaults.points = Math.max(0, parseInt(ptsElF.value) || 0);
                 fitem.family = Object.assign({}, fitem.family, { defaults: nextDefaults });
                 schedulePush();
             }
@@ -825,7 +818,7 @@
                 id: script.filename,
                 script: script.filename,
                 tier: script.tier || (script.isTest ? 'public' : 'support'),
-                points: Math.max(1, parseInt(script.points) || 1),
+                points: Math.max(0, parseInt(script.points) || 1),
                 displayName: '',
                 dependsOn: [],
                 sectionID: targetSid

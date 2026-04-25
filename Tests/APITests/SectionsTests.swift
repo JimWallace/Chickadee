@@ -146,13 +146,9 @@ final class SectionsTests: XCTestCase {
             TestSuiteSection(id: "s2", name: "Two"),
         ]
         let outcomes = [row("a.py"), row("b.py"), row("c.py"), row("d.py")]
-        let map: [String: String] = [
-            "a.py": "s1",
-            "b.py": "s2",
-            "c.py": "s1",
-            // "d.py" intentionally absent → trailing Ungrouped bucket
-        ]
-        let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDByTestName: map)
+        // outcomes[i] → sectionIDPerOutcome[i].  d.py has nil → Ungrouped.
+        let perOutcome: [String?] = ["s1", "s2", "s1", nil]
+        let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
         XCTAssertEqual(grouped.count, 3)
         XCTAssertEqual(grouped[0].sectionName, "One")
         XCTAssertEqual(grouped[0].outcomes.map(\.testName), ["a.py", "c.py"])
@@ -164,7 +160,7 @@ final class SectionsTests: XCTestCase {
 
     func testGroupOutcomesLegacyManifestProducesSingleUnlabelledBucket() {
         let outcomes = [row("a.py"), row("b.py")]
-        let grouped = groupOutcomesBySection(outcomes, sections: [], sectionIDByTestName: [:])
+        let grouped = groupOutcomesBySection(outcomes, sections: [], sectionIDPerOutcome: [nil, nil])
         XCTAssertEqual(grouped.count, 1)
         XCTAssertNil(grouped[0].sectionName,
             "Legacy (no sections, no mapping) must render as one unlabelled bucket, identical to the pre-sections page.")
@@ -174,11 +170,11 @@ final class SectionsTests: XCTestCase {
     func testGroupOutcomesStaleSectionIDFallsThroughToUngrouped() {
         let sections = [TestSuiteSection(id: "s1", name: "One")]
         let outcomes = [row("a.py"), row("b.py")]
-        let map = [
-            "a.py": "s1",
-            "b.py": "s-gone",   // section no longer exists → bucket as ungrouped
-        ]
-        let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDByTestName: map)
+        // outcomes[1] points at a section that's been deleted from the
+        // manifest — should bucket as Ungrouped instead of crashing or
+        // silently misplacing the row.
+        let perOutcome: [String?] = ["s1", "s-gone"]
+        let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
         XCTAssertEqual(grouped.count, 2)
         XCTAssertEqual(grouped[0].sectionName, "One")
         XCTAssertEqual(grouped[0].outcomes.map(\.testName), ["a.py"])
@@ -189,9 +185,36 @@ final class SectionsTests: XCTestCase {
     func testGroupOutcomesEmptyOutcomesStillYieldsOneBucket() {
         // Template loop needs at least one bucket to iterate over;
         // helper returns a single empty bucket on empty input.
-        let grouped = groupOutcomesBySection([], sections: [], sectionIDByTestName: [:])
+        let grouped = groupOutcomesBySection([], sections: [], sectionIDPerOutcome: [])
         XCTAssertEqual(grouped.count, 1)
         XCTAssertNil(grouped[0].sectionName)
         XCTAssertTrue(grouped[0].outcomes.isEmpty)
+    }
+
+    /// Regression for the v0.4.105 bug: two pattern families in
+    /// different sections used the same case label ("Test 1" in both
+    /// `bmi` (Warm Up) and `age` (Warm Up II)).  The old name-keyed
+    /// `sectionIDByTestName` collapsed both onto whichever section
+    /// got iterated last, so bmi's "Test 1" outcome rendered under
+    /// Warm Up II.  Index correlation makes this impossible: the
+    /// first "Test 1" outcome lines up with bmi's manifest entry, the
+    /// second with age's, even though the displayName is identical.
+    func testGroupOutcomesDistinguishesIdenticalDisplayNamesAcrossSections() {
+        let sections = [
+            TestSuiteSection(id: "warmup",   name: "Warm Up"),
+            TestSuiteSection(id: "warmup2",  name: "Warm Up II"),
+        ]
+        let outcomes = [
+            row("Test 1"),  // bmi   (Warm Up)
+            row("Test 1"),  // age   (Warm Up II)
+        ]
+        let perOutcome: [String?] = ["warmup", "warmup2"]
+        let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
+        XCTAssertEqual(grouped.count, 2)
+        XCTAssertEqual(grouped[0].sectionName, "Warm Up")
+        XCTAssertEqual(grouped[0].outcomes.count, 1,
+            "First 'Test 1' outcome must stay in Warm Up — not silently moved by name collision.")
+        XCTAssertEqual(grouped[1].sectionName, "Warm Up II")
+        XCTAssertEqual(grouped[1].outcomes.count, 1)
     }
 }

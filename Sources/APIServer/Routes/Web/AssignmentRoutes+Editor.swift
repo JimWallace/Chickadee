@@ -408,7 +408,10 @@ extension AssignmentRoutes {
         try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
 
         let tier       = normalizeTier(body.tier, isTest: body.isTest)
-        let points     = max(1, body.points ?? 1)
+        // v0.4.105: allow 0-mark tests (e.g. function-existence guards
+        // that exist purely to short-circuit downstream tests, not to
+        // contribute to the grade).  Negative values still clamp to 0.
+        let points     = max(0, body.points ?? 1)
         let shouldTest = tier != "support"
 
         if shouldTest {
