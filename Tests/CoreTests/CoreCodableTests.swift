@@ -384,6 +384,48 @@ struct CoreCodableTests {
         #expect(decoded == check)
     }
 
+    @Test func notebookCheckFigureCountRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "ex4_two_charts",
+            kind: .figureCount,
+            tier: .release,
+            points: 1,
+            minFigures: 2
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.minFigures == 2)
+    }
+
+    @Test func notebookCheckCellContainsRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "ex5_groupby",
+            kind: .cellContains,
+            tier: .release,
+            points: 1,
+            containsText: ".groupby(",
+            regex: false,
+            mustDifferFrom: "df.groupby(\"sex\")[\"age\"].mean()"
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+    }
+
+    @Test func notebookCheckCellContainsRegexRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "ex5_groupby_regex",
+            kind: .cellContains,
+            containsText: #"\.groupby\(['""].+['""]\)"#,
+            regex: true
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.regex == true)
+    }
+
     @Test func notebookCheckEqualityLegacyManifestDecodesCleanly() throws {
         // Pre-equality manifests don't carry the new fields; decode must
         // leave them nil rather than throwing.

@@ -102,6 +102,30 @@
                         #endif
                     </td>
                 </tr>
+                <!-- Support files: data fixtures (CSVs, JSON, etc.) bundled
+                     with the assignment.  Anything in the zip that isn't a
+                     test script and isn't a notebook lands here.  v0.4.114+. -->
+                #for(supportFile in supportFileRows):
+                <tr data-support-file="#(supportFile.name)">
+                    <td><strong>Support file</strong></td>
+                    <td>
+                        <a href="#(supportFile.url)"><code>#(supportFile.name)</code></a>
+                    </td>
+                    <td class="time">
+                        <button class="btn action-btn action-danger support-file-delete-btn" type="button"
+                                data-filename="#(supportFile.name)">Remove</button>
+                    </td>
+                </tr>
+                #endfor
+                <tr>
+                    <td><strong>Add support file</strong></td>
+                    <td colspan="2">
+                        <button class="btn action-btn" type="button" id="add-support-file-btn"
+                                title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Upload file</button>
+                        <input type="file" id="support-file-upload-input" style="display:none" multiple>
+                        <span id="support-file-upload-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -193,6 +217,9 @@
                     <button type="button" class="btn action-btn section-add-family-btn"
                             data-section-id="#(sec.sectionID)"
                             style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
+                    <button type="button" class="btn action-btn section-add-check-btn"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
@@ -260,6 +287,9 @@
                 <button type="button" class="btn action-btn section-add-family-btn"
                         data-section-id="#(sec.sectionID)"
                         style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
+                <button type="button" class="btn action-btn section-add-check-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
             </div>
         #endif
             <table class="results-table" style="width:100%">
@@ -276,6 +306,222 @@
      JSON.parse in the client. -->
 <script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
 <script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
+<script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
+
+<!-- ── Notebook Check Editor Modal ──────────────────────────────────────
+     Sibling to the pattern-family modal below.  Kind picker reveals
+     kind-specific field cards.  Saves via PUT /instructor/:id/checks
+     (full-replace, same atomic semantics as PUT /families).  -->
+<div id="check-editor-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(720px,96vw);max-height:92vh;
+                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
+            <div id="check-editor-title" style="font-weight:600;flex:1">New Notebook Check</div>
+            <button class="btn-link" id="check-editor-close" type="button" aria-label="Close" title="Close"
+                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+        </div>
+
+        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
+            <input type="hidden" id="check-id">
+            <input type="hidden" id="check-section-id">
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Kind
+                    <select class="form-input" id="check-kind" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="data_frame_shape">DataFrame shape (rows × cols)</option>
+                        <option value="data_frame_columns">DataFrame columns (exact / superset)</option>
+                        <option value="data_frame_equality">DataFrame equality (CSV expected)</option>
+                        <option value="series_equality">Series equality (CSV expected)</option>
+                        <option value="numeric_array_close">Numeric array close (numpy.assert_allclose)</option>
+                        <option value="figure_count">Figure count (matplotlib)</option>
+                        <option value="cell_contains">Cell contains (substring / regex)</option>
+                    </select>
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Display name (shown to students)
+                    <input type="text" class="form-input" id="check-name" placeholder="(auto-generated when blank)"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Tier
+                    <select class="form-input" id="check-tier" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="public">Public (shown immediately)</option>
+                        <option value="release">Release (after deadline)</option>
+                        <option value="secret">Secret (never shown)</option>
+                    </select>
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Points
+                    <input type="number" class="form-input" id="check-points" min="0" step="1" value="1"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+            </div>
+
+            <!-- Kind-specific field cards.  Each is hidden by default; the
+                 kind dropdown's change handler shows exactly one. -->
+
+            <div class="check-fields" data-kind="data_frame_shape" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    DataFrame variable name on student_module
+                    <input type="text" class="form-input" id="check-shape-variable" placeholder="df"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                        Expected rows
+                        <input type="number" class="form-input" id="check-shape-rows" min="0" step="1"
+                               style="padding:.3rem .5rem;font-size:.85rem">
+                    </label>
+                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                        Expected columns
+                        <input type="number" class="form-input" id="check-shape-cols" min="0" step="1"
+                               style="padding:.3rem .5rem;font-size:.85rem">
+                    </label>
+                </div>
+            </div>
+
+            <div class="check-fields" data-kind="data_frame_columns" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    DataFrame variable name on student_module
+                    <input type="text" class="form-input" id="check-columns-variable" placeholder="df"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected columns (one per line, in order)
+                    <textarea class="form-input" id="check-columns-list" rows="6"
+                              placeholder="caseid&#10;age&#10;sex&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <fieldset style="border:1px solid var(--border,#ddd);padding:.4rem .6rem;border-radius:.3rem">
+                    <legend style="font-size:.78rem;color:var(--gray-600);padding:0 .3rem">Match mode</legend>
+                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem;margin-right:1rem">
+                        <input type="radio" name="check-columns-match" value="exact" checked> Exact (order matters)
+                    </label>
+                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem">
+                        <input type="radio" name="check-columns-match" value="superset"> Superset (extras allowed)
+                    </label>
+                </fieldset>
+            </div>
+
+            <div class="check-fields" data-kind="data_frame_equality" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    DataFrame variable name on student_module
+                    <input type="text" class="form-input" id="check-eq-variable" placeholder="df_grouped"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected DataFrame (CSV — header row first)
+                    <textarea class="form-input" id="check-eq-csv" rows="8"
+                              placeholder="age,sex&#10;58.0,M&#10;70.0,M&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <details>
+                    <summary style="font-size:.82rem;cursor:pointer;color:var(--gray-700)">Comparison toggles (advanced)</summary>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:.4rem;margin-top:.4rem">
+                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                            <input type="checkbox" id="check-eq-check-dtype" checked> Strict dtype
+                        </label>
+                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                            <input type="checkbox" id="check-eq-check-like"> Ignore column/row order
+                        </label>
+                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                            <input type="checkbox" id="check-eq-ignore-index" checked> Ignore index
+                        </label>
+                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                            rtol
+                            <input type="number" class="form-input" id="check-eq-rtol" step="any" placeholder="1e-5"
+                                   style="padding:.2rem .4rem;font-size:.78rem">
+                        </label>
+                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                            atol
+                            <input type="number" class="form-input" id="check-eq-atol" step="any" placeholder="1e-8"
+                                   style="padding:.2rem .4rem;font-size:.78rem">
+                        </label>
+                    </div>
+                </details>
+            </div>
+
+            <div class="check-fields" data-kind="series_equality" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Series variable name on student_module
+                    <input type="text" class="form-input" id="check-series-variable" placeholder="scores"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected Series (single-column CSV — header row first)
+                    <textarea class="form-input" id="check-series-csv" rows="8"
+                              placeholder="score&#10;0.95&#10;0.88&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+            </div>
+
+            <div class="check-fields" data-kind="numeric_array_close" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Array variable name on student_module
+                    <input type="text" class="form-input" id="check-array-variable" placeholder="y_pred"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected values (one number per line, or JSON list)
+                    <textarea class="form-input" id="check-array-values" rows="6"
+                              placeholder="1.0&#10;2.5&#10;3.7&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                        rtol
+                        <input type="number" class="form-input" id="check-array-rtol" step="any" placeholder="1e-7"
+                               style="padding:.2rem .4rem;font-size:.78rem">
+                    </label>
+                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                        atol
+                        <input type="number" class="form-input" id="check-array-atol" step="any" placeholder="0"
+                               style="padding:.2rem .4rem;font-size:.78rem">
+                    </label>
+                </div>
+            </div>
+
+            <div class="check-fields" data-kind="figure_count" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Minimum number of matplotlib figures the student must produce
+                    <input type="number" class="form-input" id="check-fig-min" min="0" step="1" value="1"
+                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
+                </label>
+                <p class="card-meta" style="font-size:.72rem;margin:0">
+                    Counted via <code>plt.get_fignums()</code> after the student's notebook is loaded.  Every <code>plt.figure</code>, <code>plt.subplots</code>, and <code>df.plot</code> contributes.
+                </p>
+            </div>
+
+            <div class="check-fields" data-kind="cell_contains" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Pattern the student's submission must contain in at least one code cell
+                    <input type="text" class="form-input" id="check-cc-text" placeholder=".groupby("
+                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
+                </label>
+                <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                    <input type="checkbox" id="check-cc-regex"> Interpret as Python regex
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Must differ from this reference (optional — for "not the same as the example" exercises)
+                    <textarea class="form-input" id="check-cc-must-differ" rows="3"
+                              placeholder='df.groupby("sex")["age"].mean()'
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+            </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
+            <button class="btn btn-primary" id="check-save-btn" type="button">Save</button>
+            <button class="btn" id="check-cancel-btn" type="button">Cancel</button>
+            <button class="btn action-btn action-danger" id="check-delete-btn" type="button" style="margin-left:auto;display:none">Delete</button>
+            <span id="check-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+        </div>
+    </div>
+</div>
 
 <!-- ── Pattern Family Editor Modal ──────────────────────────────────────── -->
 <div id="family-editor-overlay"
@@ -1227,6 +1473,167 @@ function checkUWDates(dateTimeValue, warningEl) {
         },
         onFamiliesChange: function (applied) {
             if (window.chickadeeSyncFamilies) window.chickadeeSyncFamilies(applied);
+        }
+    });
+})();
+</script>
+
+<!-- ── Notebook Check Editor JS ────────────────────────────────────────────
+     Wires Public/notebook-check-editor.js to the page.  The module owns
+     the modal's state; this block just initialises it with the seed
+     check list and hooks the per-section "+ Add Check" buttons.  -->
+<script src="/notebook-check-editor.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var assignmentID = '#(assignmentID)';
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var seed = document.getElementById('notebook-checks-seed');
+    var initialChecks = [];
+    if (seed) {
+        try { initialChecks = JSON.parse(seed.textContent || '[]') || []; }
+        catch (e) { initialChecks = []; }
+    }
+    var checkEditor = window.initNotebookCheckEditor({
+        assignmentID: assignmentID,
+        csrfToken: csrfToken,
+        initialChecks: initialChecks,
+        urls: {
+            putChecks: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/checks';
+            }
+        },
+        onChecksChange: function (applied) {
+            // Reload the page on save: the suite editor's authoritative
+            // state lives server-side, and a check save rewrites the
+            // manifest + zip, so refreshing is the simplest way to pick
+            // up the new generated rows.  When the suite-table grows
+            // native check-row support, this can be a hot-update like
+            // chickadeeSyncFamilies does for families.
+            window.location.reload();
+        }
+    });
+
+    // Wire the per-section "+ Add Check" buttons.  Body-level event
+    // delegation matches how the section-add-family-btn buttons are
+    // hooked up elsewhere in this page.
+    document.body.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('.section-add-check-btn');
+        if (!btn) return;
+        ev.preventDefault();
+        var sectionID = btn.getAttribute('data-section-id') || '';
+        checkEditor.open(null, sectionID || null);
+    });
+
+    // Edit existing check: any element with data-check-id triggers an
+    // edit-modal open.  The suite table doesn't currently emit these
+    // (v1 just shows generated rows verbatim), but instructors can
+    // also use the global "manage checks" hook below; future suite-
+    // table updates can plug in here without changing this module.
+    document.body.addEventListener('click', function (ev) {
+        var el = ev.target.closest('[data-edit-check-id]');
+        if (!el) return;
+        ev.preventDefault();
+        var id = el.getAttribute('data-edit-check-id');
+        checkEditor.open(id || null);
+    });
+
+    window.chickadeeNotebookCheckEditor = checkEditor;
+})();
+</script>
+
+<!-- ── Support file upload + delete ────────────────────────────────────────
+     The top file table lists `supportFileRows`; this wires the
+     "+ Upload file" button (FileReader → POST /scripts with tier=support
+     and isTest=false) and per-row Remove buttons (DELETE /scripts/:name).
+     Reload on success to pick up the rendered changes.  -->
+<script>
+(function () {
+    var assignmentID = '#(assignmentID)';
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    var addBtn  = document.getElementById('add-support-file-btn');
+    var input   = document.getElementById('support-file-upload-input');
+    var status  = document.getElementById('support-file-upload-status');
+
+    function setStatus(msg, isError) {
+        if (!status) return;
+        status.textContent = msg;
+        status.style.color = isError ? 'var(--red,#c0392b)' : 'var(--gray-500)';
+    }
+
+    function readAsText(file) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function () { resolve(reader.result); };
+            reader.onerror = function () { reject(new Error('Could not read ' + file.name)); };
+            reader.readAsText(file);
+        });
+    }
+
+    async function uploadSupportFile(file) {
+        var content = await readAsText(file);
+        var resp = await fetch('/instructor/' + encodeURIComponent(assignmentID) + '/scripts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                filename: file.name,
+                content: content,
+                tier: 'support',
+                isTest: false
+            })
+        });
+        if (!resp.ok) {
+            var errText = await resp.text();
+            throw new Error(resp.status + ': ' + errText);
+        }
+    }
+
+    if (addBtn && input) {
+        addBtn.addEventListener('click', function () { input.click(); });
+        input.addEventListener('change', async function () {
+            if (!input.files || input.files.length === 0) return;
+            setStatus('Uploading…', false);
+            try {
+                for (var i = 0; i < input.files.length; i++) {
+                    await uploadSupportFile(input.files[i]);
+                }
+                setStatus('Uploaded.', false);
+                window.location.reload();
+            } catch (e) {
+                setStatus('Upload failed — ' + e.message, true);
+            } finally {
+                input.value = '';
+            }
+        });
+    }
+
+    document.body.addEventListener('click', async function (ev) {
+        var btn = ev.target.closest('.support-file-delete-btn');
+        if (!btn) return;
+        var filename = btn.getAttribute('data-filename');
+        if (!filename) return;
+        if (!confirm('Remove support file "' + filename + '"? Students who already use it will fail until you re-add it.')) return;
+        try {
+            var resp = await fetch(
+                '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(filename),
+                {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-Token': csrfToken },
+                    credentials: 'same-origin'
+                }
+            );
+            if (!resp.ok) {
+                var errText = await resp.text();
+                alert('Remove failed: ' + resp.status + ' ' + errText);
+                return;
+            }
+            window.location.reload();
+        } catch (e) {
+            alert('Remove failed: ' + e.message);
         }
     });
 })();

@@ -42,7 +42,8 @@ struct GeneratedCheck: Equatable {
 func notebookCheckAllGeneratedFilenames(_ check: NotebookCheck) -> [String] {
     var out = [generatedCheckFilename(checkID: check.id, tier: check.tier)]
     switch check.kind {
-    case .dataFrameShape, .dataFrameColumns, .numericArrayClose:
+    case .dataFrameShape, .dataFrameColumns, .numericArrayClose,
+         .figureCount, .cellContains:
         break  // no sidecars
     case .dataFrameEquality, .seriesEquality:
         out.append(expectedCSVSidecarFilename(checkID: check.id))
@@ -77,6 +78,12 @@ func renderNotebookCheck(_ check: NotebookCheck) -> GeneratedCheck {
     case .numericArrayClose:
         source      = renderNumericArrayClose(check, specHash: hash)
         displayName = check.name ?? defaultNumericArrayCloseLabel(check)
+    case .figureCount:
+        source      = renderFigureCount(check, specHash: hash)
+        displayName = check.name ?? defaultFigureCountLabel(check)
+    case .cellContains:
+        source      = renderCellContains(check, specHash: hash)
+        displayName = check.name ?? defaultCellContainsLabel(check)
     }
 
     let script = GeneratedScript(
@@ -512,6 +519,140 @@ private func numericArrayLiteral(_ value: Double) -> String {
         return value > 0 ? #"float("inf")"# : #"float("-inf")"#
     }
     return "\(value)"
+}
+
+// MARK: - .figureCount
+
+private func defaultFigureCountLabel(_ check: NotebookCheck) -> String {
+    let n = check.minFigures ?? 1
+    return "Notebook produces ≥ \(n) figure\(n == 1 ? "" : "s")"
+}
+
+private func renderFigureCount(_ check: NotebookCheck, specHash: String) -> String {
+    let minFigures = check.minFigures ?? 1
+    let label      = check.name ?? defaultFigureCountLabel(check)
+
+    return """
+    # Test: \(label)
+    # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=figure_count spec_hash=\(specHash) — edit the check, not this file.
+
+    minimum = \(minFigures)
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception as ex:
+        errored(f"matplotlib is not available in the grading environment: {ex}")
+
+    # plt.get_fignums() reads matplotlib's global Figure registry.  By the
+    # time this script runs, test_runtime.py has already loaded the student
+    # module, which executed every plt.figure / df.plot / sns.* call the
+    # student wrote — those Figure objects are still in the registry even
+    # though plt.show was a no-op.
+    figure_count = len(plt.get_fignums())
+
+    if figure_count < minimum:
+        failed(
+            f"Student notebook produced too few figures.\\n"
+            f"  expected at least: {minimum}\\n"
+            f"  got:               {figure_count}\\n"
+        )
+
+    passed(f"Student notebook produced {figure_count} figure(s) (minimum {minimum})")
+    """
+}
+
+// MARK: - .cellContains
+
+private func defaultCellContainsLabel(_ check: NotebookCheck) -> String {
+    let needle = check.containsText ?? ""
+    let preview = needle.count > 30 ? String(needle.prefix(27)) + "..." : needle
+    return "Notebook contains `\(preview)`"
+}
+
+private func renderCellContains(_ check: NotebookCheck, specHash: String) -> String {
+    let needle = check.containsText ?? ""
+    let asRegex = check.regex ?? false
+    let mustDiffer = check.mustDifferFrom
+    let label = check.name ?? defaultCellContainsLabel(check)
+
+    let needleLiteral = "\"" + escapeForPythonStringLiteralCheck(needle) + "\""
+    let mustDifferLiteral: String
+    if let mustDiffer {
+        mustDifferLiteral = "\"" + escapeForPythonStringLiteralCheck(mustDiffer) + "\""
+    } else {
+        mustDifferLiteral = "None"
+    }
+
+    let matchExpr = asRegex
+        ? "re.search(needle, src) is not None"
+        : "needle in src"
+
+    return """
+    # Test: \(label)
+    # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=cell_contains spec_hash=\(specHash) — edit the check, not this file.
+
+    import json
+    import re
+    from pathlib import Path
+
+    needle = \(needleLiteral)
+    must_differ_from = \(mustDifferLiteral)
+
+    # SubmissionNormalizer (v0.4.114+) writes a copy of the original
+    # student notebook to `_submission.ipynb` next to the flattened .py
+    # student module, so source-level checks like this one have
+    # cell-by-cell visibility that the flattened .py loses.
+    notebook_path = Path("_submission.ipynb")
+    if not notebook_path.exists():
+        errored(
+            "Student notebook source not preserved — cannot run cell-content check.\\n"
+            "  expected: _submission.ipynb in workspace\\n"
+        )
+
+    try:
+        notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    except Exception as ex:
+        errored(f"Could not parse _submission.ipynb: {ex}")
+
+    code_cells = []
+    for cell in notebook.get("cells", []):
+        if cell.get("cell_type") != "code":
+            continue
+        src = cell.get("source", "")
+        if isinstance(src, list):
+            src = "".join(src)
+        code_cells.append(src)
+
+    matched_cells = []
+    for src in code_cells:
+        if \(matchExpr):
+            matched_cells.append(src)
+
+    if not matched_cells:
+        failed(
+            f"No code cell in the notebook matches `{needle}`.\\n"
+            f"  expected: at least one cell containing the pattern\\n"
+            f"  searched: {len(code_cells)} code cell(s)\\n"
+        )
+
+    if must_differ_from is not None:
+        # Whitespace-normalize both sides so trailing newlines / leading
+        # indentation differences don't mask a near-identical match.
+        def _normalize(s):
+            return " ".join(s.split())
+        ref = _normalize(must_differ_from)
+        only_identical = all(_normalize(src) == ref for src in matched_cells)
+        if only_identical:
+            failed(
+                f"Cell containing `{needle}` is identical to the example.\\n"
+                f"  expected: a cell that contains `{needle}` AND differs from the example\\n"
+                f"  hint:     write your own version, not a copy of the prompt's example\\n"
+            )
+
+    passed(f"Found {len(matched_cells)} cell(s) containing `{needle}`")
+    """
 }
 
 // MARK: - Helpers

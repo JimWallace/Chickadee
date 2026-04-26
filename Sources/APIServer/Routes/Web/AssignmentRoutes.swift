@@ -1602,6 +1602,15 @@ struct AssignmentRoutes: RouteCollection {
             let familyData = (try? enc.encode(props.patternFamilies)) ?? Data("[]".utf8)
             return String(data: familyData, encoding: .utf8) ?? "[]"
         }()
+        let notebookChecksJSON: String = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return "[]" }
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.sortedKeys]
+            let checkData = (try? enc.encode(props.notebookChecks)) ?? Data("[]".utf8)
+            return String(data: checkData, encoding: .utf8) ?? "[]"
+        }()
         let ctx = EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
@@ -1616,9 +1625,11 @@ struct AssignmentRoutes: RouteCollection {
             solutionNotebookEditURL: currentFiles.solutionFile != nil
                 ? "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
                 : nil,
-            existingSuiteRows: currentFiles.existingSuiteRows,
+            existingSuiteRows: currentFiles.existingSuiteRows.filter { $0.tier != "support" },
+            supportFileRows: currentFiles.existingSuiteRows.filter { $0.tier == "support" },
             familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
+            notebookChecksJSON: notebookChecksJSON,
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             notice: q?.notice,

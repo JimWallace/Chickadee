@@ -143,6 +143,13 @@ struct EditAssignmentContext: Encodable {
     let currentSolutionURL: String?
     let solutionNotebookEditURL: String?
     let existingSuiteRows: [EditableSuiteRow]
+    /// Files in the test setup zip that aren't tests (tier == "support").
+    /// Surface as their own group at the top of the page alongside the
+    /// starter and solution notebooks so instructors can see the data
+    /// fixtures bundled with the assignment without scrolling through
+    /// the test suite.  Same `EditableSuiteRow` shape as the test rows;
+    /// rendered with no tier/points columns.
+    let supportFileRows: [EditableSuiteRow]
     /// Pattern-family rows shown alongside raw scripts in the suite table.
     /// Generated `.py` entries they produce are filtered out of
     /// `existingSuiteRows` — the family row represents them collectively.
@@ -150,6 +157,11 @@ struct EditAssignmentContext: Encodable {
     /// Pattern families currently defined on this assignment, rendered as a
     /// JSON array.  The editor JS parses it to seed the in-page family list.
     let patternFamiliesJSON: String
+    /// Notebook checks currently defined on this assignment, rendered as a
+    /// JSON array.  The editor JS parses it to seed the in-page check list.
+    /// Empty `[]` for assignments with no checks (the common case until
+    /// instructors start using the new editor).
+    let notebookChecksJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  The editor JS
     /// parses it once at page load as the initial state of the unified
     /// items list; every subsequent mutation is a PUT whose response

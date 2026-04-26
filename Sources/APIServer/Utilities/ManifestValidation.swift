@@ -443,6 +443,33 @@ func validateNotebookChecks(
                 throw Abort(.unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (numeric_array_close): atol must be a non-negative finite number")
             }
+
+        case .figureCount:
+            guard let n = check.minFigures, n >= 0 else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (figure_count): minFigures must be a non-negative integer")
+            }
+
+        case .cellContains:
+            guard let needle = check.containsText, !needle.isEmpty else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (cell_contains): containsText must be a non-empty string")
+            }
+            // If regex, sanity-check that it compiles.  We can't run a
+            // Python regex from Swift, but a simple parser catches the
+            // most common typos (unbalanced parens, dangling `\`).
+            if check.regex == true {
+                let openParens = needle.filter { $0 == "(" }.count
+                let closeParens = needle.filter { $0 == ")" }.count
+                guard openParens == closeParens else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Notebook check '\(check.id)' (cell_contains): regex has unbalanced parentheses")
+                }
+                if needle.hasSuffix("\\") {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Notebook check '\(check.id)' (cell_contains): regex ends with a dangling backslash")
+                }
+            }
         }
     }
 

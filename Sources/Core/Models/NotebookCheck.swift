@@ -53,6 +53,20 @@ public enum NotebookCheckKind: String, Codable, Sendable, Equatable {
     /// tune tolerance; numpy's defaults (rtol=1e-7, atol=0) apply when
     /// absent.
     case numericArrayClose = "numeric_array_close"
+    /// Asserts that the student notebook produced at least
+    /// `minFigures` matplotlib figures by the end of execution.  Reads
+    /// matplotlib's global figure registry via `plt.get_fignums()`
+    /// after `test_runtime.py` has loaded the student module, so no
+    /// special instrumentation is needed.  Required field: `minFigures`.
+    case figureCount = "figure_count"
+    /// Asserts that the student's submission source contains a given
+    /// substring (or regex) in at least one code cell.  Optional
+    /// `mustDifferFrom` flags cases where the cell must NOT be
+    /// identical to a reference string (for "not the same as the
+    /// example" exercises).  Required field: `containsText`.
+    /// Implemented over the preserved `_submission.ipynb` written
+    /// to the workspace by `SubmissionNormalizer` (v0.4.114+).
+    case cellContains = "cell_contains"
 }
 
 /// How a `.dataFrameColumns` check compares the student's column list
@@ -149,6 +163,26 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// 2D arrays aren't supported in v1; if needed, add a parallel
     /// `expectedArray2D` field rather than overloading this one.
     public let expectedArray: [Double]?
+    /// `.figureCount`: minimum number of matplotlib figures the student
+    /// notebook must produce.  The renderer reads
+    /// `matplotlib.pyplot.get_fignums()` after the student module has
+    /// loaded; that registry tracks every Figure ever created (whether
+    /// via `plt.figure`, `df.plot`, `subplots()`, etc.) and survives
+    /// `plt.show` no-op stubs.
+    public let minFigures: Int?
+    /// `.cellContains`: substring (or regex) the student's submission
+    /// source must contain in at least one code cell.  Plain substring
+    /// matching is the default; set `regex` to true to interpret as a
+    /// Python regex.
+    public let containsText: String?
+    /// `.cellContains`: when true, `containsText` is interpreted as a
+    /// Python regex pattern (`re.search`).  Default false.
+    public let regex: Bool?
+    /// `.cellContains`: optional reference string the matched cell's
+    /// source must NOT equal (after whitespace normalization).  Used
+    /// for "not the same as the example" exercises where the
+    /// instructor's seeded code already contains the matching pattern.
+    public let mustDifferFrom: String?
 
     public init(id: String, name: String? = nil, kind: NotebookCheckKind,
                 tier: TestTier = .pub, points: Int = 1,
@@ -161,7 +195,11 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
                 checkDtype: Bool? = nil, checkLike: Bool? = nil,
                 rtol: Double? = nil, atol: Double? = nil,
                 ignoreIndex: Bool? = nil,
-                expectedArray: [Double]? = nil) {
+                expectedArray: [Double]? = nil,
+                minFigures: Int? = nil,
+                containsText: String? = nil,
+                regex: Bool? = nil,
+                mustDifferFrom: String? = nil) {
         self.id              = id
         self.name            = name
         self.kind            = kind
@@ -181,6 +219,10 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.atol            = atol
         self.ignoreIndex     = ignoreIndex
         self.expectedArray   = expectedArray
+        self.minFigures      = minFigures
+        self.containsText    = containsText
+        self.regex           = regex
+        self.mustDifferFrom  = mustDifferFrom
     }
 
     public init(from decoder: Decoder) throws {
@@ -204,5 +246,9 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         atol            = try c.decodeIfPresent(Double.self,    forKey: .atol)
         ignoreIndex     = try c.decodeIfPresent(Bool.self,      forKey: .ignoreIndex)
         expectedArray   = try c.decodeIfPresent([Double].self,  forKey: .expectedArray)
+        minFigures      = try c.decodeIfPresent(Int.self,       forKey: .minFigures)
+        containsText    = try c.decodeIfPresent(String.self,    forKey: .containsText)
+        regex           = try c.decodeIfPresent(Bool.self,      forKey: .regex)
+        mustDifferFrom  = try c.decodeIfPresent(String.self,    forKey: .mustDifferFrom)
     }
 }

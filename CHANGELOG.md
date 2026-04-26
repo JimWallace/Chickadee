@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.114] - 2026-04-26
+
+### Added
+
+- **Phase B notebook checks (continued).**  Two new kinds extend the
+  v0.4.113 set, neither requiring sidecar files:
+  - `.figureCount` — asserts the student notebook produced at least
+    `minFigures` matplotlib figures.  Reads `plt.get_fignums()` after
+    `test_runtime.py`'s `load_student_module()` runs the student code,
+    so every `plt.figure` / `plt.subplots` / `df.plot` contributes.
+    No new runtime infrastructure.
+  - `.cellContains` — asserts at least one code cell in the student's
+    submission contains a substring (or regex).  Optional
+    `mustDifferFrom` flags cells that match the pattern AND are
+    identical to a reference string ("not the same as the example"
+    exercises).  Reads cells from a preserved copy of the original
+    notebook.
+- **`SubmissionNormalizer` preserves the original `.ipynb`.**  When a
+  student uploads a notebook, the workspace now gets both the
+  flattened `.py` (used by `test_runtime.py`) **and** a copy of the
+  original at `_submission.ipynb` so cell-source-level checks
+  (`.cellContains` today, future markdown checks) have visibility into
+  the cell-by-cell structure that flattening discards.  Pure addition
+  — existing tests don't read it.
+- **NotebookCheck editor modal.**  Instructor assignment editor grows
+  a `+ Add Check` button per section, and a kind-aware modal with
+  field cards for all seven NotebookCheck kinds (`.dataFrameShape`,
+  `.dataFrameColumns`, `.dataFrameEquality`, `.seriesEquality`,
+  `.numericArrayClose`, `.figureCount`, `.cellContains`).  Saves via
+  the existing `PUT /instructor/:id/checks` endpoint.  Module lives at
+  `Public/notebook-check-editor.js`.
+- **Support files moved to the top file table.**  Files in the test
+  setup zip with `tier == "support"` (data fixtures, CSVs, JSON
+  helpers) now render in the same top-of-page table as the assignment
+  and solution notebooks instead of in the test suite below.  New
+  `+ Upload file` button writes through the existing `POST /scripts`
+  endpoint with `tier=support`; per-row `Remove` button uses the
+  existing `DELETE /scripts/:filename` endpoint.  Distinguishes
+  pedagogically meaningful tests from instructor-bundled data without
+  needing a new manifest field — the categorization was already in
+  the data, just rendered together.
+
 ## [0.4.113] - 2026-04-26
 
 ### Added

@@ -108,6 +108,17 @@ struct SubmissionNormalizer {
                     relativePath(of: destinationURL, under: workspaceDirectory)
                 )
 
+                // v0.4.114: also preserve the original notebook bytes
+                // alongside the flattened .py so source-level checks
+                // (`.cellContains`, future `.markdownPresent`) can read
+                // the cell-by-cell structure that flattening discards.
+                // Stable filename so generated tests can `Path("_submission.ipynb")`
+                // without knowing the original upload name.
+                let preservedNotebookURL = workspaceDirectory.appendingPathComponent("_submission.ipynb")
+                if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {
+                    try data.write(to: preservedNotebookURL, options: .atomic)
+                }
+
                 let ext = fileURL.pathExtension.lowercased()
                 if ext == "py" {
                     warnings.append(
