@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.118] - 2026-04-26
+
+### Added
+
+- **Phase C, part 2 — three more kinds.**  Completes the script-template absorption work flagged in v0.4.117 (NotebookCheck + PatternFamily as the primary authoring paths; scripts stay as the escape hatch and the templates remain for examples and starting points):
+  - `.exceptionExpected` PatternFamily kind — calls the function with each case's args and asserts a specific exception type was raised.  Per-case `expected` is a string naming the class (`"ValueError"`, `"TypeError"`, etc.).  Matches via class-name MRO walk so subclasses count as a match.  Useful for input-validation exercises.  Replaces the `py:exception` script template's logic structurally.
+  - `.performanceThreshold` PatternFamily kind — wraps the function call in `time.perf_counter()` and asserts the elapsed time stays below a per-case millisecond budget.  Per-case `expected` is a number (decoded as Double; integer JSON tolerated).  Single-trial for v1; multi-trial median can come later if jitter becomes a problem.  Replaces the `py:performance` script template.
+  - `.astStructure` NotebookCheck kind — parses every code cell of the preserved `_submission.ipynb` and asserts a list of structural predicates: `for_loop`, `while_loop`, `list_comprehension`, `lambda`, `recursion`, or `import:<module>`.  Negate any predicate with a leading `!` (`!for_loop` = "must NOT use a for-loop").  Replaces the `py:structural_check` script template.
+- **Auto-compute skips for non-scalar-expected kinds.**  `.returnTypeCheck` / `.exceptionExpected` / `.performanceThreshold` all want the instructor to type a class name or millisecond budget, not the function's return value, so the auto-compute path no-ops for these kinds.  Same skip behaviour as `.variableEquality`.
+
 ## [0.4.117] - 2026-04-26
 
 ### Added

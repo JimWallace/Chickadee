@@ -38,6 +38,20 @@ public enum PatternKind: String, Codable, Sendable, Equatable {
     /// Useful as a precondition before correctness tests, and as a
     /// teaching tool for type-aware assignments.
     case returnTypeCheck = "return_type_check"
+    /// Calls the function and asserts that it raises a specific
+    /// exception type for each case's args.  Per-case `expected` is a
+    /// string naming the exception class (`"ValueError"`, `"TypeError"`,
+    /// `"KeyError"`, etc., or any user-defined exception class).
+    /// Useful for input-validation exercises: "this function must raise
+    /// `ValueError` when given a negative input."
+    case exceptionExpected = "exception_expected"
+    /// Calls the function and asserts the call completed within a
+    /// max-millisecond budget.  Per-case `expected` is a number
+    /// (decoded as Double) for the threshold; `args` are the inputs.
+    /// Uses `time.perf_counter()` around the call.  Single-trial
+    /// for v1; if jitter becomes a problem, we add a multi-trial
+    /// median in a future kind.
+    case performanceThreshold = "performance_threshold"
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,

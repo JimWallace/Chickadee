@@ -76,6 +76,15 @@ public enum NotebookCheckKind: String, Codable, Sendable, Equatable {
     /// this as a cheap precondition for downstream tests so a missing
     /// function fails clearly instead of erroring every dependent.
     case functionExists = "function_exists"
+    /// Asserts that the student notebook source has (or doesn't have)
+    /// specified AST constructs: `for_loop`, `while_loop`,
+    /// `list_comprehension`, `lambda`, `recursion`, or
+    /// `import:<module>` to require an import.  Negate any predicate
+    /// with a leading `!` (e.g. `!for_loop` for "must NOT use a
+    /// for-loop").  Reads the preserved `_submission.ipynb`.  v1
+    /// supports a fixed predicate vocabulary; instructors can add
+    /// raw cell-content checks via `.cellContains` for anything else.
+    case astStructure = "ast_structure"
 }
 
 /// How a `.dataFrameColumns` check compares the student's column list
@@ -196,6 +205,13 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// student function's positional parameter count must equal this
     /// value.  When nil, only existence + callability is checked.
     public let expectedArity: Int?
+    /// `.astStructure`: list of structural predicates the student's
+    /// code must satisfy.  Each entry is a plain predicate (e.g.
+    /// `"for_loop"`) or a negated predicate (e.g. `"!for_loop"`).
+    /// Supported: `for_loop`, `while_loop`, `list_comprehension`,
+    /// `lambda`, `recursion`, and `import:<module>`.  All listed
+    /// predicates must hold for the test to pass.
+    public let requiredConstructs: [String]?
 
     public init(id: String, name: String? = nil, kind: NotebookCheckKind,
                 tier: TestTier = .pub, points: Int = 1,
@@ -213,7 +229,8 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
                 containsText: String? = nil,
                 regex: Bool? = nil,
                 mustDifferFrom: String? = nil,
-                expectedArity: Int? = nil) {
+                expectedArity: Int? = nil,
+                requiredConstructs: [String]? = nil) {
         self.id              = id
         self.name            = name
         self.kind            = kind
@@ -238,6 +255,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.regex           = regex
         self.mustDifferFrom  = mustDifferFrom
         self.expectedArity   = expectedArity
+        self.requiredConstructs = requiredConstructs
     }
 
     public init(from decoder: Decoder) throws {
@@ -266,5 +284,6 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         regex           = try c.decodeIfPresent(Bool.self,      forKey: .regex)
         mustDifferFrom  = try c.decodeIfPresent(String.self,    forKey: .mustDifferFrom)
         expectedArity   = try c.decodeIfPresent(Int.self,       forKey: .expectedArity)
+        requiredConstructs = try c.decodeIfPresent([String].self, forKey: .requiredConstructs)
     }
 }

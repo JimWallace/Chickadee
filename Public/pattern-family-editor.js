@@ -1565,6 +1565,11 @@
             // write the value, which is wrong.  Instructor types the
             // type name directly.
             if (kindInput && kindInput.value === 'return_type_check') return;
+            // Exception-expected and performance-threshold are also
+            // instructor-typed (an exception class name and a
+            // millisecond budget respectively); skip auto-compute.
+            if (kindInput && kindInput.value === 'exception_expected') return;
+            if (kindInput && kindInput.value === 'performance_threshold') return;
             var fnName = (fnInput.value || '').trim();
             if (!fnName) return;
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);

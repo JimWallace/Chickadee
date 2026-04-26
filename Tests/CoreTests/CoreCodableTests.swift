@@ -474,6 +474,63 @@ struct CoreCodableTests {
         #expect(decoded.kind == .returnTypeCheck)
     }
 
+    @Test func patternFamilyExceptionExpectedRoundTrip() throws {
+        let c = PatternCase(
+            key: "01",
+            label: "negative input raises ValueError",
+            args: [.int(-1)],
+            expected: .string("ValueError")
+        )
+        let family = PatternFamily(
+            id: "neg_input_raises",
+            name: "Negative input raises",
+            kind: .exceptionExpected,
+            functionName: "compute",
+            paramNames: ["x"],
+            cases: [c]
+        )
+        let data = try encoder.encode(family)
+        let decoded = try decoder.decode(PatternFamily.self, from: data)
+        #expect(decoded == family)
+        #expect(decoded.kind == .exceptionExpected)
+    }
+
+    @Test func patternFamilyPerformanceThresholdRoundTrip() throws {
+        // Use a fractional millisecond threshold so JSON round-trips it
+        // as `.double` rather than collapsing to `.int`.  The renderer
+        // accepts both shapes; the validator rejects only nil/zero/inf.
+        let c = PatternCase(
+            key: "01",
+            label: "100k items finish under 200.5 ms",
+            args: [.int(100_000)],
+            expected: .double(200.5)
+        )
+        let family = PatternFamily(
+            id: "perf_100k",
+            name: "100k items perf",
+            kind: .performanceThreshold,
+            functionName: "process",
+            paramNames: ["n"],
+            cases: [c]
+        )
+        let data = try encoder.encode(family)
+        let decoded = try decoder.decode(PatternFamily.self, from: data)
+        #expect(decoded == family)
+        #expect(decoded.kind == .performanceThreshold)
+    }
+
+    @Test func notebookCheckASTStructureRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "no_for_loops",
+            kind: .astStructure,
+            requiredConstructs: ["list_comprehension", "!for_loop", "import:pandas"]
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.requiredConstructs?.count == 3)
+    }
+
     @Test func notebookCheckEqualityLegacyManifestDecodesCleanly() throws {
         // Pre-equality manifests don't carry the new fields; decode must
         // leave them nil rather than throwing.

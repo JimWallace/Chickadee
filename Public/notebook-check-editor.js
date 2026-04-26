@@ -163,6 +163,7 @@
             $('check-cc-must-differ').value = '';
             $('check-fexists-name').value = '';
             $('check-fexists-arity').value = '';
+            $('check-ast-constructs').value = '';
             showFieldsForKind('data_frame_shape');
         }
 
@@ -207,6 +208,8 @@
             } else if (c.kind === 'function_exists') {
                 $('check-fexists-name').value = c.variable || '';
                 $('check-fexists-arity').value = (c.expectedArity != null) ? c.expectedArity : '';
+            } else if (c.kind === 'ast_structure') {
+                $('check-ast-constructs').value = (c.requiredConstructs || []).join('\n');
             }
             showFieldsForKind(c.kind);
         }
@@ -297,6 +300,11 @@
                     var arity = parseInt(arityRaw, 10);
                     if (!isNaN(arity)) c.expectedArity = arity;
                 }
+            } else if (kind === 'ast_structure') {
+                c.requiredConstructs = $('check-ast-constructs').value
+                    .split('\n')
+                    .map(function (s) { return s.trim(); })
+                    .filter(function (s) { return s.length > 0; });
             }
             return c;
         }

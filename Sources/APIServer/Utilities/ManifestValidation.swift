@@ -224,6 +224,32 @@ func validatePatternFamilies(
                     throw Abort(.unprocessableEntity,
                         reason: "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")")
                 }
+            case .exceptionExpected:
+                if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                }
+                guard case .string(let exceptionType) = c.expected,
+                      !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' expected must be a non-empty string naming the exception class (e.g. \"ValueError\")")
+                }
+            case .performanceThreshold:
+                if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                }
+                let threshold: Double? = {
+                    switch c.expected {
+                    case .double(let d): return d
+                    case .int(let i):    return Double(i)
+                    default:             return nil
+                    }
+                }()
+                guard let t = threshold, t.isFinite, t > 0 else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)")
+                }
             }
         }
 
@@ -493,6 +519,32 @@ func validateNotebookChecks(
             if let arity = check.expectedArity, arity < 0 {
                 throw Abort(.unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (function_exists): expectedArity must be non-negative")
+            }
+
+        case .astStructure:
+            guard let constructs = check.requiredConstructs, !constructs.isEmpty else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (ast_structure): requiredConstructs must be a non-empty list")
+            }
+            let knownPredicates: Set<String> = [
+                "for_loop", "while_loop", "list_comprehension", "lambda", "recursion"
+            ]
+            for raw in constructs {
+                let predicate = raw.hasPrefix("!") ? String(raw.dropFirst()) : raw
+                if predicate.hasPrefix("import:") {
+                    let mod = String(predicate.dropFirst("import:".count))
+                    guard !mod.isEmpty,
+                          mod.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." })
+                    else {
+                        throw Abort(.unprocessableEntity,
+                            reason: "Notebook check '\(check.id)' (ast_structure): import predicate '\(raw)' has an invalid module name")
+                    }
+                    continue
+                }
+                guard knownPredicates.contains(predicate) else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Notebook check '\(check.id)' (ast_structure): unknown predicate '\(raw)' — supported: for_loop, while_loop, list_comprehension, lambda, recursion, import:<module>, optional leading `!` for negation")
+                }
             }
         }
     }
