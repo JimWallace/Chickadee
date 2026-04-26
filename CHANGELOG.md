@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.115] - 2026-04-26
+
+### Fixed
+
+- **Notebook check save returned 403 "No CSRF token provided".**  The Vapor CSRF library does case-sensitive intersection against lowercase keys (`x-csrf-token`); v0.4.114's editor JS sent `X-CSRF-Token` (capitalized).  Every other JS module in the codebase already used lowercase — this was a v0.4.114 regression isolated to the new check editor and the new support-file upload/delete handlers.  Fixed in `Public/notebook-check-editor.js` and the inline support-file JS in `assignment-edit.leaf`.
+
+### Changed
+
+- **NotebookCheck modal no longer edits tier or points.**  Per the same interaction model as scripts and pattern families, tier and points are edited inline on the test-suite row.  New checks default to `public` / 1 point; existing checks preserve their tier/points across modal saves so inline edits aren't clobbered.  Modal markup loses the tier/points inputs and gains a one-line hint.
+
 ## [0.4.114] - 2026-04-26
 
 ### Added

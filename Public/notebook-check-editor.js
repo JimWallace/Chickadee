@@ -59,8 +59,6 @@
         var sectionIDInput = $('check-section-id');
         var nameInput   = $('check-name');
         var kindSelect  = $('check-kind');
-        var tierSelect  = $('check-tier');
-        var pointsInput = $('check-points');
         var saveBtn   = $('check-save-btn');
         var cancelBtn = $('check-cancel-btn');
         var deleteBtn = $('check-delete-btn');
@@ -138,8 +136,6 @@
             idInput.value = '';
             nameInput.value = '';
             kindSelect.value = 'data_frame_shape';
-            tierSelect.value = 'public';
-            pointsInput.value = '1';
             // Clear all kind-specific fields
             $('check-shape-variable').value = '';
             $('check-shape-rows').value = '';
@@ -172,8 +168,6 @@
             idInput.value = c.id || '';
             nameInput.value = c.name || '';
             kindSelect.value = c.kind || 'data_frame_shape';
-            tierSelect.value = c.tier || 'public';
-            pointsInput.value = (c.points != null) ? String(c.points) : '1';
 
             if (c.kind === 'data_frame_shape') {
                 $('check-shape-variable').value = c.variable || '';
@@ -220,12 +214,21 @@
             var id = rawID || generateID(kind, rawName);
             var sectionID = sectionIDInput.value || null;
 
+            // Preserve tier / points / dependsOn from the existing check
+            // when editing, so inline edits on the suite-table row aren't
+            // clobbered by the modal save.  New checks default to
+            // public / 1 / no deps; the instructor tunes from the inline
+            // row afterwards (same model as scripts and pattern families).
+            var existing = editingID
+                ? checksState.find(function (c) { return c.id === editingID; })
+                : null;
+
             var c = {
                 id: id,
                 kind: kind,
-                tier: tierSelect.value,
-                points: parseInt(pointsInput.value, 10) || 1,
-                dependsOn: []
+                tier: (existing && existing.tier) || 'public',
+                points: (existing && existing.points != null) ? existing.points : 1,
+                dependsOn: (existing && existing.dependsOn) || []
             };
             if (rawName) c.name = rawName;
             if (sectionID) c.sectionID = sectionID;
@@ -333,7 +336,7 @@
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
+                        'x-csrf-token': csrfToken
                     },
                     credentials: 'same-origin',
                     body: JSON.stringify(nextChecks)
@@ -367,7 +370,7 @@
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
+                        'x-csrf-token': csrfToken
                     },
                     credentials: 'same-origin',
                     body: JSON.stringify(nextChecks)

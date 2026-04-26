@@ -345,21 +345,9 @@
                            style="padding:.3rem .5rem;font-size:.85rem">
                 </label>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Tier
-                    <select class="form-input" id="check-tier" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="public">Public (shown immediately)</option>
-                        <option value="release">Release (after deadline)</option>
-                        <option value="secret">Secret (never shown)</option>
-                    </select>
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Points
-                    <input type="number" class="form-input" id="check-points" min="0" step="1" value="1"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
+            <p class="card-meta" style="font-size:.72rem;margin:.1rem 0 0">
+                Tier (visibility) and points are edited inline on the test suite row — same as scripts and pattern families.  New checks default to <code>public</code> and 1 point; tweak after saving.
+            </p>
 
             <!-- Kind-specific field cards.  Each is hidden by default; the
                  kind dropdown's change handler shows exactly one. -->
@@ -1576,7 +1564,7 @@ function checkUWDates(dateTimeValue, warningEl) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
+                'x-csrf-token': csrfToken
             },
             credentials: 'same-origin',
             body: JSON.stringify({
@@ -1622,7 +1610,7 @@ function checkUWDates(dateTimeValue, warningEl) {
                 '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(filename),
                 {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-Token': csrfToken },
+                    headers: { 'x-csrf-token': csrfToken },
                     credentials: 'same-origin'
                 }
             );
