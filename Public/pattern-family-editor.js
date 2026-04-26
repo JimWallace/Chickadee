@@ -604,6 +604,28 @@
                     (typeof v === 'string') ? 'string' : 'scalar';
                 return { ok: true, value: v, kind: kind, strict: true };
             } catch (_) {
+                // v0.4.112: Python-repr fallback for variables (matches
+                // the same conversion in coerceByType).  Pasting a
+                // dict like `{'address': {'city': 'Waterloo'}}` into a
+                // section's input value should Just Work.
+                if (trimmed.indexOf('"') === -1) {
+                    var pyish = trimmed
+                        .replace(/'/g, '"')
+                        .replace(/\bTrue\b/g, 'true')
+                        .replace(/\bFalse\b/g, 'false')
+                        .replace(/\bNone\b/g, 'null');
+                    try {
+                        var v2 = JSON.parse(pyish);
+                        var k2 =
+                            Array.isArray(v2) ? 'list' :
+                            (v2 === null) ? 'null' :
+                            (typeof v2 === 'object') ? 'dict' :
+                            (typeof v2 === 'boolean') ? 'bool' :
+                            (typeof v2 === 'number') ? 'number' :
+                            (typeof v2 === 'string') ? 'string' : 'scalar';
+                        return { ok: true, value: v2, kind: k2, strict: false };
+                    } catch (_) { /* fall through */ }
+                }
                 return { ok: true, value: String(raw), kind: 'string', strict: false };
             }
         }
@@ -936,6 +958,21 @@
                     try {
                         return JSON.parse(trimmed);
                     } catch (_) {
+                        // v0.4.112: Python repr (single-quoted strings,
+                        // True/False/None) is a common copy-paste source —
+                        // try a conservative single-quote → double-quote
+                        // swap (only when no double quotes already exist
+                        // so we don't break a string that contains an
+                        // apostrophe-inside-double-quotes mix) plus
+                        // True/False/None token replacement.
+                        if (trimmed.indexOf('"') === -1) {
+                            var pyish = trimmed
+                                .replace(/'/g, '"')
+                                .replace(/\bTrue\b/g, 'true')
+                                .replace(/\bFalse\b/g, 'false')
+                                .replace(/\bNone\b/g, 'null');
+                            try { return JSON.parse(pyish); } catch (_) { /* fall through */ }
+                        }
                         return parseTypedCellValue(raw);
                     }
                 }
@@ -1581,14 +1618,22 @@
             callSolution(fnName, args).then(function (res) {
                 if (!row.parentElement) return;
                 if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
-                expectedEl.placeholder = 'e.g. underweight';
                 if (res.ok) {
+                    expectedEl.placeholder = 'e.g. underweight';
                     expectedEl.value = renderTypedCellValue(res.value);
                     expectedEl.dataset.autoComputed = '1';
                     expectedEl.title = 'Auto-computed from solution notebook';
                     expectedEl.style.color = 'var(--gray-500)';
+                    expectedEl.style.borderColor = '';
                 } else {
+                    // v0.4.112: surface the failure in the cell itself
+                    // (not just the title tooltip) — typical user
+                    // doesn't think to hover.  "computing…" → "⚠ <err>"
+                    // is enough to flag malformed input / undefined
+                    // function / etc.
+                    expectedEl.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
                     expectedEl.title = 'Solution raised: ' + res.error;
+                    expectedEl.style.borderColor = 'var(--red,#c00)';
                 }
             });
         }
