@@ -214,6 +214,16 @@ func validatePatternFamilies(
                     throw Abort(.unprocessableEntity,
                         reason: "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
                 }
+            case .returnTypeCheck:
+                if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                }
+                guard case .string(let expectedType) = c.expected,
+                      !expectedType.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")")
+                }
             }
         }
 
@@ -469,6 +479,20 @@ func validateNotebookChecks(
                     throw Abort(.unprocessableEntity,
                         reason: "Notebook check '\(check.id)' (cell_contains): regex ends with a dangling backslash")
                 }
+            }
+
+        case .functionExists:
+            guard let name = check.variable, !name.isEmpty else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (function_exists): function name (variable) is required")
+            }
+            guard isValidPythonIdentifier(name) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (function_exists): function name '\(name)' is not a valid Python identifier")
+            }
+            if let arity = check.expectedArity, arity < 0 {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (function_exists): expectedArity must be non-negative")
             }
         }
     }

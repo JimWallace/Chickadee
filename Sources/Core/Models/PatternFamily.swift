@@ -29,6 +29,15 @@ public enum PatternKind: String, Codable, Sendable, Equatable {
     /// doesn't call a function — each case's `args` holds a single string
     /// (the variable name), and `functionName` / `paramNames` are ignored.
     case variableEquality = "variable_equality"
+    /// Calls the function with each case's args and asserts the result
+    /// is an instance of the expected type.  Per-case `expected` holds
+    /// a string naming the type — Python builtins (`"int"`, `"list"`,
+    /// `"dict"`, `"str"`, `"bool"`, `"float"`, `"tuple"`, `"set"`,
+    /// `"NoneType"`) plus a few common library types pandas/numpy
+    /// instructors reach for (`"DataFrame"`, `"Series"`, `"ndarray"`).
+    /// Useful as a precondition before correctness tests, and as a
+    /// teaching tool for type-aware assignments.
+    case returnTypeCheck = "return_type_check"
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,

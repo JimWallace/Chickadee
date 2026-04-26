@@ -43,7 +43,7 @@ func notebookCheckAllGeneratedFilenames(_ check: NotebookCheck) -> [String] {
     var out = [generatedCheckFilename(checkID: check.id, tier: check.tier)]
     switch check.kind {
     case .dataFrameShape, .dataFrameColumns, .numericArrayClose,
-         .figureCount, .cellContains:
+         .figureCount, .cellContains, .functionExists:
         break  // no sidecars
     case .dataFrameEquality, .seriesEquality:
         out.append(expectedCSVSidecarFilename(checkID: check.id))
@@ -84,6 +84,9 @@ func renderNotebookCheck(_ check: NotebookCheck) -> GeneratedCheck {
     case .cellContains:
         source      = renderCellContains(check, specHash: hash)
         displayName = check.name ?? defaultCellContainsLabel(check)
+    case .functionExists:
+        source      = renderFunctionExists(check, specHash: hash)
+        displayName = check.name ?? defaultFunctionExistsLabel(check)
     }
 
     let script = GeneratedScript(
@@ -652,6 +655,92 @@ private func renderCellContains(_ check: NotebookCheck, specHash: String) -> Str
             )
 
     passed(f"Found {len(matched_cells)} cell(s) containing `{needle}`")
+    """
+}
+
+// MARK: - .functionExists
+
+private func defaultFunctionExistsLabel(_ check: NotebookCheck) -> String {
+    let name = check.variable ?? "function"
+    if let arity = check.expectedArity {
+        return "`\(name)` is defined and takes \(arity) arg\(arity == 1 ? "" : "s")"
+    }
+    return "`\(name)` is defined and callable"
+}
+
+private func renderFunctionExists(_ check: NotebookCheck, specHash: String) -> String {
+    let name  = check.variable ?? "function"
+    let label = check.name ?? defaultFunctionExistsLabel(check)
+    let nameLiteral = "\"" + escapeForPythonStringLiteralCheck(name) + "\""
+
+    let arityCheck: String
+    if let arity = check.expectedArity {
+        arityCheck = """
+        # Compare against required + optional positional params (with
+        # leniency for *args).  Mirrors test_runtime.py's _require_num_args.
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            sig = None
+        if sig is not None:
+            positional_kinds = {
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            }
+            params = [p for p in sig.parameters.values() if p.kind in positional_kinds]
+            required = sum(1 for p in params if p.default is inspect.Parameter.empty)
+            total = len(params)
+            accepts_varargs = any(
+                p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()
+            )
+            expected_arity = \(arity)
+            if accepts_varargs:
+                if expected_arity < required:
+                    failed(
+                        f"`{name}` requires at least {required} positional argument(s) "
+                        f"but the test expected it to take {expected_arity}."
+                    )
+            elif not (required <= expected_arity <= total):
+                if required == total:
+                    failed(
+                        f"`{name}` should take {expected_arity} argument(s), "
+                        f"but it takes {total}."
+                    )
+                else:
+                    failed(
+                        f"`{name}` should take {expected_arity} argument(s), "
+                        f"but it takes {required}-{total}."
+                    )
+        """
+    } else {
+        arityCheck = "# (no arity check; existence + callability only)"
+    }
+
+    return """
+    # Test: \(label)
+    # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=function_exists spec_hash=\(specHash) — edit the check, not this file.
+
+    import inspect
+
+    name = \(nameLiteral)
+
+    _MISSING = object()
+    fn = getattr(student_module, name, _MISSING)
+    if fn is _MISSING:
+        failed(
+            f"`{name}` is not defined in the student notebook.\\n"
+            f"  expected: a callable named `{name}`\\n"
+        )
+
+    if not callable(fn):
+        failed(
+            f"`{name}` is defined but not callable.\\n"
+            f"  got: {type(fn).__name__}\\n"
+        )
+
+    \(arityCheck)
+
+    passed(f"`{name}` is defined and callable")
     """
 }
 

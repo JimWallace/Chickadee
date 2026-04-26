@@ -337,6 +337,7 @@
                         <option value="numeric_array_close">Numeric array close (numpy.assert_allclose)</option>
                         <option value="figure_count">Figure count (matplotlib)</option>
                         <option value="cell_contains">Cell contains (substring / regex)</option>
+                        <option value="function_exists">Function exists (callable, optional arity)</option>
                     </select>
                 </label>
                 <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
@@ -500,6 +501,23 @@
                               style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
                 </label>
             </div>
+
+            <div class="check-fields" data-kind="function_exists" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Function name (must be defined in the student notebook and callable)
+                    <input type="text" class="form-input" id="check-fexists-name" placeholder="classify_bmi"
+                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Required arity (number of positional parameters — leave blank to skip)
+                    <input type="number" class="form-input" id="check-fexists-arity" min="0" step="1"
+                           placeholder="(any)"
+                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
+                </label>
+                <p class="card-meta" style="font-size:.72rem;margin:0">
+                    Useful as a precondition before correctness tests so a missing function fails clearly instead of erroring every dependent test.
+                </p>
+            </div>
         </div>
 
         <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
@@ -544,6 +562,7 @@
                         <option value="boundary_equality">Exact equality (== comparison)</option>
                         <option value="approximate_equality">Approximate equality (float tolerance)</option>
                         <option value="variable_equality">Variable equality (module-level variable)</option>
+                        <option value="return_type_check">Return type check (isinstance / class name)</option>
                     </select>
                 </label>
                 <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">

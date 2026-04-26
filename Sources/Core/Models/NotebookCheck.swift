@@ -67,6 +67,15 @@ public enum NotebookCheckKind: String, Codable, Sendable, Equatable {
     /// Implemented over the preserved `_submission.ipynb` written
     /// to the workspace by `SubmissionNormalizer` (v0.4.114+).
     case cellContains = "cell_contains"
+    /// Asserts that a named function exists on the student module
+    /// and is callable, optionally with a specific arity (number of
+    /// positional parameters).  Required field: `variable` (the
+    /// function name).  Optional `expectedArity` enforces a precise
+    /// parameter count; varargs (`*args`) match any arity if expected
+    /// is at least the number of required positional params.  Use
+    /// this as a cheap precondition for downstream tests so a missing
+    /// function fails clearly instead of erroring every dependent.
+    case functionExists = "function_exists"
 }
 
 /// How a `.dataFrameColumns` check compares the student's column list
@@ -183,6 +192,10 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// for "not the same as the example" exercises where the
     /// instructor's seeded code already contains the matching pattern.
     public let mustDifferFrom: String?
+    /// `.functionExists`: optional exact-arity check.  When set, the
+    /// student function's positional parameter count must equal this
+    /// value.  When nil, only existence + callability is checked.
+    public let expectedArity: Int?
 
     public init(id: String, name: String? = nil, kind: NotebookCheckKind,
                 tier: TestTier = .pub, points: Int = 1,
@@ -199,7 +212,8 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
                 minFigures: Int? = nil,
                 containsText: String? = nil,
                 regex: Bool? = nil,
-                mustDifferFrom: String? = nil) {
+                mustDifferFrom: String? = nil,
+                expectedArity: Int? = nil) {
         self.id              = id
         self.name            = name
         self.kind            = kind
@@ -223,6 +237,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.containsText    = containsText
         self.regex           = regex
         self.mustDifferFrom  = mustDifferFrom
+        self.expectedArity   = expectedArity
     }
 
     public init(from decoder: Decoder) throws {
@@ -250,5 +265,6 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         containsText    = try c.decodeIfPresent(String.self,    forKey: .containsText)
         regex           = try c.decodeIfPresent(Bool.self,      forKey: .regex)
         mustDifferFrom  = try c.decodeIfPresent(String.self,    forKey: .mustDifferFrom)
+        expectedArity   = try c.decodeIfPresent(Int.self,       forKey: .expectedArity)
     }
 }

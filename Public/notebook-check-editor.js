@@ -161,6 +161,8 @@
             $('check-cc-text').value = '';
             $('check-cc-regex').checked = false;
             $('check-cc-must-differ').value = '';
+            $('check-fexists-name').value = '';
+            $('check-fexists-arity').value = '';
             showFieldsForKind('data_frame_shape');
         }
 
@@ -202,6 +204,9 @@
                 $('check-cc-text').value = c.containsText || '';
                 $('check-cc-regex').checked = (c.regex === true);
                 $('check-cc-must-differ').value = c.mustDifferFrom || '';
+            } else if (c.kind === 'function_exists') {
+                $('check-fexists-name').value = c.variable || '';
+                $('check-fexists-arity').value = (c.expectedArity != null) ? c.expectedArity : '';
             }
             showFieldsForKind(c.kind);
         }
@@ -285,6 +290,13 @@
                 c.regex = $('check-cc-regex').checked;
                 var mustDiffer = $('check-cc-must-differ').value;
                 if (mustDiffer.trim()) c.mustDifferFrom = mustDiffer;
+            } else if (kind === 'function_exists') {
+                c.variable = $('check-fexists-name').value.trim();
+                var arityRaw = $('check-fexists-arity').value.trim();
+                if (arityRaw !== '') {
+                    var arity = parseInt(arityRaw, 10);
+                    if (!isNaN(arity)) c.expectedArity = arity;
+                }
             }
             return c;
         }

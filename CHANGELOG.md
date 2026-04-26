@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.117] - 2026-04-26
+
+### Added
+
+- **Phase C, part 1 — two new kinds + a student-side download endpoint.**
+  Per the v0.4.114 follow-up direction (NotebookCheck + PatternFamily as the primary authoring paths, scripts as the escape hatch):
+  - `.functionExists` NotebookCheck — asserts a named function is defined on `student_module` and is callable, with optional exact-arity check.  Mirrors the `py:exists` script template's logic in a structured kind.  Useful as a precondition before correctness tests so a missing function fails clearly instead of erroring every dependent test.
+  - `.returnTypeCheck` PatternFamily kind — calls the function with each case's args and asserts the result is an instance of the expected type.  Per-case `expected` is a string naming the type: Python builtins (`"int"`, `"list"`, `"dict"`, etc.), library types via class-name MRO walk (`"DataFrame"`, `"Series"`, `"ndarray"`), or any user class name.  Auto-compute is intentionally skipped for this kind (the type name is what the instructor wants to type, not the value).
+- **Student-side support file download** — new `GET /api/v1/testsetups/:setupID/support/:filename` endpoint, parallel to the existing `/assignment/download` route with the same enrolled-student gate.  Refuses to stream test scripts and notebooks; only serves files classified as `tier == "support"`.  Pairs with the JupyterLite read-only symlink mechanism (v0.4.116) so students can both edit the notebook in-browser AND download support data for offline work.
+
 ## [0.4.116] - 2026-04-26
 
 ### Fixed

@@ -229,6 +229,7 @@ struct TestSetupRoutes: RouteCollection {
             group.get("assignment",                    use: getAssignment)
             group.get("assignment", "download",        use: downloadAssignment)
             group.put("assignment",                    use: saveAssignment)
+            group.get("support", ":filename",          use: downloadSupportFile)
         }
     }
 
@@ -379,6 +380,65 @@ struct TestSetupRoutes: RouteCollection {
         headers.add(name: .contentDisposition,
                     value: "attachment; filename=\"\(safeName).ipynb\"")
         return Response(status: .ok, headers: headers, body: .init(data: filtered))
+    }
+
+    // MARK: - GET /api/v1/testsetups/:id/support/:filename  [enrolled students + instructors]
+    //
+    // Streams a single support file (CSV / JSON / etc.) from the test
+    // setup zip to the caller.  Same enrolled-student gate as the
+    // assignment-download route.  Refuses to stream test scripts and
+    // notebooks — only files classified as `tier == "support"` (i.e.
+    // not in `testSuites` and not the canonical notebook names).
+    // v0.4.117+: enables students to download data fixtures for offline
+    // work; the same files are already symlinked into their JupyterLite
+    // working dir for in-browser editing.
+
+    @Sendable
+    func downloadSupportFile(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
+        guard let setupID = req.parameters.get("testSetupID"),
+              let filename = req.parameters.get("filename"),
+              let setup    = try await APITestSetup.find(setupID, on: req.db)
+        else { throw Abort(.notFound) }
+
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+
+        // Refuse path-traversal-shaped filenames outright.  Names with
+        // slashes, backslashes, or `..` segments are never produced by
+        // legitimate uploads.
+        guard !filename.isEmpty,
+              !filename.contains("/"), !filename.contains("\\"),
+              !filename.contains("..")
+        else { throw Abort(.badRequest, reason: "Invalid filename") }
+
+        // Confirm the file is classified as a support file: must exist
+        // in the zip, must not be in `testSuites`, must not be a
+        // canonical notebook name.
+        let allEntries = listZipEntries(zipPath: setup.zipPath)
+        guard allEntries.contains(filename) else { throw Abort(.notFound) }
+
+        let testScripts: Set<String> = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return [] }
+            return Set(props.testSuites.map(\.script))
+        }()
+        let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+        guard !testScripts.contains(filename), !reservedNames.contains(filename) else {
+            throw Abort(.forbidden, reason: "'\(filename)' is not a support file")
+        }
+
+        guard let bytes = extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
+            throw Abort(.notFound)
+        }
+
+        var headers = HTTPHeaders()
+        headers.contentType = HTTPMediaType.fileExtension(
+            (filename as NSString).pathExtension.lowercased()
+        ) ?? .binary
+        headers.add(name: .contentDisposition,
+                    value: "attachment; filename=\"\(filename)\"")
+        return Response(status: .ok, headers: headers, body: .init(data: bytes))
     }
 
     // MARK: - PUT /api/v1/testsetups/:id/assignment  [instructor only, Phase 8]

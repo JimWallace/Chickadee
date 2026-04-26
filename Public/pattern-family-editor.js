@@ -1560,6 +1560,11 @@
             if (!row || !row.parentElement) return;
             // Variable-equality families don't call a function — skip.
             if (kindInput && kindInput.value === 'variable_equality') return;
+            // Return-type-check expected is a type name (e.g. "DataFrame"),
+            // not the function's actual return value — auto-compute would
+            // write the value, which is wrong.  Instructor types the
+            // type name directly.
+            if (kindInput && kindInput.value === 'return_type_check') return;
             var fnName = (fnInput.value || '').trim();
             if (!fnName) return;
             var paramNames = paramsInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);

@@ -426,6 +426,54 @@ struct CoreCodableTests {
         #expect(decoded.regex == true)
     }
 
+    @Test func notebookCheckFunctionExistsRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "fn_classify_bmi",
+            kind: .functionExists,
+            tier: .pub,
+            points: 1,
+            variable: "classify_bmi",
+            expectedArity: 1
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.expectedArity == 1)
+    }
+
+    @Test func notebookCheckFunctionExistsNoArityRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "fn_helper",
+            kind: .functionExists,
+            variable: "helper"
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.expectedArity == nil)
+    }
+
+    @Test func patternFamilyReturnTypeCheckRoundTrip() throws {
+        let check = PatternCase(
+            key: "01",
+            label: "returns a DataFrame",
+            args: [.string("vitaldb.csv")],
+            expected: .string("DataFrame")
+        )
+        let family = PatternFamily(
+            id: "load_returns_df",
+            name: "Load returns DataFrame",
+            kind: .returnTypeCheck,
+            functionName: "load_data",
+            paramNames: ["filename"],
+            cases: [check]
+        )
+        let data = try encoder.encode(family)
+        let decoded = try decoder.decode(PatternFamily.self, from: data)
+        #expect(decoded == family)
+        #expect(decoded.kind == .returnTypeCheck)
+    }
+
     @Test func notebookCheckEqualityLegacyManifestDecodesCleanly() throws {
         // Pre-equality manifests don't carry the new fields; decode must
         // leave them nil rather than throwing.
