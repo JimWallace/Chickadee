@@ -57,11 +57,13 @@ struct ConfiguredSuiteEntry {
     let points: Int            // grade weight; 1 = default (unweighted)
     let displayName: String?   // optional human-readable name shown to students
     let generatedBy: String?   // pattern family id; nil for hand-written scripts
+    let generatedByCheck: String? // notebook check id; nil otherwise
     let sectionID: String?     // id into TestProperties.sections; nil = ungrouped
 
     init(script: String, tier: String, order: Int,
          dependsOn: [String], points: Int, displayName: String?,
-         generatedBy: String? = nil, sectionID: String? = nil) {
+         generatedBy: String? = nil, generatedByCheck: String? = nil,
+         sectionID: String? = nil) {
         self.script = script
         self.tier = tier
         self.order = order
@@ -69,6 +71,7 @@ struct ConfiguredSuiteEntry {
         self.points = points
         self.displayName = displayName
         self.generatedBy = generatedBy
+        self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
     }
 }
@@ -341,7 +344,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
         )
     }()
 
-    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, generatedBy: String?)] = {
+    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, isGenerated: Bool)] = {
         guard let data = setup.manifest.data(using: .utf8),
               let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
             return []
@@ -349,7 +352,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
         return props.testSuites.enumerated().map { (idx, item) in
             (script: item.script, tier: item.tier.rawValue, order: idx + 1,
              dependsOn: item.dependsOn, points: item.points, name: item.name,
-             generatedBy: item.generatedBy)
+             isGenerated: item.isGenerated)
         }
     }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
@@ -377,11 +380,12 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
             return lhs < rhs
         }
 
-    // Generated entries are represented by their family's row in the suite
-    // table, so omit them from the raw script list here.
+    // Generated entries (pattern-family or notebook-check output) are
+    // represented by their generator's row in the suite table, so omit
+    // them from the raw script list here.
     let existingSuiteRows = nonNotebookFiles.enumerated().compactMap { idx, name -> EditableSuiteRow? in
         let entry = testMap[name]
-        if entry?.generatedBy != nil { return nil }
+        if entry?.isGenerated == true { return nil }
         return EditableSuiteRow(
             name: name,
             url: "/instructor/\(assignmentID)/files/item?name=\(urlEncode(name))",
@@ -1110,7 +1114,7 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
         let dependsOn: [String]
         let points: Int
         let name: String?
-        let generatedBy: String?
+        let isGenerated: Bool
     }
     let manifestTests: [String: ManifestRow] = {
         guard let data = setup.manifest.data(using: .utf8),
@@ -1125,18 +1129,19 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
                 dependsOn: entry.dependsOn,
                 points: entry.points,
                 name: entry.name,
-                generatedBy: entry.generatedBy
+                isGenerated: entry.isGenerated
             )
         }
         return map
     }()
 
-    // Generated entries (pattern-family output) are represented collectively
-    // by their family's row in the suite table — hide them from the raw list
-    // so instructors don't see N duplicate generated rows for one family.
+    // Generated entries (pattern-family or notebook-check output) are
+    // represented collectively by their family's / check's row in the
+    // suite table — hide them from the raw list so instructors don't see
+    // N duplicate generated rows.
     return entries.enumerated().compactMap { idx, name -> EditableSuiteRow? in
         let info = manifestTests[name]
-        if info?.generatedBy != nil { return nil }
+        if info?.isGenerated == true { return nil }
         return EditableSuiteRow(
             name: name,
             url: "#",
@@ -1805,6 +1810,7 @@ func makeWorkerManifestJSON(
     gradingMode: String = "worker",
     starterNotebook: String? = "assignment.ipynb",
     patternFamilies: [PatternFamily] = [],
+    notebookChecks: [NotebookCheck] = [],
     sections: [TestSuiteSection] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
@@ -1824,6 +1830,9 @@ func makeWorkerManifestJSON(
         }
         if let fid = entry.generatedBy, !fid.isEmpty {
             dict["generatedBy"] = fid
+        }
+        if let cid = entry.generatedByCheck, !cid.isEmpty {
+            dict["generatedByCheck"] = cid
         }
         if let sid = entry.sectionID, !sid.isEmpty {
             dict["sectionID"] = sid
@@ -1850,6 +1859,15 @@ func makeWorkerManifestJSON(
         let familyData = try encoder.encode(patternFamilies)
         if let parsed = try JSONSerialization.jsonObject(with: familyData) as? [Any] {
             manifest["patternFamilies"] = parsed
+        }
+    }
+    if !notebookChecks.isEmpty {
+        // Same encode-then-reparse trick as patternFamilies above.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let checksData = try encoder.encode(notebookChecks)
+        if let parsed = try JSONSerialization.jsonObject(with: checksData) as? [Any] {
+            manifest["notebookChecks"] = parsed
         }
     }
     if !sections.isEmpty {

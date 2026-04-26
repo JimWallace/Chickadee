@@ -9,6 +9,14 @@ struct DatabaseConfigurationTests {
     final class EnvironmentScope: @unchecked Sendable {
         private var backup: [String: String?] = [:]
 
+        // Acquire the shared env lock so this scope's env mutations don't
+        // race with env-touching tests in other suites (notably
+        // APIServerAppTests).  `@Suite(.serialized)` on this suite only
+        // covers within-suite parallelism.
+        init() {
+            EnvTestLock.shared.lock()
+        }
+
         deinit {
             for (key, value) in backup {
                 if let value {
@@ -17,6 +25,7 @@ struct DatabaseConfigurationTests {
                     unsetenv(key)
                 }
             }
+            EnvTestLock.shared.unlock()
         }
 
         func set(_ key: String, _ value: String?) {

@@ -2,6 +2,14 @@
 //
 // Tests for ZipArchiver — round-trip extraction, zip-slip path traversal
 // detection, and error descriptions.
+//
+// `.serialized`: every test in this suite spawns one or more `Process`
+// instances (zip / unzip / python3) and reads from `Pipe`s.  Foundation's
+// posix_spawn implementation has a known race under concurrent invocation
+// that surfaces as `NSPOSIXErrorDomain Code=14 "Bad address"` (EFAULT) at
+// ~5% rate when nine of these tests run in parallel within the suite.
+// Serializing the suite eliminates the within-suite race while still
+// allowing other suites to run in parallel.
 
 import Testing
 @testable import chickadee_server
@@ -9,6 +17,7 @@ import Fluent
 import Foundation
 
 // final class so deinit can remove the per-test temp directory.
+@Suite(.serialized)
 final class ZipArchiverTests {
 
     private let tmpDir: URL

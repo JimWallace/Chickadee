@@ -91,6 +91,12 @@ struct AssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "families", use: getPatternFamilies)
         r.put(":assignmentID", "families", use: putPatternFamilies)
 
+        // Notebook check editor — sibling concept to pattern families.
+        // Same atomic-replace semantics as /families above.  Each check
+        // expands to exactly one generated test script at save time.
+        r.get(":assignmentID", "checks", use: getNotebookChecks)
+        r.put(":assignmentID", "checks", use: putNotebookChecks)
+
         // Unified suite editor — GET returns the full reconciled list
         // (scripts + families, in manifest order).  PUT replaces the whole
         // list atomically; each mutation in the suite-edit UI sends a fresh

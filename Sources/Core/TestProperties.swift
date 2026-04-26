@@ -32,6 +32,10 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// `generatedBy` is the id of the `PatternFamily` that produced this entry, or
 /// nil for hand-written scripts.  Generated scripts are read-only in the
 /// raw-script editor; edits and deletes flow through the family editor.
+/// `generatedByCheck` is the parallel field for `NotebookCheck`-generated
+/// entries.  At most one of `generatedBy` / `generatedByCheck` is non-nil
+/// for any given entry (validation enforces this); both nil means a
+/// hand-written script.
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
     public let script: String       // e.g. "01_public.py"
@@ -39,29 +43,41 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let dependsOn: [String]  // script names of prerequisites; empty == no deps
     public let points: Int          // grade weight; 1 = default (unweighted)
     public let generatedBy: String? // pattern family id, nil for hand-written scripts
+    public let generatedByCheck: String? // notebook check id, nil otherwise
     public let sectionID: String?   // id into TestProperties.sections, or nil = ungrouped
 
     public init(tier: TestTier, script: String, name: String? = nil,
                 dependsOn: [String] = [], points: Int = 1,
-                generatedBy: String? = nil, sectionID: String? = nil) {
-        self.tier        = tier
-        self.script      = script
-        self.name        = name
-        self.dependsOn   = dependsOn
-        self.points      = points
-        self.generatedBy = generatedBy
-        self.sectionID   = sectionID
+                generatedBy: String? = nil,
+                generatedByCheck: String? = nil,
+                sectionID: String? = nil) {
+        self.tier             = tier
+        self.script           = script
+        self.name             = name
+        self.dependsOn        = dependsOn
+        self.points           = points
+        self.generatedBy      = generatedBy
+        self.generatedByCheck = generatedByCheck
+        self.sectionID        = sectionID
     }
 
     public init(from decoder: Decoder) throws {
-        let c       = try decoder.container(keyedBy: CodingKeys.self)
-        tier        = try c.decode(TestTier.self,    forKey: .tier)
-        script      = try c.decode(String.self,      forKey: .script)
-        name        = try c.decodeIfPresent(String.self,   forKey: .name)
-        dependsOn   = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
-        points      = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
-        generatedBy = try c.decodeIfPresent(String.self, forKey: .generatedBy)
-        sectionID   = try c.decodeIfPresent(String.self, forKey: .sectionID)
+        let c            = try decoder.container(keyedBy: CodingKeys.self)
+        tier             = try c.decode(TestTier.self,    forKey: .tier)
+        script           = try c.decode(String.self,      forKey: .script)
+        name             = try c.decodeIfPresent(String.self,   forKey: .name)
+        dependsOn        = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+        points           = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        generatedBy      = try c.decodeIfPresent(String.self, forKey: .generatedBy)
+        generatedByCheck = try c.decodeIfPresent(String.self, forKey: .generatedByCheck)
+        sectionID        = try c.decodeIfPresent(String.self, forKey: .sectionID)
+    }
+
+    /// True if this entry was produced by a pattern family or a notebook
+    /// check.  Raw-script-edit guards consult this so they refuse to mutate
+    /// generated entries regardless of which generator produced them.
+    public var isGenerated: Bool {
+        generatedBy != nil || generatedByCheck != nil
     }
 }
 
@@ -119,6 +135,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// a save-time authoring concern; by the time the zip reaches the runner
     /// every generated `.py` is an ordinary test script.
     public let patternFamilies: [PatternFamily]
+    /// Notebook checks whose expansion produced some of the entries in
+    /// `testSuites`.  Same save-time-only model as `patternFamilies`:
+    /// stripped from the runner-facing manifest by `runnerSanitized()`
+    /// so older runners never see new `NotebookCheckKind` cases.
+    public let notebookChecks: [NotebookCheck]
     /// Ordered list of sections that group `testSuites` for display only.
     /// Empty = "no grouping"; the student and instructor UIs render
     /// identically to the pre-sections layout.  Entries in `testSuites`
@@ -135,6 +156,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 makefile: MakefileConfig? = nil,
                 starterNotebook: String? = nil,
                 patternFamilies: [PatternFamily] = [],
+                notebookChecks: [NotebookCheck] = [],
                 sections: [TestSuiteSection] = []) {
         self.schemaVersion    = schemaVersion
         self.gradingMode      = gradingMode
@@ -144,6 +166,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.makefile         = makefile
         self.starterNotebook  = starterNotebook
         self.patternFamilies  = patternFamilies
+        self.notebookChecks   = notebookChecks
         self.sections         = sections
     }
 
@@ -157,16 +180,18 @@ public struct TestProperties: Codable, Equatable, Sendable {
         makefile         = try c.decodeIfPresent(MakefileConfig.self,   forKey: .makefile)
         starterNotebook  = try c.decodeIfPresent(String.self,           forKey: .starterNotebook)
         patternFamilies  = try c.decodeIfPresent([PatternFamily].self,  forKey: .patternFamilies)  ?? []
+        notebookChecks   = try c.decodeIfPresent([NotebookCheck].self,  forKey: .notebookChecks)   ?? []
         sections         = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections)       ?? []
     }
 
-    /// Manifest view shipped to runners.  Pattern families are a save-time
-    /// authoring concern — by the time the zip reaches the runner every
-    /// generated `.py` is already an ordinary test script — so the field is
-    /// stripped before encode.  Keeping `patternFamilies` in the payload
-    /// would force every runner binary to know every `PatternKind` case the
-    /// server ever introduces (a new raw value crashes the enum decoder),
-    /// defeating rolling deployments.
+    /// Manifest view shipped to runners.  Pattern families and notebook
+    /// checks are save-time authoring concerns — by the time the zip
+    /// reaches the runner every generated `.py` is already an ordinary
+    /// test script — so both fields are stripped before encode.  Keeping
+    /// them in the payload would force every runner binary to know every
+    /// `PatternKind` / `NotebookCheckKind` case the server ever introduces
+    /// (a new raw value crashes the enum decoder), defeating rolling
+    /// deployments.
     public func runnerSanitized() -> TestProperties {
         TestProperties(
             schemaVersion:    schemaVersion,
@@ -177,6 +202,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
             makefile:         makefile,
             starterNotebook:  starterNotebook,
             patternFamilies:  [],
+            notebookChecks:   [],
             sections:         sections
         )
     }

@@ -5,16 +5,24 @@ import Vapor
 import Foundation
 
 // Environment variable manipulation is global process state, so this suite
-// runs its tests serially to prevent races between concurrent test instances.
+// runs its tests serially (`@Suite(.serialized)`) and also holds the shared
+// `EnvTestLock` for the duration of each test.  The lock prevents races
+// against env-touching tests in OTHER suites (e.g. DatabaseConfigurationTests)
+// — `.serialized` is within-suite only.
 @Suite(.serialized)
 class APIServerAppTests {
 
     private var envBackup: [String: String?] = [:]
 
+    init() {
+        EnvTestLock.shared.lock()
+    }
+
     deinit {
         for (key, value) in envBackup {
             if let value { setenv(key, value, 1) } else { unsetenv(key) }
         }
+        EnvTestLock.shared.unlock()
     }
 
     private func setEnv(_ key: String, _ value: String?) {

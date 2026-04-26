@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.113] - 2026-04-26
+
+### Added
+
+- **Notebook checks — Phase A backend.**  New spec type sibling to `PatternFamily`: each check expands at save time into one generated `.py` test script (and optionally a sidecar `_expected_<id>.csv` for DataFrame/Series equality kinds), referenced from `TestSuiteEntry.generatedByCheck`.  Five kinds ship in this drop, all asserting on `student_module.<variable>` after the existing `test_runtime.py` infrastructure loads the student submission:
+  - `.dataFrameShape` — `df.shape == (rows, cols)`.
+  - `.dataFrameColumns` — column list matches expected; `.exact` (order matters) or `.superset` (instructor-required columns must be present, extras allowed).
+  - `.dataFrameEquality` — `pandas.testing.assert_frame_equal` with sidecar CSV expected; toggles for `checkDtype` / `checkLike` / `rtol` / `atol` / `ignoreIndex` (defaults: strict dtype, order matters, pandas-default tolerances, ignore index).
+  - `.seriesEquality` — `pandas.testing.assert_series_equal` with single-column sidecar CSV.
+  - `.numericArrayClose` — `numpy.testing.assert_allclose`; expected encoded inline as `[Double]` in the manifest (no sidecar).
+- **GET / PUT `/instructor/:assignmentID/checks` endpoints** mirroring the families routes.  Atomic replace; the shared `applyPatternFamilies` save path now also accepts `nextChecks: [NotebookCheck]?` and writes families + checks + sidecars in one zip-mutation pass.
+- **`TestSuiteEntry.generatedByCheck: String?` and `TestProperties.notebookChecks: [NotebookCheck]`** — both stripped from the runner-facing manifest by `runnerSanitized()` so older runners never decode new `NotebookCheckKind` raw values.
+
+### Fixed
+
+- **`ZipArchiverTests` EFAULT flake under parallel test execution.**  Foundation's `Process` race surfaced as `NSPOSIXErrorDomain Code=14 "Bad address"` at ~5–8% on macOS when ZipArchiver's `Process` invocations stacked up against other suites' direct `Process` use.  Three-layer fix: `ZipArchiverTests` is now `@Suite(.serialized)` (matches existing `APIServerAppTests` / `DatabaseConfigurationTests`); `ZipArchiver.swift` holds a process-wide `zipProcessLock` across the whole zip subprocess lifecycle (Process / Pipe construction + setup + `run()`); and `Process.run()` now retries once on transient EFAULT to absorb cross-call races we can't lock against (other test suites that use `Process` directly).
+- **Cross-suite env-var race between `APIServerAppTests` and `DatabaseConfigurationTests`.**  Both suites manipulate `setenv` / `unsetenv` for config-from-env tests, both were `.serialized` *within* their suite, but env vars are process-global so a test reading `SESSION_COOKIE_SECURE` could see another suite's mid-flight change.  Added a shared `EnvTestLock` (`NSLock`) acquired in each class's `init` / released in `deinit` — exactly one env-touching test in either suite holds it at a time.
+
 ## [0.4.112] - 2026-04-26
 
 ### Removed

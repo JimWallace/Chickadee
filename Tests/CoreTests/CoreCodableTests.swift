@@ -243,6 +243,192 @@ struct CoreCodableTests {
         #expect(roundTripped.patternFamilies.isEmpty)
     }
 
+    @Test func runnerSanitizedStripsNotebookChecks() throws {
+        let check = NotebookCheck(
+            id: "df_shape",
+            kind: .dataFrameShape,
+            tier: .pub,
+            points: 1,
+            variable: "df",
+            expectedRows: 250,
+            expectedCols: 13
+        )
+        let manifest = TestProperties(
+            schemaVersion: 1,
+            testSuites: [TestSuiteEntry(
+                tier: .pub,
+                script: "publiccheck_df_shape.py",
+                generatedByCheck: "df_shape"
+            )],
+            timeLimitSeconds: 7,
+            notebookChecks: [check]
+        )
+
+        let sanitized = manifest.runnerSanitized()
+        #expect(sanitized.notebookChecks.isEmpty)
+        // testSuites entries — including the one with generatedByCheck —
+        // are preserved.  Only the spec list is stripped.
+        #expect(sanitized.testSuites.count == 1)
+        #expect(sanitized.testSuites.first?.generatedByCheck == "df_shape")
+    }
+
+    @Test func notebookCheckRoundTripsThroughJSON() throws {
+        let check = NotebookCheck(
+            id: "df_shape_full",
+            name: "Full dataset shape",
+            kind: .dataFrameShape,
+            tier: .release,
+            points: 2,
+            dependsOn: ["public_load_df.py"],
+            sectionID: "ex2",
+            variable: "df",
+            expectedRows: 250,
+            expectedCols: 13
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+    }
+
+    @Test func notebookCheckColumnsExactRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "df_columns_full",
+            kind: .dataFrameColumns,
+            variable: "df",
+            expectedColumns: ["caseid", "age", "sex", "height", "weight"],
+            columnMatch: .exact
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.columnMatch == .exact)
+    }
+
+    @Test func notebookCheckColumnsSupersetRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "df_required_cols",
+            kind: .dataFrameColumns,
+            variable: "df",
+            expectedColumns: ["age", "sex"],
+            columnMatch: .superset
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.columnMatch == .superset)
+    }
+
+    @Test func notebookCheckColumnsAbsentColumnMatchDecodesNil() throws {
+        // When the manifest omits columnMatch, decode leaves it nil; the
+        // renderer treats nil as .exact (the default).  Verify the field
+        // is genuinely optional rather than coerced to a default at
+        // decode time, so callers can distinguish "instructor didn't
+        // pick" from "instructor picked exact".
+        let json = """
+        {
+          "id": "x",
+          "kind": "data_frame_columns",
+          "tier": "public",
+          "points": 1,
+          "variable": "df",
+          "expectedColumns": ["a", "b"]
+        }
+        """
+        let decoded = try decoder.decode(NotebookCheck.self, from: json.data(using: .utf8)!)
+        #expect(decoded.columnMatch == nil)
+    }
+
+    @Test func notebookCheckEqualityRoundTripsThroughJSON() throws {
+        let check = NotebookCheck(
+            id: "df_full_match",
+            kind: .dataFrameEquality,
+            tier: .release,
+            points: 3,
+            variable: "df_grouped",
+            expectedCSV: "sex,age\nF,56.7\nM,59.4\n",
+            checkDtype: true,
+            checkLike: false,
+            rtol: 1e-4,
+            atol: 1e-7,
+            ignoreIndex: true
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+    }
+
+    @Test func notebookCheckSeriesRoundTripsThroughJSON() throws {
+        let check = NotebookCheck(
+            id: "scores_expected",
+            kind: .seriesEquality,
+            variable: "scores",
+            expectedCSV: "score\n0.95\n0.88\n0.72\n",
+            ignoreIndex: true
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+    }
+
+    @Test func notebookCheckArrayRoundTripsThroughJSON() throws {
+        let check = NotebookCheck(
+            id: "predictions_close",
+            kind: .numericArrayClose,
+            variable: "y_pred",
+            rtol: 1e-3,
+            atol: 1e-6,
+            expectedArray: [1.0, 2.5, 3.7, 4.9]
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+    }
+
+    @Test func notebookCheckEqualityLegacyManifestDecodesCleanly() throws {
+        // Pre-equality manifests don't carry the new fields; decode must
+        // leave them nil rather than throwing.
+        let json = """
+        {
+          "id": "x",
+          "kind": "data_frame_equality",
+          "tier": "public",
+          "points": 1,
+          "variable": "df",
+          "expectedCSV": "a,b\\n1,2\\n"
+        }
+        """
+        let decoded = try decoder.decode(NotebookCheck.self, from: json.data(using: .utf8)!)
+        #expect(decoded.checkDtype == nil)
+        #expect(decoded.checkLike == nil)
+        #expect(decoded.rtol == nil)
+        #expect(decoded.atol == nil)
+        #expect(decoded.ignoreIndex == nil)
+    }
+
+    @Test func testSuiteEntryIsGeneratedReportsBothGenerators() throws {
+        let raw = TestSuiteEntry(tier: .pub, script: "manual.py")
+        let family = TestSuiteEntry(
+            tier: .pub, script: "publictest_bmi_01.py",
+            generatedBy: "bmi"
+        )
+        let check = TestSuiteEntry(
+            tier: .pub, script: "publiccheck_df_shape.py",
+            generatedByCheck: "df_shape"
+        )
+        #expect(raw.isGenerated == false)
+        #expect(family.isGenerated == true)
+        #expect(check.isGenerated == true)
+    }
+
+    @Test func legacyManifestWithoutNotebookChecksDecodesAsEmpty() throws {
+        // Pre-NotebookCheck manifests don't carry the notebookChecks field;
+        // decoder must default to [].
+        let manifest = try decoder.decode(TestProperties.self, from: """
+        { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
+        """.data(using: .utf8)!)
+        #expect(manifest.notebookChecks.isEmpty)
+    }
+
     // MARK: - WorkerActivityPayload
 
     @Test func workerActivityPayloadRoundTrip() throws {

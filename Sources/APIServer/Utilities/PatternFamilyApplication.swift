@@ -45,17 +45,20 @@ struct AuthoredRawScript: Equatable {
     }
 }
 
-/// One position in the unified suite-edit list.  Either a raw script entry
-/// or a reference to one of the families in `nextFamilies`.  Array ordering
-/// is authoritative for UI order — a family's generated scripts occupy a
-/// contiguous block at the family's position.  The optional `sectionID`
-/// carried on each item is a pure display-grouping concern: the server
-/// stamps it onto the resulting `TestSuiteEntry` so the student submission
-/// page can group results, but it doesn't influence the dependency graph
-/// or run order beyond the existing `testSuites[]` ordering.
+/// One position in the unified suite-edit list.  Either a raw script entry,
+/// a reference to one of the families in `nextFamilies`, or a reference to
+/// one of the checks in `nextChecks`.  Array ordering is authoritative for
+/// UI order — a family's generated scripts occupy a contiguous block at the
+/// family's position; a check produces exactly one entry at the check's
+/// position.  The optional `sectionID` carried on each item is a pure
+/// display-grouping concern: the server stamps it onto the resulting
+/// `TestSuiteEntry` so the student submission page can group results, but
+/// it doesn't influence the dependency graph or run order beyond the
+/// existing `testSuites[]` ordering.
 enum AuthoredSuiteItem: Equatable {
     case script(AuthoredRawScript)
     case family(id: String, sectionID: String?)
+    case check(id: String, sectionID: String?)
 
     /// Convenience for the pre-sections call sites that don't care about
     /// sections.  Swift can't give enum associated values a default value,
@@ -117,6 +120,7 @@ struct PatternFamilyApplyResult: Equatable {
 func applyPatternFamilies(
     to setup: APITestSetup,
     nextFamilies: [PatternFamily],
+    nextChecks: [NotebookCheck]? = nil,
     authoredItems: [AuthoredSuiteItem]? = nil,
     sections: [TestSuiteSection]? = nil,
     on db: Database
@@ -127,6 +131,11 @@ func applyPatternFamilies(
           let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
         throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
     }
+
+    // Resolve the final checks list: caller wins; otherwise carry forward
+    // whatever's on the manifest already.  Mirrors the section resolution
+    // below so this function is the single save path for both concepts.
+    let resolvedChecks: [NotebookCheck] = nextChecks ?? props.notebookChecks
 
     // ── 1. Resolve section list (caller wins; otherwise carry old manifest).
     let resolvedSections: [TestSuiteSection] = sections ?? props.sections
@@ -178,11 +187,13 @@ func applyPatternFamilies(
                 ))
             case .family(let id, let sid):
                 return .family(id: id, sectionID: normaliseSectionID(sid))
+            case .check(let id, let sid):
+                return .check(id: id, sectionID: normaliseSectionID(sid))
             }
         }
     } else {
         authoredRawEntries = props.testSuites
-            .filter { $0.generatedBy == nil }
+            .filter { !$0.isGenerated }
             .map { e in
                 AuthoredRawScript(
                     script: e.script,
@@ -194,16 +205,20 @@ func applyPatternFamilies(
                 )
             }
         // Reconstruct authored ordering from the existing manifest: walk
-        // testSuites in order, emit a script item for each raw entry and
+        // testSuites in order, emit a script item for each raw entry,
         // one family item at the position of each family's first generated
-        // entry.  Families present in `nextFamilies` but absent from the
-        // old manifest (i.e. newly added) are appended at the end.  This
-        // preserves the instructor's hand-placed position across a family
-        // modal save, which goes through the legacy (authoredItems == nil)
-        // path.
+        // entry, and one check item at the position of each check's
+        // (single) generated entry.  Families/checks present in
+        // `nextFamilies` / `resolvedChecks` but absent from the old
+        // manifest (i.e. newly added) are appended at the end.  This
+        // preserves the instructor's hand-placed position across a family-
+        // or check-modal save, which goes through the legacy
+        // (authoredItems == nil) path.
         let nextFamilyIDs = Set(nextFamilies.map(\.id))
+        let nextCheckIDs  = Set(resolvedChecks.map(\.id))
         var rebuilt: [AuthoredSuiteItem] = []
         var seenFamilyIDs: Set<String> = []
+        var seenCheckIDs:  Set<String> = []
         for entry in props.testSuites {
             if let fid = entry.generatedBy {
                 guard !seenFamilyIDs.contains(fid) else { continue }
@@ -211,6 +226,15 @@ func applyPatternFamilies(
                 if nextFamilyIDs.contains(fid) {
                     rebuilt.append(.family(
                         id: fid,
+                        sectionID: normaliseSectionID(entry.sectionID)
+                    ))
+                }
+            } else if let cid = entry.generatedByCheck {
+                guard !seenCheckIDs.contains(cid) else { continue }
+                seenCheckIDs.insert(cid)
+                if nextCheckIDs.contains(cid) {
+                    rebuilt.append(.check(
+                        id: cid,
                         sectionID: normaliseSectionID(entry.sectionID)
                     ))
                 }
@@ -227,6 +251,9 @@ func applyPatternFamilies(
         }
         for f in nextFamilies where !seenFamilyIDs.contains(f.id) {
             rebuilt.append(.family(id: f.id, sectionID: nil))
+        }
+        for c in resolvedChecks where !seenCheckIDs.contains(c.id) {
+            rebuilt.append(.check(id: c.id, sectionID: nil))
         }
         itemsForOrdering = rebuilt
     }
@@ -245,6 +272,7 @@ func applyPatternFamilies(
                 switch item {
                 case .script(let s):        return s.sectionID
                 case .family(_, let sid):   return sid
+                case .check(_, let sid):    return sid
                 }
             }()
             if !haveStarted {
@@ -286,6 +314,11 @@ func applyPatternFamilies(
         sections: resolvedSections,
         familySectionID: familySectionIDForValidation
     )
+    try validateNotebookChecks(
+        resolvedChecks,
+        patternFamilies: nextFamilies,
+        testSuites: authoredAsTestSuites
+    )
 
     let knownFamilyIDs = Set(nextFamilies.map(\.id))
     for r in authoredRawEntries {
@@ -311,6 +344,19 @@ func applyPatternFamilies(
         }
     }
 
+    // Same family-dep reference check for notebook checks.  Plain
+    // script-filename deps are validated by validateManifestDependencies
+    // after expansion (so they reference an existing entry in the
+    // post-expansion testSuites).
+    for c in resolvedChecks {
+        for dep in c.dependsOn {
+            if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(c.id)' depends on unknown pattern family '\(fid)'.")
+            }
+        }
+    }
+
     // Cycle detection on the authored graph (family ids + script filenames
     // as a single node set; family:<id> edges expand to the family node,
     // NOT to its generated scripts, so family→family cycles are caught).
@@ -320,8 +366,15 @@ func applyPatternFamilies(
     )
 
     // ── 3. Diff generated filenames and mutate the zip ──────────────────
+    // Old-side filenames for both generators are pooled into one set so
+    // the deletion diff is computed in one shot.  Notebook checks may
+    // produce sidecar files (e.g. `_expected_<id>.csv` for
+    // `.dataFrameEquality`); both the script and the sidecars are
+    // tracked here so removing a check cleans up all of its files.
     let oldGeneratedFilenames = Set(
         props.patternFamilies.flatMap(patternFamilyAllGeneratedFilenames)
+    ).union(
+        props.notebookChecks.flatMap(notebookCheckAllGeneratedFilenames)
     )
 
     // Build a familyID → sectionID map from the authored items, so we can
@@ -349,10 +402,35 @@ func applyPatternFamilies(
             renderedByFilename[generated.filename] = generated
         }
     }
+    // Render notebook checks alongside pattern families so a single zip
+    // mutation pass writes everything.  Each check produces one `.py`
+    // file plus zero or more sidecar files (e.g. `_expected_<id>.csv`
+    // for `.dataFrameEquality`).  Sidecars don't have a `GeneratedScript`
+    // — they aren't entries in the suite — but they DO need to be in
+    // `newGeneratedFilenames` so stale ones get diffed away when a check
+    // changes kind or is removed.
+    var renderedCheckByID: [String: GeneratedScript] = [:]
+    var sidecarFilesToWrite: [String: String] = [:]
+    for check in resolvedChecks {
+        let bundle = renderNotebookCheck(check)
+        renderedByFilename[bundle.script.filename] = bundle.script
+        renderedCheckByID[check.id] = bundle.script
+        for (name, content) in bundle.sidecars {
+            sidecarFilesToWrite[name] = content
+        }
+    }
     let newGeneratedFilenames = Set(renderedByFilename.keys)
+        .union(sidecarFilesToWrite.keys)
 
     let toDelete = oldGeneratedFilenames.subtracting(newGeneratedFilenames)
-    let toWrite  = renderedByFilename.mapValues(\.source)
+    // Merge generated `.py` sources with check sidecars (e.g. expected
+    // CSVs) into the single write map.  applyScriptChangesToZip is
+    // bytes-agnostic — it doesn't care that some entries are Python and
+    // others are CSV.
+    var toWrite = renderedByFilename.mapValues(\.source)
+    for (name, content) in sidecarFilesToWrite {
+        toWrite[name] = content
+    }
 
     try applyScriptChangesToZip(
         zipPath: setup.zipPath,
@@ -398,9 +476,14 @@ func applyPatternFamilies(
         uniqueKeysWithValues: props.testSuites.map { ($0.script, $0) }
     )
 
+    let checkByID: [String: NotebookCheck] = Dictionary(
+        uniqueKeysWithValues: resolvedChecks.map { ($0.id, $0) }
+    )
+
     var newConfigured: [ConfiguredSuiteEntry] = []
     var order = 0
     var emittedFamilyIDs: Set<String> = []
+    var emittedCheckIDs:  Set<String> = []
 
     for item in itemsForOrdering {
         switch item {
@@ -442,6 +525,25 @@ func applyPatternFamilies(
                     sectionID:   familySection
                 ))
             }
+
+        case .check(let cid, let checkSection):
+            guard let check = checkByID[cid],
+                  let generated = renderedCheckByID[cid],
+                  !emittedCheckIDs.contains(cid) else { continue }
+            emittedCheckIDs.insert(cid)
+            order += 1
+            let inherited = expandDeps(check.dependsOn)
+            newConfigured.append(ConfiguredSuiteEntry(
+                script:           generated.filename,
+                tier:             generated.tier.rawValue,
+                order:            order,
+                dependsOn:        inherited,
+                points:           generated.points,
+                displayName:      generated.displayName,
+                generatedBy:      nil,
+                generatedByCheck: check.id,
+                sectionID:        checkSection
+            ))
         }
     }
 
@@ -473,12 +575,32 @@ func applyPatternFamilies(
         }
     }
 
+    // Same defensive pass for checks: any check not referenced by
+    // `authoredItems` still needs its generated entry emitted.
+    for check in resolvedChecks where !emittedCheckIDs.contains(check.id) {
+        guard let generated = renderedCheckByID[check.id] else { continue }
+        order += 1
+        let inherited = expandDeps(check.dependsOn)
+        newConfigured.append(ConfiguredSuiteEntry(
+            script:           generated.filename,
+            tier:             generated.tier.rawValue,
+            order:            order,
+            dependsOn:        inherited,
+            points:           generated.points,
+            displayName:      generated.displayName,
+            generatedBy:      nil,
+            generatedByCheck: check.id,
+            sectionID:        nil
+        ))
+    }
+
     let newManifest = try makeWorkerManifestJSON(
         testSuites:      newConfigured,
         includeMakefile: props.makefile != nil,
         gradingMode:     props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
         patternFamilies: nextFamilies,
+        notebookChecks:  resolvedChecks,
         sections:        resolvedSections
     )
 
