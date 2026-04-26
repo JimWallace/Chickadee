@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.116] - 2026-04-26
+
+### Fixed
+
+- **Support files uploaded via "+ Upload file" weren't reaching student JupyterLite working dirs.**  The infrastructure already exists (`createSupportFileSymlinks` symlinks every support file from a shared extraction at `{testSetupsDir}/shared/{setupID}/` into each student's per-user JupyterLite working dir at notebook-open time, and the symlinks render as read-only via the existing `isSymlink` check in `JupyterLiteContentsRoutes`).  But the shared dir was only re-extracted by the bigger `/edit/save` flow, not by the single-file `POST /scripts` path used by the new support-file UI.  After this fix, `POST /scripts` (with `tier=support`) and `DELETE /scripts/:filename` both call `extractSupportFilesToSharedDirectory` so the shared dir stays in sync with every upload/delete.  Students opening the assignment notebook in JupyterLite now see the support files alongside `assignment.ipynb`, can `pd.read_csv("assignment4_vitaldb_cases.csv")` directly in-browser, and the symlinks are read-only so they can't accidentally overwrite shared data.
+
 ## [0.4.115] - 2026-04-26
 
 ### Fixed

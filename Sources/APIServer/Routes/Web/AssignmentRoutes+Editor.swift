@@ -423,6 +423,25 @@ extension AssignmentRoutes {
                 setup.manifest = updated
                 try await setup.save(on: req.db)
             }
+        } else {
+            // Support files (tier=="support") aren't entries in `testSuites`,
+            // but they still need to land in the shared extraction dir so
+            // student JupyterLite working copies pick them up via the symlinks
+            // created in `createSupportFileSymlinks`.  v0.4.116+: keep the
+            // shared dir in sync after every POST /scripts upload, not just
+            // the bigger /edit/save flow.
+            let activeTestSuiteScripts: Set<String> = {
+                guard let data = setup.manifest.data(using: .utf8),
+                      let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                else { return [] }
+                return Set(props.testSuites.map(\.script))
+            }()
+            extractSupportFilesToSharedDirectory(
+                zipPath: setup.zipPath,
+                setupID: setup.id!,
+                testSuiteScripts: activeTestSuiteScripts,
+                testSetupsDirectory: req.application.testSetupsDirectory
+            )
         }
 
         struct CreatedResponse: Content {
@@ -485,6 +504,23 @@ extension AssignmentRoutes {
             setup.manifest = updated
             try await setup.save(on: req.db)
         }
+
+        // Re-extract support files to the shared dir (parallels the
+        // create-script path).  Idempotent and cheap; the shared dir
+        // is just a flat extraction of every non-test, non-notebook
+        // entry in the zip, so a deleted file vanishes from there too.
+        let activeTestSuiteScripts: Set<String> = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            else { return [] }
+            return Set(props.testSuites.map(\.script))
+        }()
+        extractSupportFilesToSharedDirectory(
+            zipPath: setup.zipPath,
+            setupID: setup.id!,
+            testSuiteScripts: activeTestSuiteScripts,
+            testSetupsDirectory: req.application.testSetupsDirectory
+        )
         return .noContent
     }
 
