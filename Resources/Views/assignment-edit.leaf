@@ -145,10 +145,14 @@
             <!-- v0.4.104: top-level New Script / New Family hidden — every
                  section (named + Ungrouped) has its own inline buttons now.
                  Kept in the DOM (with `hidden`) so the per-section delegate
-                 click() in the IIFE below still routes to their handlers. -->
+                 click() in the IIFE below still routes to their handlers.
+                 v0.4.112: same treatment for the global Upload button —
+                 instructors author tests in-house via the family/script
+                 editor, or import from Marmoset on the create page.  No
+                 zip upload anymore. -->
             <button class="btn action-btn" type="button" id="new-script-btn" hidden>New Script</button>
             <button class="btn action-btn" type="button" id="add-family-btn" hidden>New Family</button>
-            <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
+            <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
     </div>
 
@@ -592,7 +596,20 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         if (t === 'False') return { ok: true, value: false, strict: true };
         if (t === 'None')  return { ok: true, value: null,  strict: true };
         try { return { ok: true, value: JSON.parse(t), strict: true }; }
-        catch (_) { return { ok: true, value: String(raw), strict: false }; }
+        catch (_) { /* fall through to Python-repr fallback */ }
+        // v0.4.112: Python repr fallback — `{'address': {'city': 'Waterloo'}}`
+        // and similar single-quoted dicts/lists are common copy-paste
+        // sources.  Conservative swap (only when no double quotes
+        // already exist) plus True/False/None token replacement.
+        if (t.indexOf('"') === -1) {
+            var pyish = t.replace(/'/g, '"')
+                         .replace(/\bTrue\b/g, 'true')
+                         .replace(/\bFalse\b/g, 'false')
+                         .replace(/\bNone\b/g, 'null');
+            try { return { ok: true, value: JSON.parse(pyish), strict: false }; }
+            catch (_) { /* fall through */ }
+        }
+        return { ok: true, value: String(raw), strict: false };
     }
 
     function refreshRow(tr) {

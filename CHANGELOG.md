@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.112] - 2026-04-26
+
+### Removed
+
+- **Top-level Upload button hidden on the assignment edit page.**  Tests are authored in-house via the family/script editor or imported from Marmoset on the create page; the manual zip-upload path was rarely used and added clutter.  Same approach as v0.4.104's New Script / New Family hide — `hidden` attribute on the button, kept in DOM in case any latent listener expects it.
+
+### Fixed
+
+- **Auto-compute failures are now visible** instead of silently dropping back to an empty placeholder.  When Pyodide raises (TypeError because the input wasn't a dict, NameError because the function isn't defined in the solution, malformed `$varRef`, …), the Expected cell now shows `⚠ <error>` as its placeholder + a red outline.  Previously the user only saw "computing…" briefly disappear with no feedback — the actual error was buried in the cell's `title` tooltip.
+- **Input cells and section/family variables accept Python repr** (single-quoted strings, `True`/`False`/`None`) when JSON parsing fails.  Pasting `{'address': {'city': 'Waterloo'}, 'name': {'family': 'Nguyen', 'given': 'Ava'}}` (a Python dict literal) now Just Works.  Conservative — only kicks in when the input doesn't already contain double quotes (so genuinely-mixed strings still fail loudly), and only swaps `'` → `"` plus `True`/`False`/`None` → `true`/`false`/`null`.
+
 ## [0.4.111] - 2026-04-25
 
 ### Fixed
