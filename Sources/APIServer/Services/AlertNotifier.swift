@@ -83,7 +83,3 @@ enum WebhookNotifierError: Error, CustomStringConvertible {
         }
     }
 }
-
-func iso8601String(_ date: Date) -> String {
-    ISO8601DateFormatter().string(from: date)
-}
