@@ -1,0 +1,167 @@
+#extend("base"):
+#export("title"):
+Server Health Alerts
+#endexport
+#export("content"):
+<section class="admin-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">Server Health Alerts</h2>
+        <a href="/admin" class="btn">← Back to admin</a>
+    </div>
+
+    #if(flashSuccess):
+    <div class="flash flash-success" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:#d4edda;color:#155724">#(flashSuccess)</div>
+    #endif
+    #if(flashError):
+    <div class="flash flash-error" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:#f8d7da;color:#721c24">#(flashError)</div>
+    #endif
+
+    #if(!enabled):
+    <div class="flash" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:var(--gray-100);color:var(--gray-700)">
+        Alerting is currently <strong>disabled</strong>.  Set <code>ALERT_ENABLED=1</code> in the
+        environment and restart the server to begin evaluating rules.
+    </div>
+    #endif
+
+    <p style="color:var(--muted);margin-top:0">
+        Chickadee evaluates four rules every #(checkIntervalSeconds)s.  When a rule
+        fires it sends a JSON POST to the configured webhook (compatible with Slack,
+        Discord, ntfy.sh, Pushover, Twilio Studio Flow, etc.).  Each rule has a
+        #(cooldownSeconds)-second cooldown, and Chickadee sends a follow-up
+        <code>"resolved": true</code> message when a previously-firing rule clears.
+    </p>
+
+    <h3>Webhook</h3>
+    <form method="post" action="/admin/alerts/config" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+        #csrfFormField()
+        <input class="form-input"
+               type="url"
+               name="webhookURL"
+               value="#(webhookURL)"
+               placeholder="https://hooks.slack.com/services/…"
+               style="flex:1;min-width:320px">
+        <button class="btn btn-primary" type="submit">Save webhook</button>
+    </form>
+    <form method="post" action="/admin/alerts/test" style="margin-bottom:1.5rem">
+        #csrfFormField()
+        <button class="btn" type="submit">Send test alert</button>
+        #if(webhookURLFromEnvironment):
+        <span style="margin-left:.6rem;color:var(--muted);font-size:.85rem">
+            (Fallback URL also configured via <code>ALERT_WEBHOOK_URL</code>.)
+        </span>
+        #endif
+    </form>
+
+    <h3>Rules</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Rule</th>
+                <th>Threshold</th>
+                <th>Status</th>
+                <th class="time">Last fired</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(rule in rules):
+            <tr>
+                <td>
+                    <strong>#(rule.humanReadable)</strong><br>
+                    <code style="font-size:.8em;color:var(--muted)">#(rule.rule)</code>
+                </td>
+                <td>
+                    #if(rule.rule == "runnerOffline"):
+                        no heartbeat for #(runnerOfflineSeconds)s while jobs queued
+                    #elseif(rule.rule == "queueBackedUp"):
+                        ≥ #(queueDepthThreshold) pending OR oldest > #(oldestPendingSeconds)s
+                    #elseif(rule.rule == "errorRateSpike"):
+                        ≥ #(errorRatePercent)% errors+timeouts in last 50 jobs
+                    #elseif(rule.rule == "databaseUnreachable"):
+                        SELECT 1 fails
+                    #endif
+                </td>
+                <td>
+                    #if(rule.isFiring):
+                        <span class="tier tier-closed">FIRING</span>
+                    #else:
+                        <span class="tier tier-open">ok</span>
+                    #endif
+                </td>
+                <td class="time js-relative-time" data-iso="#(rule.lastFiredAt)">
+                    #if(rule.lastFiredAt):#(rule.lastFiredAt)#else:—#endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+
+    <h3 style="margin-top:1.5rem">Recent firings</h3>
+    #if(recentFirings.isEmpty):
+    <p class="empty">No alerts have fired since startup.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th class="time">When</th>
+                <th>Rule</th>
+                <th>Kind</th>
+                <th>Summary</th>
+                <th>Delivery</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(firing in recentFirings):
+            <tr>
+                <td class="time js-relative-time" data-iso="#(firing.firedAt)">#(firing.firedAt)</td>
+                <td><code>#(firing.rule)</code></td>
+                <td>
+                    #if(firing.resolved):
+                        <span class="tier tier-open">resolved</span>
+                    #else:
+                        <span class="tier tier-closed">fired</span>
+                    #endif
+                </td>
+                <td>#(firing.summary)</td>
+                <td>
+                    #if(firing.delivered):
+                        delivered
+                    #else:
+                        <span style="color:var(--danger,#a8272c)">failed</span>
+                        #if(firing.deliveryError):<br><code style="font-size:.75em;color:var(--muted)">#(firing.deliveryError)</code>#endif
+                    #endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+<script>
+(function () {
+    'use strict';
+    var formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+    function formatRelative(iso) {
+        var date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return iso;
+        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
+        var abs = Math.abs(seconds);
+        if (abs < 60) return formatter.format(seconds, 'second');
+        var minutes = Math.round(seconds / 60);
+        if (Math.abs(minutes) < 60) return formatter.format(minutes, 'minute');
+        var hours = Math.round(minutes / 60);
+        if (Math.abs(hours) < 24) return formatter.format(hours, 'hour');
+        var days = Math.round(hours / 24);
+        return formatter.format(days, 'day');
+    }
+    document.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
+        var iso = el.getAttribute('data-iso');
+        if (!iso) return;
+        var date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return;
+        el.textContent = formatRelative(iso);
+        el.title = date.toLocaleString();
+    });
+})();
+</script>
+#endexport
+#endextend

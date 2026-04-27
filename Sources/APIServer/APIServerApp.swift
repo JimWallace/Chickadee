@@ -43,6 +43,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     let workerSecretFile = workDir + ".worker-secret"
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
+    let alertWebhookURLFile = workDir + ".alert-webhook-url"
     let requestedAuthMode = AuthMode.fromEnvironment()
     let nonSSOModesEnabled = environmentBool("ENABLE_NON_SSO_AUTH_MODES") ?? false
     let authMode = authModeOverride ?? resolvedAuthMode(
@@ -68,6 +69,8 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
     app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
     app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
+    app.storage[ServerHealthAlertWebhookURLFilePathKey.self] = alertWebhookURLFile
+    app.storage[ServerHealthAlertConfigurationKey.self] = ServerHealthAlertConfiguration.fromEnvironment()
     let startupWorkerSecret = resolveStartupWorkerSecret(
         cliWorkerSecret: cliWorkerSecret,
         workerSecretFilePath: workerSecretFile,
@@ -151,6 +154,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.lifecycle.use(ObservabilityLifecycleHandler())
     app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
     app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
+    app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     if authMode != .local {
         if !nonSSOModesEnabled {

@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.122] - 2026-04-27
+
+### Added
+
+- **Server health alerts.**  A periodic monitor evaluates four threshold rules and
+  pushes a JSON webhook (Slack / Discord / ntfy.sh / Pushover / Twilio Studio Flow)
+  when one fires, with a 30-minute cooldown per rule and a follow-up
+  `"resolved": true` message when a rule clears.  Pattern mirrors
+  `StuckSubmissionReaperService` — `ServerHealthAlertMonitor` actor + a
+  `LifecycleHandler` registered in `configure()` next to the other monitors.
+  Cost is in the noise: ~3 small indexed queries per minute, all reusing existing
+  signal sources (`WorkerActivityStore`, `JobExecutionMetric`, the same
+  `SELECT 1` probe `/health` already runs).
+  - **Rules** (all opt-in via `ALERT_ENABLED=1`):
+    - `runnerOffline` — no runner heartbeat for `ALERT_RUNNER_OFFLINE_SECONDS` (300s)
+      while at least one submission is pending.  Avoids weekend noise: a silent
+      runner with an empty queue is fine.
+    - `queueBackedUp` — `pendingCount` ≥ `ALERT_QUEUE_DEPTH_THRESHOLD` (25) OR the
+      oldest pending submission is older than `ALERT_OLDEST_PENDING_SECONDS` (600).
+    - `errorRateSpike` — over the last 50 finalised jobs, `error+timeout` ratio
+      ≥ `ALERT_ERROR_RATE_THRESHOLD` (0.30).  Skipped if fewer than 10 samples in
+      the window, so freshly-restarted servers don't false-fire on a single
+      timeout.
+    - `databaseUnreachable` — same `SELECT 1` probe used by `/health`.
+  - **Admin UI** at `GET /admin/alerts`: webhook URL form (persisted to
+    `.alert-webhook-url`, mirroring `.worker-secret`'s on-disk cascade), a
+    "Send test alert" button that exercises the configured notifier without
+    needing a real outage, a per-rule status table, and the last 50 firings
+    (in-memory ring buffer; persistence is out of scope for v1).
+  - **Webhook payload** is consumable as-is by Slack, Discord, ntfy.sh, and
+    Pushover — every firing includes a top-level `text:` summary alongside the
+    structured fields (`rule`, `severity`, `firedAt`, `resolved`, `summary`,
+    `details`, `serverURL`).
+  - **Configuration** is env-var driven (`ALERT_ENABLED`, `ALERT_CHECK_INTERVAL_SECONDS`,
+    `ALERT_COOLDOWN_SECONDS`, `ALERT_RUNNER_OFFLINE_SECONDS`,
+    `ALERT_QUEUE_DEPTH_THRESHOLD`, `ALERT_OLDEST_PENDING_SECONDS`,
+    `ALERT_ERROR_RATE_THRESHOLD`, `ALERT_WEBHOOK_URL`); `ALERT_WEBHOOK_URL` is
+    also editable via the admin UI and persists across restarts.
+
 ## [0.4.121] - 2026-04-27
 
 ### Added

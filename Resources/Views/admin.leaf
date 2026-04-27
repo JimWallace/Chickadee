@@ -44,17 +44,20 @@ Admin
                 <button class="btn" type="submit" style="font-size:.8rem;padding:.2rem .5rem">Save</button>
             </form>
         </div>
-        <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
-            #csrfFormField()
-            <input class="form-input"
-                   type="text"
-                   name="secret"
-                   value="#(workerSecret)"
-                   autocomplete="new-password"
-                   placeholder="Worker shared secret"
-                   style="width:16rem">
-            <button class="btn" type="submit">Save secret</button>
-        </form>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <a href="/admin/alerts" class="btn">Server health alerts</a>
+            <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
+                #csrfFormField()
+                <input class="form-input"
+                       type="text"
+                       name="secret"
+                       value="#(workerSecret)"
+                       autocomplete="new-password"
+                       placeholder="Worker shared secret"
+                       style="width:16rem">
+                <button class="btn" type="submit">Save secret</button>
+            </form>
+        </div>
     </div>
 
     <table id="workers-table" class="results-table">
