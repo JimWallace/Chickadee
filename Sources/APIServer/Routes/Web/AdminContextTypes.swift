@@ -142,3 +142,27 @@ struct AdminCourseAssignmentRow: Encodable {
     let dueAt: String?
     let isOpen: Bool
 }
+
+struct AdminAlertsRuleRow: Encodable {
+    let rule: String
+    let humanReadable: String
+    let isFiring: Bool
+    let lastFiredAt: String?
+}
+
+struct AdminAlertsContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let enabled: Bool
+    let webhookURL: String
+    let webhookURLFromEnvironment: Bool
+    let checkIntervalSeconds: Int
+    let cooldownSeconds: Int
+    let runnerOfflineSeconds: Int
+    let queueDepthThreshold: Int
+    let oldestPendingSeconds: Int
+    let errorRatePercent: Int
+    let rules: [AdminAlertsRuleRow]
+    let recentFirings: [AlertFiringRecord]
+    let flashSuccess: String?
+    let flashError: String?
+}

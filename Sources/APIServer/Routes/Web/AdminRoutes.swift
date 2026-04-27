@@ -25,6 +25,9 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
+        admin.get("alerts", use: alertsPage)
+        admin.post("alerts", "config", use: updateAlertsConfig)
+        admin.post("alerts", "test", use: sendTestAlert)
         admin.get("courses", "new", use: newCourseForm)
         admin.post("courses", use: createCourse)
         admin.get("courses", ":courseID", use: courseDetail)
@@ -353,6 +356,94 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+    // MARK: - GET /admin/alerts
+
+    @Sendable
+    func alertsPage(req: Request) async throws -> View {
+        struct FlashQuery: Content {
+            var ok: String?
+            var error: String?
+        }
+        let query = (try? req.query.decode(FlashQuery.self)) ?? FlashQuery()
+
+        let configuration = req.application.serverHealthAlertConfiguration
+        let monitor = req.application.serverHealthAlertMonitor
+        let effectiveURL = await monitor.effectiveWebhookURL() ?? ""
+        let envURL = configuration.webhookURLFromEnvironment ?? ""
+        let states = await monitor.currentRuleStates()
+        let recent = await monitor.recentFiringsSnapshot()
+
+        let iso = ISO8601DateFormatter()
+        let ruleRows = HealthRule.allCases.map { rule -> AdminAlertsRuleRow in
+            let state = states[rule] ?? .initial
+            return AdminAlertsRuleRow(
+                rule: rule.rawValue,
+                humanReadable: rule.humanReadable,
+                isFiring: state.isFiring,
+                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) }
+            )
+        }
+
+        let ctx = AdminAlertsContext(
+            currentUser: req.currentUserContext,
+            enabled: configuration.enabled,
+            webhookURL: effectiveURL,
+            webhookURLFromEnvironment: !envURL.isEmpty,
+            checkIntervalSeconds: Int(configuration.checkIntervalSeconds),
+            cooldownSeconds: Int(configuration.cooldownSeconds),
+            runnerOfflineSeconds: Int(configuration.runnerOfflineSeconds),
+            queueDepthThreshold: configuration.queueDepthThreshold,
+            oldestPendingSeconds: Int(configuration.oldestPendingSeconds),
+            errorRatePercent: Int((configuration.errorRateThreshold * 100).rounded()),
+            rules: ruleRows,
+            recentFirings: recent,
+            flashSuccess: query.ok,
+            flashError: query.error
+        )
+        return try await req.view.render("alerts", ctx)
+    }
+
+    // MARK: - POST /admin/alerts/config
+
+    @Sendable
+    func updateAlertsConfig(req: Request) async throws -> Response {
+        struct AlertsConfigBody: Content { var webhookURL: String? }
+        let body = try req.content.decode(AlertsConfigBody.self)
+        let trimmed = (body.webhookURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmed.isEmpty {
+            guard let parsed = URL(string: trimmed),
+                  let scheme = parsed.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https"
+            else {
+                return req.redirect(to: alertsRedirect(error: "Webhook URL must start with http:// or https://"))
+            }
+        }
+
+        await req.application.serverHealthAlertMonitor.setWebhookURL(trimmed)
+        req.logger.info("Admin updated alerts webhook URL (\(trimmed.isEmpty ? "cleared" : "set"))")
+        return req.redirect(to: alertsRedirect(ok: trimmed.isEmpty ? "Webhook cleared." : "Webhook saved."))
+    }
+
+    // MARK: - POST /admin/alerts/test
+
+    @Sendable
+    func sendTestAlert(req: Request) async throws -> Response {
+        let monitor = req.application.serverHealthAlertMonitor
+        let effectiveURL = await monitor.effectiveWebhookURL() ?? ""
+
+        if effectiveURL.isEmpty {
+            return req.redirect(to: alertsRedirect(error: "No webhook URL configured. Set one above first."))
+        }
+
+        do {
+            _ = try await monitor.dispatchTestAlert(application: req.application)
+            return req.redirect(to: alertsRedirect(ok: "Test alert dispatched to webhook."))
+        } catch {
+            return req.redirect(to: alertsRedirect(error: "Test alert failed: \(error)"))
+        }
+    }
+
     // MARK: - GET /admin/users/:userID
 
     @Sendable
@@ -419,6 +510,17 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
+}
+
+private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
+    var pairs: [String] = []
+    if let okValue = ok?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+        pairs.append("ok=\(okValue)")
+    }
+    if let errorValue = error?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+        pairs.append("error=\(errorValue)")
+    }
+    return pairs.isEmpty ? "/admin/alerts" : "/admin/alerts?" + pairs.joined(separator: "&")
 }
 
 private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
