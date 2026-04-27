@@ -12,7 +12,7 @@ struct AdminUserRow: Encodable {
     let username: String
     let role: String
     let createdAt: String
-    let lastLoginAt: String?
+    let lastSeenAt: String?
 }
 
 struct AdminWorkerRow: Content {

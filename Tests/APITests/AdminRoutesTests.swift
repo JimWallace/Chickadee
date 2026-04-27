@@ -247,15 +247,15 @@ final class AdminRoutesTests: XCTestCase {
         })
     }
 
-    func testAdminDashboardDefaultsUsersToMostRecentLastLoginFirst() async throws {
+    func testAdminDashboardDefaultsUsersToMostRecentLastSeenFirst() async throws {
         let cookie = try await loginAsAdmin()
         let now = Date()
-        _ = try await makeUser(username: "never_logged_in")
-        let older = try await makeUser(username: "older_login", role: "student")
-        older.lastLoginAt = now.addingTimeInterval(-3600)
+        _ = try await makeUser(username: "never_seen")
+        let older = try await makeUser(username: "older_seen", role: "student")
+        older.lastSeenAt = now.addingTimeInterval(-3600)
         try await older.save(on: app.db)
-        let recent = try await makeUser(username: "recent_login", role: "student")
-        recent.lastLoginAt = now
+        let recent = try await makeUser(username: "recent_seen", role: "student")
+        recent.lastSeenAt = now
         try await recent.save(on: app.db)
 
         try await app.asyncTest(.GET, "/admin", beforeRequest: { req in
@@ -263,11 +263,11 @@ final class AdminRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let body = String(buffer: res.body)
-            XCTAssertTrue(body.contains("data-sort-key=\"last-login\""))
+            XCTAssertTrue(body.contains("data-sort-key=\"last-seen\""))
             XCTAssertTrue(body.contains("sortUsersByHeader(defaultUserHeader, 'desc');"))
-            let recentIndex = try XCTUnwrap(body.range(of: "recent_login")?.lowerBound)
-            let olderIndex = try XCTUnwrap(body.range(of: "older_login")?.lowerBound)
-            let neverIndex = try XCTUnwrap(body.range(of: "never_logged_in")?.lowerBound)
+            let recentIndex = try XCTUnwrap(body.range(of: "recent_seen")?.lowerBound)
+            let olderIndex = try XCTUnwrap(body.range(of: "older_seen")?.lowerBound)
+            let neverIndex = try XCTUnwrap(body.range(of: "never_seen")?.lowerBound)
             XCTAssertLessThan(recentIndex, olderIndex)
             XCTAssertLessThan(olderIndex, neverIndex)
         })

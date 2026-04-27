@@ -33,6 +33,7 @@ struct AssignmentRoutes: RouteCollection {
         routes.post("courses", ":courseID", "enrollment-mode", use: setCourseEnrollmentMode)
         routes.post("courses", ":courseID", "enroll-csv",      use: instructorBulkEnrollCSV)
         routes.post("courses", ":courseID", "unenroll", ":userID", use: instructorUnenrollUser)
+        routes.post("courses", ":courseID", "pre-unenroll", ":preEnrollmentID", use: instructorCancelPreEnrollment)
 
         let r = routes.grouped("instructor")
         r.get(use: list)
@@ -175,7 +176,7 @@ struct AssignmentRoutes: RouteCollection {
         )
         let allSetupIDs = allSetups.compactMap { $0.id }
 
-        let enrolledStudents: [EnrolledStudentRow]
+        var enrolledStudents: [EnrolledStudentRow]
         let metrics: [InstructorDashboardMetric]
         if let activeCourseUUID = courseState.activeCourseUUID {
             let enrollments = try await APICourseEnrollment.query(on: req.db)
@@ -192,7 +193,7 @@ struct AssignmentRoutes: RouteCollection {
                     .filter(\.$id ~~ enrolledUserIDs)
                     .all()
                     .sorted { lhs, rhs in
-                        switch (lhs.lastLoginAt, rhs.lastLoginAt) {
+                        switch (lhs.lastSeenAt, rhs.lastSeenAt) {
                         case let (l?, r?):
                             if l != r { return l > r }
                         case (.some, nil):
@@ -211,12 +212,39 @@ struct AssignmentRoutes: RouteCollection {
                         username: u.username,
                         displayName: u.displayName ?? u.username,
                         role: u.role,
-                        lastLoginAtText: u.lastLoginAt.map { fmt.string(from: $0) } ?? "—",
-                        lastLoginAtISO: u.lastLoginAt.map { isoFormatter.string(from: $0) },
-                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions"
+                        lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
+                        lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
+                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions",
+                        unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
+                        isPending: false
                     )
                 }
             }
+
+            // Append pre-enrolled (pending) students — bulk-enroll-by-CSV
+            // entries that haven't been claimed yet by a first SSO/local
+            // login.  Showing them in the same roster list keeps the
+            // count matching what the instructor uploaded; the
+            // `isPending` flag drives muted styling in the template.
+            let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
+                .filter(\.$course.$id == activeCourseUUID)
+                .sort(\.$username)
+                .all()
+            let pendingRows = pendingPreEnrollments.compactMap { p -> EnrolledStudentRow? in
+                guard let preID = p.id else { return nil }
+                return EnrolledStudentRow(
+                    id: preID.uuidString,
+                    username: p.username,
+                    displayName: p.username,
+                    role: "(pending)",
+                    lastSeenAtText: "—",
+                    lastSeenAtISO: nil,
+                    submissionsURL: "#",
+                    unenrollURL: "/courses/\(activeCourseUUID.uuidString)/pre-unenroll/\(preID.uuidString)",
+                    isPending: true
+                )
+            }
+            enrolledStudents = enrolledStudents + pendingRows
 
             let now = Date()
             let windowStart = now.addingTimeInterval(-24 * 60 * 60)
@@ -240,9 +268,9 @@ struct AssignmentRoutes: RouteCollection {
                     .filter { $0.role == "student" }
                     .compactMap(\.id)
             )
-            let loggedIn24h = enrolledUsers.reduce(into: 0) { count, user in
+            let active24h = enrolledUsers.reduce(into: 0) { count, user in
                 guard user.role == "student" else { return }
-                if let lastLoginAt = user.lastLoginAt, lastLoginAt >= windowStart {
+                if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
                     count += 1
                 }
             }
@@ -267,7 +295,7 @@ struct AssignmentRoutes: RouteCollection {
             let noSubmissionYet = enrolledStudentIDs.subtracting(submitterIDs).count
 
             metrics = [
-                InstructorDashboardMetric(label: "24h Logged In", value: "\(loggedIn24h)"),
+                InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
                 InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
                 InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
                 InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
@@ -276,7 +304,7 @@ struct AssignmentRoutes: RouteCollection {
         } else {
             enrolledStudents = []
             metrics = [
-                InstructorDashboardMetric(label: "24h Logged In", value: "—"),
+                InstructorDashboardMetric(label: "24h Active", value: "—"),
                 InstructorDashboardMetric(label: "24h Submissions", value: "—"),
                 InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
                 InstructorDashboardMetric(label: "Queued Right Now", value: "—"),

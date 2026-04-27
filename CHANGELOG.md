@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.123] - 2026-04-27
+
+### Added
+
+- **Pending pre-enrollments now show in the instructor roster.**  v0.4.121 added the `pre_enrollments` table but the instructor's roster view only queried `APICourseEnrollment`, so bulk-uploaded students who hadn't logged in yet were invisible.  Now they appear in the same Enrolled-students table, visually muted with an "awaiting first login" tag and a `(pending)` role label, and the row's Remove button cancels the pending pre-enrollment instead of erroring.
+- **`POST /courses/:courseID/pre-unenroll/:preEnrollmentID` endpoint** to cancel a pending pre-enrollment.  Same instructor-only authz as the regular unenroll endpoint.
+- **`users.last_seen_at` column + `UserActivityMiddleware`.**  Refreshes a user's activity timestamp on every authenticated request (debounced to 60 s).  Without it, the admin/instructor dashboards' "Last Login" column froze at the moment the cookie session was first established and read "active 2 weeks ago" for users browsing daily.  The instructor "24h Logged In" metric is now "24h Active" and counts students seen within the window, not just freshly logged-in ones.  Admin and instructor roster columns renamed accordingly; ISO-formatted timestamp surfaced via `data-iso` for client-side relative formatting.
+
+### Changed
+
+- **`EnrolledStudentRow` carries an `unenrollURL` field** so the template doesn't have to branch on row type to produce the right form action.  Active rows point at `/unenroll/:userID`; pending rows at `/pre-unenroll/:preEnrollmentID`.
+
 ## [0.4.122] - 2026-04-27
 
 ### Added

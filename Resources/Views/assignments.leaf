@@ -534,24 +534,38 @@
                 <th class="sortable" data-col="0" style="cursor:pointer;user-select:none">Name <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
                 <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
-                <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇕</span></th>
+                <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Seen <span class="sort-icon">⇕</span></th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
         #for(student in enrolledStudents):
-            <tr class="student-row-link" data-href="#(student.submissionsURL)">
-                <td><a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a></td>
-                <td><a href="#(student.submissionsURL)"><code>#(student.username)</code></a></td>
+            <tr class="student-row-link#if(student.isPending): student-row-pending#endif"
+                #if(!student.isPending):data-href="#(student.submissionsURL)"#endif>
+                <td>
+                    #if(student.isPending):
+                    <strong style="color:var(--gray-500)">#(student.displayName)</strong>
+                    <span style="font-size:.72rem;color:var(--gray-500);margin-left:.4rem">awaiting first login</span>
+                    #else:
+                    <a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a>
+                    #endif
+                </td>
+                <td>
+                    #if(student.isPending):
+                    <code style="color:var(--gray-500)">#(student.username)</code>
+                    #else:
+                    <a href="#(student.submissionsURL)"><code>#(student.username)</code></a>
+                    #endif
+                </td>
                 <td>#(student.role)</td>
                 <td class="js-relative-time"
-                    #if(student.lastLoginAtISO):data-iso="#(student.lastLoginAtISO)"#endif>
-                    #(student.lastLoginAtText)
+                    #if(student.lastSeenAtISO):data-iso="#(student.lastSeenAtISO)"#endif>
+                    #(student.lastSeenAtText)
                 </td>
                 <td>
                     #if(!courseIsArchived):
                     #if(currentUser.activeCourse):
-                    <form method="post" action="/courses/#(currentUser.activeCourse.id)/unenroll/#(student.id)"
+                    <form method="post" action="#(student.unenrollURL)"
                           style="display:inline;margin:0">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"

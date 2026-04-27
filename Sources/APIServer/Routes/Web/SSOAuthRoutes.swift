@@ -218,11 +218,14 @@ struct SSOAuthRoutes: RouteCollection {
             if let mappedRole {
                 existing.role = mappedRole
             }
-            existing.lastLoginAt  = Date()
+            let now = Date()
+            existing.lastLoginAt  = now
+            existing.lastSeenAt   = now
             try await existing.save(on: req.db)
             return existing
         }
 
+        let now = Date()
         let newUser = APIUser(
             username:        username,
             passwordHash:    "",            // SSO users have no local password
@@ -234,7 +237,8 @@ struct SSOAuthRoutes: RouteCollection {
             userIdentifier:  userIdentifier,
             studentID:       studentID,
             displayName:     displayName,
-            lastLoginAt:     Date()
+            lastLoginAt:     now,
+            lastSeenAt:      now
         )
         try await newUser.save(on: req.db)
         return newUser

@@ -118,4 +118,34 @@ extension AssignmentRoutes {
 
         return req.redirect(to: "/instructor")
     }
+
+    // MARK: - POST /courses/:courseID/pre-unenroll/:preEnrollmentID
+    //
+    // Cancels a pending pre-enrollment (instructor bulk-uploaded the
+    // username via CSV, the student hasn't logged in yet so there's no
+    // APICourseEnrollment row yet).  Mirrors the regular unenroll
+    // endpoint but operates on the `pre_enrollments` table.  Same
+    // instructor-only authz; same redirect on success.
+
+    @Sendable
+    func instructorCancelPreEnrollment(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
+        guard caller.isInstructor else { throw Abort(.forbidden) }
+
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID       = UUID(uuidString: courseIDString),
+            let preIDString    = req.parameters.get("preEnrollmentID"),
+            let preID          = UUID(uuidString: preIDString)
+        else {
+            throw Abort(.badRequest)
+        }
+
+        try await APIPreEnrollment.query(on: req.db)
+            .filter(\.$id == preID)
+            .filter(\.$course.$id == courseID)
+            .delete()
+
+        return req.redirect(to: "/instructor")
+    }
 }

@@ -47,6 +47,13 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "last_login_at")
     var lastLoginAt: Date?
 
+    /// Refreshed on every authenticated request (debounced) by
+    /// `UserActivityMiddleware`. Drives the activity columns on the
+    /// instructor and admin dashboards, where `lastLoginAt` would otherwise
+    /// freeze at the original cookie-session login.
+    @OptionalField(key: "last_seen_at")
+    var lastSeenAt: Date?
+
     /// "student" | "instructor" | "admin"
     @Field(key: "role")
     var role: String
@@ -68,7 +75,8 @@ final class APIUser: Model, Content, @unchecked Sendable {
         userIdentifier: String? = nil,
         studentID: String? = nil,
         displayName: String? = nil,
-        lastLoginAt: Date? = nil
+        lastLoginAt: Date? = nil,
+        lastSeenAt: Date? = nil
     ) {
         self.id           = id
         self.username     = username
@@ -81,6 +89,7 @@ final class APIUser: Model, Content, @unchecked Sendable {
         self.studentID = studentID
         self.displayName = displayName
         self.lastLoginAt = lastLoginAt
+        self.lastSeenAt = lastSeenAt
         self.role         = role
     }
 }

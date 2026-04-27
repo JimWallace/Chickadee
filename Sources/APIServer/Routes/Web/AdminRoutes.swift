@@ -51,7 +51,7 @@ struct AdminRoutes: RouteCollection {
         let users = try await APIUser.query(on: req.db)
             .all()
             .sorted { lhs, rhs in
-                switch (lhs.lastLoginAt, rhs.lastLoginAt) {
+                switch (lhs.lastSeenAt, rhs.lastSeenAt) {
                 case let (l?, r?):
                     if l != r { return l > r }
                 case (.some, nil):
@@ -78,7 +78,7 @@ struct AdminRoutes: RouteCollection {
                 username:  u.username,
                 role:      u.role,
                 createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                lastLoginAt: u.lastLoginAt.map { ISO8601DateFormatter().string(from: $0) }
+                lastSeenAt: u.lastSeenAt.map { ISO8601DateFormatter().string(from: $0) }
             )
         }
 

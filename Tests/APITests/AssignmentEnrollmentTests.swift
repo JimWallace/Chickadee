@@ -344,6 +344,60 @@ final class AssignmentEnrollmentTests: XCTestCase {
         XCTAssertEqual(preEnrollments.count, 1, "Re-uploading should not create a duplicate pre_enrollment")
     }
 
+    func testPreUnenroll_removesPendingRow() async throws {
+        let course = try await makeCourse(code: "CSV_PRE5")
+        let courseID = try course.requireID()
+
+        // Pre-create a pending row.
+        let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_cancel")
+        try await pending.save(on: app.db)
+        let preID = try pending.requireID().uuidString
+
+        let cookie = try await loginUser(username: "csv_pre_instructor5", password: "pw",
+                                         role: "instructor", on: app)
+        let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+        try await app.asyncTest(.POST, "/courses/\(courseID.uuidString)/pre-unenroll/\(preID)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+        })
+
+        let pendingID = try pending.requireID()
+        let remaining = try await APIPreEnrollment.query(on: app.db)
+            .filter(\.$id == pendingID)
+            .count()
+        XCTAssertEqual(remaining, 0)
+    }
+
+    func testPreUnenroll_studentForbidden() async throws {
+        let course = try await makeCourse(code: "CSV_PRE6")
+        let courseID = try course.requireID()
+
+        let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_studentforbidden")
+        try await pending.save(on: app.db)
+        let preID = try pending.requireID().uuidString
+
+        let cookie = try await loginUser(username: "csv_pre_student6", password: "pw",
+                                         role: "student", on: app)
+        let (token, newCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
+
+        try await app.asyncTest(.POST, "/courses/\(courseID.uuidString)/pre-unenroll/\(preID)", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .forbidden)
+        })
+
+        // Pending row still exists.
+        let pendingID = try pending.requireID()
+        let remaining = try await APIPreEnrollment.query(on: app.db)
+            .filter(\.$id == pendingID)
+            .count()
+        XCTAssertEqual(remaining, 1)
+    }
+
     func testBulkEnrollCSV_studentForbidden() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL3")
         let cookie = try await loginUser(username: "csv_student1", password: "pw",

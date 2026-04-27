@@ -210,7 +210,7 @@ Admin
                 <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
                 <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
                 <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
-                <th class="time" data-sort-key="last-login" data-sort-type="date" tabindex="0" aria-sort="none">Last Login</th>
+                <th class="time" data-sort-key="last-seen" data-sort-type="date" tabindex="0" aria-sort="none">Last Seen</th>
                 <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
                 <th>Actions</th>
             </tr>
@@ -239,9 +239,9 @@ Admin
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
                 </td>
-                <td class="time js-relative-time" data-iso="#(user.lastLoginAt)">
-                    #if(user.lastLoginAt):
-                        #(user.lastLoginAt)
+                <td class="time js-relative-time" data-iso="#(user.lastSeenAt)">
+                    #if(user.lastSeenAt):
+                        #(user.lastSeenAt)
                     #else:
                         —
                     #endif
@@ -736,7 +736,7 @@ tr.runner-row-offline {
             });
 
             var defaultUserHeader = userHeaders.find(function (header) {
-                return header.getAttribute('data-sort-key') === 'last-login';
+                return header.getAttribute('data-sort-key') === 'last-seen';
             }) || userHeaders[0];
             sortUsersByHeader(defaultUserHeader, 'desc');
         }

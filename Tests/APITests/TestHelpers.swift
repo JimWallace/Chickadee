@@ -129,6 +129,7 @@ private func registerBaseTestMigrations(on app: Application) {
     app.migrations.add(AddSubmissionRetestedByUserID())
     app.migrations.add(AddTestSetupLastRetestedManifestHash())
     app.migrations.add(CreatePreEnrollments())
+    app.migrations.add(AddUserLastSeenAt())
 }
 
 private func registerObservabilityTestMigrations(on app: Application) {

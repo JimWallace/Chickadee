@@ -74,7 +74,9 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=invalid")
         }
 
-        user.lastLoginAt = Date()
+        let now = Date()
+        user.lastLoginAt = now
+        user.lastSeenAt = now
         try await user.save(on: req.db)
 
         req.auth.login(user)

@@ -55,10 +55,19 @@ struct EnrolledStudentRow: Encodable {
     let id: String
     let username: String
     let displayName: String
-    let role: String        // "student" | "instructor" | "admin"
-    let lastLoginAtText: String
-    let lastLoginAtISO: String?
+    let role: String        // "student" | "instructor" | "admin" | "(pending)"
+    let lastSeenAtText: String
+    let lastSeenAtISO: String?
     let submissionsURL: String
+    /// URL to POST to to remove this student from the course.  Differs
+    /// for active enrollments vs pending pre-enrollments — the template
+    /// just uses this verbatim instead of branching on `isPending`.
+    let unenrollURL: String
+    /// True when this row represents a `pre_enrollments` row (instructor
+    /// bulk-enrolled the username via CSV but the student hasn't logged
+    /// in yet).  Template renders these visually muted; pending students
+    /// have no submissions or last-seen data.
+    let isPending: Bool
 }
 
 struct AssignmentSubmissionsContext: Encodable {

@@ -117,6 +117,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     }
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
+    app.middleware.use(UserActivityMiddleware(debounceWindow: 60))
     app.middleware.use(UserFileNamespaceMiddleware())
     // Allow notebook uploads from the assignment-creation flow.
     app.routes.defaultMaxBodySize = "10mb"
