@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.120] - 2026-04-27
+
+### Changed
+
+- **Bulk-enroll CSV parser now handles Brightspace / D2L gradebook exports.**  Three loosened rules:
+  - `OrgDefinedId` joins the recognised header keywords, so the header row in `OrgDefinedId,Username,End-of-Line Indicator` exports is correctly skipped instead of being treated as a username.
+  - When the header has multiple columns, a column literally named `Username` is preferred over the first column (Brightspace puts the friendlier identifier there).
+  - Values matching the Brightspace `#<digits>.<rest>` shape are stripped to the bare username — `#174667.teststudent1` resolves to `teststudent1`, matching the quest name UW's OIDC sets as `APIUser.username` (via `winaccountname`).  Conservative: only fires when the prefix is `#<digits>.`, so non-Brightspace `#`-prefixed usernames pass through unchanged.
+
+  The previous parser silently dropped Brightspace exports — first column was `OrgDefinedId`-prefixed, never matched any account, so every student landed in "not found".
+
 ## [0.4.119] - 2026-04-27
 
 ### Fixed
