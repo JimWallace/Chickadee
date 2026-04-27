@@ -11,24 +11,31 @@ CSV Enrollment Result
 
 <section class="admin-section">
     <h2>Results</h2>
-    <dl style="display:grid;grid-template-columns:auto 1fr;gap:.4rem 1.5rem;max-width:400px;margin:0">
-        <dt style="font-weight:600">Enrolled</dt>
+    <dl style="display:grid;grid-template-columns:auto 1fr;gap:.4rem 1.5rem;max-width:480px;margin:0">
+        <dt style="font-weight:600">Enrolled (existing accounts)</dt>
         <dd style="margin:0">#(enrolledCount)</dd>
+        <dt style="font-weight:600">Pre-enrolled (resolved on first login)</dt>
+        <dd style="margin:0">#(preEnrolledCount)</dd>
         <dt style="font-weight:600">Already enrolled (skipped)</dt>
         <dd style="margin:0">#(alreadyEnrolledCount)</dd>
-        <dt style="font-weight:600">Not found</dt>
-        <dd style="margin:0">#(notFoundCount)</dd>
+        <dt style="font-weight:600">Rejected (invalid format)</dt>
+        <dd style="margin:0">#(rejectedCount)</dd>
     </dl>
+    #if(hasPreEnrolled):
+    <p style="font-size:.85rem;color:var(--gray-600);margin-top:.75rem;margin-bottom:0">
+        Pre-enrolled usernames are recorded as pending; each one is automatically added to the roster the first time that student signs in.  No action needed from you.
+    </p>
+    #endif
 </section>
 
-#if(hasNotFound):
+#if(hasRejected):
 <section class="admin-section">
-    <h2>Usernames not found</h2>
+    <h2>Rejected usernames</h2>
     <p style="font-size:.875rem;color:var(--gray-600);margin-top:0">
-        These usernames from the CSV did not match any account in the system:
+        These rows in the CSV had a format we couldn't accept (empty, too long, or contained unsafe characters).  Fix the CSV and re-upload.
     </p>
     <ul style="margin:.25rem 0 0 1.25rem;padding:0">
-    #for(name in notFoundUsernames):
+    #for(name in rejectedUsernames):
         <li><code>#(name)</code></li>
     #endfor
     </ul>

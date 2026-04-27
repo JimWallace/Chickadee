@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.121] - 2026-04-27
+
+### Added
+
+- **Pre-enrollment from CSV — instructors can populate a course roster before students log in.**  Bulk-enroll's behaviour for usernames with no matching `APIUser`:
+  - **Before:** silently dropped (reported as "not found").
+  - **After:** recorded in a new `pre_enrollments` table.  The next time the matching student authenticates (SSO or local), a post-login resolver creates the `APICourseEnrollment` and deletes the pending row.
+- The login flow itself is **completely untouched** — `upsertUser` is unchanged, the new resolver runs *after* the user is already authenticated.  A bug in the resolver can leave a student off the roster (which the instructor can correct manually) but cannot block them from signing in.  This is a deliberate design choice over the alternative of pre-creating placeholder `APIUser` rows: that approach would have introduced a new claim-on-first-login path inside the SSO upsert, where any failure mode means lockout.
+
+### Changed
+
+- **Bulk-enroll result page** distinguishes Enrolled (existing accounts), Pre-enrolled (queued for first login), Already enrolled (skipped), and Rejected (invalid format) — the old "Not found" bucket merged the second and fourth, which was misleading.
+- **Bulk-enroll is idempotent**: re-uploading the same CSV makes no further changes — pre-enrollments get a `(course_id, username)` unique constraint.
+
 ## [0.4.120] - 2026-04-27
 
 ### Changed

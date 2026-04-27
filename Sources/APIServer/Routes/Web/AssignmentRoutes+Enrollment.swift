@@ -77,44 +77,20 @@ extension AssignmentRoutes {
         let form = try req.content.decode(BulkEnrollForm.self)
 
         let rawUsernames = parseUsernamesFromCSV(form.file)
-        var seen = Set<String>()
-        let uniqueUsernames = rawUsernames.filter { seen.insert($0).inserted }
-
-        let usernameSet = Set(uniqueUsernames)
-        let allUsers = try await APIUser.query(on: req.db).all()
-        let matchedUsers = allUsers.filter { usernameSet.contains($0.username) }
-
-        let matchedUsernameSet = Set(matchedUsers.map { $0.username })
-        let notFoundUsernames = uniqueUsernames
-            .filter { !matchedUsernameSet.contains($0) }
-            .sorted()
-
-        let existingEnrollments = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .all()
-        let alreadyEnrolledUserIDs = Set(existingEnrollments.map { $0.userID })
-
-        var enrolledCount = 0
-        var alreadyEnrolledCount = 0
-
-        for user in matchedUsers {
-            guard let userID = user.id else { continue }
-            if alreadyEnrolledUserIDs.contains(userID) {
-                alreadyEnrolledCount += 1
-            } else {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try await enrollment.save(on: req.db)
-                enrolledCount += 1
-            }
-        }
+        let result = try await enrollUsernamesInCourse(
+            rawUsernames,
+            courseID: courseID,
+            on: req.db
+        )
 
         return try await req.view.render("admin-enroll-csv-result", EnrollCSVResultContext(
             currentUser:          req.currentUserContext,
             courseCode:           course.code,
             courseName:           course.name,
-            enrolledCount:        enrolledCount,
-            alreadyEnrolledCount: alreadyEnrolledCount,
-            notFoundUsernames:    notFoundUsernames,
+            enrolledCount:        result.enrolledCount,
+            preEnrolledCount:     result.preEnrolledCount,
+            alreadyEnrolledCount: result.alreadyEnrolledCount,
+            rejectedUsernames:    result.rejectedUsernames,
             returnURL:            "/instructor"
         ))
     }

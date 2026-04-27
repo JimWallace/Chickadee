@@ -148,6 +148,12 @@ struct SSOAuthRoutes: RouteCollection {
             return req.redirect(to: "/login?error=sso_failed")
         }
 
+        // Resolve any pending pre-enrollments for this username (instructor
+        // can populate a roster before students log in via POST /courses/:id
+        // /enroll-csv).  Failures are swallowed inside the resolver and
+        // logged — they cannot block this login flow.
+        await resolvePendingPreEnrollments(for: user, db: req.db, logger: req.logger)
+
         // Persist tokens in the session for use at logout time.
         // - access token: revoked via revocation_endpoint on logout
         // - refresh token: revoked too when the provider issued one

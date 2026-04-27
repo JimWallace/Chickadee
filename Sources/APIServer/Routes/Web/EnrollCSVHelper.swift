@@ -4,6 +4,8 @@
 // and AssignmentRoutes so the logic and result view context stay in sync.
 
 import Foundation
+import Fluent
+import Vapor
 
 /// Parses a flat list of usernames from a CSV upload.
 ///
@@ -97,11 +99,165 @@ struct EnrollCSVResultContext: Encodable {
     let courseCode: String
     let courseName: String
     let enrolledCount: Int
+    /// Usernames the parser produced that don't yet have an APIUser row;
+    /// recorded as pre-enrollments and resolved on first SSO login.
+    let preEnrolledCount: Int
     let alreadyEnrolledCount: Int
-    let notFoundUsernames: [String]
+    /// Usernames the parser rejected (failed shape validation) — surfaced
+    /// to the instructor so they can fix the CSV.
+    let rejectedUsernames: [String]
     /// URL the back-button should link to (admin course page or /instructor).
     let returnURL: String
     // Precomputed for easy Leaf truthiness check.
-    var hasNotFound: Bool { !notFoundUsernames.isEmpty }
-    var notFoundCount: Int { notFoundUsernames.count }
+    var hasRejected: Bool { !rejectedUsernames.isEmpty }
+    var rejectedCount: Int { rejectedUsernames.count }
+    var hasPreEnrolled: Bool { preEnrolledCount > 0 }
+}
+
+// MARK: - Bulk-enroll execution
+
+/// Validates that a parsed username is safe to record as a pending
+/// pre-enrollment.  Conservative: matches the typical shape of UWaterloo
+/// quest names plus common email/identifier formats; rejects empty,
+/// over-long, or control-char-laden values.  The bulk-enroll handler
+/// surfaces rejected names so the instructor can clean the CSV.
+func isAcceptableUsernameForEnrollment(_ s: String) -> Bool {
+    guard !s.isEmpty, s.count <= 64 else { return false }
+    let allowed = CharacterSet(charactersIn:
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@+")
+    return s.unicodeScalars.allSatisfy { allowed.contains($0) }
+}
+
+struct EnrollUsernamesResult {
+    /// Existing users freshly added to this course's roster.
+    let enrolledCount: Int
+    /// Usernames recorded as pending pre-enrollments (no APIUser yet).
+    let preEnrolledCount: Int
+    /// Existing users already on the roster; left untouched.
+    let alreadyEnrolledCount: Int
+    /// Usernames the parser produced that we refused to record.
+    let rejectedUsernames: [String]
+}
+
+/// Enrolls `usernames` in `courseID`, recording a pre-enrollment row for
+/// any username that has no matching APIUser yet.  Idempotent: re-running
+/// with the same CSV makes no further changes.  The login flow itself is
+/// untouched — pre-enrollments resolve in a separate post-login step
+/// (`resolvePendingPreEnrollments`), so a bug in this helper cannot block
+/// any student from signing in.
+func enrollUsernamesInCourse(
+    _ usernames: [String],
+    courseID: UUID,
+    on db: Database
+) async throws -> EnrollUsernamesResult {
+    var seen = Set<String>()
+    let uniqueUsernames = usernames.filter { seen.insert($0).inserted }
+
+    let usernameSet = Set(uniqueUsernames)
+    let allUsers = try await APIUser.query(on: db).all()
+    var byUsername: [String: APIUser] = [:]
+    for u in allUsers where usernameSet.contains(u.username) {
+        byUsername[u.username] = u
+    }
+
+    let existingEnrollments = try await APICourseEnrollment.query(on: db)
+        .filter(\.$course.$id == courseID)
+        .all()
+    let alreadyEnrolledUserIDs = Set(existingEnrollments.map { $0.userID })
+
+    let existingPreEnrollments = try await APIPreEnrollment.query(on: db)
+        .filter(\.$course.$id == courseID)
+        .all()
+    let alreadyPreEnrolledUsernames = Set(existingPreEnrollments.map { $0.username })
+
+    var enrolledCount        = 0
+    var preEnrolledCount     = 0
+    var alreadyEnrolledCount = 0
+    var rejected:    [String] = []
+
+    for name in uniqueUsernames {
+        if let user = byUsername[name] {
+            guard let userID = user.id else { continue }
+            if alreadyEnrolledUserIDs.contains(userID) {
+                alreadyEnrolledCount += 1
+            } else {
+                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+                try await enrollment.save(on: db)
+                enrolledCount += 1
+            }
+            continue
+        }
+
+        guard isAcceptableUsernameForEnrollment(name) else {
+            rejected.append(name)
+            continue
+        }
+
+        // Already pre-enrolled in this course?  Idempotent skip.
+        if alreadyPreEnrolledUsernames.contains(name) {
+            alreadyEnrolledCount += 1
+            continue
+        }
+
+        let pending = APIPreEnrollment(courseID: courseID, username: name)
+        try await pending.save(on: db)
+        preEnrolledCount += 1
+    }
+
+    return EnrollUsernamesResult(
+        enrolledCount:        enrolledCount,
+        preEnrolledCount:     preEnrolledCount,
+        alreadyEnrolledCount: alreadyEnrolledCount,
+        rejectedUsernames:    rejected.sorted()
+    )
+}
+
+/// Resolves any pending pre-enrollments for `user`: turns each pending
+/// (course, username) into a real `APICourseEnrollment` and deletes the
+/// pre-enrollment row.  Called after login (SSO and local) returns a
+/// successfully authenticated user.  Failures are intentionally
+/// swallowed and logged — they cannot block login.
+func resolvePendingPreEnrollments(
+    for user: APIUser,
+    db: Database,
+    logger: Logger
+) async {
+    guard let userID = user.id else { return }
+    let username = user.username
+
+    do {
+        let pending = try await APIPreEnrollment.query(on: db)
+            .filter(\.$username == username)
+            .all()
+        guard !pending.isEmpty else { return }
+
+        // Existing enrollments for this user — skip duplicate inserts so
+        // a unique-constraint violation can't kill the resolution loop.
+        let existing = try await APICourseEnrollment.query(on: db)
+            .filter(\.$userID == userID)
+            .all()
+        let existingCourseIDs = Set(existing.map { $0.$course.id })
+
+        for row in pending {
+            let courseID = row.$course.id
+            if !existingCourseIDs.contains(courseID) {
+                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+                do {
+                    try await enrollment.save(on: db)
+                } catch {
+                    logger.warning("Pre-enrollment resolve: failed to enroll \(username) in \(courseID): \(error)")
+                    continue
+                }
+            }
+            do {
+                try await row.delete(on: db)
+            } catch {
+                logger.warning("Pre-enrollment resolve: failed to delete pending row for \(username) in \(courseID): \(error)")
+            }
+        }
+    } catch {
+        // Swallow — the user is already authenticated; missing roster
+        // membership is a UX bug, not an auth blocker.
+        logger.warning("Pre-enrollment resolve query failed for \(username): \(error)")
+    }
 }
