@@ -436,7 +436,7 @@ actor ServerHealthAlertMonitor {
         return AlertMessage(
             rule: rule.rawValue,
             severity: rule.severity,
-            firedAt: iso8601String(firedAt),
+            firedAt: formatAlertTimestamp(firedAt),
             resolved: resolved,
             summary: summary,
             details: details,
@@ -444,6 +444,10 @@ actor ServerHealthAlertMonitor {
             text: "[Chickadee] \(summary)"
         )
     }
+}
+
+private func formatAlertTimestamp(_ date: Date) -> String {
+    ISO8601DateFormatter().string(from: date)
 }
 
 // MARK: - Webhook URL persistence
