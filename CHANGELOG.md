@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.119] - 2026-04-27
+
+### Fixed
+
+- **Multipart-form interceptor 404'd handlers that render a result view directly.**  Every multipart form on the site goes through a JS interceptor in `base.leaf` that re-submits via `fetch` with `x-csrf-token` in a header (because the body stream isn't read before the CSRF middleware runs).  The post-fetch step set `window.location.href = res.url`.  When the server responded with a redirect, fetch followed it and `res.url` was the redirect target — fine.  When the server responded with **200 + an HTML result page** (no redirect), `res.url` was the POST URL itself; setting `location.href` to a POST URL triggers a GET, which has no handler, hence the 404.  Affected `instructorBulkEnrollCSV` and `adminBulkEnrollCSV` (both render `admin-enroll-csv-result` directly) and any future multipart handler that returns a View.  Fix: the interceptor now distinguishes `res.redirected` (still navigates) from a non-redirect response (renders the response HTML in place via `document.open/write/close` so the result page replaces the form, the URL bar matches what the server saw, and a refresh resubmits — exactly what a native form submit would do).
+
 ## [0.4.118] - 2026-04-26
 
 ### Added

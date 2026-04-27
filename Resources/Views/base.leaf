@@ -67,6 +67,14 @@
 // All multipart/form-data uploads bypass the hidden _csrf body field because
 // the body stream is not collected before CSRF middleware runs.  Intercept
 // every such form and re-submit via fetch with x-csrf-token in the header.
+//
+// When the server responds with a redirect, fetch follows it and `res.url`
+// is the final destination — point the browser there.  When the server
+// responds with 200 (or any non-redirect HTML) we replace the document
+// inline so the user sees the result page; previously this code did
+// `window.location.href = res.url`, which navigated GET to the POST URL
+// and surfaced a 404 for handlers that render a result view directly
+// (admin / instructor bulk-enroll, etc.).  v0.4.119+.
 (function () {
     document.addEventListener('submit', function (e) {
         var form = e.target;
@@ -85,8 +93,26 @@
             headers: { 'x-csrf-token': csrfToken },
             body: new FormData(form)
         }).then(function (res) {
-            window.location.href = res.url || window.location.href;
-        }).catch(function () {
+            if (res.redirected) {
+                window.location.href = res.url;
+                return;
+            }
+            // 200 OK with HTML body — render in place via document.open/write
+            // so the result page replaces the form, with the same URL the
+            // server saw (so a refresh resubmits — same as a native form
+            // submit's behaviour).  Status text shown for non-OK results.
+            return res.text().then(function (html) {
+                if (!res.ok && !html) {
+                    alert('Upload failed: ' + res.status + ' ' + res.statusText);
+                    if (btn) btn.disabled = false;
+                    return;
+                }
+                document.open();
+                document.write(html);
+                document.close();
+            });
+        }).catch(function (err) {
+            alert('Upload failed: ' + (err && err.message ? err.message : 'network error'));
             if (btn) btn.disabled = false;
         });
     });
