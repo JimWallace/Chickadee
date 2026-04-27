@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.4.121] - 2026-04-27
+## [0.4.122] - 2026-04-27
 
 ### Added
 
@@ -44,6 +44,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     `ALERT_QUEUE_DEPTH_THRESHOLD`, `ALERT_OLDEST_PENDING_SECONDS`,
     `ALERT_ERROR_RATE_THRESHOLD`, `ALERT_WEBHOOK_URL`); `ALERT_WEBHOOK_URL` is
     also editable via the admin UI and persists across restarts.
+
+## [0.4.121] - 2026-04-27
+
+### Added
+
+- **Pre-enrollment from CSV — instructors can populate a course roster before students log in.**  Bulk-enroll's behaviour for usernames with no matching `APIUser`:
+  - **Before:** silently dropped (reported as "not found").
+  - **After:** recorded in a new `pre_enrollments` table.  The next time the matching student authenticates (SSO or local), a post-login resolver creates the `APICourseEnrollment` and deletes the pending row.
+- The login flow itself is **completely untouched** — `upsertUser` is unchanged, the new resolver runs *after* the user is already authenticated.  A bug in the resolver can leave a student off the roster (which the instructor can correct manually) but cannot block them from signing in.  This is a deliberate design choice over the alternative of pre-creating placeholder `APIUser` rows: that approach would have introduced a new claim-on-first-login path inside the SSO upsert, where any failure mode means lockout.
+
+### Changed
+
+- **Bulk-enroll result page** distinguishes Enrolled (existing accounts), Pre-enrolled (queued for first login), Already enrolled (skipped), and Rejected (invalid format) — the old "Not found" bucket merged the second and fourth, which was misleading.
+- **Bulk-enroll is idempotent**: re-uploading the same CSV makes no further changes — pre-enrollments get a `(course_id, username)` unique constraint.
+
+## [0.4.120] - 2026-04-27
+
+### Changed
+
+- **Bulk-enroll CSV parser now handles Brightspace / D2L gradebook exports.**  Three loosened rules:
+  - `OrgDefinedId` joins the recognised header keywords, so the header row in `OrgDefinedId,Username,End-of-Line Indicator` exports is correctly skipped instead of being treated as a username.
+  - When the header has multiple columns, a column literally named `Username` is preferred over the first column (Brightspace puts the friendlier identifier there).
+  - Values matching the Brightspace `#<digits>.<rest>` shape are stripped to the bare username — `#174667.teststudent1` resolves to `teststudent1`, matching the quest name UW's OIDC sets as `APIUser.username` (via `winaccountname`).  Conservative: only fires when the prefix is `#<digits>.`, so non-Brightspace `#`-prefixed usernames pass through unchanged.
+
+  The previous parser silently dropped Brightspace exports — first column was `OrgDefinedId`-prefixed, never matched any account, so every student landed in "not found".
 
 ## [0.4.119] - 2026-04-27
 

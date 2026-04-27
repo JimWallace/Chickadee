@@ -225,6 +225,125 @@ final class AssignmentEnrollmentTests: XCTestCase {
         XCTAssertEqual(enrollments.count, 1, "Should still be exactly one enrollment (no duplicate)")
     }
 
+    // MARK: - Pre-enrollment (no APIUser yet)
+
+    func testBulkEnrollCSV_recordsPreEnrollmentForUnknownUsernames() async throws {
+        let course = try await makeCourse(code: "CSV_PRE1")
+        // alice exists; carol does not
+        _ = try await makeStudent(username: "csv_pre_alice")
+        let cookie = try await loginUser(username: "csv_pre_instructor1", password: "pw",
+                                         role: "instructor", on: app)
+        let courseID = try course.requireID().uuidString
+        let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+        let csvData = "csv_pre_alice\ncsv_pre_carol\n"
+        let boundary = "----TestBoundaryPre1"
+        let part = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"u.csv\"\r\nContent-Type: text/csv\r\n\r\n\(csvData)\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
+
+        try await app.asyncTest(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: newCookie)
+            var body = ByteBufferAllocator().buffer(capacity: 256)
+            body.writeString(part)
+            req.headers.contentType = HTTPMediaType(type: "multipart", subType: "form-data",
+                                                    parameters: ["boundary": boundary])
+            req.body = .init(buffer: body)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+        })
+
+        // alice was enrolled directly.
+        let enrollments = try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$course.$id == course.requireID())
+            .all()
+        XCTAssertEqual(enrollments.count, 1)
+
+        // carol got recorded as a pre-enrollment.
+        let preEnrollments = try await APIPreEnrollment.query(on: app.db)
+            .filter(\.$course.$id == course.requireID())
+            .all()
+        XCTAssertEqual(preEnrollments.count, 1)
+        XCTAssertEqual(preEnrollments.first?.username, "csv_pre_carol")
+    }
+
+    func testResolvePendingPreEnrollments_promotesPendingToActiveOnLogin() async throws {
+        let course = try await makeCourse(code: "CSV_PRE2")
+        let courseID = try course.requireID()
+
+        // Pre-enroll a username that has no APIUser yet.
+        let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_promote")
+        try await pending.save(on: app.db)
+
+        // The student then logs in (we just create the user directly here
+        // because the resolver doesn't care HOW the APIUser came to exist).
+        let user = try await makeStudent(username: "csv_pre_promote")
+        await resolvePendingPreEnrollments(for: user, db: app.db, logger: app.logger)
+
+        // The pending row is gone, replaced by a real enrollment.
+        let remainingPending = try await APIPreEnrollment.query(on: app.db)
+            .filter(\.$username == "csv_pre_promote")
+            .count()
+        XCTAssertEqual(remainingPending, 0)
+
+        let enrollments = try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID == user.requireID())
+            .count()
+        XCTAssertEqual(enrollments, 1)
+    }
+
+    func testResolvePendingPreEnrollments_isIdempotent() async throws {
+        let course = try await makeCourse(code: "CSV_PRE3")
+        let courseID = try course.requireID()
+
+        let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_idem")
+        try await pending.save(on: app.db)
+
+        let user = try await makeStudent(username: "csv_pre_idem")
+        // Run the resolver twice — second call should not duplicate
+        // enrollments and should not throw.
+        await resolvePendingPreEnrollments(for: user, db: app.db, logger: app.logger)
+        await resolvePendingPreEnrollments(for: user, db: app.db, logger: app.logger)
+
+        let enrollments = try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID == user.requireID())
+            .count()
+        XCTAssertEqual(enrollments, 1)
+    }
+
+    func testBulkEnrollCSV_isIdempotentOnReupload() async throws {
+        let course = try await makeCourse(code: "CSV_PRE4")
+        let cookie = try await loginUser(username: "csv_pre_instructor4", password: "pw",
+                                         role: "instructor", on: app)
+        let courseID = try course.requireID().uuidString
+        let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+        let csvData = "csv_pre_dup\n"
+        let boundary = "----TestBoundaryPre4"
+
+        func upload(cookie: String, token: String) async throws {
+            let part = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"u.csv\"\r\nContent-Type: text/csv\r\n\r\n\(csvData)\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
+            try await app.asyncTest(.POST, "/courses/\(courseID)/enroll-csv", beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                var body = ByteBufferAllocator().buffer(capacity: 256)
+                body.writeString(part)
+                req.headers.contentType = HTTPMediaType(type: "multipart", subType: "form-data",
+                                                        parameters: ["boundary": boundary])
+                req.body = .init(buffer: body)
+            }, afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
+        }
+
+        try await upload(cookie: newCookie, token: token)
+        try await upload(cookie: newCookie, token: token)
+
+        let preEnrollments = try await APIPreEnrollment.query(on: app.db)
+            .filter(\.$course.$id == course.requireID())
+            .all()
+        XCTAssertEqual(preEnrollments.count, 1, "Re-uploading should not create a duplicate pre_enrollment")
+    }
+
     func testBulkEnrollCSV_studentForbidden() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL3")
         let cookie = try await loginUser(username: "csv_student1", password: "pw",

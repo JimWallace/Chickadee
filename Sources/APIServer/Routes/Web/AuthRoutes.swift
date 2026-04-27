@@ -79,6 +79,11 @@ struct AuthRoutes: RouteCollection {
 
         req.auth.login(user)
         req.session.authenticate(user)
+        // Resolve any pending pre-enrollments for this username (the
+        // bulk-enroll path may have queued course enrollments before
+        // this user existed).  Errors are swallowed inside the
+        // resolver — they cannot block this login.
+        await resolvePendingPreEnrollments(for: user, db: req.db, logger: req.logger)
         return try await postLoginRedirect(for: user, req: req)
     }
 
