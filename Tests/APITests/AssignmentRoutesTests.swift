@@ -535,6 +535,73 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
+    /// Regression guard for v0.4.129 — the "Students With No Submissions"
+    /// dashboard card subtracted submitters from the *active* student set,
+    /// ignoring pending pre-enrollments.  An instructor who bulk-enrolled
+    /// a class via CSV (e.g. 151 students) and had only 12 of them log in
+    /// would see "12 without submissions" on the day of upload, which
+    /// massively understates the real engagement gap (139 students who
+    /// haven't even logged in yet).  Pending pre-enrollments now roll
+    /// into this count — by definition they have zero submissions.
+    func testInstructorDashboardCountsPendingPreEnrollmentsAsNoSubmissionYet() async throws {
+        let courseID = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        // Two enrolled students: one submits, one doesn't.
+        let s1 = try await insertStudent(username: "noSubMetric_s1")
+        try await enrollStudentInTestCourse(s1)
+        let s2 = try await insertStudent(username: "noSubMetric_s2")
+        try await enrollStudentInTestCourse(s2)
+
+        try await insertSetup(id: "setup_no_sub_metric")
+        try await insertAssignment(
+            testSetupID: "setup_no_sub_metric",
+            title: "No-Sub Metric Test",
+            isOpen: true
+        )
+        try await insertSubmission(
+            id: "sub_metric_s1",
+            testSetupID: "setup_no_sub_metric",
+            userID: try s1.requireID()
+        )
+
+        // One pending pre-enrollment: bulk-uploaded student who hasn't
+        // logged in yet.  Has no APIUser row, no submissions, but
+        // belongs to the course's roster intent.
+        let pending = APIPreEnrollment(
+            courseID: courseID, username: "noSubMetric_pending"
+        )
+        try await pending.save(on: app.db)
+
+        // Active students without submissions: just s2 (1).
+        // Pending students: 1.
+        // Expected card value: 2.
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+
+            // Match the literal card structure so a regression in
+            // ANOTHER metric's value can't accidentally pass this test.
+            let pattern = #"Students With No Submissions</div>\s*<div class="diagnostic-value">(\d+)</div>"#
+            let re = try NSRegularExpression(pattern: pattern)
+            let nsr = NSRange(html.startIndex..., in: html)
+            guard let match = re.firstMatch(in: html, range: nsr),
+                  let valueRange = Range(match.range(at: 1), in: html)
+            else {
+                XCTFail("Could not locate 'Students With No Submissions' metric card in dashboard HTML")
+                return
+            }
+            XCTAssertEqual(
+                String(html[valueRange]), "2",
+                "Expected card to read 2 (1 enrolled student without submissions + "
+                + "1 pending pre-enrollment).  Pre-fix the card showed only the "
+                + "enrolled-student gap (1) and ignored pending pre-enrollments."
+            )
+        })
+    }
+
     // MARK: - POST /instructor (publish → creates draft)
 
     func testPublishCreatesDraftAssignment() async throws {

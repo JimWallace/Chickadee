@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.129] - 2026-04-28
+
+### Fixed
+
+- **"Students With No Submissions" dashboard card now includes pending
+  pre-enrollments.**  v0.4.126 widened the per-assignment
+  `enrolledStudentCount` (the badge denominator) to include CSV-uploaded
+  students who haven't logged in yet, but the dashboard card was left
+  scoped to active student users only.  Result: an instructor who bulk-
+  enrolled 151 students via CSV and had only 12 of them log in saw
+  "Students With No Submissions: 12" on the day of upload, which
+  massively understated the engagement gap (the other 139 students
+  hadn't even signed in yet, let alone submitted).  The card now adds
+  `pendingPreEnrollments.count` to the active-student gap so it's
+  consistent with the badge denominator.
+- The other dashboard cards (24h Active, 24h Submissions, Assignments
+  Active (24h), Queued Right Now) were already correct: they count
+  events or recently-active users, neither of which a pending pre-
+  enrollment can contribute to.
+
+### Added
+
+- Regression test
+  `AssignmentRoutesTests.testInstructorDashboardCountsPendingPreEnrollmentsAsNoSubmissionYet`:
+  enrolls 2 students (1 submits, 1 doesn't) plus 1 pending
+  pre-enrollment, asserts the card reads 2.  Pinned to the literal
+  card structure via regex so a regression in another metric's value
+  can't accidentally pass it.  Verified to fail with a precise
+  diagnostic ("1" vs "2") against the pre-fix code.
+
 ## [0.4.128] - 2026-04-28
 
 ### Fixed

@@ -308,7 +308,15 @@ struct AssignmentRoutes: RouteCollection {
                     return userID
                 }
             )
+            // Pending pre-enrollments are CSV-uploaded students who haven't
+            // logged in yet — by definition they have zero submissions.
+            // Including them keeps this card consistent with the
+            // `enrolledStudentCount` denominator used by the per-assignment
+            // badge (v0.4.126), so an instructor with a 151-student CSV
+            // upload doesn't see "12 without submissions" the day they
+            // bulk-enroll the class.
             let noSubmissionYet = enrolledStudentIDs.subtracting(submitterIDs).count
+                                + pendingPreEnrollments.count
 
             metrics = [
                 InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
