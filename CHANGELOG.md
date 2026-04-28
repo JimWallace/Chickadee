@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.125] - 2026-04-28
+
+### Fixed
+
+- **Pattern family auto-compute (value-mode) was broken in v0.4.124.**  The
+  v0.4.124 sentinel-keyed Pyodide snippet ended in an `if/else` top-level
+  statement.  Pyodide's `eval_code` only returns a value to JS when
+  `body[-1]` of the parsed AST is an `ast.Expr`; for any other top-level
+  statement type (`If`, `With`, `Assign`, `Import`, …) it returns `None`.
+  That meant `runPythonAsync` resolved with `undefined`, downstream
+  `JSON.parse(undefined)` threw, and the Expected cell always landed in
+  the `⚠ Unexpected token …` error branch instead of filling with the
+  function's return value.  The stdout-mode snippet from v0.4.124 was
+  unaffected (its last statement was already an expression).
+- The fix factors the JSON payload into a single conditional expression
+  assigned to `_payload`, with a final bare `_json.dumps(_payload,
+  default=str)` expression statement on the last line — that's now an
+  `ast.Expr` and Pyodide returns the JSON string as expected.
+
+### Added
+
+- **Regression test in `Tests/BrowserRunnerJSTests/pattern-family-editor.test.mjs`.**
+  Reads each Pyodide snippet from the live JS file (between
+  `// PYODIDE_SNIPPET_BEGIN: <name>` and `// PYODIDE_SNIPPET_END: <name>`
+  marker comments), reconstructs the Python source under fake
+  `fnLit`/`argsLit` substitutions, and shells out to `python3` to assert
+  `body[-1]` is `ast.Expr`.  Catches the v0.4.124 shape directly (verified
+  by re-introducing the bug locally — test fails with a precise
+  `last top-level statement is If, not ast.Expr` diagnostic).  Picked up
+  automatically by the existing `node --test Tests/BrowserRunnerJSTests/*.mjs`
+  step in `.github/workflows/swift-tests.yml`.
+
 ## [0.4.124] - 2026-04-27
 
 ### Added

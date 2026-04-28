@@ -1530,8 +1530,21 @@
                 var argsJSON = JSON.stringify(args);
                 var fnLit = JSON.stringify(fnName);
                 var argsLit = JSON.stringify(argsJSON);
+                // The LAST top-level statement of each snippet must be an
+                // expression statement (`ast.Expr`) — that's the only shape
+                // Pyodide's `eval_code` extracts and returns to JS in
+                // `last_expr` mode.  An `if/else` or `with` as the final
+                // top-level statement causes `runPythonAsync` to resolve
+                // with `undefined` and `JSON.parse(undefined)` to throw,
+                // which silently breaks auto-compute.  Pre-v0.4.125 the
+                // value-mode snippet did exactly that.  We now compute the
+                // payload into `_payload` and put a bare `_json.dumps(...)`
+                // on the last line.  The regression test in
+                // PatternFamilyEditorJSTests asserts this structurally —
+                // do not move work below that final dumps line.
                 var pyCode;
                 if (captureStdout) {
+                    // PYODIDE_SNIPPET_BEGIN: stdout
                     pyCode = [
                         'import json as _json',
                         'import io as _io',
@@ -1549,9 +1562,12 @@
                         // generated test will compare against.
                         'if _captured.endswith("\\n"):',
                         '    _captured = _captured[:-1]',
-                        '_json.dumps({"__chickadee_kind__": "value", "value": _captured})'
+                        '_payload = {"__chickadee_kind__": "value", "value": _captured}',
+                        '_json.dumps(_payload)'
                     ].join('\n');
+                    // PYODIDE_SNIPPET_END: stdout
                 } else {
+                    // PYODIDE_SNIPPET_BEGIN: value
                     pyCode = [
                         'import json as _json',
                         '_fn = globals().get(' + fnLit + ')',
@@ -1559,11 +1575,11 @@
                         '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
                         '_args = _json.loads(' + argsLit + ')',
                         '_result = _fn(*_args)',
-                        'if _result is None:',
-                        '    _json.dumps({"__chickadee_kind__": "none"})',
-                        'else:',
-                        '    _json.dumps({"__chickadee_kind__": "value", "value": _result}, default=str)'
+                        '_payload = ({"__chickadee_kind__": "none"} if _result is None',
+                        '            else {"__chickadee_kind__": "value", "value": _result})',
+                        '_json.dumps(_payload, default=str)'
                     ].join('\n');
+                    // PYODIDE_SNIPPET_END: value
                 }
                 var run = py.runPythonAsync(pyCode);
                 var timeout = new Promise(function (_, reject) {
