@@ -156,16 +156,25 @@ extension WebRoutes {
             submission: submission, on: req.db, logger: req.logger
         )
 
-        // Award Pathfinder to the first student in the class who submits.
-        let classCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-        if classCount == 1, let uid = user.id {
-            let badge = APIClassAchievement(
-                testSetupID: setupID, achievementID: "pathfinder",
-                userID: uid, submissionID: subID)
-            try? await badge.save(on: req.db)
+        // Award Pathfinder to the first STUDENT in the class who submits.
+        // Pre-v0.4.127 this gated on `classCount == 1` over student-kind
+        // submissions, with no role check on the submitter — so an admin
+        // or instructor testing the assignment would lock in this
+        // immutable badge before any real student had a chance.  The fix
+        // checks the submitter's role and uses the existence of a
+        // pathfinder row directly (the unique constraint on
+        // (test_setup_id, achievement_id) makes this the natural query).
+        if user.role == "student", let uid = user.id {
+            let pathfinderExists = try await APIClassAchievement.query(on: req.db)
+                .filter(\.$testSetupID == setupID)
+                .filter(\.$achievementID == "pathfinder")
+                .first() != nil
+            if !pathfinderExists {
+                let badge = APIClassAchievement(
+                    testSetupID: setupID, achievementID: "pathfinder",
+                    userID: uid, submissionID: subID)
+                try? await badge.save(on: req.db)
+            }
         }
 
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)

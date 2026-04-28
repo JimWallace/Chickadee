@@ -8,6 +8,12 @@ import Foundation
 
 /// Awards class-wide badges for a 100%-grade submission.
 /// Safe to call multiple times for the same submission (idempotent via unique constraint).
+///
+/// Class-wide badges are class-LEVEL recognitions and only meaningful for
+/// enrolled students.  Admin/instructor test submissions used to lock in
+/// the immutable Trailblazer badge before any real student got to attempt
+/// the assignment (v0.4.127 fix).  This guard runs at the helper entry so
+/// every call site is protected — including future ones.
 func awardClassBadgesFor100Percent(
     testSetupID: String,
     userID: UUID,
@@ -16,6 +22,10 @@ func awardClassBadgesFor100Percent(
     attemptNumber: Int,
     on db: Database
 ) async throws {
+    guard let user = try await APIUser.find(userID, on: db),
+          user.role == "student"
+    else { return }
+
     async let _trail = awardImmutableBadge(
         achievementID: "trailblazer",
         testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)

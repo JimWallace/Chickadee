@@ -6,6 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.127] - 2026-04-28
+
+### Fixed
+
+- **Class-wide achievement badges no longer go to admin/instructor
+  submissions.**  An instructor or admin who tested an assignment via
+  the same submit flow students use could earn — and lock in — the
+  Pathfinder (first to submit) and Trailblazer (first to score 100%)
+  badges before any real student got to attempt the assignment.  Both
+  badges have a unique constraint on `(test_setup_id, achievement_id)`,
+  so once an instructor's test submission claimed them no real student
+  could ever earn them.  Speed Champion / Minimalist (record-holder
+  badges) had a milder version of the same problem: an
+  admin/instructor's record persisted until a student beat it.
+- **Pathfinder fix** (`WebRoutes+Submission.swift`): the award block
+  now checks the submitter's role and tests for an existing pathfinder
+  row directly (using the unique constraint as the natural gate),
+  instead of relying on `classCount == 1` over the unfiltered
+  student-kind submissions count.  An admin's submission no longer
+  blocks the next real student from earning Pathfinder.
+- **Trailblazer / Speed Champion / Minimalist fix**
+  (`ClassAchievements.swift`): `awardClassBadgesFor100Percent` now
+  loads the submitter's `APIUser` and bails early when
+  `role != "student"`.  This is defence-in-depth at the helper entry
+  so every current and future call site (currently
+  `ResultRoutes.swift`) inherits the gate without needing to
+  reimplement the check.
+
+### Added
+
+- Three regression tests in `WebRoutesTests`:
+  - `testPathfinderNotAwardedToAdminSubmission` — admin submits, no
+    Pathfinder row created.
+  - `testPathfinderAwardedToFirstStudentEvenAfterAdminSubmits` — admin
+    submits first (no badge), then a real student submits and Pathfinder
+    lands on the student's userID, not the admin's.
+  - `testAwardClassBadgesFor100PercentSkipsAdminAndInstructor` —
+    direct-helper test: calls with admin and instructor users yield
+    zero rows; calls with a student yield all three badges
+    (`trailblazer`, `speed_champion`, `minimalist`), each owned by
+    the student.
+
+### Notes
+
+- Per-submission badges (Ace / First-Try Perfect, Rally, Tenacious,
+  Swift) are still computed on-read for any submitter and shown on the
+  submitter's own pages.  These are personal feedback, not aggregate
+  stats — an admin viewing their own test submission seeing
+  "First-Try Perfect" doesn't pollute any class-level metric.  If you
+  want these gated as well, that's a follow-up: the BadgeContext
+  computation in `WebRoutes+Submission.swift` is where to filter.
+- Pre-existing class-wide badges held by non-students (from before
+  this fix) are not retroactively cleaned up.  If your database has
+  any, run a manual `DELETE FROM class_achievements WHERE user_id IN
+  (SELECT id FROM users WHERE role != 'student');` once.
+
 ## [0.4.126] - 2026-04-28
 
 ### Fixed
