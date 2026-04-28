@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.128] - 2026-04-28
+
+### Fixed
+
+- **Brightspace gradebook CSV bulk-enrol now imports the whole class
+  (not just the test accounts).**  In a real UWaterloo HLTH 230
+  gradebook export, the `Username` column carries two distinct shapes:
+  - `#<digits>.<rest>` for institution-issued gradebook test accounts
+    (e.g. `#174667.teststudent1`)
+  - bare `#<rest>` for actual students (e.g. `#mj39lee`,
+    `#20878497`) — Brightspace prepends `#` to every cell purely as
+    an Excel-anti-coercion hack so spreadsheet tools don't auto-
+    convert numeric quest IDs to numbers
+  v0.4.120's prefix-stripping handled only the dotted form, so
+  uploading a real export accepted the 2 test rows but rejected
+  every actual student (their `#mj39lee`-style values fell through
+  unchanged and were then rejected by
+  `isAcceptableUsernameForEnrollment` for containing `#`).
+  `stripBrightspacePrefix` now drops the leading `#` for every
+  Brightspace-shaped cell.  Verified against the user's real export
+  (146 rows, 144 students enrolled where 0 were enrolled pre-fix).
+
+### Changed
+
+- **Brightspace gradebook test accounts are now filtered out of the
+  enrol roster.**  Rows whose value matches the namespaced
+  `#<digits>.<rest>` shape are dropped at parse time — those are
+  Brightspace gradebook test accounts and shouldn't pollute a real
+  class roster.  New `isBrightspaceTestAccount` predicate gates the
+  filter so the rest of the class (bare-`#` values) parses normally.
+  In the user's real export this drops the 2 `teststudent` rows
+  alongside the existing 144 students.
+
+### Added
+
+- Updated `EnrollCSVHelperTests`:
+  - Renamed `brightspaceGradebookExport` →
+    `brightspaceGradebookExportFiltersTestAccounts` and inverted its
+    expected output to reflect the new filtering behaviour (all-test-
+    account input → empty parsed list).
+  - Renamed `stripsBrightspacePrefixOnSingleColumn` →
+    `brightspaceTestAccountsAreSkippedOnSingleColumn` (same flip).
+  - Replaced `leavesNonBrightspaceHashPrefixedUsernamesAlone` (which
+    encoded the wrong assumption that a bare `#` prefix wasn't a
+    Brightspace artifact) with `stripsBareHashPrefix`.
+  - Added `brightspaceRealWorldClassExportFiltersTestAccountsAndKeepsStudents`
+    driven by the actual user-reported file shape: 5 rows
+    (2 test accounts + 3 real students) → 3 students emitted.
+
 ## [0.4.127] - 2026-04-28
 
 ### Fixed

@@ -63,18 +63,39 @@ func parseUsernamesFromCSV(_ data: Data) -> [String] {
         }
     }
 
-    // Strip the Brightspace `#<digits>.` OrgDefinedId prefix so values
-    // like `#174667.teststudent1` resolve to bare `teststudent1`.
-    // Conservative: only fires when the value starts with `#` and the
-    // prefix is digits-and-dot — random `#`-prefixed usernames pass
-    // through unchanged.
+    // Strip the Brightspace `#` prefix that's prepended to every
+    // OrgDefinedId / Username cell so spreadsheet tools don't
+    // auto-convert numeric quest IDs to numbers.  The real-world shape
+    // for an actual student in a UWaterloo Brightspace export is bare
+    // `#<questname>` (e.g. `#mj39lee`); the dotted form
+    // `#<digits>.<rest>` (e.g. `#174667.teststudent1`) is reserved for
+    // gradebook test accounts and is filtered out by the parse loop
+    // before this function runs (see `isBrightspaceTestAccount`).
+    //
+    // Pre-v0.4.128 only the dotted form was stripped, so the bulk-
+    // enroll path accepted test accounts but rejected every real
+    // student in the class (their `#mj39lee`-style values fell through
+    // and were rejected for containing `#`).
     func stripBrightspacePrefix(_ s: String) -> String {
-        guard s.hasPrefix("#") else { return s }
+        guard s.hasPrefix("#"), s.count > 1 else { return s }
+        return String(s.dropFirst())
+    }
+
+    // Detects Brightspace gradebook-test-account rows: the namespaced
+    // `#<digits>.<rest>` shape that Brightspace uses for institution-
+    // issued test users (e.g. `#174667.teststudent1`).  These should
+    // not pollute a real class roster — instructors who upload a
+    // gradebook export expect only the actual class members to enrol.
+    //
+    // Real students have a bare `#<questname>` shape with no
+    // intervening dot, which falls through this predicate and goes
+    // through normal stripping.
+    func isBrightspaceTestAccount(_ s: String) -> Bool {
+        guard s.hasPrefix("#") else { return false }
         let afterHash = s.dropFirst()
-        guard let dotIdx = afterHash.firstIndex(of: "."),
-              afterHash[..<dotIdx].allSatisfy(\.isNumber)
-        else { return s }
-        return String(afterHash[afterHash.index(after: dotIdx)...])
+        guard let dotIdx = afterHash.firstIndex(of: ".") else { return false }
+        let prefix = afterHash[..<dotIdx]
+        return !prefix.isEmpty && prefix.allSatisfy(\.isNumber)
     }
 
     return lines.compactMap { line -> String? in
@@ -87,6 +108,9 @@ func parseUsernamesFromCSV(_ data: Data) -> [String] {
         // when the chosen column lands on that, drop it.  Bare `#` is
         // never a real username.
         guard !raw.isEmpty, raw != "#" else { return nil }
+        // Drop Brightspace gradebook-test-account rows entirely — they
+        // shouldn't pollute a real class roster (v0.4.128).
+        if isBrightspaceTestAccount(raw) { return nil }
         let stripped = stripBrightspacePrefix(raw)
         return stripped.isEmpty ? nil : stripped
     }
