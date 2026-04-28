@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.124] - 2026-04-27
+
+### Added
+
+- **`stdout_equality` pattern family kind** — a seventh `PatternKind` for grading
+  beginner exercises where the student is expected to `print(...)` rather than
+  return.  Each case calls the function with its args inside
+  `contextlib.redirect_stdout(io.StringIO())`; the captured string is compared
+  to the case's `expected` (a string).  A single trailing newline is trimmed
+  from both sides so `print("hi")` matches an instructor-typed Expected of
+  `"hi"`; internal newlines and leading whitespace are preserved.  The
+  function's return value is ignored — instructors who care about both stdout
+  and the return value should write two families.  Empty-string Expected is
+  permitted (the legitimate "this function should print nothing" case).
+- **Auto-compute now captures stdout for `stdout_equality` families.**  The
+  Pyodide-backed Expected auto-compute in the family editor uses
+  `redirect_stdout` when the kind is `stdout_equality`, so the cell auto-fills
+  to whatever the solution function prints.
+- **`assignment-new.leaf` now exposes all seven pattern kinds** in the kind
+  dropdown.  Pre-v0.4.124 the new-assignment page only listed three of the six
+  existing kinds (`return_type_check`, `exception_expected`,
+  `performance_threshold` were missing); fixed in passing.
+
+### Fixed
+
+- **Pattern family auto-compute no longer hangs / mis-fills when the solution
+  function returns `None`.**  Pre-fix, the JSON round-trip turned Python
+  `None` into the string `"null"`, which then landed in the Expected cell
+  as if the instructor had typed it (round-trippable as a literal value,
+  silently broken).  The Pyodide bridge now uses a sentinel-keyed wrapper
+  (`{"__chickadee_kind__": "none" | "value"}`) that distinguishes a `None`
+  return from a legitimate `null` value; the editor renders this with an
+  empty cell and an orange `⚠ solution returned None` placeholder, with a
+  tooltip suggesting `stdout_equality` (the most common reason a function
+  returns None is that it `print()`s instead of returning).
+- **5 s hard timeout on Pyodide auto-compute.**  `callSolution` now switches
+  to `runPythonAsync` and races against a `Promise.race` timer, so a
+  cooperative hang in the solution notebook (`asyncio.sleep`, blocking I/O,
+  `input()`) flips the cell to a clear `⚠ timed out after 5s` instead of
+  stranding the modal on the "computing…" placeholder forever.  Tight Python
+  CPU loops still block until the runtime returns control to JS — fully
+  fixing that needs Pyodide-in-Web-Worker, which is a larger rework.
+
 ## [0.4.123] - 2026-04-27
 
 ### Added

@@ -52,6 +52,14 @@ public enum PatternKind: String, Codable, Sendable, Equatable {
     /// for v1; if jitter becomes a problem, we add a multi-trial
     /// median in a future kind.
     case performanceThreshold = "performance_threshold"
+    /// Calls the function with each case's args, captures everything
+    /// written to stdout via `contextlib.redirect_stdout`, and asserts
+    /// the captured string equals `case.expected` (a string).  A single
+    /// trailing newline is trimmed from both sides so `print("hi")`
+    /// matches Expected `"hi"`.  The function's return value is
+    /// ignored — instructors who care about both stdout and the
+    /// return value should write two families (one of each kind).
+    case stdoutEquality = "stdout_equality"
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,

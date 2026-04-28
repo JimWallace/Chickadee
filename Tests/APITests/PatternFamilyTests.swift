@@ -1581,6 +1581,92 @@ final class PatternFamilyTests: XCTestCase {
         try validatePatternFamilies([fam], testSuites: [])
     }
 
+    // MARK: - stdoutEquality
+
+    private func helloPrintsFamily(expected: String = "hi world") -> PatternFamily {
+        PatternFamily(
+            id: "hello_prints",
+            name: "Hello prints to stdout",
+            kind: .stdoutEquality,
+            functionName: "say_hi",
+            paramNames: ["name"],
+            cases: [
+                PatternCase(key: "01", label: "prints greeting",
+                            args: [.string("world")], expected: .string(expected)),
+            ]
+        )
+    }
+
+    func testStdoutEqualityRendererBasicShape() throws {
+        let rendered = renderPatternFamily(helloPrintsFamily())
+        XCTAssertEqual(rendered.count, 1)
+        let src = rendered[0].source
+        XCTAssertTrue(src.hasPrefix("# Test: prints greeting\n"))
+        XCTAssertTrue(src.contains("import contextlib as _contextlib"))
+        XCTAssertTrue(src.contains("with _contextlib.redirect_stdout(_buf):"))
+        XCTAssertTrue(src.contains("student_module.say_hi(name)"))
+        XCTAssertTrue(src.contains("expected = \"hi world\""))
+        XCTAssertTrue(src.contains("wrong stdout"))
+        XCTAssertTrue(src.contains("Printed"))
+        try assertValidPythonSyntax(src, label: rendered[0].filename)
+    }
+
+    func testStdoutEqualityRendererFilenameFormat() {
+        let rendered = renderPatternFamily(helloPrintsFamily())
+        XCTAssertEqual(rendered[0].filename, "publictest_hello_prints_01.py")
+    }
+
+    func testStdoutEqualityRendererPreservesMultilineExpected() throws {
+        // A multi-line Expected (the natural shape for two `print()`
+        // calls) must round-trip through the Python literal without
+        // breaking the source.  The single-trailing-newline trim is
+        // applied at runtime, not at rendering — the literal in the
+        // source still carries the trailing \n that the instructor
+        // typed.
+        let fam = helloPrintsFamily(expected: "a\nb\n")
+        let rendered = renderPatternFamily(fam)
+        let src = rendered[0].source
+        XCTAssertTrue(src.contains(#"expected = "a\nb\n""#))
+        try assertValidPythonSyntax(src, label: rendered[0].filename)
+    }
+
+    func testStdoutEqualityValidationAllowsEmptyExpected() throws {
+        // "this function should print nothing" is a legitimate case.
+        let fam = PatternFamily(
+            id: "silent", name: "Silent", kind: .stdoutEquality,
+            functionName: "say", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "prints nothing",
+                                args: [.int(1)], expected: .string(""))]
+        )
+        try validatePatternFamilies([fam], testSuites: [])
+    }
+
+    func testStdoutEqualityValidationRejectsNonStringExpected() {
+        let bad = PatternFamily(
+            id: "bad", name: "Bad", kind: .stdoutEquality,
+            functionName: "say", paramNames: ["x"],
+            cases: [PatternCase(key: "01", label: "non-string",
+                                args: [.int(1)], expected: .int(42))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+    }
+
+    func testStdoutEqualityValidationRejectsArgArityMismatch() {
+        let bad = PatternFamily(
+            id: "bad", name: "Bad", kind: .stdoutEquality,
+            functionName: "say", paramNames: ["x", "y"],
+            cases: [PatternCase(key: "01", label: "wrong arity",
+                                args: [.int(1)], expected: .string("hi"))]
+        )
+        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+    }
+
+    func testStdoutEqualitySpecHashChangesWithExpected() {
+        let a = patternFamilySpecHash(helloPrintsFamily(expected: "hi"))
+        let b = patternFamilySpecHash(helloPrintsFamily(expected: "bye"))
+        XCTAssertNotEqual(a, b)
+    }
+
     private func assertValidPythonSyntax(_ source: String, label: String,
                                          file: StaticString = #filePath,
                                          line: UInt = #line) throws {

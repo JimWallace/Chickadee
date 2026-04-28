@@ -281,6 +281,10 @@ Create Assignment
                         <option value="boundary_equality">Exact equality (== comparison)</option>
                         <option value="approximate_equality">Approximate equality (float tolerance)</option>
                         <option value="variable_equality">Variable equality (module-level variable)</option>
+                        <option value="return_type_check">Return type check (isinstance / class name)</option>
+                        <option value="exception_expected">Exception expected (function raises a specific class)</option>
+                        <option value="performance_threshold">Performance threshold (max milliseconds)</option>
+                        <option value="stdout_equality">Stdout equality (compare captured print output)</option>
                     </select>
                 </label>
                 <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">

@@ -1086,8 +1086,16 @@
                     }
                 }
                 var expected;
-                if (rawExp === '') throw new Error('Case ' + caseNum + ': expected value is required');
-                expected = coerceByType(rawExp, currentReturnType);
+                // stdout_equality permits an empty Expected — that's the
+                // legitimate "this function should print nothing" case.
+                // For all other kinds an empty cell is still an error.
+                var allowEmptyExpected = (kindInput && kindInput.value === 'stdout_equality');
+                if (rawExp === '' && !allowEmptyExpected) throw new Error('Case ' + caseNum + ': expected value is required');
+                if (rawExp === '') {
+                    expected = '';
+                } else {
+                    expected = coerceByType(rawExp, currentReturnType);
+                }
                 if (!label) throw new Error('Case ' + caseNum + ': label is required');
                 out.push({
                     key: caseNum,
@@ -1430,6 +1438,16 @@
         var _pyodidePromise = null;
         var _solutionLoadedPromise = null;
 
+        // Hard cap on how long we wait for the solution function to return.
+        // Catches cooperative hangs (`await asyncio.sleep(...)`, network
+        // waits, etc.) — `runPythonAsync` yields at every `await` so the
+        // `Promise.race` timer can fire.  Tight Python loops (`while True:
+        // pass`) still block the editor thread until the runtime returns
+        // to JS; truly fixing that needs Pyodide-in-Web-Worker, which is
+        // a larger rework.  For now this is enough to recover the modal
+        // from realistic instructor-side mistakes.
+        var TIMEOUT_MS = 5000;
+
         function getPyodide() {
             if (_pyodidePromise) return _pyodidePromise;
             _pyodidePromise = new Promise(function (resolve, reject) {
@@ -1490,22 +1508,81 @@
 
         /// Calls `fnName(*args)` on the loaded solution and returns the
         /// result as a JSON-serialisable value, or an error summary if it
-        /// throws.
-        function callSolution(fnName, args) {
+        /// throws.  When `opts.captureStdout` is set, `redirect_stdout`
+        /// wraps the call and the captured string is returned instead of
+        /// the function's return value (used by the `stdout_equality`
+        /// pattern kind).
+        ///
+        /// Result shape:
+        ///   { ok: true,  value: <parsed>, returnedNone: false }  // value-returning success
+        ///   { ok: true,  value: null,     returnedNone: true  }  // function returned None
+        ///   { ok: false, error: "<msg>" }                        // exception inside Python
+        ///   { ok: false, timedOut: true, error: "..." }          // 5s budget exceeded
+        ///
+        /// The Python boundary uses a sentinel-keyed wrapper
+        /// (`__chickadee_kind__`) instead of bare `_json.dumps(_result)`
+        /// so that a `None` return is unambiguous — pre-fix, `None`
+        /// became the string `"null"` and silently landed in the
+        /// Expected cell as if the instructor had typed it.
+        function callSolution(fnName, args, opts) {
+            var captureStdout = !!(opts && opts.captureStdout);
             return ensureSolutionLoaded().then(function (py) {
                 var argsJSON = JSON.stringify(args);
-                var pyCode = [
-                    'import json as _json',
-                    '_fn = globals().get(' + JSON.stringify(fnName) + ')',
-                    'if _fn is None:',
-                    '    raise NameError(' + JSON.stringify(fnName) + ' + " not defined in solution notebook")',
-                    '_args = _json.loads(' + JSON.stringify(argsJSON) + ')',
-                    '_result = _fn(*_args)',
-                    '_json.dumps(_result, default=str)'
-                ].join('\n');
-                var resJson = py.runPython(pyCode);
-                return { ok: true, value: JSON.parse(resJson) };
+                var fnLit = JSON.stringify(fnName);
+                var argsLit = JSON.stringify(argsJSON);
+                var pyCode;
+                if (captureStdout) {
+                    pyCode = [
+                        'import json as _json',
+                        'import io as _io',
+                        'import contextlib as _contextlib',
+                        '_fn = globals().get(' + fnLit + ')',
+                        'if _fn is None:',
+                        '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
+                        '_args = _json.loads(' + argsLit + ')',
+                        '_buf = _io.StringIO()',
+                        'with _contextlib.redirect_stdout(_buf):',
+                        '    _fn(*_args)',
+                        '_captured = _buf.getvalue()',
+                        // Mirror the renderer-side normalisation so the
+                        // auto-computed Expected matches what the
+                        // generated test will compare against.
+                        'if _captured.endswith("\\n"):',
+                        '    _captured = _captured[:-1]',
+                        '_json.dumps({"__chickadee_kind__": "value", "value": _captured})'
+                    ].join('\n');
+                } else {
+                    pyCode = [
+                        'import json as _json',
+                        '_fn = globals().get(' + fnLit + ')',
+                        'if _fn is None:',
+                        '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
+                        '_args = _json.loads(' + argsLit + ')',
+                        '_result = _fn(*_args)',
+                        'if _result is None:',
+                        '    _json.dumps({"__chickadee_kind__": "none"})',
+                        'else:',
+                        '    _json.dumps({"__chickadee_kind__": "value", "value": _result}, default=str)'
+                    ].join('\n');
+                }
+                var run = py.runPythonAsync(pyCode);
+                var timeout = new Promise(function (_, reject) {
+                    setTimeout(function () {
+                        reject(new Error('__chickadee_timeout__'));
+                    }, TIMEOUT_MS);
+                });
+                return Promise.race([run, timeout]).then(function (resJson) {
+                    var parsed = JSON.parse(resJson);
+                    if (parsed && parsed.__chickadee_kind__ === 'none') {
+                        return { ok: true, value: null, returnedNone: true };
+                    }
+                    return { ok: true, value: parsed.value, returnedNone: false };
+                });
             }).catch(function (err) {
+                if (err && err.message === '__chickadee_timeout__') {
+                    return { ok: false, timedOut: true,
+                             error: 'timed out after ' + (TIMEOUT_MS / 1000) + 's' };
+                }
                 var msg = (err && err.message) ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop() : String(err);
                 return { ok: false, error: msg || 'error' };
             });
@@ -1625,16 +1702,36 @@
             }
 
             expectedEl.placeholder = 'computing…';
-            callSolution(fnName, args).then(function (res) {
+            var captureStdout = (kindInput && kindInput.value === 'stdout_equality');
+            callSolution(fnName, args, { captureStdout: captureStdout }).then(function (res) {
                 if (!row.parentElement) return;
                 if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
-                if (res.ok) {
+                if (res.ok && res.returnedNone) {
+                    // The solution function returned None.  Don't write
+                    // the string "null" to the cell — that used to
+                    // round-trip as a literal value and confuse
+                    // instructors.  Instead leave it empty with a
+                    // clear hint, and suggest stdout_equality (which
+                    // is the most common reason a function returns
+                    // None: it print()s instead of returning).
+                    expectedEl.value = '';
+                    expectedEl.placeholder = '⚠ solution returned None';
+                    expectedEl.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
+                    expectedEl.style.borderColor = 'var(--orange,#d80)';
+                    expectedEl.style.color = '';
+                    delete expectedEl.dataset.autoComputed;
+                } else if (res.ok) {
                     expectedEl.placeholder = 'e.g. underweight';
                     expectedEl.value = renderTypedCellValue(res.value);
                     expectedEl.dataset.autoComputed = '1';
                     expectedEl.title = 'Auto-computed from solution notebook';
                     expectedEl.style.color = 'var(--gray-500)';
                     expectedEl.style.borderColor = '';
+                } else if (res.timedOut) {
+                    expectedEl.value = '';
+                    expectedEl.placeholder = '⚠ ' + res.error;
+                    expectedEl.title = 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
+                    expectedEl.style.borderColor = 'var(--red,#c00)';
                 } else {
                     // v0.4.112: surface the failure in the cell itself
                     // (not just the title tooltip) — typical user

@@ -250,6 +250,19 @@ func validatePatternFamilies(
                     throw Abort(.unprocessableEntity,
                         reason: "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)")
                 }
+            case .stdoutEquality:
+                if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                }
+                // Empty string is intentionally allowed — it means "this
+                // function should print nothing", a legitimate case for
+                // a beginner exercise where the assignment is to add the
+                // print() call.
+                guard case .string = c.expected else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)")
+                }
             }
         }
 
