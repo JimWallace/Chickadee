@@ -178,6 +178,16 @@ struct AssignmentRoutes: RouteCollection {
 
         var enrolledStudents: [EnrolledStudentRow]
         let metrics: [InstructorDashboardMetric]
+        // The per-assignment "X / Y students submitted" badge needs both
+        // counters scoped to enrolled users with role == "student".  We
+        // hoist these so the post-if `studentSubmissions` query (used to
+        // build `uniqueSubmittersBySetup`) and the `AssignmentsContext`
+        // both see the filtered set, instead of leaning on
+        // `enrolledStudents.count` (which includes admin/instructor users
+        // enrolled for testing purposes) and an unfiltered submission
+        // query (which counts admin/instructor test submissions).
+        let enrolledStudentIDs: Set<UUID>
+        let enrolledStudentCount: Int
         if let activeCourseUUID = courseState.activeCourseUUID {
             let enrollments = try await APICourseEnrollment.query(on: req.db)
                 .filter(\.$course.$id == activeCourseUUID)
@@ -263,11 +273,17 @@ struct AssignmentRoutes: RouteCollection {
                 on: req.db
             )
 
-            let enrolledStudentIDs = Set(
+            let activeStudentIDs = Set(
                 enrolledUsers
                     .filter { $0.role == "student" }
                     .compactMap(\.id)
             )
+            enrolledStudentIDs = activeStudentIDs
+            // Pending pre-enrollments are CSV-uploaded students who
+            // haven't logged in yet — count them toward the
+            // "Y students enrolled" denominator so the badge reflects
+            // the instructor's roster intent, not just who's logged in.
+            enrolledStudentCount = activeStudentIDs.count + pendingPreEnrollments.count
             let active24h = enrolledUsers.reduce(into: 0) { count, user in
                 guard user.role == "student" else { return }
                 if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
@@ -303,6 +319,8 @@ struct AssignmentRoutes: RouteCollection {
             ]
         } else {
             enrolledStudents = []
+            enrolledStudentIDs = []
+            enrolledStudentCount = 0
             metrics = [
                 InstructorDashboardMetric(label: "24h Active", value: "—"),
                 InstructorDashboardMetric(label: "24h Submissions", value: "—"),
@@ -312,11 +330,17 @@ struct AssignmentRoutes: RouteCollection {
             ]
         }
 
-        // Batch-fetch unique submitter counts: [testSetupID: count of distinct userIDs]
-        let studentSubmissions = allSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID ~~ allSetupIDs)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
+        // Batch-fetch unique submitter counts: [testSetupID: count of distinct userIDs].
+        // Filter by enrolledStudentIDs so admin/instructor test submissions
+        // don't inflate the per-assignment "X / Y students submitted" badge —
+        // only enrolled users with role == "student" count toward X.
+        let studentSubmissions = (allSetupIDs.isEmpty || enrolledStudentIDs.isEmpty)
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ allSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$userID ~~ Array(enrolledStudentIDs))
+                .all()
         var submitterSets: [String: Set<UUID>] = [:]
         for sub in studentSubmissions {
             guard let uid = sub.userID else { continue }
@@ -458,7 +482,7 @@ struct AssignmentRoutes: RouteCollection {
             hasUngrouped: !ungroupedRows.isEmpty,
             enrolledStudents: enrolledStudents,
             hasEnrolledStudents: !enrolledStudents.isEmpty,
-            enrolledStudentCount: enrolledStudents.count,
+            enrolledStudentCount: enrolledStudentCount,
             courseEnrollmentMode: courseEnrollmentMode,
             courseIsArchived: courseIsArchived
         )

@@ -121,6 +121,44 @@ final class AssignmentRoutesTests: XCTestCase {
         return student
     }
 
+    @discardableResult
+    private func insertUser(
+        username: String,
+        role: String,
+        displayName: String? = nil
+    ) async throws -> APIUser {
+        let hash = try Bcrypt.hash("testpassword")
+        let u = APIUser(
+            username: username,
+            passwordHash: hash,
+            role: role,
+            displayName: displayName
+        )
+        try await u.save(on: app.db)
+        return u
+    }
+
+    @discardableResult
+    private func insertSubmission(
+        id: String,
+        testSetupID: String,
+        userID: UUID,
+        attemptNumber: Int = 1,
+        status: String = "complete"
+    ) async throws -> APISubmission {
+        let sub = APISubmission(
+            id: id,
+            testSetupID: testSetupID,
+            zipPath: tmpDir + "submissions/\(id).zip",
+            attemptNumber: attemptNumber,
+            status: status,
+            userID: userID,
+            kind: APISubmission.Kind.student
+        )
+        try await sub.save(on: app.db)
+        return sub
+    }
+
     private func enrollStudentInTestCourse(_ student: APIUser) async throws {
         let courseID = try await makeTestCourseID()
         let enrollment = APICourseEnrollment(
@@ -419,6 +457,81 @@ final class AssignmentRoutesTests: XCTestCase {
             let neverIndex = try XCTUnwrap(html.range(of: "never_seen_student")?.lowerBound)
             XCTAssertLessThan(recentIndex, olderIndex)
             XCTAssertLessThan(olderIndex, neverIndex)
+        })
+    }
+
+    /// Regression guard for v0.4.126 — admin/instructor users enrolled in a
+    /// course (a common pattern: instructor enrolls themselves to test their
+    /// own assignment via the same flow as a student) used to inflate the
+    /// per-assignment "X / Y students submitted" badge on the `/instructor`
+    /// dashboard.  Both counts now filter to enrolled users with role ==
+    /// "student"; this test enrolls 2 students + 1 instructor + 1 admin in
+    /// the test course, has each of them submit one student-kind submission,
+    /// and asserts the badge for the assignment row reads "2 / 2" (not
+    /// "4 / 4", which is what it showed pre-fix).
+    func testInstructorDashboardBadgeCountsStudentsOnly() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        // Two real students, both enrolled.
+        let s1 = try await insertStudent(username: "stat_s1", displayName: "Student One")
+        try await enrollStudentInTestCourse(s1)
+        let s2 = try await insertStudent(username: "stat_s2", displayName: "Student Two")
+        try await enrollStudentInTestCourse(s2)
+
+        // One extra instructor + one admin, also enrolled in the same
+        // course.  These are the users whose submissions should NOT be
+        // reflected in either side of the badge.
+        let i1 = try await insertUser(username: "stat_i1", role: "instructor",
+                                      displayName: "Helper Instructor")
+        try await enrollStudentInTestCourse(i1)
+        let a1 = try await insertUser(username: "stat_a1", role: "admin",
+                                      displayName: "Helper Admin")
+        try await enrollStudentInTestCourse(a1)
+
+        // Setup + assignment.
+        try await insertSetup(id: "setup_dashboard_filter")
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_dashboard_filter",
+            title: "Mixed-Role Assignment",
+            isOpen: true
+        )
+
+        // One student-kind submission per user — same path the instructor
+        // would hit when testing their own assignment via the submit form.
+        try await insertSubmission(id: "sub_s1", testSetupID: "setup_dashboard_filter",
+                                   userID: try s1.requireID())
+        try await insertSubmission(id: "sub_s2", testSetupID: "setup_dashboard_filter",
+                                   userID: try s2.requireID())
+        try await insertSubmission(id: "sub_i1", testSetupID: "setup_dashboard_filter",
+                                   userID: try i1.requireID())
+        try await insertSubmission(id: "sub_a1", testSetupID: "setup_dashboard_filter",
+                                   userID: try a1.requireID())
+
+        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+
+            // The leaf template renders the badge as
+            //   <span title="<X> / <Y> students submitted"><X> / <Y></span>
+            // We assert against the title (a unique, structural attribute)
+            // so the test doesn't depend on layout cosmetics.
+            XCTAssertTrue(
+                html.contains("title=\"2 / 2 students submitted\""),
+                "Per-assignment badge should read '2 / 2 students submitted' "
+                + "(only enrolled students count); admin/instructor "
+                + "submissions and enrollments must be filtered out. "
+                + "Assignment publicID=\(assignment.publicID)"
+            )
+            XCTAssertFalse(
+                html.contains("title=\"4 / 4 students submitted\""),
+                "Pre-v0.4.126 shape: admin/instructor inflated both X and Y. "
+                + "The fix in AssignmentRoutes.swift list() must scope both "
+                + "submittedStudentCount and enrolledStudentCount to "
+                + "enrolledStudentIDs."
+            )
         })
     }
 

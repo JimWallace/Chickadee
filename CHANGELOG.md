@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.126] - 2026-04-28
+
+### Fixed
+
+- **Per-assignment "X / Y students submitted" badge now excludes
+  admin/instructor users.**  When an instructor enrolls themselves in
+  their own course (a common pattern for testing assignments through
+  the same submit flow students use), their submissions inflated both
+  sides of the badge: `submittedStudentCount` (X) was computed from a
+  submissions query with no role filter, and `enrolledStudentCount` (Y)
+  was just `enrolledStudents.count` — which includes admins/instructors
+  enrolled in the course.  Both counters now scope to enrolled users
+  with `role == "student"`, plus pending pre-enrollments on the
+  denominator (so the badge reflects the instructor's roster intent
+  rather than just who has logged in).  Regression test in
+  `AssignmentRoutesTests.testInstructorDashboardBadgeCountsStudentsOnly`
+  enrolls 2 students + 1 instructor + 1 admin, has each submit, and
+  asserts the badge reads `2 / 2 students submitted` (not `4 / 4`).
+- The other dashboard cards (24h Active, 24h Submissions, Assignments
+  Active (24h), Queued Right Now, Students With No Submissions) were
+  already filtered correctly via `enrolledStudentIDs`; only the
+  per-assignment badge had the inconsistency.
+
 ## [0.4.125] - 2026-04-28
 
 ### Fixed
