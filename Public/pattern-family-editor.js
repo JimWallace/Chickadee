@@ -1455,6 +1455,11 @@
         // After v0.4.135 this enforces a true wall-clock limit (worker is
         // terminated on timeout) instead of just catching cooperative hangs.
         var TIMEOUT_MS = 5000;
+        // Longer cap for the one-time solution-notebook load (importing
+        // heavy modules, reading a CSV, etc.).  Bounded so a top-level
+        // infinite loop in a setup cell can't strand auto-compute on
+        // "computing…" forever.
+        var LOAD_TIMEOUT_MS = 30000;
 
         function getWorker() {
             if (_worker) return _worker;
@@ -1567,10 +1572,15 @@
             .then(function (nb) {
                 var cells = extractSolutionCells(nb);
                 if (!cells.length) return Promise.reject(new Error('empty-solution'));
-                // No timeout on the load itself — it might legitimately
-                // run a long setup cell (e.g. a heavy `pd.read_csv`).
-                // Per-call timeouts kick in for the function invocation.
-                return workerSend({ type: 'loadCells', cells: cells }, 0);
+                // Hard cap on the load too.  A pathological top-level
+                // cell (e.g. `while True: pass` outside any function,
+                // or a heavy CSV read with a bug that loops) used to
+                // hang the auto-compute forever — the function-call
+                // timeout never fired because we never got past load.
+                // 30s is generous (legitimate heavy imports, large
+                // pandas reads) while still bounded.  On timeout we
+                // terminate the worker; the next attempt re-loads.
+                return workerSend({ type: 'loadCells', cells: cells }, LOAD_TIMEOUT_MS);
             })
             .then(function (data) {
                 return { cellErrors: data.cellErrors || [] };

@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.136] - 2026-04-29
+
+### Fixed
+
+- **Pattern-family auto-compute solution-load can no longer hang
+  forever.**  v0.4.135's worker-based fix moved Pyodide off the main
+  thread so synchronous tight loops in the *function under test* no
+  longer froze the browser — but I left the cell-load phase
+  (`workerSend({type:'loadCells', cells:...})`) without a timeout
+  (passed `0`).  A pathological top-level cell — `while True: pass`
+  *outside* any function, a `pd.read_csv(...)` with a typo that
+  loops forever, etc. — would hang the auto-compute on
+  "computing…" forever.  The browser stayed responsive (worker
+  thread, not main thread), but the user got no signal that the
+  load failed.
+
+  Adds `LOAD_TIMEOUT_MS = 30000` (30s) for the load phase.  Generous
+  enough for legitimate heavy imports / large pandas reads, bounded
+  enough to recover the editor when a setup cell goes wrong.  On
+  timeout the worker is terminated and the next attempt re-loads
+  from scratch.
+
+### Verified (no code change needed)
+
+- **`return None` from the solution function is correctly handled
+  through the worker pipeline.**  Traced end-to-end: the value-mode
+  Pyodide snippet's `_result is None` branch sets
+  `__chickadee_kind__: "none"`; the JS side detects that key and
+  returns `{ok: true, value: null, returnedNone: true}`; the UI
+  renders the "⚠ solution returned None" hint without filling the
+  Expected cell.  The 5-second function-call timeout still kicks
+  in if the function takes too long *to return* None — the worker
+  is terminated on the main-thread timer regardless of what the
+  function would have returned.
+
 ## [0.4.135] - 2026-04-29
 
 ### Fixed
