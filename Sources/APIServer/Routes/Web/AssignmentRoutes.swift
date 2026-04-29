@@ -1268,24 +1268,30 @@ struct AssignmentRoutes: RouteCollection {
             sectionGradingMode = "worker"
         }
 
-        // Preserve the draft's pattern families across the manifest rebuild —
-        // same fix as v0.4.77 for saveEditedAssignment.  The draft may have
-        // accumulated families via `PUT /instructor/new/draft/families`;
-        // without this forward, `makeWorkerManifestJSON` would emit an
-        // empty `patternFamilies` field and the generated scripts would
-        // lose their family provenance on publish.
+        // Preserve the draft's pattern families, sections, and notebook
+        // checks across the manifest rebuild.  Each was added on a
+        // different version (v0.4.77 for families, v0.4.96 for sections,
+        // v0.4.113 for checks); without forwarding all three,
+        // `makeWorkerManifestJSON` emits empty fields and any
+        // sections / checks / families authored on the create page get
+        // dropped on publish.  Regression guard:
+        // `testCreatePublishPreservesSectionsAndChecks`.
         let draftProps: TestProperties? = {
             guard let existingManifest = draftSetup?.manifest,
                   let data = existingManifest.data(using: .utf8) else { return nil }
             return try? JSONDecoder().decode(TestProperties.self, from: data)
         }()
         let existingFamilies: [PatternFamily] = draftProps?.patternFamilies ?? []
+        let existingChecks:   [NotebookCheck] = draftProps?.notebookChecks  ?? []
+        let existingSections: [TestSuiteSection] = draftProps?.sections     ?? []
 
         let manifest = try makeWorkerManifestJSON(
             testSuites: setupPackage.testSuites,
             includeMakefile: setupPackage.hasMakefile,
             gradingMode: sectionGradingMode,
-            patternFamilies: existingFamilies
+            patternFamilies: existingFamilies,
+            notebookChecks: existingChecks,
+            sections: existingSections
         )
         let setup = draftSetup ?? APITestSetup(
             id: setupID,
@@ -1300,18 +1306,18 @@ struct AssignmentRoutes: RouteCollection {
         setup.courseID = courseID
         try await setup.save(on: req.db)
 
-        // Re-run applyPatternFamilies so the generated scripts survive the
-        // zip rebuild.  Mirrors v0.4.77's fix for the edit-save path.
-        //
-        // Passing `authoredItems` preserves each family's position from the
-        // draft manifest — without this, every family published from the
-        // Create page lands at the bottom of the suite (and every
-        // generated test outcome renders at the end of the submission
-        // view), because the legacy `authoredItems == nil` path can't
-        // infer positions after `makeWorkerManifestJSON` above strips the
-        // generated entries.  Regression guard:
-        // `testApply_createPublishPreservesFamilyPosition`.
-        if !existingFamilies.isEmpty {
+        // Re-run applyPatternFamilies so generated scripts survive the
+        // zip rebuild AND so each entry's `sectionID` is restored —
+        // `setupPackage.testSuites` loses sectionID through the
+        // ReindexedSuiteConfigRow JSON round-trip, and the `authoredItems`
+        // path is the only one that re-stamps it from the draft manifest.
+        // Run unconditionally when ANY of families / checks / sections
+        // exist; the previous gate (families-only) silently dropped
+        // sections + checks on publish.
+        let needsApply = !existingFamilies.isEmpty
+            || !existingChecks.isEmpty
+            || !existingSections.isEmpty
+        if needsApply {
             let authoredItems = authoredSuiteItemsFromDraftManifest(
                 draftProps: draftProps,
                 newRawEntries: setupPackage.testSuites
@@ -1319,7 +1325,9 @@ struct AssignmentRoutes: RouteCollection {
             _ = try await applyPatternFamilies(
                 to: setup,
                 nextFamilies: existingFamilies,
+                nextChecks: existingChecks.isEmpty ? nil : existingChecks,
                 authoredItems: authoredItems,
+                sections: existingSections.isEmpty ? nil : existingSections,
                 on: req.db
             )
         }

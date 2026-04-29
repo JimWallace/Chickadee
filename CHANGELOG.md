@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.134] - 2026-04-29
+
+### Fixed
+
+- **Sections, notebook checks, and per-entry `sectionID` were dropped on
+  publish from the create page.**  `saveNewAssignment` rebuilt the
+  manifest via `makeWorkerManifestJSON(testSuites:patternFamilies:)`
+  with `sections` and `notebookChecks` defaulting to `[]`, silently
+  discarding anything authored on the draft.  Per-entry `sectionID`
+  was also stripped through the `ReindexedSuiteConfigRow` JSON
+  round-trip.  Combined effect: an instructor who built sections + a
+  notebook check on the create page would publish an assignment with
+  none of that state — sections became empty headers; check-generated
+  entries fell into the trailing Ungrouped block.  Surfaced during the
+  v0.4.132 / v0.4.133 audit (the `applyPatternFamilies` re-run was
+  gated on `!existingFamilies.isEmpty`, so a draft with sections but
+  no families never got the `applyPatternFamilies` rebuild that would
+  have re-stamped per-entry `sectionID`).
+
+  Fix: forward `notebookChecks` + `sections` through
+  `makeWorkerManifestJSON`, run `applyPatternFamilies` whenever
+  *any* of families / checks / sections is present, and propagate
+  `sectionID` (plus `.check(id:, sectionID:)` items, previously
+  unhandled) through `authoredSuiteItemsFromDraftManifest`.
+  Regression guard: `testApply_createPublishPreservesSectionsAndChecks`
+  in `Tests/APITests/PatternFamilyTests.swift`.
+
 ## [0.4.133] - 2026-04-29
 
 ### Fixed
