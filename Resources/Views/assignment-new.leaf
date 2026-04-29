@@ -71,6 +71,7 @@ Create Assignment
     <button id="js-upload-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook"    style="display:none"></button>
     <button id="js-create-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook"  style="display:none"></button>
     <button id="js-create-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook"    style="display:none"></button>
+    <button id="js-create-solution-from-assignment" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-from-assignment" style="display:none"></button>
     <button id="js-clear-assignment-notebook"   type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook"   style="display:none"></button>
     <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     style="display:none"></button>
 
@@ -126,29 +127,120 @@ Create Assignment
                             <button class="btn action-btn" type="button" id="upload-solution-notebook-btn">Upload</button>
                             <button class="btn action-btn" type="button"
                                     onclick="document.getElementById('js-create-solution-notebook').click()">Create Blank</button>
+                            #if(assignmentNotebook):
+                            <!-- Parity PR 4 of #433: only meaningful once an
+                                 assignment notebook exists; copies its bytes
+                                 into the draft solution path. -->
+                            <button class="btn action-btn" type="button"
+                                    title="Copy the assignment notebook as a starting point for the solution"
+                                    onclick="document.getElementById('js-create-solution-from-assignment').click()">Create from Assignment</button>
+                            #endif
                             #endif
                         </div>
                     </td>
                 </tr>
+                <!-- Support files: data fixtures (CSVs, JSON, etc.) bundled
+                     with the assignment.  Anything in the draft zip that
+                     isn't a test script and isn't a notebook lands here.
+                     v0.4.132 / parity PR 3 of #433. -->
+                #for(supportFile in supportFileRows):
+                <tr data-support-file="#(supportFile.name)">
+                    <td><strong>Support file</strong></td>
+                    <td>
+                        <a href="#(supportFile.url)"><code>#(supportFile.name)</code></a>
+                    </td>
+                    <td class="time">
+                        <button class="btn action-btn action-danger support-file-delete-btn" type="button"
+                                data-filename="#(supportFile.name)">Remove</button>
+                    </td>
+                </tr>
+                #endfor
+                #if(draftID):
+                <tr>
+                    <td><strong>Add support file</strong></td>
+                    <td colspan="2">
+                        <button class="btn action-btn" type="button" id="add-support-file-btn"
+                                title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Upload file</button>
+                        <input type="file" id="support-file-upload-input" style="display:none" multiple>
+                        <span id="support-file-upload-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
+                    </td>
+                </tr>
+                #endif
             </tbody>
         </table>
     </div>
 
-    <!-- ── Test Suite ─────────────────────────────────────────────────── -->
-    <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
-    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
+    <!-- ── Runner Requirements ────────────────────────────────────────── -->
+    #if(!detectedLanguages.isEmpty):
+    <p class="card-meta" style="margin:.75rem 0 .4rem">
+        <strong>Auto-detected:</strong>
+        Languages: #(detectedLanguagesCSV)
+        #if(!detectedCapabilities.isEmpty):
+        · Capabilities: #(detectedCapabilitiesCSV)
+        #endif
+    </p>
+    #endif
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1.25rem">
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+            Languages
+            <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
+                   placeholder="python, r" style="font-size:.875rem;padding:.25rem .5rem">
+        </label>
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+            Capabilities
+            <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
+                   placeholder="numpy, pandas, shell-bash" style="font-size:.875rem;padding:.25rem .5rem">
+        </label>
+    </div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
+</form>
+
+<!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
+     so its nested per-op <form> elements (Add Section, rename section,
+     delete section) parse correctly.  The browser strips nested <form>
+     tags, which is why the v0.4.96 in-form `+ Section` JS button
+     worked but a server-rendered `+ Section` form would not.  Suite
+     edits go through dedicated draft-scoped endpoints (JS PUT
+     /instructor/new/draft/suite for items, POST /instructor/new/draft
+     /suite-sections/* for section CRUD) — none of them rely on the
+     outer form. -->
+
+#if(draftID):
+<label class="visually-hidden" for="suite-files-input">Add test suite files</label>
+<input class="form-input" id="suite-files-input" type="file" multiple style="display:none">
+
+<div class="form form--wide" style="margin-top:1.25rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
         <h2 style="margin:0">Test Suite</h2>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
-            <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
-            <button class="btn action-btn" type="button" id="add-family-btn">New Family</button>
-            <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
+            <!-- Add Section — form POST + full page reload, mirrors the
+                 edit-page pattern (assignment-edit.leaf:154-168). -->
+            <details class="add-section-details" id="add-suite-section-details" style="position:relative">
+                <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Section</summary>
+                <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
+                    <form method="post" action="/instructor/new/draft/suite-sections?draftID=#(draftID)" class="form" style="margin:0;gap:.6rem">
+                        #csrfFormField()
+                        <label class="form-label" style="margin:0">
+                            Section name
+                            <input class="form-input" type="text" name="name" placeholder="e.g. Question 1" required
+                                   style="font-size:.85rem;padding:.3rem .5rem">
+                        </label>
+                        <button class="btn btn-primary" type="submit"
+                                style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                    </form>
+                </div>
+            </details>
+            <!-- Hidden global toolbar buttons — every section has its own
+                 inline buttons that delegate to these.  Kept in the DOM
+                 so the per-section delegate click() in the IIFE below
+                 still routes to their handlers. -->
+            <button class="btn action-btn" type="button" id="new-script-btn" hidden>New Script</button>
+            <button class="btn action-btn" type="button" id="add-family-btn" hidden>New Family</button>
+            <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
     </div>
 
-    <!-- Generate Tests from Solution (hidden; shown when solution file selected) -->
+    <!-- Generate Tests from Solution (hidden; shown when solution notebook present) -->
     <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
         <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
             <span style="font-size:.875rem;font-weight:600">Generate Starter Tests</span>
@@ -178,72 +270,422 @@ Create Assignment
         </div>
     </div>
 
-    <table class="results-table" id="suite-config-table">
-        <thead>
-            <tr>
-                <th title="Student-facing name (edit to override the filename)">Name</th>
-                <th>Visibility</th>
-                <th title="Grade point weight for this test (default 1)">Pts</th>
-                <th class="time">Action</th>
-            </tr>
-        </thead>
-        <tbody id="suite-config-body">
-            #for(row in suiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td><div class="suite-name-cell">
-                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
-                    <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                </div></td>
-                <td>
-                    <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
-                        <option value="support" #if(row.tier == "support"):selected#endif>support</option>
-                        <option value="public"  #if(row.tier == "public"):selected#endif>public</option>
-                        <option value="secret"  #if(row.tier == "secret"):selected#endif>secret</option>
-                        <option value="release" #if(row.tier == "release"):selected#endif>release</option>
-                    </select>
-                </td>
-                <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
-                <td class="time">
-                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
-                        <button class="btn action-btn action-danger suite-delete-btn" type="button"
-                                title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            #endfor
-        </tbody>
-    </table>
+    <!-- Server-rendered section shells (parity with assignment-edit.leaf,
+         #435 / v0.4.132).  Each .section-block owns its own table shell;
+         `suite-table.js` populates the `<tbody data-section-id>` rows from
+         the JSON seed and keeps them in sync via the debounced
+         `PUT /instructor/new/draft/suite`.  Section CRUD goes through the
+         draft-scoped endpoints in AssignmentRoutes+DraftSections.swift. -->
+    <div id="suite-sections">
+    #for(sec in suiteSectionRows):
+        <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
+        #if(!sec.isUngrouped):
+            <div class="section-header" draggable="true"
+                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
+                      style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
 
-    <!-- ── Runner Requirements ────────────────────────────────────────── -->
-    #if(!detectedLanguages.isEmpty):
-    <p class="card-meta" style="margin:.75rem 0 .4rem">
-        <strong>Auto-detected:</strong>
-        Languages: #(detectedLanguagesCSV)
-        #if(!detectedCapabilities.isEmpty):
-        · Capabilities: #(detectedCapabilitiesCSV)
+                <!-- View mode -->
+                <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+                    <strong>#(sec.name)</strong>
+                    <button class="btn-link section-edit-toggle" type="button"
+                            title="Edit section" aria-label="Edit section"
+                            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                    <span style="flex:1"></span>
+                    <button type="button" class="btn action-btn section-var-add"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
+                    <button type="button" class="btn action-btn section-new-script-btn"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
+                    <button type="button" class="btn action-btn section-add-family-btn"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
+                    <button type="button" class="btn action-btn section-add-check-btn"
+                            data-section-id="#(sec.sectionID)"
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                </div>
+
+                <!-- Edit mode (hidden by default) -->
+                <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
+                    <form class="section-rename-form" method="post"
+                          action="/instructor/new/draft/suite-sections/#(sec.sectionID)/rename?draftID=#(draftID)"
+                          style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+                        #csrfFormField()
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required
+                               style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
+                        <button class="btn btn-primary" type="submit"
+                                style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+                    </form>
+                    <button class="btn action-btn action-danger section-delete-btn" type="button"
+                            data-action="/instructor/new/draft/suite-sections/#(sec.sectionID)/delete?draftID=#(draftID)"
+                            data-name="#(sec.name)"
+                            style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
+                    <button class="btn-link section-edit-cancel" type="button"
+                            aria-label="Cancel" title="Cancel"
+                            style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                </div>
+            </div>
+
+            <!-- Section variables (shared inputs) form.  Auto-saves on
+                 change (debounced), POSTs JSON to the draft-scoped
+                 variables endpoint. -->
+            <form class="section-vars-form" method="post"
+                  action="/instructor/new/draft/suite-sections/#(sec.sectionID)/variables?draftID=#(draftID)"
+                  style="margin:.25rem 0 .5rem"
+                  data-section-id="#(sec.sectionID)">
+                <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
+                    <tbody class="section-vars-body">
+                        #for(v in sec.variables):
+                        <tr class="section-var-row">
+                            <td style="width:14rem;white-space:nowrap">
+                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
+                                <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
+                                       style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                            </td>
+                            <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"
+                                       style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
+                            <td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove"
+                                        title="Remove input" aria-label="Remove input"
+                                        style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                        </tr>
+                        #endfor
+                    </tbody>
+                </table>
+            </form>
+        #else:
+            <div class="section-create-toolbar"
+                 data-section-id="#(sec.sectionID)"
+                 style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
+                <button type="button" class="btn action-btn section-new-script-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
+                <button type="button" class="btn action-btn section-add-family-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
+                <button type="button" class="btn action-btn section-add-check-btn"
+                        data-section-id="#(sec.sectionID)"
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+            </div>
         #endif
-    </p>
-    #endif
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1.25rem">
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
-            Languages
-            <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
-                   placeholder="python, r" style="font-size:.875rem;padding:.25rem .5rem">
-        </label>
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
-            Capabilities
-            <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
-                   placeholder="numpy, pandas, shell-bash" style="font-size:.875rem;padding:.25rem .5rem">
-        </label>
+            <table class="results-table" style="width:100%">
+                <tbody data-section-id="#(sec.sectionID)"></tbody>
+            </table>
+        </div>
+    #endfor
     </div>
+</div>
 
-</form>
+<!-- Suite seed (full reconciled GET /suite payload) — same shape the
+     edit page emits.  rawJSON emits the string verbatim so JSON.parse
+     in suite-table.js doesn't choke on HTML-escaped quotes. -->
+<script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
+#else:
+<!-- Pre-draft state: nothing to author yet.  The notebook upload above
+     creates the draft setup, after which the page reloads with the
+     suite editor visible. -->
+<div style="margin-top:1.25rem;padding:1rem 1.25rem;border:1px dashed var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa);color:var(--gray-500);font-size:.875rem">
+    <strong>Test Suite</strong> — upload an assignment notebook above to begin authoring tests.
+</div>
+#endif
 
 <!-- Pattern families seed — same shape as the edit page's seed.
      Server renders the current draft's families (empty before first save). -->
 <script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
+<!-- Notebook checks seed (parity PR 2 of #433).  Empty `[]` until a draft
+     exists; the check editor module silently no-ops in that case. -->
+<script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
+
+<!-- ── Notebook Check Editor Modal ──────────────────────────────────────
+     Sibling to the pattern-family modal below.  HTML mirrors
+     assignment-edit.leaf:311-543 verbatim — same `notebook-check-editor.js`
+     module drives both pages.  Saves via PUT /instructor/new/draft/checks
+     (parity PR 2 of #433); the assignment-scoped variant uses the same
+     full-replace semantics. -->
+<div id="check-editor-overlay"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(720px,96vw);max-height:92vh;
+                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
+            <div id="check-editor-title" style="font-weight:600;flex:1">New Notebook Check</div>
+            <button class="btn-link" id="check-editor-close" type="button" aria-label="Close" title="Close"
+                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+        </div>
+
+        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
+            <input type="hidden" id="check-id">
+            <input type="hidden" id="check-section-id">
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Kind
+                    <select class="form-input" id="check-kind" style="padding:.3rem .5rem;font-size:.85rem">
+                        <option value="data_frame_shape">DataFrame shape (rows × cols)</option>
+                        <option value="data_frame_columns">DataFrame columns (exact / superset)</option>
+                        <option value="data_frame_equality">DataFrame equality (CSV expected)</option>
+                        <option value="series_equality">Series equality (CSV expected)</option>
+                        <option value="numeric_array_close">Numeric array close (numpy.assert_allclose)</option>
+                        <option value="figure_count">Figure count (matplotlib)</option>
+                        <option value="cell_contains">Cell contains (substring / regex)</option>
+                        <option value="function_exists">Function exists (callable, optional arity)</option>
+                        <option value="ast_structure">AST structure (uses for-loop, lambda, etc.)</option>
+                    </select>
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Display name (shown to students)
+                    <input type="text" class="form-input" id="check-name" placeholder="(auto-generated when blank)"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+            </div>
+            <p class="card-meta" style="font-size:.72rem;margin:.1rem 0 0">
+                Tier (visibility) and points are edited inline on the test suite row — same as scripts and pattern families.  New checks default to <code>public</code> and 1 point; tweak after saving.
+            </p>
+
+            <!-- Kind-specific field cards.  Each is hidden by default; the
+                 kind dropdown's change handler shows exactly one. -->
+
+            <div class="check-fields" data-kind="data_frame_shape" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    DataFrame variable name on student_module
+                    <input type="text" class="form-input" id="check-shape-variable" placeholder="df"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                        Expected rows
+                        <input type="number" class="form-input" id="check-shape-rows" min="0" step="1"
+                               style="padding:.3rem .5rem;font-size:.85rem">
+                    </label>
+                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                        Expected columns
+                        <input type="number" class="form-input" id="check-shape-cols" min="0" step="1"
+                               style="padding:.3rem .5rem;font-size:.85rem">
+                    </label>
+                </div>
+            </div>
+
+            <div class="check-fields" data-kind="data_frame_columns" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    DataFrame variable name on student_module
+                    <input type="text" class="form-input" id="check-columns-variable" placeholder="df"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected columns (one per line, in order)
+                    <textarea class="form-input" id="check-columns-list" rows="6"
+                              placeholder="caseid&#10;age&#10;sex&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <fieldset style="border:1px solid var(--border,#ddd);padding:.4rem .6rem;border-radius:.3rem">
+                    <legend style="font-size:.78rem;color:var(--gray-600);padding:0 .3rem">Match mode</legend>
+                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem;margin-right:1rem">
+                        <input type="radio" name="check-columns-match" value="exact" checked> Exact (order matters)
+                    </label>
+                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem">
+                        <input type="radio" name="check-columns-match" value="superset"> Superset (extras allowed)
+                    </label>
+                </fieldset>
+            </div>
+
+            <div class="check-fields" data-kind="data_frame_equality" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    DataFrame variable name on student_module
+                    <input type="text" class="form-input" id="check-eq-variable" placeholder="df_grouped"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected DataFrame (CSV — header row first)
+                    <textarea class="form-input" id="check-eq-csv" rows="8"
+                              placeholder="age,sex&#10;58.0,M&#10;70.0,M&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <details>
+                    <summary style="font-size:.82rem;cursor:pointer;color:var(--gray-700)">Comparison toggles (advanced)</summary>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:.4rem;margin-top:.4rem">
+                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                            <input type="checkbox" id="check-eq-check-dtype" checked> Strict dtype
+                        </label>
+                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                            <input type="checkbox" id="check-eq-check-like"> Ignore column/row order
+                        </label>
+                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                            <input type="checkbox" id="check-eq-ignore-index" checked> Ignore index
+                        </label>
+                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                            rtol
+                            <input type="number" class="form-input" id="check-eq-rtol" step="any" placeholder="1e-5"
+                                   style="padding:.2rem .4rem;font-size:.78rem">
+                        </label>
+                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                            atol
+                            <input type="number" class="form-input" id="check-eq-atol" step="any" placeholder="1e-8"
+                                   style="padding:.2rem .4rem;font-size:.78rem">
+                        </label>
+                    </div>
+                </details>
+            </div>
+
+            <div class="check-fields" data-kind="series_equality" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Series variable name on student_module
+                    <input type="text" class="form-input" id="check-series-variable" placeholder="scores"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected Series (single-column CSV — header row first)
+                    <textarea class="form-input" id="check-series-csv" rows="8"
+                              placeholder="score&#10;0.95&#10;0.88&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+            </div>
+
+            <div class="check-fields" data-kind="numeric_array_close" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Array variable name on student_module
+                    <input type="text" class="form-input" id="check-array-variable" placeholder="y_pred"
+                           style="padding:.3rem .5rem;font-size:.85rem">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Expected values (one number per line, or JSON list)
+                    <textarea class="form-input" id="check-array-values" rows="6"
+                              placeholder="1.0&#10;2.5&#10;3.7&#10;..."
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                        rtol
+                        <input type="number" class="form-input" id="check-array-rtol" step="any" placeholder="1e-7"
+                               style="padding:.2rem .4rem;font-size:.78rem">
+                    </label>
+                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
+                        atol
+                        <input type="number" class="form-input" id="check-array-atol" step="any" placeholder="0"
+                               style="padding:.2rem .4rem;font-size:.78rem">
+                    </label>
+                </div>
+            </div>
+
+            <div class="check-fields" data-kind="figure_count" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Minimum number of matplotlib figures the student must produce
+                    <input type="number" class="form-input" id="check-fig-min" min="0" step="1" value="1"
+                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
+                </label>
+                <p class="card-meta" style="font-size:.72rem;margin:0">
+                    Counted via <code>plt.get_fignums()</code> after the student's notebook is loaded.  Every <code>plt.figure</code>, <code>plt.subplots</code>, and <code>df.plot</code> contributes.
+                </p>
+            </div>
+
+            <div class="check-fields" data-kind="cell_contains" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Pattern the student's submission must contain in at least one code cell
+                    <input type="text" class="form-input" id="check-cc-text" placeholder=".groupby("
+                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
+                </label>
+                <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
+                    <input type="checkbox" id="check-cc-regex"> Interpret as Python regex
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Must differ from this reference (optional — for "not the same as the example" exercises)
+                    <textarea class="form-input" id="check-cc-must-differ" rows="3"
+                              placeholder='df.groupby("sex")["age"].mean()'
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+            </div>
+
+            <div class="check-fields" data-kind="function_exists" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Function name (must be defined in the student notebook and callable)
+                    <input type="text" class="form-input" id="check-fexists-name" placeholder="classify_bmi"
+                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Required arity (number of positional parameters — leave blank to skip)
+                    <input type="number" class="form-input" id="check-fexists-arity" min="0" step="1"
+                           placeholder="(any)"
+                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
+                </label>
+                <p class="card-meta" style="font-size:.72rem;margin:0">
+                    Useful as a precondition before correctness tests so a missing function fails clearly instead of erroring every dependent test.
+                </p>
+            </div>
+
+            <div class="check-fields" data-kind="ast_structure" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Required structural predicates (one per line)
+                    <textarea class="form-input" id="check-ast-constructs" rows="5"
+                              placeholder="for_loop&#10;list_comprehension&#10;import:pandas"
+                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
+                </label>
+                <p class="card-meta" style="font-size:.72rem;margin:0">
+                    Supported: <code>for_loop</code>, <code>while_loop</code>, <code>list_comprehension</code>, <code>lambda</code>, <code>recursion</code>, and <code>import:&lt;module&gt;</code> (e.g. <code>import:pandas</code>).  Prefix with <code>!</code> to forbid (e.g. <code>!for_loop</code> = "must NOT use a for-loop").
+                </p>
+            </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
+            <button class="btn btn-primary" id="check-save-btn" type="button">Save</button>
+            <button class="btn" id="check-cancel-btn" type="button">Cancel</button>
+            <button class="btn action-btn action-danger" id="check-delete-btn" type="button" style="margin-left:auto;display:none">Delete</button>
+            <span id="check-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Notebook check editor module — same JS that drives the edit page,
+     wired here against the draft-scoped PUT endpoint.  Saves trigger
+     a full page reload so the suite editor picks up the newly
+     generated rows; the same trade-off the edit page makes (parity
+     PR 2 of #433). -->
+<script src="/notebook-check-editor.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var draftID = #rawJSON(draftIDJSON);
+    if (!draftID) return;  // No draft yet — nothing to save against.
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var seed = document.getElementById('notebook-checks-seed');
+    var initialChecks = [];
+    if (seed) {
+        try { initialChecks = JSON.parse(seed.textContent || '[]') || []; }
+        catch (e) { initialChecks = []; }
+    }
+    var checkEditor = window.initNotebookCheckEditor({
+        assignmentID: 'draft:' + draftID,
+        csrfToken: csrfToken,
+        initialChecks: initialChecks,
+        urls: {
+            putChecks: function () {
+                return '/instructor/new/draft/checks?draftID=' + encodeURIComponent(draftID);
+            }
+        },
+        onChecksChange: function () {
+            window.location.reload();
+        }
+    });
+
+    // Per-section "+ Add Check" delegate — same pattern as the edit page.
+    document.body.addEventListener('click', function (ev) {
+        var btn = ev.target.closest && ev.target.closest('.section-add-check-btn');
+        if (!btn) return;
+        ev.preventDefault();
+        var sectionID = btn.getAttribute('data-section-id') || '';
+        checkEditor.open(null, sectionID || null);
+    });
+
+    // Edit existing check (data-edit-check-id attribute on suite-table rows).
+    document.body.addEventListener('click', function (ev) {
+        var el = ev.target.closest && ev.target.closest('[data-edit-check-id]');
+        if (!el) return;
+        ev.preventDefault();
+        var id = el.getAttribute('data-edit-check-id');
+        checkEditor.open(id || null);
+    });
+
+    window.chickadeeNotebookCheckEditor = checkEditor;
+})();
+</script>
 
 <!-- ── Pattern Family Editor Modal ──────────────────────────────────────────
      HTML duplicated from assignment-edit.leaf until the LeafKit partial
@@ -474,282 +916,357 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
 .suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
 .suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
-#suite-config-table td { vertical-align: top; }
 </style>
-<script src="/suite-list.js?v=#appVersion()"></script>
+<!-- ── Unified Suite Table ─────────────────────────────────────────────────
+     v0.4.132: the create page now shares `suite-table.js` with the edit
+     page (lines 809-841 in assignment-edit.leaf).  All section CRUD
+     goes through draft-scoped endpoints — see
+     AssignmentRoutes+DraftSections.swift. -->
+#if(draftID):
+<script src="/suite-table.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var draftID = #rawJSON(draftIDJSON);
+    if (!draftID) return;
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var suiteTable = window.initSuiteTable({
+        assignmentID: 'draft:' + draftID,  // diagnostics-only; URL builders below ignore
+        csrfToken: csrfToken,
+        formSelector: 'form#new-assignment-form',
+        urls: {
+            putSuite: function () {
+                return '/instructor/new/draft/suite?draftID=' + encodeURIComponent(draftID);
+            },
+            deleteScript: function (name) {
+                return '/instructor/new/draft/scripts/' + encodeURIComponent(name)
+                     + '?draftID=' + encodeURIComponent(draftID);
+            },
+            uploadScript: function () {
+                return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
+            }
+        }
+    });
+    // Same window globals the edit page exposes — pattern-family-editor.js
+    // and the script-editor module below call these directly.
+    window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
+    window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
+})();
+</script>
+
+<!-- Section-variables auto-save (mirrors assignment-edit.leaf:847-1113).
+     Each section gets a Shared Inputs table; rows debounce-POST to
+     /instructor/new/draft/suite-sections/:sid/variables. -->
 <script>
 (function () {
     'use strict';
 
-    var filesInput  = document.getElementById('suite-files-input');
-    var configField = document.getElementById('suite-config-field');
-    var body        = document.getElementById('suite-config-body');
-    if (!filesInput || !configField || !body) return;
-
-    // items: { name, source, index?, displayName, isTest, tier, dependsOn[], points, errors? }
-    var items = [];
-    var dragName = null;
-
-    var suiteUploadFiles = Array.from(filesInput.files || []);
-    var suiteFilesReady = Promise.resolve();
-
-    function setQueuedUploadFiles(files) {
-        suiteUploadFiles = files || [];
-        var dt = new DataTransfer();
-        suiteUploadFiles.forEach(function (file) { dt.items.add(file); });
-        filesInput.files = dt.files;
+    function csrf() {
+        var m = document.querySelector('meta[name="csrf-token"]');
+        return m ? m.getAttribute('content') : '';
     }
 
-    function stemOf(filename) {
-        var dot = filename.lastIndexOf('.');
-        return dot > 0 ? filename.slice(0, dot) : filename;
+    function isValidPyIdent(s) {
+        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
     }
 
-    function hasChildren(name) {
-        return items.some(function (it) { return it.dependsOn.indexOf(name) >= 0; });
+    function tryParseValue(raw) {
+        var t = String(raw == null ? '' : raw).trim();
+        if (!t) return { ok: false, empty: true };
+        if (t === 'True')  return { ok: true, value: true,  strict: true };
+        if (t === 'False') return { ok: true, value: false, strict: true };
+        if (t === 'None')  return { ok: true, value: null,  strict: true };
+        try { return { ok: true, value: JSON.parse(t), strict: true }; }
+        catch (_) {}
+        if (t.indexOf('"') === -1) {
+            var pyish = t.replace(/'/g, '"')
+                         .replace(/\bTrue\b/g, 'true')
+                         .replace(/\bFalse\b/g, 'false')
+                         .replace(/\bNone\b/g, 'null');
+            try { return { ok: true, value: JSON.parse(pyish), strict: false }; }
+            catch (_) {}
+        }
+        return { ok: true, value: String(raw), strict: false };
     }
 
-    function isChild(name) {
-        var it = items.find(function (i) { return i.name === name; });
-        return it ? it.dependsOn.length > 0 : false;
+    function refreshRow(tr) {
+        var name = (tr.querySelector('.section-var-name') || {}).value || '';
+        var rawVal = (tr.querySelector('.section-var-value') || {}).value || '';
+        name = name.trim();
+        var nameOk = name && isValidPyIdent(name);
+        var nameEl = tr.querySelector('.section-var-name');
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red,#c0392b)';
+        if (nameOk) {
+            var others = Array.from(tr.parentNode.querySelectorAll('.section-var-name'))
+                .map(function (el) { return el.value.trim(); });
+            if (others.filter(function (n) { return n === name; }).length > 1) {
+                nameEl.style.borderColor = 'var(--red,#c0392b)';
+                nameOk = false;
+            }
+        }
+        var parsed = tryParseValue(rawVal);
+        var valueEl = tr.querySelector('.section-var-value');
+        var valueOk = parsed.ok && !parsed.empty && parsed.strict;
+        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber,#b38600)';
+        valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
+            ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.' : '';
+        var check = tr.querySelector('.section-var-row-valid');
+        if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
     }
 
-    function visualOrder() {
-        var result = [];
-        var childMap = {};
-        items.forEach(function (it) {
-            if (it.dependsOn.length > 0) {
-                var p = it.dependsOn[0];
-                childMap[p] = childMap[p] || [];
-                childMap[p].push(it);
+    function refreshAllRows(tbody) {
+        Array.from(tbody.querySelectorAll('tr.section-var-row')).forEach(refreshRow);
+    }
+
+    function addEmptyRow(tbody) {
+        var tr = document.createElement('tr');
+        tr.className = 'section-var-row';
+        tr.innerHTML =
+            '<td style="width:14rem;white-space:nowrap">'
+          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
+          +   '<input type="text" class="form-input section-var-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">'
+          + '</td>'
+          + '<td><input type="text" class="form-input section-var-value" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
+          + '<td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove" title="Remove input" aria-label="Remove input" style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
+        tbody.appendChild(tr);
+        refreshRow(tr);
+        var input = tr.querySelector('.section-var-name');
+        if (input) input.focus();
+    }
+
+    function buildPayload(form) {
+        var tbody = form.querySelector('tbody.section-vars-body');
+        if (!tbody) return null;
+        var rows = Array.from(tbody.querySelectorAll('tr.section-var-row'));
+        var variables = [];
+        var valid = true;
+        for (var i = 0; i < rows.length; i++) {
+            var tr = rows[i];
+            var name = (tr.querySelector('.section-var-name').value || '').trim();
+            var rawVal = tr.querySelector('.section-var-value').value || '';
+            if (!name && !rawVal.trim()) continue;
+            if (!isValidPyIdent(name)) { valid = false; continue; }
+            var parsed = tryParseValue(rawVal);
+            if (parsed.empty) { valid = false; continue; }
+            variables.push({ name: name, value: parsed.value });
+        }
+        var seen = {};
+        for (var k = 0; k < variables.length; k++) {
+            if (seen[variables[k].name]) { valid = false; break; }
+            seen[variables[k].name] = true;
+        }
+        return valid ? { variables: variables } : null;
+    }
+
+    function wireAutoSave(form) {
+        var tbody = form.querySelector('tbody.section-vars-body');
+        if (!tbody) return { flush: function () { return Promise.resolve(); } };
+
+        var timer = null;
+        var inFlight = null;
+        var pending = false;
+
+        function doPost() {
+            var payload = buildPayload(form);
+            if (!payload) return Promise.resolve();
+            inFlight = fetch(form.action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                redirect: 'manual',
+                body: JSON.stringify(payload)
+            }).then(function (r) {
+                if (!r.ok && r.type !== 'opaqueredirect') {
+                    return r.text().catch(function () { return ''; }).then(function (t) {
+                        throw new Error('section-vars save failed: HTTP ' + r.status + ' ' + t.slice(0, 200));
+                    });
+                }
+            }).catch(function (err) {
+                console.error('section-vars auto-save failed:', err);
+            }).finally(function () {
+                inFlight = null;
+                if (pending) { pending = false; doPost(); }
+            });
+            return inFlight;
+        }
+
+        function schedule() {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(function () { timer = null; flushNow(); }, 500);
+        }
+
+        function flushNow() {
+            if (timer) { clearTimeout(timer); timer = null; }
+            if (inFlight) { pending = true; return inFlight; }
+            return doPost() || Promise.resolve();
+        }
+
+        refreshAllRows(tbody);
+
+        form.addEventListener('input', function (e) {
+            var tr = e.target.closest && e.target.closest('tr.section-var-row');
+            if (tr) {
+                refreshAllRows(tbody);
+                schedule();
             }
         });
-        items.filter(function (it) { return it.dependsOn.length === 0; }).forEach(function (root) {
-            result.push({ item: root, depth: 0 });
-            (childMap[root.name] || []).forEach(function (child) {
-                result.push({ item: child, depth: 1 });
+        form.addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('.section-var-remove');
+            if (btn && form.contains(btn)) {
+                var tr = btn.closest('tr.section-var-row');
+                if (tr) { tr.remove(); refreshAllRows(tbody); schedule(); }
+            }
+        });
+        form.addEventListener('submit', function (e) { e.preventDefault(); flushNow(); });
+
+        return { flush: flushNow };
+    }
+
+    var forms = Array.from(document.querySelectorAll('form.section-vars-form')).map(wireAutoSave);
+
+    window.chickadeeFlushSectionVars = function () {
+        return Promise.all(forms.map(function (f) { return f.flush(); }));
+    };
+
+    document.querySelectorAll('button.section-var-add').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var sid = btn.getAttribute('data-section-id') || '';
+            var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
+            if (!form) return;
+            var tbody = form.querySelector('tbody.section-vars-body');
+            if (tbody) addEmptyRow(tbody);
+        });
+    });
+
+    function delegateWithSection(sid, globalID) {
+        window.__chickadeeTargetSection = sid;
+        var btn = document.getElementById(globalID);
+        if (btn) btn.click();
+    }
+    document.querySelectorAll('button.section-new-script-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            delegateWithSection(btn.getAttribute('data-section-id') || '', 'new-script-btn');
+        });
+    });
+    document.querySelectorAll('button.section-add-family-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-family-btn');
+        });
+    });
+    ['new-script-btn', 'add-family-btn', 'add-test-btn'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', function (e) {
+            if (!e.isTrusted) return;
+            window.__chickadeeTargetSection = null;
+        }, true);
+    });
+
+    // ── Section header view/edit toggle ────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var toggleBtn = e.target.closest && e.target.closest('.section-edit-toggle');
+        var cancelBtn = e.target.closest && e.target.closest('.section-edit-cancel');
+        var deleteBtn = e.target.closest && e.target.closest('.section-delete-btn');
+
+        if (toggleBtn) {
+            var hdr = toggleBtn.closest('.section-header');
+            if (!hdr) return;
+            hdr.querySelector('.section-view').style.display = 'none';
+            hdr.querySelector('.section-edit').style.display = 'flex';
+            var input = hdr.querySelector('.section-name-input');
+            if (input) input.focus();
+        } else if (cancelBtn) {
+            var hdr2 = cancelBtn.closest('.section-header');
+            if (!hdr2) return;
+            hdr2.querySelector('.section-view').style.display = 'flex';
+            hdr2.querySelector('.section-edit').style.display = 'none';
+        } else if (deleteBtn) {
+            var name = deleteBtn.getAttribute('data-name') || 'this section';
+            if (!confirm('Delete section "' + name + '"? Tests in this section move to Ungrouped.')) return;
+            var action = deleteBtn.getAttribute('data-action');
+            if (!action) return;
+            var form = document.createElement('form');
+            form.method = 'post';
+            form.action = action;
+            form.style.display = 'none';
+            var tokenEl = document.querySelector('meta[name="csrf-token"]');
+            var token = tokenEl ? tokenEl.getAttribute('content') : '';
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = '_csrf';
+            inp.value = token;
+            form.appendChild(inp);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    });
+
+    // ── Section header drag-reorder ─────────────────────────────────────
+    var sectionContainer = document.getElementById('suite-sections');
+    if (sectionContainer) {
+        var draggingHeader = null;
+        sectionContainer.addEventListener('dragstart', function (e) {
+            var hdr = e.target.closest && e.target.closest('.section-header');
+            if (!hdr) return;
+            draggingHeader = hdr;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', hdr.parentNode.getAttribute('data-section-id') || '');
+            hdr.style.opacity = '.4';
+        });
+        sectionContainer.addEventListener('dragend', function () {
+            if (draggingHeader) draggingHeader.style.opacity = '';
+            draggingHeader = null;
+        });
+        sectionContainer.addEventListener('dragover', function (e) {
+            if (!draggingHeader) return;
+            e.preventDefault();
+        });
+        sectionContainer.addEventListener('drop', function (e) {
+            if (!draggingHeader) return;
+            e.preventDefault();
+            var draggedBlock = draggingHeader.closest('.section-block');
+            var targetBlock = e.target.closest && e.target.closest('.section-block');
+            if (!draggedBlock || !targetBlock || draggedBlock === targetBlock) return;
+            // Don't allow dragging onto the Ungrouped block (it's terminal)
+            if (!targetBlock.querySelector('.section-header')) return;
+            var rect = targetBlock.getBoundingClientRect();
+            var midpoint = rect.top + rect.height / 2;
+            if (e.clientY < midpoint) {
+                sectionContainer.insertBefore(draggedBlock, targetBlock);
+            } else {
+                sectionContainer.insertBefore(draggedBlock, targetBlock.nextSibling);
+            }
+            // Persist new order
+            var ids = Array.from(sectionContainer.querySelectorAll('.section-block'))
+                .map(function (b) { return b.getAttribute('data-section-id') || ''; })
+                .filter(function (s) { return s !== ''; });
+            fetch('/instructor/new/draft/suite-sections/reorder?draftID=' + encodeURIComponent(draftID), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                body: JSON.stringify({ sectionIDs: ids })
+            }).catch(function (err) {
+                console.error('section reorder failed:', err);
             });
         });
-        return result;
     }
+})();
+</script>
+#endif
 
-    function tierOptions(selected) {
-        return ['support','public','secret','release'].map(function (t) {
-            return '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>';
-        }).join('');
+<!-- ── Form-level helpers (notebook upload, gen-tests, UW dates) ────────── -->
+<script>
+(function () {
+    'use strict';
+
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    function escHtml(v) {
+        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
     }
+    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
 
-    function itemIsTest(item) { return item.tier !== 'support'; }
-
-    function rowHTML(item, depth) {
-        var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
-        var errBadge = errs.length > 0
-            ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
-            : '';
-        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
-        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var pts       = item.points || 1;
-        var nameVal   = escAttr(item.displayName || stemOf(item.name));
-        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
-            + '<td' + indent + '><div class="suite-name-cell">'
-            +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
-            +   connector
-            +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
-            +   errBadge
-            + '</div></td>'
-            + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
-            +   tierOptions(item.tier)
-            + '</select></td>'
-            + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-            + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
-            +   '<button class="btn action-btn suite-edit-upload-btn" type="button" data-name="' + escAttr(item.name) + '" title="View/Edit script" aria-label="View/Edit script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
-            +   '<button class="btn action-btn action-danger suite-delete-btn" type="button" title="Delete script" aria-label="Delete script" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
-            + '</div></td>'
-            + '</tr>';
-    }
-
-    function renderTree() {
-        var visual = visualOrder();
-        body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
-    }
-
-    function syncConfig() {
-        var visual = visualOrder();
-        var config = visual.map(function (v, i) {
-            var item = v.item;
-            var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
-            if (row) {
-                var tierEl        = row.querySelector('.suite-tier');
-                var ptsEl         = row.querySelector('.suite-points');
-                var displayNameEl = row.querySelector('.suite-display-name');
-                if (tierEl)        item.tier   = tierEl.value;
-                item.isTest = itemIsTest(item);
-                if (ptsEl)         item.points = Math.max(1, parseInt(ptsEl.value) || 1);
-                if (displayNameEl) {
-                    var val = displayNameEl.value.trim();
-                    item.displayName = (val && val !== stemOf(item.name)) ? val : null;
-                }
-            }
-            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
-            if (item.source === 'upload') { base.index = item.index; }
-            else                          { base.name  = item.name;  }
-            return base;
-        });
-        configField.value = JSON.stringify(config);
-    }
-
-    function initFromDOM() {
-        items = [];
-        body.querySelectorAll('tr[data-source="existing"]').forEach(function (row) {
-            var name        = row.getAttribute('data-name') || '';
-            var tier        = row.getAttribute('data-tier') || 'public';
-            var depsRaw     = row.getAttribute('data-depends-on') || '[]';
-            var dependsOn   = [];
-            try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
-            var points      = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
-            var displayName = row.getAttribute('data-display-name') || '';
-            items.push({ name: name, displayName: displayName, source: 'existing', isTest: tier !== 'support', tier: tier, dependsOn: dependsOn, points: points });
-        });
-        renderTree();
-        syncConfig();
-    }
-
-    function refreshUploadItems(selectedFiles) {
-        syncConfig();
-        var mergedFiles = ChickadeeSuiteList.mergeFiles(suiteUploadFiles, selectedFiles || []);
-        var existingNames = {};
-        items.forEach(function (it) { if (it.source !== 'upload') existingNames[it.name] = true; });
-        mergedFiles = mergedFiles.filter(function (file) { return !existingNames[file.name]; });
-        setQueuedUploadFiles(mergedFiles);
-        suiteFilesReady = Promise.all(suiteUploadFiles.map(ChickadeeSuiteList.classifyFile)).then(function (classifications) {
-            items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, classifications);
-            renderTree();
-            syncConfig();
-            return suiteUploadFiles;
-        });
-        return suiteFilesReady;
-    }
-
-    function addUploadedFiles() {
-        refreshUploadItems(Array.from(filesInput.files || [])).catch(function (err) {
-            console.error('suite upload refresh failed:', err);
-        });
-    }
-
-    // --- Drag & Drop ---
-    body.addEventListener('dragstart', function (e) {
-        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
-        var row = handle.closest('tr[data-name]');
-        if (!row) { e.preventDefault(); return; }
-        dragName = row.getAttribute('data-name');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragName);
-        row.classList.add('suite-row-dragging');
-    });
-
-    body.addEventListener('dragend', function () {
-        dragName = null;
-        body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
-        clearDropIndicators();
-    });
-
-    function clearDropIndicators() {
-        body.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover').forEach(function (r) {
-            r.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-        });
-    }
-
-    body.addEventListener('dragover', function (e) {
-        if (!dragName) return;
-        e.preventDefault();
-        clearDropIndicators();
-        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) { rootZone.classList.add('drop-hover'); return; }
-        var target = e.target.closest && e.target.closest('tr[data-name]');
-        if (!target) return;
-        var rect  = target.getBoundingClientRect();
-        var relY  = (e.clientY - rect.top) / rect.height;
-        var tName = target.getAttribute('data-name');
-        if (tName === dragName) return;
-        if (relY < 0.3)       { target.classList.add('drop-before'); }
-        else if (relY > 0.7)  { target.classList.add('drop-after'); }
-        else if (!isChild(tName) && !hasChildren(dragName)) { target.classList.add('drop-adopt'); }
-        else { target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after'); }
-    });
-
-    body.addEventListener('dragleave', function (e) {
-        var row = e.target.closest && e.target.closest('tr');
-        if (row) row.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-    });
-
-    body.addEventListener('drop', function (e) {
-        e.preventDefault();
-        if (!dragName) return;
-        var dragItem = items.find(function (it) { return it.name === dragName; });
-        if (!dragItem) return;
-        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) { dragItem.dependsOn = []; renderTree(); syncConfig(); return; }
-        var target = e.target.closest && e.target.closest('tr[data-name]');
-        if (!target) return;
-        var tName = target.getAttribute('data-name');
-        if (!tName || tName === dragName) return;
-        var rect = target.getBoundingClientRect();
-        var relY = (e.clientY - rect.top) / rect.height;
-        if (relY >= 0.3 && relY <= 0.7 && !isChild(tName) && !hasChildren(dragName)) {
-            dragItem.dependsOn = [tName];
-        } else {
-            dragItem.dependsOn = [];
-            items = items.filter(function (it) { return it.name !== dragName; });
-            var tIdx = items.findIndex(function (it) { return it.name === tName; });
-            items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
-        }
-        renderTree(); syncConfig();
-    });
-
-    body.addEventListener('click', function (event) {
-        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
-        if (!btn) return;
-        var row = btn.closest('tr[data-name]');
-        if (!row) return;
-        var name = row.getAttribute('data-name');
-        var removed = items.find(function (it) { return it.name === name; });
-        items = items.filter(function (it) { return it.name !== name; });
-        if (removed && removed.source === 'upload') {
-            setQueuedUploadFiles(suiteUploadFiles.filter(function (file) { return file.name !== name; }));
-            items = ChickadeeSuiteList.upsertUploadItems(items, suiteUploadFiles, []);
-        }
-        items.forEach(function (it) { it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; }); });
-        renderTree(); syncConfig();
-    });
-
-    body.addEventListener('change', function () { syncConfig(); });
-    body.addEventListener('input',  function () { syncConfig(); });
-
-    // Upload button opens the hidden file input
-    var addTestBtn = document.getElementById('add-test-btn');
-    if (addTestBtn) {
-        addTestBtn.addEventListener('click', function () {
-            filesInput.value = '';
-            filesInput.click();
-        });
-    }
-    filesInput.addEventListener('change', addUploadedFiles);
-
-    window.chickadeeAddSuiteUploadFiles = function (files) {
-        return refreshUploadItems(Array.from(files || []));
-    };
-    window.chickadeeSuiteUploadFiles = function () {
-        return suiteUploadFiles.slice();
-    };
-    window.chickadeeSuiteFilesReady = function () {
-        return suiteFilesReady;
-    };
-
-    // Notebook upload buttons: open picker, submit to draft endpoint on selection.
-    // Uses explicit form.action override instead of formaction on hidden buttons to
-    // avoid browser inconsistencies with programmatic clicks on hidden submit elements.
+    // ── Notebook upload buttons ────────────────────────────────────────
+    // Open hidden file pickers, then submit the main form to the draft
+    // endpoint with a `draftAction` field so the server saves the file
+    // bytes and reloads the page on the same draft.
     function wireNotebookUpload(btnID, inputID, draftActionValue) {
         var btn       = document.getElementById(btnID);
         var fileInput = document.getElementById(inputID);
@@ -757,7 +1274,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         btn.addEventListener('click', function () { fileInput.value = ''; fileInput.click(); });
         fileInput.addEventListener('change', function () {
             if (fileInput.files.length === 0) return;
-            syncConfig();
             var form = document.getElementById('new-assignment-form');
             var inp = document.createElement('input');
             inp.type = 'hidden';
@@ -771,107 +1287,113 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'upload-assignment-notebook');
     wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'upload-solution-notebook');
 
-    // Solution file selection shows Generate Tests panel
-    var solutionFileInput = document.getElementById('solution-notebook-file-input');
-    var genPanel          = document.getElementById('gen-tests-panel');
-    if (solutionFileInput && genPanel) {
-        solutionFileInput.addEventListener('change', function () {
-            // Panel shown after draft round-trip; for new uploads trigger via scan button only
-        });
-    }
+    // ── Support file upload / delete ───────────────────────────────────
+    // Reads each picked file as text and POSTs it to the draft scripts
+    // endpoint with `tier: "support"` (no manifest entry → not a test
+    // script).  Delete fires `DELETE /draft/scripts/:filename`.  Mirrors
+    // assignment-edit.leaf:1577-1662; same flow, draft-scoped URLs.
+    (function () {
+        var draftID = #rawJSON(draftIDJSON);
+        var addBtn  = document.getElementById('add-support-file-btn');
+        var fileEl  = document.getElementById('support-file-upload-input');
+        var statusEl = document.getElementById('support-file-upload-status');
 
-    var form = document.getElementById('new-assignment-form');
-    if (form) {
-        // Override the generic base.leaf multipart submit so we can explicitly
-        // append files from filesInput.  Some browsers do not include
-        // programmatically-set input.files (via DataTransfer) in new FormData(form),
-        // which would silently drop auto-generated test scripts.
-        form.addEventListener('submit', function (e) {
-            syncConfig();
+        function setStatus(msg, isError) {
+            if (!statusEl) return;
+            statusEl.textContent = msg;
+            statusEl.style.color = isError ? 'var(--red,#c0392b)' : 'var(--gray-500)';
+        }
 
-            // Let draft-action submissions (wireNotebookUpload) fall through to the
-            // base.leaf handler — they set form.action themselves and don't need
-            // explicit file injection.  Only intercept the main save submission.
-            var targetURL = form.action;
-            if (e.submitter && e.submitter.getAttribute('formaction')) {
-                // A hidden draft-action button fired the submit — let base.leaf handle it.
-                return;
-            }
-            // wireNotebookUpload sets form.action to the draft endpoint then calls
-            // requestSubmit() without a submitter, so e.submitter is null and the
-            // formaction check above won't catch it.  Bail so the file bytes reach
-            // the server in the normal browser multipart POST.
-            if (targetURL.endsWith('/draft')) {
-                return;
-            }
-
-            // Prevent base.leaf's generic handler from running.
-            e.preventDefault();
-
-            var meta   = document.querySelector('meta[name="csrf-token"]');
-            var token  = meta ? meta.getAttribute('content') : '';
-            var submitBtn = e.submitter || form.querySelector('.btn-primary[type="submit"]');
-            if (submitBtn) submitBtn.disabled = true;
-
-            suiteFilesReady.then(function () {
-                syncConfig();
-                var fd = new FormData(form);
-                // The notebook upload controls are draft-only. By the time we do the
-                // final save, the canonical notebook bytes come from the saved draft
-                // copy, not these hidden file inputs. Some browsers still include
-                // empty file parts here (filename="", 0 bytes), which can confuse
-                // the server's filename resolution for validation submissions.
-                fd.delete('assignmentNotebookFile');
-                fd.delete('solutionNotebookFile');
-                fd.delete('suiteFiles[]');
-                fd.delete('suiteFiles');
-                // Use our own upload queue as the source of truth. This preserves
-                // generated File objects even in browsers that omit DataTransfer-set
-                // input.files from FormData(form).
-                suiteUploadFiles.forEach(function (file) {
-                    fd.append('suiteFiles[]', file, file.name);
-                });
-                return fetch(targetURL, {
-                    method: 'POST',
-                    headers: { 'x-csrf-token': token },
-                    body: fd
-                });
-            }).then(function (res) {
-                window.location.href = res.url || window.location.href;
-            }).catch(function () {
-                if (submitBtn) submitBtn.disabled = false;
+        function readAsText(file) {
+            return new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload  = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(new Error('Could not read ' + file.name)); };
+                reader.readAsText(file);
             });
+        }
+
+        async function uploadSupportFile(file) {
+            var content = await readAsText(file);
+            var resp = await fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    filename: file.name,
+                    content:  content,
+                    tier:     'support',
+                    isTest:   false
+                })
+            });
+            if (!resp.ok) {
+                var errText = await resp.text();
+                throw new Error(resp.status + ': ' + errText);
+            }
+        }
+
+        if (draftID && addBtn && fileEl) {
+            addBtn.addEventListener('click', function () { fileEl.click(); });
+            fileEl.addEventListener('change', async function () {
+                if (!fileEl.files || fileEl.files.length === 0) return;
+                setStatus('Uploading…', false);
+                try {
+                    for (var i = 0; i < fileEl.files.length; i++) {
+                        await uploadSupportFile(fileEl.files[i]);
+                    }
+                    setStatus('Uploaded.', false);
+                    window.location.reload();
+                } catch (e) {
+                    setStatus('Upload failed — ' + e.message, true);
+                } finally {
+                    fileEl.value = '';
+                }
+            });
+        }
+
+        // Delegated delete handler — works whether or not a draft exists
+        // (rows only render when one does, but defensive nonetheless).
+        document.body.addEventListener('click', async function (ev) {
+            var btn = ev.target.closest && ev.target.closest('.support-file-delete-btn');
+            if (!btn) return;
+            var filename = btn.getAttribute('data-filename');
+            if (!filename || !draftID) return;
+            if (!confirm('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
+            try {
+                var resp = await fetch(
+                    '/instructor/new/draft/scripts/' + encodeURIComponent(filename)
+                        + '?draftID=' + encodeURIComponent(draftID),
+                    { method: 'DELETE', headers: { 'x-csrf-token': csrfToken }, credentials: 'same-origin' }
+                );
+                if (!resp.ok) {
+                    var errText = await resp.text();
+                    alert('Remove failed: ' + resp.status + ' ' + errText);
+                    return;
+                }
+                window.location.reload();
+            } catch (e) {
+                alert('Remove failed: ' + e.message);
+            }
         });
-        form.addEventListener('chickadee:before-multipart-submit', function () { syncConfig(); });
-    }
+    })();
 
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-    }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
-
-    initFromDOM();
-
-    // ── Generate Tests from Solution ─────────────────────────────────────────
-
-    var csrfToken       = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    // ── Generate Tests from Solution ──────────────────────────────────
+    // Each generated script is POSTed to the draft scripts endpoint and
+    // then handed to suite-table.js via `chickadeeAddExistingSuiteScript`
+    // so it appears in the appropriate section's tbody without a reload.
     var scanBtn         = document.getElementById('scan-solution-btn');
     var scanStatus      = document.getElementById('scan-status');
     var scanResults     = document.getElementById('scan-results');
     var fnChecklist     = document.getElementById('fn-checklist');
     var genTplSelect    = document.getElementById('gen-template-select');
     var addGenTestsBtn  = document.getElementById('add-gen-tests-btn');
+    var genPanel        = document.getElementById('gen-tests-panel');
     var scannedFunctions = [];
 
-    // Show gen-tests panel if solution notebook already in draft
     #if(solutionNotebook):
     if (genPanel) genPanel.style.display = '';
     #endif
 
-    // Look up the server-rendered template for a scanned function.  The
-    // /instructor/scan-notebook response embeds a per-function `templates`
-    // array with content already personalised for each function's name and
-    // parameter list, so we don't duplicate the template logic in JS.
     function genPyTemplate(type, fnName) {
         var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
         if (fn && Array.isArray(fn.templates)) {
@@ -885,7 +1407,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     if (scanBtn) {
         scanBtn.addEventListener('click', function () {
             var solInput = document.getElementById('solution-notebook-file-input');
-            // After a draft save the solution file input is empty; fetch from draft
             #if(solutionNotebook):
             if (!solInput || solInput.files.length === 0) {
                 fetch('/instructor/new/draft/solution-notebook?draftID=#(draftID)', { headers: { 'x-csrf-token': csrfToken } })
@@ -931,26 +1452,42 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     if (addGenTestsBtn) {
         addGenTestsBtn.addEventListener('click', function () {
+            #if(draftID):
+            var draftID = #rawJSON(draftIDJSON);
+            if (!draftID) { if (scanStatus) scanStatus.textContent = 'No draft to save into.'; return; }
             var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
             var checked = Array.from(fnChecklist.querySelectorAll('input[type=checkbox]:checked'));
             if (checked.length === 0) { if (scanStatus) scanStatus.textContent = 'Select at least one function.'; return; }
-            var generatedFiles = [];
-            checked.forEach(function (chk) {
-                var fnName = chk.value;
-                var content = genPyTemplate(tplType, fnName);
+            if (scanStatus) scanStatus.textContent = 'Saving ' + checked.length + ' test(s)…';
+            // POST each generated script in series to the draft scripts
+            // endpoint, then hand it to suite-table.js for in-place add.
+            var ops = checked.map(function (chk) {
+                var fnName   = chk.value;
+                var content  = genPyTemplate(tplType, fnName);
                 var filename = 'test_' + fnName + '.py';
-                generatedFiles.push(new File([content], filename, { type: 'text/plain' }));
+                return fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                    body: JSON.stringify({ filename: filename, content: content, tier: 'public', points: 1, isTest: true })
+                }).then(function (r) {
+                    return r.ok ? r.json() : r.text().then(function (t) { return Promise.reject(t || ('HTTP ' + r.status)); });
+                }).then(function (data) {
+                    if (window.chickadeeAddExistingSuiteScript) window.chickadeeAddExistingSuiteScript(data);
+                });
             });
-            window.chickadeeAddSuiteUploadFiles(generatedFiles).then(function () {
+            Promise.all(ops).then(function () {
                 if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
                 if (scanResults) scanResults.style.display = 'none';
             }).catch(function (err) {
                 if (scanStatus) scanStatus.textContent = 'Could not add generated tests: ' + err;
             });
+            #else:
+            if (scanStatus) scanStatus.textContent = 'Upload a notebook first to start a draft.';
+            #endif
         });
     }
 
-    // UWaterloo important-date proximity warning
+    // ── UWaterloo important-date proximity warning ────────────────────
     (function () {
         var dueAtInput = document.getElementById('dueAt');
         var warning    = document.getElementById('uw-date-warning');
@@ -958,7 +1495,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         dueAtInput.addEventListener('change', function () { checkUWDates(dueAtInput.value, warning); });
     })();
 
-    // Grading mode hint
+    // ── Grading mode hint ─────────────────────────────────────────────
     (function () {
         var sectionSelect = document.getElementById('sectionID');
         var hint = document.getElementById('grading-mode-hint');
@@ -966,14 +1503,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         function updateHint() {
             var selected = sectionSelect.options[sectionSelect.selectedIndex];
             var mode = selected ? selected.getAttribute('data-grading-mode') : null;
-            if (mode === 'browser') { hint.textContent = '\u24d8 This section uses Student Browser grading by default.'; hint.style.display = ''; }
-            else if (mode === 'worker') { hint.textContent = '\u24d8 This section uses Chickadee grading by default.'; hint.style.display = ''; }
+            if (mode === 'browser') { hint.textContent = 'ⓘ This section uses Student Browser grading by default.'; hint.style.display = ''; }
+            else if (mode === 'worker') { hint.textContent = 'ⓘ This section uses Chickadee grading by default.'; hint.style.display = ''; }
             else { hint.style.display = 'none'; }
         }
         sectionSelect.addEventListener('change', updateHint);
         updateHint();
     })();
-
 })();
 </script>
 <style>
@@ -990,7 +1526,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 }
 </style>
 <script type="module">
-// ── CodeMirror 6 script creator (new scripts added client-side via DataTransfer) ──
+// ── CodeMirror 6 script creator ────────────────────────────────────────
+// v0.4.132: scripts are persisted immediately to the draft setup zip
+// via POST /instructor/new/draft/scripts and then handed to
+// `suite-table.js` for in-place add (mirrors the edit-page flow at
+// assignment-edit.leaf:1361-1409).  No more multipart upload queue.
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
          drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
 import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
@@ -1040,8 +1580,8 @@ const pointsInput  = document.getElementById('new-file-points');
 const templateSel  = document.getElementById('template-select');
 const applyTplBtn  = document.getElementById('apply-template-btn');
 const newScriptBtn = document.getElementById('new-script-btn');
-const filesInput   = document.getElementById('suite-files-input');
 const csrfToken    = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+const draftIDForCM = #rawJSON(draftIDJSON);
 
 let view = null;
 
@@ -1055,67 +1595,59 @@ function openCreator() {
     if (titleEl)  titleEl.textContent  = 'New Test Script';
     if (statusEl) statusEl.textContent = '';
     if (newControls) newControls.style.display = '';
-    if (newNameInput) newNameInput.value = '';
-    overlay.style.display = 'flex';
+    if (newNameInput) { newNameInput.value = ''; newNameInput.disabled = false; }
+    if (overlay) overlay.style.display = 'flex';
     initView('', '');
     if (newNameInput) newNameInput.focus();
 }
 
 function closeEditor() {
-    overlay.style.display = 'none';
+    if (overlay) overlay.style.display = 'none';
     if (view) { view.destroy(); view = null; }
-    // Re-enable filename input in case it was locked for editing
     if (newNameInput) newNameInput.disabled = false;
-}
-
-// Open editor pre-loaded with the content of an existing upload-sourced file.
-function openEditorForUpload(name, content) {
-    if (titleEl)  titleEl.textContent  = 'Edit: ' + name;
-    if (statusEl) statusEl.textContent = '';
-    if (newControls) newControls.style.display = '';
-    if (newNameInput) { newNameInput.value = name; newNameInput.disabled = true; }
-    overlay.style.display = 'flex';
-    initView(content, name);
-    if (view) view.focus();
-}
-
-// Delegated click handler for the View/Edit button on upload-sourced rows.
-const suiteTableBody = document.getElementById('suite-config-body');
-if (suiteTableBody) {
-    suiteTableBody.addEventListener('click', function (e) {
-        const btn = e.target.closest('.suite-edit-upload-btn');
-        if (!btn) return;
-        const name = btn.getAttribute('data-name');
-        if (!name) return;
-        const files = Array.from(filesInput ? filesInput.files : []);
-        const file  = files.find(function (f) { return f.name === name; });
-        if (!file) {
-            if (statusEl) statusEl.textContent = 'File not found in queue.';
-            return;
-        }
-        file.text().then(function (content) {
-            openEditorForUpload(name, content);
-        }).catch(function (err) {
-            if (statusEl) statusEl.textContent = 'Could not read file: ' + err;
-        });
-    });
 }
 
 if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
 if (closeBtn)     closeBtn.addEventListener('click',   closeEditor);
 if (cancelBtn)    cancelBtn.addEventListener('click',  closeEditor);
 
-overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
+if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
 
-// Save: create a File blob and inject it into the suite files input via DataTransfer
+// Save: POST to /instructor/new/draft/scripts and call suite-table's
+// addExistingScript so the new row appears under the section the user
+// clicked "+ Add Script" on.  Falls back to ungrouped if no draft exists.
 if (saveBtn) {
     saveBtn.addEventListener('click', function () {
+        if (!draftIDForCM) {
+            if (statusEl) statusEl.textContent = 'Upload an assignment notebook first to start a draft.';
+            return;
+        }
         const filename = newNameInput ? newNameInput.value.trim() : '';
         if (!filename) { if (statusEl) statusEl.textContent = 'Enter a filename.'; if (newNameInput) newNameInput.focus(); return; }
         const content  = view ? view.state.doc.toString() : '';
-        const file     = new File([content], filename, { type: 'text/plain' });
-
-        window.chickadeeAddSuiteUploadFiles([file]).then(closeEditor);
+        const tier     = tierSelect ? tierSelect.value : 'public';
+        const points   = Math.max(0, parseInt(pointsInput ? pointsInput.value : '1') || 1);
+        const isTest   = tier !== 'support';
+        if (statusEl) statusEl.textContent = 'Saving…';
+        saveBtn.disabled = true;
+        fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftIDForCM), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: JSON.stringify({ filename, content, tier, points, isTest })
+        })
+        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t || ('HTTP ' + r.status))))
+        .then(data => {
+            if (statusEl) statusEl.textContent = 'Saved.';
+            saveBtn.disabled = false;
+            if (window.chickadeeAddExistingSuiteScript) {
+                window.chickadeeAddExistingSuiteScript(data);
+            }
+            closeEditor();
+        })
+        .catch(err => {
+            if (statusEl) statusEl.textContent = 'Error: ' + err;
+            saveBtn.disabled = false;
+        });
     });
 }
 
