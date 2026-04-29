@@ -1,25 +1,26 @@
-// APIServer/Routes/Web/AssignmentRoutes+SuiteSections.swift
+// APIServer/Routes/Web/AssignmentRoutes+DraftSections.swift
 //
-// Per-operation CRUD endpoints for the test-suite Sections feature
-// (introduced in v0.4.96, refactored in v0.4.98 to mirror the dashboard
-// pattern).  These handlers mutate ONLY the test setup's `manifest.sections`
-// JSON field (and, for delete, the `sectionID` field on matching
-// `manifest.testSuites` entries).  They intentionally bypass
-// `applyPatternFamilies`, the zip rebuild, and the validation/retest
-// machinery — section names have no effect on test behaviour, so none of
-// that pipeline needs to run.
+// Draft-scoped siblings of the test-suite section CRUD endpoints in
+// `AssignmentRoutes+SuiteSections.swift`.  Same body shapes, same
+// validation rules, same dictionary-of-Any manifest mutations — the
+// only differences are (1) the resolver (`loadDraftSetup` reading
+// `?draftID=<id>` instead of `loadAssignmentAndSetup` reading
+// `:assignmentID`) and (2) the redirect target
+// (`/instructor/new?draftID=<id>` instead of
+// `/instructor/<aid>/edit`).
 //
-// Pattern mirrors `AssignmentRoutes+Sections.swift`:
-//   - form-encoded POST bodies for write ops (create, rename, delete)
-//   - 303 redirect back to the edit page on success
-//   - JSON POST body for AJAX reorder; returns 200 OK
-//   - CSRF via `#csrfFormField()` (or `x-csrf-token` header for AJAX)
+// Added in v0.4.132 as parity PR 1 of the create-page rework tracked
+// by issue #433.  Pre-fix, instructors had to publish an assignment
+// before they could group tests into sections — confusing two-step
+// when sections were the whole reason they were authoring the
+// assignment in the first place.
 //
-// The manifest is a JSON string stored in APITestSetup.manifest; we mutate
-// it via JSONSerialization to avoid touching the codable TestProperties
-// (which is shared with the runner) — that way a future field the client
-// knows about but the runner doesn't won't be stripped on save.  Same
-// approach `moveToSection` uses for the `gradingMode` field.
+// Routes (all share the `?draftID=<id>` query parameter):
+//   POST   /instructor/new/draft/suite-sections                       — create
+//   POST   /instructor/new/draft/suite-sections/reorder               — reorder (AJAX)
+//   POST   /instructor/new/draft/suite-sections/:sectionID/rename     — rename
+//   POST   /instructor/new/draft/suite-sections/:sectionID/delete     — delete
+//   POST   /instructor/new/draft/suite-sections/:sectionID/variables  — variables
 
 import Vapor
 import Fluent
@@ -28,14 +29,14 @@ import Foundation
 
 extension AssignmentRoutes {
 
-    // MARK: - POST /instructor/:assignmentID/suite-sections
+    // MARK: - POST /instructor/new/draft/suite-sections
 
     @Sendable
-    func createSuiteSection(req: Request) async throws -> Response {
+    func createDraftSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
         try requireInstructor(req)
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let setup = try await loadDraftSetup(req)
         let body = try req.content.decode(Body.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -51,17 +52,17 @@ extension AssignmentRoutes {
             dict["sections"] = sections
         }
 
-        return redirectToEdit(req: req)
+        return redirectToDraft(req: req, setup: setup)
     }
 
-    // MARK: - POST /instructor/:assignmentID/suite-sections/:sectionID/rename
+    // MARK: - POST /instructor/new/draft/suite-sections/:sectionID/rename
 
     @Sendable
-    func renameSuiteSection(req: Request) async throws -> Response {
+    func renameDraftSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
         try requireInstructor(req)
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let setup = try await loadDraftSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw Abort(.notFound)
         }
@@ -82,15 +83,15 @@ extension AssignmentRoutes {
             dict["sections"] = sections
         }
 
-        return redirectToEdit(req: req)
+        return redirectToDraft(req: req, setup: setup)
     }
 
-    // MARK: - POST /instructor/:assignmentID/suite-sections/:sectionID/delete
+    // MARK: - POST /instructor/new/draft/suite-sections/:sectionID/delete
 
     @Sendable
-    func deleteSuiteSection(req: Request) async throws -> Response {
+    func deleteDraftSuiteSection(req: Request) async throws -> Response {
         try requireInstructor(req)
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let setup = try await loadDraftSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw Abort(.notFound)
         }
@@ -103,7 +104,7 @@ extension AssignmentRoutes {
             }
             // Clear matching entries' sectionID so the affected items flow
             // into the trailing Ungrouped block — same semantics as the
-            // dashboard's onDelete: .setNull on course_sections.
+            // assignment-scoped variant.
             if var testSuites = dict["testSuites"] as? [[String: Any]] {
                 for i in testSuites.indices {
                     if (testSuites[i]["sectionID"] as? String) == sectionID {
@@ -114,33 +115,29 @@ extension AssignmentRoutes {
             }
         }
 
-        return redirectToEdit(req: req)
+        return redirectToDraft(req: req, setup: setup)
     }
 
-    // MARK: - POST /instructor/:assignmentID/suite-sections/:sectionID/variables
+    // MARK: - POST /instructor/new/draft/suite-sections/:sectionID/variables
     //
-    // Replaces the section's variables list atomically.  Body is the full
-    // new list (same shape every call); the server doesn't diff.  Takes
-    // JSON so the editor can send structured `FamilyVariable` values
-    // directly — same shape the `PUT /families` endpoint already uses.
-    // Returns 303 so the browser reloads the edit page with the updated
-    // section block.
+    // Replaces the section's variables list atomically.  Shape matches
+    // the assignment-scoped endpoint: JSON body with `variables:
+    // [FamilyVariable]`; identical Python-identifier + uniqueness
+    // validation.  Returns 303 on the form-encoded path; the auto-save
+    // JS sends `redirect: 'manual'` so it doesn't follow the redirect
+    // back to the create page.
 
     @Sendable
-    func updateSuiteSectionVariables(req: Request) async throws -> Response {
+    func updateDraftSuiteSectionVariables(req: Request) async throws -> Response {
         struct Body: Content { var variables: [FamilyVariable] }
 
         try requireInstructor(req)
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let setup = try await loadDraftSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw Abort(.notFound)
         }
         let body = try req.content.decode(Body.self)
 
-        // Validate: each name must be a valid Python identifier and
-        // unique within the list.  Mirrors the `validatePatternFamilies`
-        // checks so a bad section-variable save can't produce a test
-        // that won't render.
         var seenNames: Set<String> = []
         for v in body.variables {
             guard isValidPythonIdentifier(v.name) else {
@@ -153,9 +150,6 @@ extension AssignmentRoutes {
             }
         }
 
-        // Encode the variables list via JSONEncoder so JSONValue fields
-        // (dict / list / scalar) round-trip through `mutateManifest`'s
-        // dictionary-of-Any representation.
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let varData = try encoder.encode(body.variables)
@@ -178,17 +172,17 @@ extension AssignmentRoutes {
             dict["sections"] = sections
         }
 
-        return redirectToEdit(req: req)
+        return redirectToDraft(req: req, setup: setup)
     }
 
-    // MARK: - POST /instructor/:assignmentID/suite-sections/reorder
+    // MARK: - POST /instructor/new/draft/suite-sections/reorder
 
     @Sendable
-    func reorderSuiteSections(req: Request) async throws -> HTTPStatus {
+    func reorderDraftSuiteSections(req: Request) async throws -> HTTPStatus {
         struct Body: Content { var sectionIDs: [String] }
 
         try requireInstructor(req)
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let setup = try await loadDraftSetup(req)
         let body = try req.content.decode(Body.self)
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
@@ -199,7 +193,6 @@ extension AssignmentRoutes {
                     return (id, s)
                 }
             )
-            // Validate the set of ids matches exactly.
             guard Set(body.sectionIDs) == Set(byID.keys),
                   body.sectionIDs.count == existing.count else {
                 throw Abort(.badRequest, reason: "Section set mismatch in reorder payload.")
@@ -212,11 +205,10 @@ extension AssignmentRoutes {
 
     // MARK: - Helpers
 
-    /// Build the 303 redirect back to the assignment edit page using the
-    /// request's `:assignmentID` parameter, so the browser reloads into a
-    /// freshly-rendered view of the new section state.
-    private func redirectToEdit(req: Request) -> Response {
-        let idStr = (try? assignmentPublicIDParameter(from: req)) ?? ""
-        return req.redirect(to: "/instructor/\(idStr)/edit")
+    /// 303 redirect back to the create-assignment page, preserving the
+    /// `?draftID=<id>` query so the page reloads on the same draft.
+    private func redirectToDraft(req: Request, setup: APITestSetup) -> Response {
+        let id = setup.id ?? ""
+        return req.redirect(to: "/instructor/new?draftID=\(id)")
     }
 }

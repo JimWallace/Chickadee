@@ -55,8 +55,28 @@ struct AssignmentRoutes: RouteCollection {
         r.get("new", "draft", "suite",    use: getDraftSuite)
         r.put("new", "draft", "suite",    use: putDraftSuite)
         r.put("new", "draft", "families", use: putDraftPatternFamilies)
+        // Draft-scoped notebook checks (v0.4.132 / parity PR 2 of #433).
+        // Mirrors PUT /instructor/:assignmentID/checks; uses the shared
+        // applyNotebookChecksEdit core, which also re-applies the current
+        // pattern families so both generated-script sets stay in sync.
+        r.put("new", "draft", "checks", use: putDraftNotebookChecks)
         r.post("new", "draft", "scripts", use: createDraftScript)
         r.delete("new", "draft", "scripts", ":filename", use: deleteDraftScript)
+        // Draft-scoped file download (v0.4.132 / parity PR 3 of #433).
+        // Used by the support-file list on the create page so instructors
+        // can click a filename to inspect the bundled data file before
+        // publish.  Mirrors `downloadCurrentSetupItem` for the assignment-
+        // scoped case.
+        r.get("new", "draft", "files", "item", use: downloadDraftSetupItem)
+        // Draft-scoped suite-section CRUD (v0.4.132, #435).  Mirrors the
+        // assignment-scoped routes registered below; identical body /
+        // validation / response shape, only the resolver and redirect
+        // target differ.  See AssignmentRoutes+DraftSections.swift.
+        r.post("new", "draft", "suite-sections", use: createDraftSuiteSection)
+        r.post("new", "draft", "suite-sections", "reorder", use: reorderDraftSuiteSections)
+        r.post("new", "draft", "suite-sections", ":sectionID", "rename", use: renameDraftSuiteSection)
+        r.post("new", "draft", "suite-sections", ":sectionID", "delete", use: deleteDraftSuiteSection)
+        r.post("new", "draft", "suite-sections", ":sectionID", "variables", use: updateDraftSuiteSectionVariables)
         r.post("new", "save", use: saveNewAssignment)
         r.post("reorder", use: reorderAssignments)
         r.post("sections", use: createSection)
@@ -565,6 +585,28 @@ struct AssignmentRoutes: RouteCollection {
         }()
 
         let suiteRows = setup.map(editableSuiteRowsForSetup) ?? []
+        // Split out support files (tier == "support") so they render in
+        // the notebook table alongside the starter / solution notebooks
+        // — parity with the edit page (parity PR 3 of #433).  The base
+        // helper sets `url: "#"` because it doesn't know the draft's id;
+        // rebuild the URL here so the filename is clickable.
+        let supportFileRows: [EditableSuiteRow] = {
+            guard let setup, let draftID = setup.id else { return [] }
+            return suiteRows
+                .filter { $0.tier == "support" }
+                .map { row in
+                    EditableSuiteRow(
+                        name: row.name,
+                        url: "/instructor/new/draft/files/item?draftID=\(urlEncode(draftID))&name=\(urlEncode(row.name))",
+                        isTest: row.isTest,
+                        tier: row.tier,
+                        order: row.order,
+                        dependsOn: row.dependsOn,
+                        points: row.points,
+                        displayName: row.displayName
+                    )
+                }
+        }()
         let detected = {
             guard let setup else { return DraftRequirementSuggestions(languages: [], capabilities: []) }
             let assignmentData = draftNotebookData(
@@ -610,6 +652,27 @@ struct AssignmentRoutes: RouteCollection {
             encoder.outputFormatting = [.sortedKeys]
             return (try? String(data: encoder.encode(props.patternFamilies), encoding: .utf8)) ?? "[]"
         }()
+        let notebookChecksJSON: String = {
+            guard let setup,
+                  let manifestData = setup.manifest.data(using: .utf8),
+                  let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
+            else { return "[]" }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? String(data: encoder.encode(props.notebookChecks), encoding: .utf8)) ?? "[]"
+        }()
+
+        // Suite editor seed + section shells (v0.4.132 parity work, #435).
+        // `suiteSectionShellRows` and `suiteStateJSON` already handle the
+        // no-draft case — the helpers return a single Ungrouped block /
+        // empty `{"items":[]}` payload when the manifest is missing or
+        // unparseable, which is exactly what we want before the
+        // instructor uploads a notebook.
+        let suiteStateSeedJSON = setup.map { suiteStateJSON(fromManifest: $0.manifest) }
+            ?? #"{"items":[]}"#
+        let suiteSectionShellRowsForView = setup.map { suiteSectionShellRows(fromManifest: $0.manifest) }
+            ?? [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
+                                      variables: [], hasVariables: false)]
 
         let ctx = NewAssignmentContext(
             currentUser: req.currentUserContext,
@@ -623,7 +686,11 @@ struct AssignmentRoutes: RouteCollection {
             solutionNotebook: solutionNotebook,
             suiteRows: suiteRows,
             hasSuiteRows: !suiteRows.isEmpty,
+            supportFileRows: supportFileRows,
             patternFamiliesJSON: patternFamiliesJSON,
+            notebookChecksJSON: notebookChecksJSON,
+            suiteStateJSON: suiteStateSeedJSON,
+            suiteSectionRows: suiteSectionShellRowsForView,
             requiredPlatform: storedState.requiredPlatform,
             requiredArchitecture: storedState.requiredArchitecture,
             requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty
@@ -830,6 +897,36 @@ struct AssignmentRoutes: RouteCollection {
                 fallbackSetup: setup,
                 relativePath: userNotebookWorkingCopyRelativePath(setupID: setup.id!, userID: userID, fileKind: .solution),
                 overwriteWith: data
+            )
+            formState.solutionNotebookName = "solution.ipynb"
+        case "create-solution-from-assignment":
+            // Parity PR 4 of #433.  Mirrors the assignment-scoped
+            // `createSolutionFromAssignment` (POST /:id/create-solution):
+            // copy the assignment notebook bytes into the draft solution
+            // path so the instructor can author the answer key starting
+            // from the student-facing notebook.  Falls back to a blank
+            // notebook with the title suffix " Solution" when the
+            // assignment notebook isn't readable yet — same fallback
+            // the assignment-scoped variant uses.
+            let sourceData: Data = {
+                if let path = setup.notebookPath,
+                   let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                   !bytes.isEmpty {
+                    return bytes
+                }
+                return defaultNotebookData(title: "\(notebookTitle) Solution")
+            }()
+            let normalized = normalizeNotebookForJupyterLite(sourceData)
+            let path = draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            _ = try ensureDraftNotebookDirectory(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            try normalized.write(to: URL(fileURLWithPath: path))
+            _ = try await ensureUserNotebookWorkingCopy(
+                req: req,
+                setupID: setup.id!,
+                userID: userID,
+                fallbackSetup: setup,
+                relativePath: userNotebookWorkingCopyRelativePath(setupID: setup.id!, userID: userID, fileKind: .solution),
+                overwriteWith: normalized
             )
             formState.solutionNotebookName = "solution.ipynb"
         case "upload-solution-notebook":

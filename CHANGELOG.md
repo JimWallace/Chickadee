@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.132] - 2026-04-29
+
+### Added
+
+- **Create-page UI parity (#433).**  Four small follow-on PRs land
+  together as v0.4.132, bringing the create-assignment page
+  (`/instructor/new`) up to date with the edit page on the features
+  instructors are using heaviest this term.  None of these are new
+  capabilities — they're parity work; the underlying server-side
+  endpoints are the v0.4.131 shared core (`SuiteEditHelpers.swift`)
+  applied to draft-scoped routes.
+
+  - **Sections on the create page (#435 / parity PR 1).**  Five new
+    draft-scoped section-CRUD endpoints
+    (`POST /instructor/new/draft/suite-sections{,/reorder,/:sid/rename,
+    /:sid/delete,/:sid/variables}`) and a leaf rewrite that drops the
+    legacy `suite-list.js` IIFE in favor of the unified `suite-table.js`.
+    Instructors can now author with sections **before** publishing —
+    no more publish-then-reopen-to-add-sections two-step.
+  - **Notebook Checks editor on the create page (parity PR 2).**  New
+    `PUT /instructor/new/draft/checks` endpoint plus the check-editor
+    modal HTML, `notebook-checks-seed`, and per-section `+ Add Check`
+    button delegation copied from the edit page.  `notebook-check-editor.js`
+    is shared.
+  - **Support files on the create page (parity PR 3).**  New
+    `GET /instructor/new/draft/files/item?draftID=…&name=…` download
+    endpoint; existing `POST /draft/scripts` (with `tier: "support"`)
+    and `DELETE /draft/scripts/:filename` already worked.  Notebook
+    files-table grows a "Support file" row per bundled CSV/JSON plus an
+    "+ Upload file" picker — same behaviour as the edit page.
+  - **"Create from Assignment" button (parity PR 4).**  New
+    `create-solution-from-assignment` draft action copies the assignment
+    notebook bytes (normalized for JupyterLite) into the draft solution
+    path, mirroring the assignment-scoped `POST /:id/create-solution`.
+    Visible only when an assignment notebook exists but no solution does.
+
+### Refactor
+
+- **`mutateManifest` promoted out of `AssignmentRoutes+SuiteSections.swift`**
+  and into `SuiteEditHelpers.swift` so the new
+  `AssignmentRoutes+DraftSections.swift` (parity PR 1) can share it.
+  Identical behaviour; the helper is just no longer file-private.
+- **`NewAssignmentContext` grows `suiteStateJSON`, `suiteSectionRows`,
+  `supportFileRows`, and `notebookChecksJSON`** alongside the existing
+  `EditAssignmentContext` fields it now mirrors.  The `instructorNewAssignment`
+  handler reuses the existing `suiteStateJSON(fromManifest:)` and
+  `suiteSectionShellRows(fromManifest:)` helpers from
+  `AssignmentRoutes+Suite.swift` — no new helpers, no duplication.
+
 ## [0.4.131] - 2026-04-29
 
 ### Refactor

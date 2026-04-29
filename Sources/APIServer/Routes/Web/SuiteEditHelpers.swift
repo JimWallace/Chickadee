@@ -199,3 +199,34 @@ func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) th
                     headers: ["Content-Type": "application/json"],
                     body: .init(data: data))
 }
+
+// MARK: - Manifest dictionary mutation
+
+/// Reads the test setup's manifest JSON as a mutable dictionary, runs
+/// the caller's mutation closure, re-serialises with sorted keys, and
+/// saves.  Throws if the manifest can't round-trip through
+/// JSONSerialization — that would indicate a corrupted setup, not a
+/// user error.
+///
+/// Used by both the assignment-scoped suite-section CRUD endpoints
+/// (`AssignmentRoutes+SuiteSections.swift`) and the draft-scoped ones
+/// (`AssignmentRoutes+DraftSections.swift`).  Lives here so both can
+/// share the same dictionary-of-Any approach — Codable round-trips
+/// through `TestProperties` would strip any unknown fields the client
+/// might add, defeating the point of forward compatibility.
+func mutateManifest(
+    setup: APITestSetup,
+    on db: Database,
+    _ mutate: (inout [String: Any]) throws -> Void
+) async throws {
+    guard var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any] else {
+        throw Abort(.internalServerError, reason: "Test setup manifest is not a JSON object.")
+    }
+    try mutate(&dict)
+    let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
+    guard let json = String(data: data, encoding: .utf8) else {
+        throw Abort(.internalServerError, reason: "Failed to re-serialise manifest.")
+    }
+    setup.manifest = json
+    try await setup.save(on: db)
+}

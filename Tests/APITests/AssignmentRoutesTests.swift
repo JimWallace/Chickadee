@@ -865,7 +865,14 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
-    func testNewAssignmentPageSyncsSuiteConfigBeforeMultipartSubmit() async throws {
+    func testNewAssignmentPageWiresSuiteTableJS() async throws {
+        // Updated v0.4.132 (#435 / parity PR 1): the create page no
+        // longer bundles suite changes through `chickadee:before-
+        // multipart-submit` + `syncConfig()` + the legacy `suite-list.js`
+        // IIFE.  Suite mutations now persist live via `suite-table.js`
+        // against draft-scoped endpoints (`PUT /draft/suite`,
+        // `POST /draft/scripts`, etc.); the multipart submit only
+        // carries notebook bytes + assignment metadata.
         _ = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
 
@@ -874,9 +881,11 @@ final class AssignmentRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
-            XCTAssertTrue(html.contains("chickadee:before-multipart-submit"))
-            XCTAssertTrue(html.contains("syncConfig();"))
-            XCTAssertTrue(html.contains("if (e.defaultPrevented) return;"))
+            // Legacy IIFE markers must be gone.
+            XCTAssertFalse(html.contains("syncConfig();"),
+                           "Legacy syncConfig() must not appear after the v0.4.132 rewrite")
+            XCTAssertFalse(html.contains("chickadeeAddSuiteUploadFiles"),
+                           "Legacy upload-queue global must not appear after the v0.4.132 rewrite")
         })
     }
 
@@ -889,9 +898,10 @@ final class AssignmentRoutesTests: XCTestCase {
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let body = res.body.string
-            XCTAssertFalse(body.contains("<th>Test?</th>"))
-            XCTAssertTrue(body.contains("Visibility"))   // new column header (was "Tier")
-            XCTAssertTrue(body.contains("support"))
+            XCTAssertFalse(body.contains("<th>Test?</th>"),
+                           "Legacy `Test?` column header must not appear on the create page")
+            XCTAssertFalse(body.contains("id=\"suite-config-table\""),
+                           "Legacy `suite-config-table` must not appear after the v0.4.132 rewrite")
         })
     }
 
@@ -1817,24 +1827,57 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
-    /// Bug #1 regression: the new assignment page must include JavaScript for the edit button
-    /// on uploaded suite file rows so instructors can view/edit script content before saving.
-    func testNewAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
+    /// v0.4.132 regression (was: bug #1 regression on the legacy
+    /// upload-queue path).  After parity PR 1 of #433 dropped the
+    /// `suite-list.js` IIFE in favor of `suite-table.js` + the
+    /// per-script `POST /draft/scripts` endpoint, the create page
+    /// hands generated/edited scripts to the suite table via
+    /// `chickadeeAddExistingSuiteScript`.  This test creates a draft
+    /// (so the suite-editor block is rendered) and confirms the
+    /// page ships the wiring points so the gen-tests panel and the
+    /// CodeMirror script editor can stream new scripts straight onto
+    /// the suite editor without a multipart bundle.
+    func testNewAssignmentPageWiresGeneratedScriptsThroughSuiteTable() async throws {
         _ = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.GET, "/instructor/new", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
+        // Create a draft via the same multipart path the UI uses.
+        let boundary = "Boundary-Suite-Table-Wiring"
+        var redirectLocation: String?
+        try await app.asyncTest(.POST, "/instructor/new/draft", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.contentType = HTTPMediaType(
+                type: "multipart",
+                subType: "form-data",
+                parameters: ["boundary": boundary]
+            )
+            req.body = .init(buffer: self.multipartBody(
+                boundary: boundary,
+                fields: [
+                    ("_csrf", csrf),
+                    ("assignmentName", "Suite Table Wiring Lab"),
+                    ("draftAction", "create-assignment-notebook")
+                ]
+            ))
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .seeOther)
+            redirectLocation = res.headers.first(name: .location)
+        })
+
+        try await app.asyncTest(.GET, try XCTUnwrap(redirectLocation), beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
-            // The rowHTML JS function must contain the edit-button class that opens the CodeMirror editor.
-            XCTAssertTrue(html.contains("suite-edit-upload-btn"),
-                          "New assignment page must contain suite-edit-upload-btn in rowHTML JS")
-            XCTAssertTrue(html.contains("chickadeeAddSuiteUploadFiles"),
-                          "Generated tests should update the suite upload queue directly")
-            XCTAssertTrue(html.contains("suiteUploadFiles.forEach(function (file)"),
-                          "Final save should append queued generated/uploaded files from the suite model")
+            XCTAssertTrue(html.contains("/suite-table.js"),
+                          "Create page must load suite-table.js once a draft exists (v0.4.132)")
+            XCTAssertTrue(html.contains("chickadeeAddExistingSuiteScript"),
+                          "Create page must wire chickadeeAddExistingSuiteScript so " +
+                          "generated/edited scripts land in the suite editor live")
+            XCTAssertTrue(html.contains("/instructor/new/draft/scripts"),
+                          "Generated scripts and the CodeMirror save flow must POST to " +
+                          "the draft scripts endpoint, not bundle into the multipart submit")
         })
     }
 

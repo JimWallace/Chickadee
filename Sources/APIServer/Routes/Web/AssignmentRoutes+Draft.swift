@@ -83,6 +83,32 @@ extension AssignmentRoutes {
         return try jsonResponse(families)
     }
 
+    // MARK: - PUT /instructor/new/draft/checks
+    //
+    // Draft-scoped sibling of `putNotebookChecks` (parity PR 2 of #433).
+    // Same body / response shape; the only differences are the resolver
+    // (`loadDraftSetup` reading `?draftID=…`) and the absence of the
+    // `scheduleValidationAfterSuiteEdit` call — drafts don't enter the
+    // validation pipeline until publish.
+
+    @Sendable
+    func putDraftNotebookChecks(req: Request) async throws -> Response {
+        try requireInstructor(req)
+        let setup = try await loadDraftSetup(req)
+
+        let checks: [NotebookCheck]
+        do {
+            checks = try req.content.decode([NotebookCheck].self)
+        } catch {
+            throw Abort(.badRequest,
+                reason: "Invalid notebook check list: \(error.localizedDescription)")
+        }
+
+        try await applyNotebookChecksEdit(setup: setup, checks: checks, on: req.db)
+
+        return try jsonResponse(checks)
+    }
+
     // MARK: - POST /instructor/new/draft/scripts
 
     @Sendable
@@ -178,5 +204,31 @@ extension AssignmentRoutes {
             try await setup.save(on: req.db)
         }
         return .noContent
+    }
+
+    // MARK: - GET /instructor/new/draft/files/item?draftID=<id>&name=<filename>
+    //
+    // Draft-scoped sibling of `downloadCurrentSetupItem` (the assignment-
+    // scoped download).  Used by the support-files list on the create
+    // page so the instructor can click a filename to download / inspect
+    // the file before publish.  Same lookup-by-name pattern; no path
+    // traversal allowed (lastPathComponent guard).
+
+    @Sendable
+    func downloadDraftSetupItem(req: Request) async throws -> Response {
+        try requireInstructor(req)
+        let setup = try await loadDraftSetup(req)
+
+        struct FileQuery: Content { let name: String }
+        let q = try req.query.decode(FileQuery.self)
+        let fileName = (q.name as NSString).lastPathComponent
+        guard !fileName.isEmpty, fileName == q.name else {
+            throw Abort(.badRequest, reason: "Invalid file name")
+        }
+
+        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
+            throw Abort(.notFound, reason: "File '\(fileName)' not found in setup")
+        }
+        return buildFileResponse(data: data, filename: fileName)
     }
 }
