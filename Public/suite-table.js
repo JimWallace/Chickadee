@@ -776,18 +776,54 @@
         // (wired by assignment-edit.leaf's section-vars IIFE) so the
         // main "Save & Validate" button also persists any shared-inputs
         // edits the instructor had in progress.
+        //
+        // v0.4.133: re-submit via `form.requestSubmit()` (NOT
+        // `form.submit()`).  `form.submit()` deliberately bypasses
+        // submit-event listeners — including base.leaf's multipart-CSRF
+        // intercept that adds `x-csrf-token` to the request headers.
+        // Without that header, the multipart body's `_csrf` field is
+        // unreachable to the CSRF middleware (the body isn't buffered
+        // before middleware runs), and every save 403s with
+        // "No CSRF token provided".  `requestSubmit()` fires submit
+        // events properly; the `__chickadeeFlushed` flag prevents this
+        // listener from looping when the re-fired event arrives.
         if (form) {
             form.addEventListener('submit', function (e) {
                 if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+
+                // Second pass: the flushes are done and we requested a
+                // re-submit.  Skip our handler so base.leaf's listener
+                // can intercept the (now-clean) multipart submit.
+                if (form.__chickadeeFlushed) {
+                    form.__chickadeeFlushed = false;
+                    return;
+                }
+
                 var sectionVarsPromise = (typeof window.chickadeeFlushSectionVars === 'function')
                     ? window.chickadeeFlushSectionVars()
                     : Promise.resolve();
+
+                function resubmit() {
+                    form.__chickadeeFlushed = true;
+                    // Preserve any activating submit button so its
+                    // `formaction` (e.g. hidden draft-action buttons on
+                    // the create page) is honored on the re-fire.
+                    if (typeof form.requestSubmit === 'function') {
+                        form.requestSubmit(e.submitter || null);
+                    } else {
+                        // Fallback for ancient browsers without
+                        // requestSubmit — dispatch a synthesized submit
+                        // event so base.leaf's listener still fires.
+                        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                    }
+                }
+
                 if (pushInFlight || pushPending) {
                     e.preventDefault();
                     var iv = setInterval(function () {
                         if (!pushInFlight && !pushPending) {
                             clearInterval(iv);
-                            sectionVarsPromise.finally(function () { form.submit(); });
+                            sectionVarsPromise.finally(resubmit);
                         }
                     }, 50);
                 } else {
@@ -795,7 +831,7 @@
                     // if they're in flight, since they might have been
                     // triggered by the same keystroke that led here.
                     e.preventDefault();
-                    sectionVarsPromise.finally(function () { form.submit(); });
+                    sectionVarsPromise.finally(resubmit);
                 }
             });
         }
