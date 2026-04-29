@@ -79,15 +79,8 @@ extension AssignmentRoutes {
     /// runner-facing expanded form.
     @Sendable
     func getSuite(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
-
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest)
         return try await payload.encodeResponse(for: req)
     }
@@ -100,14 +93,8 @@ extension AssignmentRoutes {
     /// view without a second round-trip.
     @Sendable
     func putSuite(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        try requireInstructor(req)
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) }
@@ -116,67 +103,7 @@ extension AssignmentRoutes {
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
 
-        // Translate the DTO into the AuthoredSuiteItem model.
-        var authored: [AuthoredSuiteItem] = []
-        var nextFamilies: [PatternFamily] = []
-        for item in body.items {
-            switch item.kind {
-            case "script":
-                guard let s = item.script else {
-                    throw Abort(.badRequest,
-                        reason: "Suite item kind=script is missing `script` payload.")
-                }
-                authored.append(.script(AuthoredRawScript(
-                    script: s.script,
-                    tier: s.tier,
-                    points: s.points,
-                    displayName: s.displayName,
-                    dependsOn: s.dependsOn,
-                    sectionID: item.sectionID
-                )))
-            case "family":
-                guard var f = item.family else {
-                    throw Abort(.badRequest,
-                        reason: "Suite item kind=family is missing `family` payload.")
-                }
-                // Allow callers to carry the family's top-level dependsOn in
-                // either `family.dependsOn` or `item.dependsOn`; the row-
-                // level field wins so the UI can adopt a dep without
-                // rebuilding the whole family spec.  IMPORTANT: the
-                // rebuild must preserve `variables` (added in v0.4.94);
-                // otherwise any case that references a `$var` via
-                // `argVarRefs` would fail validation on the very next
-                // save, triggering a 422 and a full page reload.
-                if let rowDeps = item.dependsOn {
-                    f = PatternFamily(
-                        id: f.id, name: f.name, kind: f.kind,
-                        functionName: f.functionName, paramNames: f.paramNames,
-                        defaults: f.defaults, cases: f.cases,
-                        variables: f.variables,
-                        dependsOn: rowDeps
-                    )
-                }
-                authored.append(.family(id: f.id, sectionID: item.sectionID))
-                nextFamilies.append(f)
-            default:
-                throw Abort(.badRequest,
-                    reason: "Unknown suite item kind '\(item.kind)'.")
-            }
-        }
-
-        // Section CRUD (create/rename/delete/reorder) lives on dedicated
-        // endpoints as of v0.4.98 — `PUT /suite` only carries item-level
-        // edits now.  Pass `nil` so `applyPatternFamilies` falls through to
-        // the manifest's existing `sections` list; the client's body is
-        // allowed to include `sections` for back-compat but we don't act
-        // on it.
-        _ = try await applyPatternFamilies(
-            to: setup,
-            nextFamilies: nextFamilies,
-            authoredItems: authored,
-            sections: nil,
-            on: req.db
-        )
+        try await applySuiteEdit(setup: setup, body: body, on: req.db)
 
         // Re-kick validation so the runner picks up the edited manifest.
         // Debounced: a no-op when a pending validation already exists.

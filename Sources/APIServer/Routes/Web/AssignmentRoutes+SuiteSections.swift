@@ -34,7 +34,8 @@ extension AssignmentRoutes {
     func createSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        let (_, _, setup) = try await resolveSuiteSectionContext(req)
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(Body.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -59,7 +60,8 @@ extension AssignmentRoutes {
     func renameSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        let (_, _, setup) = try await resolveSuiteSectionContext(req)
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw Abort(.notFound)
         }
@@ -87,7 +89,8 @@ extension AssignmentRoutes {
 
     @Sendable
     func deleteSuiteSection(req: Request) async throws -> Response {
-        let (_, _, setup) = try await resolveSuiteSectionContext(req)
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw Abort(.notFound)
         }
@@ -127,7 +130,8 @@ extension AssignmentRoutes {
     func updateSuiteSectionVariables(req: Request) async throws -> Response {
         struct Body: Content { var variables: [FamilyVariable] }
 
-        let (_, _, setup) = try await resolveSuiteSectionContext(req)
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw Abort(.notFound)
         }
@@ -183,7 +187,8 @@ extension AssignmentRoutes {
     func reorderSuiteSections(req: Request) async throws -> HTTPStatus {
         struct Body: Content { var sectionIDs: [String] }
 
-        let (_, _, setup) = try await resolveSuiteSectionContext(req)
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(Body.self)
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
@@ -206,21 +211,6 @@ extension AssignmentRoutes {
     }
 
     // MARK: - Helpers
-
-    /// Common prologue: auth + instructor role + load assignment + setup.
-    /// Returns the trio used by every handler in this file.
-    private func resolveSuiteSectionContext(
-        _ req: Request
-    ) async throws -> (APIUser, APIAssignment, APITestSetup) {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
-        return (user, assignment, setup)
-    }
 
     /// Reads the manifest JSON as a mutable dictionary, runs the caller's
     /// mutation closure, re-serialises, and saves.  Throws if the manifest

@@ -8,9 +8,12 @@
 // by draftID, skipping the `APIAssignment` lookup (there isn't one yet).
 //
 // Added in v0.4.91 as phase 2 of the Create/Edit authoring-page parity
-// refactor.  The shared helpers (`applyPatternFamilies`,
-// `buildSuitePayload`, `listZipEntries`, …) already operate on
-// `APITestSetup`, so these are thin wrappers.
+// refactor.  v0.4.131 collapsed each handler down to a draft-target
+// resolution + shared core call by extracting `applySuiteEdit`,
+// `applyPatternFamiliesEdit`, and the auth/load helpers into
+// `SuiteEditHelpers.swift`; pre-fix this file duplicated the DTO
+// translation, manifest-encoding, and JSON response boilerplate from
+// `AssignmentRoutes+Suite.swift` and `AssignmentRoutes+Families.swift`.
 //
 // Routes:
 //   GET    /instructor/new/draft/suite?draftID=<id>
@@ -26,41 +29,26 @@ import Foundation
 
 extension AssignmentRoutes {
 
-    // MARK: - Helpers
-
-    /// Resolves the draft `APITestSetup` from a `draftID` query parameter.
-    /// Throws `400` if missing, `404` if not found.
-    private func draftSetupFromQuery(_ req: Request) async throws -> APITestSetup {
-        guard let draftID = try? req.query.get(String.self, at: "draftID"),
-              !draftID.isEmpty else {
-            throw Abort(.badRequest, reason: "Missing `draftID` query parameter")
-        }
-        guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
-            throw Abort(.notFound, reason: "Draft '\(draftID)' not found")
-        }
-        return setup
-    }
-
     // MARK: - GET /instructor/new/draft/suite
 
     @Sendable
     func getDraftSuite(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let setup = try await draftSetupFromQuery(req)
+        try requireInstructor(req)
+        let setup = try await loadDraftSetup(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest)
         return try await payload.encodeResponse(for: req)
     }
 
     // MARK: - PUT /instructor/new/draft/suite
+    //
+    // Drafts don't have a validation pipeline yet — that kicks in on
+    // publish.  So this is the bare apply-edit + return-reconciled
+    // pattern; no `scheduleValidationAfterSuiteEdit` call.
 
     @Sendable
     func putDraftSuite(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let setup = try await draftSetupFromQuery(req)
+        try requireInstructor(req)
+        let setup = try await loadDraftSetup(req)
 
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) }
@@ -69,53 +57,7 @@ extension AssignmentRoutes {
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
 
-        var authored: [AuthoredSuiteItem] = []
-        var nextFamilies: [PatternFamily] = []
-        for item in body.items {
-            switch item.kind {
-            case "script":
-                guard let s = item.script else {
-                    throw Abort(.badRequest,
-                        reason: "Suite item kind=script is missing `script` payload.")
-                }
-                authored.append(.script(AuthoredRawScript(
-                    script: s.script,
-                    tier: s.tier,
-                    points: s.points,
-                    displayName: s.displayName,
-                    dependsOn: s.dependsOn
-                )))
-            case "family":
-                guard var f = item.family else {
-                    throw Abort(.badRequest,
-                        reason: "Suite item kind=family is missing `family` payload.")
-                }
-                if let rowDeps = item.dependsOn {
-                    f = PatternFamily(
-                        id: f.id, name: f.name, kind: f.kind,
-                        functionName: f.functionName, paramNames: f.paramNames,
-                        defaults: f.defaults, cases: f.cases,
-                        dependsOn: rowDeps
-                    )
-                }
-                authored.append(.family(id: f.id))
-                nextFamilies.append(f)
-            default:
-                throw Abort(.badRequest,
-                    reason: "Unknown suite item kind '\(item.kind)'.")
-            }
-        }
-
-        _ = try await applyPatternFamilies(
-            to: setup,
-            nextFamilies: nextFamilies,
-            authoredItems: authored,
-            on: req.db
-        )
-
-        // Drafts don't have a validation pipeline yet — that kicks in on
-        // publish.  Skip the scheduleValidationAfterSuiteEdit call the
-        // assignment-scoped handler makes.
+        try await applySuiteEdit(setup: setup, body: body, on: req.db)
 
         let payload = buildSuitePayload(fromManifest: setup.manifest)
         return try await payload.encodeResponse(for: req)
@@ -125,10 +67,8 @@ extension AssignmentRoutes {
 
     @Sendable
     func putDraftPatternFamilies(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let setup = try await draftSetupFromQuery(req)
+        try requireInstructor(req)
+        let setup = try await loadDraftSetup(req)
 
         let families: [PatternFamily]
         do {
@@ -138,28 +78,17 @@ extension AssignmentRoutes {
                 reason: "Invalid pattern family list: \(error.localizedDescription)")
         }
 
-        _ = try await applyPatternFamilies(
-            to: setup,
-            nextFamilies: families,
-            on: req.db
-        )
+        try await applyPatternFamiliesEdit(setup: setup, families: families, on: req.db)
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(families)
-        return Response(status: .ok,
-                        headers: ["Content-Type": "application/json"],
-                        body: .init(data: data))
+        return try jsonResponse(families)
     }
 
     // MARK: - POST /instructor/new/draft/scripts
 
     @Sendable
     func createDraftScript(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let setup = try await draftSetupFromQuery(req)
+        try requireInstructor(req)
+        let setup = try await loadDraftSetup(req)
 
         struct CreateBody: Content {
             var filename: String
@@ -219,10 +148,8 @@ extension AssignmentRoutes {
 
     @Sendable
     func deleteDraftScript(req: Request) async throws -> HTTPStatus {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let setup    = try await draftSetupFromQuery(req)
+        try requireInstructor(req)
+        let setup    = try await loadDraftSetup(req)
         let filename = try safeScriptFilename(from: req)
 
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
