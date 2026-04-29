@@ -6,7 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.4.134] - 2026-04-29
+## [0.4.135] - 2026-04-29
+
+### Fixed
+
+- **Pattern-family editor's auto-compute can no longer hang the
+  browser.**  Pyodide ran on the main thread, so a synchronous tight
+  loop in the instructor's solution notebook (`while True: pass`,
+  infinite recursion) blocked the event loop indefinitely — the 5s
+  `Promise.race` timeout fired but the main thread was already
+  frozen, so the modal and the rest of the page became
+  unresponsive until the tab was force-quit.  Past mitigations
+  (v0.4.124 None-return guard, v0.4.125 AST-shape fix, v0.4.130
+  type-check guards) only addressed cooperative hangs (code that
+  yields via `await`); they couldn't catch CPU-bound run-aways.
+
+  v0.4.135 moves Pyodide into a Web Worker (`Public/pyodide-worker.js`).
+  The worker thread is independent of the UI thread, so a synchronous
+  tight loop no longer freezes the page.  When the 5s timeout fires
+  the main thread terminates the worker (killing whatever Python is
+  running) and allocates a fresh worker for the next call — the first
+  call after a kill pays the ~5s Pyodide reload cost again, but the
+  modal stays interactive throughout.  No SharedArrayBuffer required
+  (the COEP headers a SAB-based interrupt would need are deliberately
+  scoped away from `/instructor/:id/edit` so CodeMirror's CDN imports
+  keep working).
+
+
 
 ### Fixed
 

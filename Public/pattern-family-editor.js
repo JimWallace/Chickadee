@@ -1435,30 +1435,99 @@
         // the ~10 MB Pyodide download doesn't happen if the instructor never
         // uses a family.  Respects manual overrides: once the user types in
         // the Expected cell we mark it `data-manual` and never clobber.
-        var _pyodidePromise = null;
+        //
+        // v0.4.135: Pyodide runs in a Web Worker (`/pyodide-worker.js`)
+        // instead of on the main thread.  Synchronous tight loops in the
+        // instructor's solution notebook (`while True: pass`, infinite
+        // recursion) used to freeze the editor modal and the rest of the
+        // page because `runPythonAsync` only yields at `await` boundaries
+        // — the 5-second timeout fired but the main thread was already
+        // blocked.  In a worker we can `terminate()` the worker mid-run,
+        // unblocking the UI, and allocate a fresh worker for the next
+        // call.  The first call after a kill pays the ~5s Pyodide reload
+        // cost again.
         var _solutionLoadedPromise = null;
+        var _worker = null;
+        var _nextRequestId = 1;
+        var _pendingRequests = new Map();
 
         // Hard cap on how long we wait for the solution function to return.
-        // Catches cooperative hangs (`await asyncio.sleep(...)`, network
-        // waits, etc.) — `runPythonAsync` yields at every `await` so the
-        // `Promise.race` timer can fire.  Tight Python loops (`while True:
-        // pass`) still block the editor thread until the runtime returns
-        // to JS; truly fixing that needs Pyodide-in-Web-Worker, which is
-        // a larger rework.  For now this is enough to recover the modal
-        // from realistic instructor-side mistakes.
+        // After v0.4.135 this enforces a true wall-clock limit (worker is
+        // terminated on timeout) instead of just catching cooperative hangs.
         var TIMEOUT_MS = 5000;
 
-        function getPyodide() {
-            if (_pyodidePromise) return _pyodidePromise;
-            _pyodidePromise = new Promise(function (resolve, reject) {
-                if (window.loadPyodide) return resolve();
-                var s = document.createElement('script');
-                s.src = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
-                s.onload = resolve;
-                s.onerror = function () { reject(new Error('Pyodide failed to load')); };
-                document.head.appendChild(s);
-            }).then(function () { return window.loadPyodide(); });
-            return _pyodidePromise;
+        function getWorker() {
+            if (_worker) return _worker;
+            var version = (document.querySelector('meta[name="app-version"]') || {}).content || '';
+            var workerURL = '/pyodide-worker.js' + (version ? '?v=' + encodeURIComponent(version) : '');
+            _worker = new Worker(workerURL);
+            _worker.addEventListener('message', function (e) {
+                var data = e.data || {};
+                var handler = _pendingRequests.get(data.id);
+                if (handler) {
+                    _pendingRequests.delete(data.id);
+                    handler(data);
+                }
+            });
+            _worker.addEventListener('error', function (e) {
+                // Surface uncaught worker errors to every pending request
+                // so the modal doesn't sit forever.  The next call spins
+                // up a fresh worker.
+                var err = (e && e.message) ? e.message : 'worker error';
+                _pendingRequests.forEach(function (handler) {
+                    handler({ ok: false, error: err });
+                });
+                _pendingRequests.clear();
+                killWorker();
+            });
+            return _worker;
+        }
+
+        function killWorker() {
+            if (_worker) {
+                try { _worker.terminate(); } catch (_) {}
+                _worker = null;
+            }
+            // The worker held the loaded solution module; the next call
+            // must re-load it.
+            _solutionLoadedPromise = null;
+        }
+
+        /// Sends a message to the Pyodide worker, optionally with a
+        /// wall-clock timeout.  When the timeout fires we terminate the
+        /// worker (killing whatever Python is running, including
+        /// synchronous tight loops) and reject with `__chickadee_timeout__`.
+        /// Pending requests on the killed worker are also rejected so
+        /// concurrent in-flight calls don't hang.
+        function workerSend(message, timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                var id = _nextRequestId++;
+                var worker = getWorker();
+                var timer = null;
+                if (timeoutMs && timeoutMs > 0) {
+                    timer = setTimeout(function () {
+                        _pendingRequests.delete(id);
+                        killWorker();
+                        reject(new Error('__chickadee_timeout__'));
+                    }, timeoutMs);
+                }
+                _pendingRequests.set(id, function (data) {
+                    if (timer) { clearTimeout(timer); }
+                    if (data.ok) {
+                        resolve(data);
+                    } else {
+                        reject(new Error(data.error || 'unknown error'));
+                    }
+                });
+                try {
+                    var payload = Object.assign({ id: id }, message);
+                    worker.postMessage(payload);
+                } catch (err) {
+                    if (timer) { clearTimeout(timer); }
+                    _pendingRequests.delete(id);
+                    reject(err);
+                }
+            });
         }
 
         /// Splits a notebook into its code cells' source, skipping markdown,
@@ -1498,21 +1567,13 @@
             .then(function (nb) {
                 var cells = extractSolutionCells(nb);
                 if (!cells.length) return Promise.reject(new Error('empty-solution'));
-                return getPyodide().then(function (py) {
-                    var cellErrors = [];
-                    return cells.reduce(function (chain, cellSrc, idx) {
-                        return chain.then(function () {
-                            return py.runPythonAsync(cellSrc).catch(function (err) {
-                                var msg = (err && err.message)
-                                    ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop()
-                                    : String(err);
-                                cellErrors.push({ index: idx, message: msg || 'error' });
-                            });
-                        });
-                    }, Promise.resolve()).then(function () {
-                        return { py: py, cellErrors: cellErrors };
-                    });
-                });
+                // No timeout on the load itself — it might legitimately
+                // run a long setup cell (e.g. a heavy `pd.read_csv`).
+                // Per-call timeouts kick in for the function invocation.
+                return workerSend({ type: 'loadCells', cells: cells }, 0);
+            })
+            .then(function (data) {
+                return { cellErrors: data.cellErrors || [] };
             });
             _solutionLoadedPromise.catch(function () { _solutionLoadedPromise = null; });
             return _solutionLoadedPromise;
@@ -1545,7 +1606,6 @@
         function callSolution(fnName, args, opts) {
             var captureStdout = !!(opts && opts.captureStdout);
             return ensureSolutionLoaded().then(function (loaded) {
-                var py = loaded.py;
                 var cellErrors = loaded.cellErrors || [];
                 var argsJSON = JSON.stringify(args);
                 var fnLit = JSON.stringify(fnName);
@@ -1638,14 +1698,8 @@
                     ].join('\n');
                     // PYODIDE_SNIPPET_END: value
                 }
-                var run = py.runPythonAsync(pyCode);
-                var timeout = new Promise(function (_, reject) {
-                    setTimeout(function () {
-                        reject(new Error('__chickadee_timeout__'));
-                    }, TIMEOUT_MS);
-                });
-                return Promise.race([run, timeout]).then(function (resJson) {
-                    var parsed = JSON.parse(resJson);
+                return workerSend({ type: 'run', code: pyCode }, TIMEOUT_MS).then(function (data) {
+                    var parsed = JSON.parse(data.result);
                     if (parsed && parsed.__chickadee_kind__ === 'none') {
                         return { ok: true, value: null, returnedNone: true };
                     }
