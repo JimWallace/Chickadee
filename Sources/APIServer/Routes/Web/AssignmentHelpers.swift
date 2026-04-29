@@ -1181,7 +1181,8 @@ func authoredSuiteItemsFromDraftManifest(
             tier: TestTier(rawValue: $0.tier) ?? .pub,
             points: $0.points,
             displayName: $0.displayName,
-            dependsOn: $0.dependsOn
+            dependsOn: $0.dependsOn,
+            sectionID: $0.sectionID
         )) }
     }
     let newByScript: [String: ConfiguredSuiteEntry] = Dictionary(
@@ -1189,12 +1190,24 @@ func authoredSuiteItemsFromDraftManifest(
     )
     var items: [AuthoredSuiteItem] = []
     var seenFamilies: Set<String> = []
+    var seenChecks:   Set<String> = []
     var seenScripts:  Set<String> = []
     for entry in draftProps.testSuites {
         if let fid = entry.generatedBy {
             guard !seenFamilies.contains(fid) else { continue }
             seenFamilies.insert(fid)
-            items.append(.family(id: fid))
+            // v0.4.134: propagate sectionID from the draft's family-generated
+            // entry so families published from the create page keep their
+            // section assignment instead of falling into Ungrouped.
+            items.append(.family(id: fid, sectionID: entry.sectionID))
+        } else if let cid = entry.generatedByCheck {
+            // v0.4.134: same fix for notebook checks — without this the
+            // check-generated entries fall through to applyPatternFamilies'
+            // "checks not in authoredItems" branch which appends them at
+            // the end with `sectionID: nil`.
+            guard !seenChecks.contains(cid) else { continue }
+            seenChecks.insert(cid)
+            items.append(.check(id: cid, sectionID: entry.sectionID))
         } else {
             guard let newEntry = newByScript[entry.script] else { continue }
             seenScripts.insert(entry.script)
@@ -1203,7 +1216,11 @@ func authoredSuiteItemsFromDraftManifest(
                 tier: TestTier(rawValue: newEntry.tier) ?? .pub,
                 points: newEntry.points,
                 displayName: newEntry.displayName,
-                dependsOn: newEntry.dependsOn
+                dependsOn: newEntry.dependsOn,
+                // v0.4.134: prefer the draft's sectionID over the rebuilt
+                // raw entry's (which loses sectionID through the JSON
+                // round-trip via ReindexedSuiteConfigRow).
+                sectionID: entry.sectionID ?? newEntry.sectionID
             )))
         }
     }
@@ -1213,7 +1230,8 @@ func authoredSuiteItemsFromDraftManifest(
             tier: TestTier(rawValue: newEntry.tier) ?? .pub,
             points: newEntry.points,
             displayName: newEntry.displayName,
-            dependsOn: newEntry.dependsOn
+            dependsOn: newEntry.dependsOn,
+            sectionID: newEntry.sectionID
         )))
     }
     return items
