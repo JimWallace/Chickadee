@@ -1991,6 +1991,14 @@ func enqueueRunnerValidationSubmission(
 /// manifest (the test setup download URL carries a hash of manifest bytes,
 /// so an in-flight submission still pulls the updated zip + manifest).
 ///
+/// Pre-checks that a runner compatible with the assignment's
+/// `AssignmentRequirement` is available before enqueueing.  If none is
+/// available (and local-runner-autostart can't bring one up), the
+/// validation is *not* enqueued and `validationStatus` is set to
+/// `"no-runner"` so the assignments list shows a specific reason
+/// instead of a perpetual "pending".  Pre-v0.4.130 the validation went
+/// in regardless and silently sat in queue forever.
+///
 /// Errors are swallowed: this is a nice-to-have trigger from live-edit
 /// endpoints and must not block the edit save.
 func scheduleValidationAfterSuiteEdit(
@@ -2008,6 +2016,20 @@ func scheduleValidationAfterSuiteEdit(
         guard let solution = try await loadExistingSolution(req: req, assignment: assignment)
         else { return }
 
+        let requirementSpec = try await loadAssignmentRequirementSpec(
+            assignment: assignment,
+            on: req.db
+        )
+        let hasRunner = try await ensureCompatibleValidationRunnerAvailability(
+            req: req,
+            requirements: requirementSpec
+        )
+        guard hasRunner else {
+            assignment.validationStatus = "no-runner"
+            try await assignment.save(on: req.db)
+            return
+        }
+
         let subID = try await enqueueRunnerValidationSubmission(
             req: req,
             setupID: assignment.testSetupID,
@@ -2017,10 +2039,23 @@ func scheduleValidationAfterSuiteEdit(
         assignment.validationSubmissionID = subID
         assignment.validationStatus = "pending"
         try await assignment.save(on: req.db)
-        await ensureValidationRunnerAvailability(req: req)
     } catch {
         req.logger.warning("scheduleValidationAfterSuiteEdit: \(error)")
     }
+}
+
+/// Loads the persisted `AssignmentRequirement` for an assignment, if any,
+/// and decodes it into an `AssignmentRequirementSpec`.  Used by the
+/// validation pre-check to pick the right runner profile.
+func loadAssignmentRequirementSpec(
+    assignment: APIAssignment,
+    on db: Database
+) async throws -> AssignmentRequirementSpec? {
+    guard let assignmentID = assignment.id else { return nil }
+    let row = try await AssignmentRequirement.query(on: db)
+        .filter(\.$assignmentID == assignmentID)
+        .first()
+    return row?.requirementSpec
 }
 
 /// Re-queues every student submission for a test setup so the worker

@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.130] - 2026-04-29
+
+### Fixed
+
+- **Pattern family auto-compute now flags non-JSON-native return types
+  instead of silently storing the wrong value.**  When the instructor's
+  solution function returned a `coroutine` (async function used by
+  mistake), `generator`, `async-generator`, `set`, `tuple`, `bytes`, or
+  `complex`, the Pyodide auto-computer used `_json.dumps(..., default=str)`
+  as a fallback and landed `"<coroutine object f at 0x...>"` (or, for
+  tuples, a JSON array that compared `False` against the runner-side
+  tuple at grading time) in the Expected cell as if the instructor had
+  typed it.  The cell now shows a specific reason ("solution returned
+  an async function (returned a coroutine without awaiting it)", "…a
+  set", "…a tuple", etc.) with an actionable tooltip; `Expected` stays
+  blank so it can't accidentally round-trip the wrong value.
+- **Auto-compute now explains *why* a missing function is missing.**
+  When a solution-notebook cell raised before reaching the function
+  definition, the editor saw a generic "function `foo` not defined in
+  solution notebook" message that didn't mention the underlying cell
+  failure.  Per-cell errors are now collected during solution load and
+  folded into the missing-function message ("…not defined (cell 2
+  failed: NameError on line 3)") so the instructor knows which earlier
+  cell to fix.
+
+### Added
+
+- **Validation runner availability is pre-checked on every save path,
+  not just create-assignment.**  The live-edit save path
+  (`POST /instructor/:id/edit/save`) and the suite-edit auto-trigger
+  (`scheduleValidationAfterSuiteEdit`, fired by `PUT /suite` and
+  `PUT /families`) now pre-check
+  `ensureCompatibleValidationRunnerAvailability` against the
+  assignment's persisted requirements.  If no compatible runner is
+  available (and local-runner-autostart can't bring one up), the
+  assignment's `validationStatus` is set to a new `"no-runner"` state
+  and *no validation submission is enqueued* — pre-fix the row was
+  queued and sat indefinitely.  The assignments list shows a distinct
+  "no runner" badge with a tooltip directing the instructor to ask an
+  admin to start a compatible runner, then re-save.  Mirrors the
+  create-assignment path's pre-existing behaviour.
+
 ## [0.4.129] - 2026-04-28
 
 ### Fixed

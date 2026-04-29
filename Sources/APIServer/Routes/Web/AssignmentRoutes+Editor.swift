@@ -282,8 +282,31 @@ extension AssignmentRoutes {
             existingOverride: assignment.deadlineOverrideActive ?? false
         )
         assignment.isOpen = false
-        assignment.validationStatus = "pending"
 
+        // Pre-check that a compatible runner is up before enqueueing the
+        // validation submission.  Without this, the save flips
+        // `validationStatus = "pending"` and the validation row sits in
+        // queue indefinitely if no runner can grade it (no compatible
+        // language, runner stopped, autostart disabled).  Mirrors the
+        // create-assignment path's behaviour at AssignmentRoutes.swift,
+        // but allows the save itself to proceed since the instructor's
+        // notebook + metadata edits should still persist.
+        let requirementSpec = try await loadAssignmentRequirementSpec(
+            assignment: assignment,
+            on: req.db
+        )
+        let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
+            req: req,
+            requirements: requirementSpec
+        )
+        guard hasEligibleRunner else {
+            assignment.validationStatus = "no-runner"
+            assignment.validationSubmissionID = nil
+            try await assignment.save(on: req.db)
+            return req.redirect(to: "/instructor")
+        }
+
+        assignment.validationStatus = "pending"
         let solutionDataToSubmit = solutionIsNotebook
             ? normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw)
             : resolvedSolutionNotebookRaw
@@ -295,11 +318,6 @@ extension AssignmentRoutes {
         )
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)
-
-        // Kick off the runner if needed, then return immediately.
-        // Validation runs in the background; the instructor sees "pending" on the
-        // assignments list and can refresh to see the outcome.
-        await ensureValidationRunnerAvailability(req: req)
         return req.redirect(to: "/instructor")
     }
 

@@ -182,6 +182,8 @@
                         <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
                     </div>
                     #endif
+                    #elseif(row.validationStatus == "no-runner"):
+                    <span class="tier tier-closed" title="No compatible runner was available when the assignment was last saved. Validation was not enqueued — ask an admin to start a compatible runner, then re-save the assignment.">no runner</span>
                     #else:
                     <span class="tier">—</span>
                     #endif
@@ -391,6 +393,8 @@
                         <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
                     </div>
                     #endif
+                    #elseif(row.validationStatus == "no-runner"):
+                    <span class="tier tier-closed" title="No compatible runner was available when the assignment was last saved. Validation was not enqueued — ask an admin to start a compatible runner, then re-save the assignment.">no runner</span>
                     #else:
                     <span class="tier">—</span>
                     #endif

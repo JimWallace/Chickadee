@@ -1482,6 +1482,13 @@
         /// Loads the solution notebook into Pyodide's global namespace,
         /// cell by cell, catching per-cell errors so one failing statement
         /// doesn't stop later cells from defining their functions.
+        ///
+        /// Returns `{ py, cellErrors: [{ index, message }] }`.  The
+        /// `cellErrors` list lets `callSolution` explain a downstream
+        /// NameError ("function `foo` not defined") in terms of the
+        /// earlier cell that crashed before reaching the def — pre-v0.4.130
+        /// the per-cell errors were swallowed silently and a missing
+        /// function gave a confusing message that didn't mention the cause.
         function ensureSolutionLoaded() {
             if (_solutionLoadedPromise) return _solutionLoadedPromise;
             _solutionLoadedPromise = fetch(urls.solutionNotebook(), {
@@ -1492,14 +1499,19 @@
                 var cells = extractSolutionCells(nb);
                 if (!cells.length) return Promise.reject(new Error('empty-solution'));
                 return getPyodide().then(function (py) {
-                    return cells.reduce(function (chain, cellSrc) {
+                    var cellErrors = [];
+                    return cells.reduce(function (chain, cellSrc, idx) {
                         return chain.then(function () {
-                            return py.runPythonAsync(cellSrc).catch(function () {
-                                // Swallow: usage-code failures in a cell
-                                // don't prevent later defs from landing.
+                            return py.runPythonAsync(cellSrc).catch(function (err) {
+                                var msg = (err && err.message)
+                                    ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop()
+                                    : String(err);
+                                cellErrors.push({ index: idx, message: msg || 'error' });
                             });
                         });
-                    }, Promise.resolve()).then(function () { return py; });
+                    }, Promise.resolve()).then(function () {
+                        return { py: py, cellErrors: cellErrors };
+                    });
                 });
             });
             _solutionLoadedPromise.catch(function () { _solutionLoadedPromise = null; });
@@ -1514,19 +1526,27 @@
         /// pattern kind).
         ///
         /// Result shape:
-        ///   { ok: true,  value: <parsed>, returnedNone: false }  // value-returning success
-        ///   { ok: true,  value: null,     returnedNone: true  }  // function returned None
-        ///   { ok: false, error: "<msg>" }                        // exception inside Python
-        ///   { ok: false, timedOut: true, error: "..." }          // 5s budget exceeded
+        ///   { ok: true,  value: <parsed>, returnedNone: false }     // value-returning success
+        ///   { ok: true,  value: null,     returnedNone: true  }     // function returned None
+        ///   { ok: false, unsupported: "<reason>" }                  // non-JSON-native return type
+        ///   { ok: false, error: "<msg>" }                           // exception inside Python
+        ///   { ok: false, timedOut: true, error: "..." }             // 5s budget exceeded
         ///
         /// The Python boundary uses a sentinel-keyed wrapper
         /// (`__chickadee_kind__`) instead of bare `_json.dumps(_result)`
         /// so that a `None` return is unambiguous — pre-fix, `None`
         /// became the string `"null"` and silently landed in the
-        /// Expected cell as if the instructor had typed it.
+        /// Expected cell as if the instructor had typed it.  v0.4.130
+        /// extends the same sentinel to flag return types that don't
+        /// round-trip cleanly via JSON (coroutines, generators, sets,
+        /// tuples, bytes, complex) so the instructor sees a specific
+        /// reason instead of `default=str` silently storing the repr
+        /// string in the Expected cell.
         function callSolution(fnName, args, opts) {
             var captureStdout = !!(opts && opts.captureStdout);
-            return ensureSolutionLoaded().then(function (py) {
+            return ensureSolutionLoaded().then(function (loaded) {
+                var py = loaded.py;
+                var cellErrors = loaded.cellErrors || [];
                 var argsJSON = JSON.stringify(args);
                 var fnLit = JSON.stringify(fnName);
                 var argsLit = JSON.stringify(argsJSON);
@@ -1549,20 +1569,30 @@
                         'import json as _json',
                         'import io as _io',
                         'import contextlib as _contextlib',
+                        'import inspect as _inspect',
                         '_fn = globals().get(' + fnLit + ')',
                         'if _fn is None:',
                         '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
                         '_args = _json.loads(' + argsLit + ')',
                         '_buf = _io.StringIO()',
                         'with _contextlib.redirect_stdout(_buf):',
-                        '    _fn(*_args)',
-                        '_captured = _buf.getvalue()',
+                        '    _ret = _fn(*_args)',
+                        // An async function used by mistake: `_fn(*_args)`
+                        // returns a coroutine without ever entering the
+                        // body, so `_buf` is empty and the instructor
+                        // would see a blank Expected.  Surface it.
+                        'if _inspect.iscoroutine(_ret):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "coroutine"}',
+                        'elif _inspect.isasyncgen(_ret):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "async-generator"}',
+                        'else:',
+                        '    _captured = _buf.getvalue()',
                         // Mirror the renderer-side normalisation so the
                         // auto-computed Expected matches what the
                         // generated test will compare against.
-                        'if _captured.endswith("\\n"):',
-                        '    _captured = _captured[:-1]',
-                        '_payload = {"__chickadee_kind__": "value", "value": _captured}',
+                        '    if _captured.endswith("\\n"):',
+                        '        _captured = _captured[:-1]',
+                        '    _payload = {"__chickadee_kind__": "value", "value": _captured}',
                         '_json.dumps(_payload)'
                     ].join('\n');
                     // PYODIDE_SNIPPET_END: stdout
@@ -1570,13 +1600,40 @@
                     // PYODIDE_SNIPPET_BEGIN: value
                     pyCode = [
                         'import json as _json',
+                        'import inspect as _inspect',
                         '_fn = globals().get(' + fnLit + ')',
                         'if _fn is None:',
                         '    raise NameError(' + fnLit + ' + " not defined in solution notebook")',
                         '_args = _json.loads(' + argsLit + ')',
                         '_result = _fn(*_args)',
-                        '_payload = ({"__chickadee_kind__": "none"} if _result is None',
-                        '            else {"__chickadee_kind__": "value", "value": _result})',
+                        // Non-JSON-native return types silently round-tripped
+                        // pre-v0.4.130 via `default=str`, landing the repr
+                        // string in the Expected cell as if the instructor
+                        // typed it.  Detect each common shape and surface a
+                        // specific reason so the instructor sees what
+                        // happened instead of a stringified "<coroutine ...>".
+                        'if _inspect.iscoroutine(_result):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "coroutine"}',
+                        'elif _inspect.isasyncgen(_result):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "async-generator"}',
+                        'elif _inspect.isgenerator(_result):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "generator"}',
+                        'elif isinstance(_result, (set, frozenset)):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "set"}',
+                        // Tuples ARE JSON-serialisable but the runner-side
+                        // test compares with `==` against a Python tuple,
+                        // and a JSON array round-trips back as a `list`,
+                        // so `(1,2) == [1,2]` is False — silent miscompare.
+                        'elif isinstance(_result, tuple):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "tuple"}',
+                        'elif isinstance(_result, (bytes, bytearray)):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "bytes"}',
+                        'elif isinstance(_result, complex):',
+                        '    _payload = {"__chickadee_kind__": "unsupported", "reason": "complex"}',
+                        'elif _result is None:',
+                        '    _payload = {"__chickadee_kind__": "none"}',
+                        'else:',
+                        '    _payload = {"__chickadee_kind__": "value", "value": _result}',
                         '_json.dumps(_payload, default=str)'
                     ].join('\n');
                     // PYODIDE_SNIPPET_END: value
@@ -1592,14 +1649,33 @@
                     if (parsed && parsed.__chickadee_kind__ === 'none') {
                         return { ok: true, value: null, returnedNone: true };
                     }
+                    if (parsed && parsed.__chickadee_kind__ === 'unsupported') {
+                        return { ok: false, unsupported: parsed.reason || 'unknown' };
+                    }
                     return { ok: true, value: parsed.value, returnedNone: false };
+                }).catch(function (err) {
+                    if (err && err.message === '__chickadee_timeout__') {
+                        return { ok: false, timedOut: true,
+                                 error: 'timed out after ' + (TIMEOUT_MS / 1000) + 's' };
+                    }
+                    var msg = (err && err.message)
+                        ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop()
+                        : String(err);
+                    // When the function isn't found, fold the first
+                    // solution-load error into the message so the
+                    // instructor sees *why* the function never landed
+                    // in globals — typical case: an earlier cell raised.
+                    if (msg && msg.indexOf('not defined') >= 0 && cellErrors.length > 0) {
+                        var first = cellErrors[0];
+                        msg += ' (cell ' + (first.index + 1) + ' failed: ' + first.message + ')';
+                    }
+                    return { ok: false, error: msg || 'error' };
                 });
             }).catch(function (err) {
-                if (err && err.message === '__chickadee_timeout__') {
-                    return { ok: false, timedOut: true,
-                             error: 'timed out after ' + (TIMEOUT_MS / 1000) + 's' };
-                }
-                var msg = (err && err.message) ? String(err.message).split('\n').filter(function (l) { return l.trim(); }).pop() : String(err);
+                // Solution-load failures (no-solution, empty-solution,
+                // network).  These come *before* any callSolution-specific
+                // error wrapping, so cellErrors is not in scope.
+                var msg = (err && err.message) ? String(err.message) : String(err);
                 return { ok: false, error: msg || 'error' };
             });
         }
@@ -1748,6 +1824,27 @@
                     expectedEl.placeholder = '⚠ ' + res.error;
                     expectedEl.title = 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
                     expectedEl.style.borderColor = 'var(--red,#c00)';
+                } else if (res.unsupported) {
+                    // The solution returned a value of a type that
+                    // doesn't round-trip through JSON in a way the
+                    // runner-side test will accept.  Show the specific
+                    // reason so the instructor can decide whether to
+                    // change the solution or type Expected manually.
+                    var reasonText = ({
+                        'coroutine':       'an async function (returned a coroutine without awaiting it)',
+                        'async-generator': 'an async generator',
+                        'generator':       'a generator',
+                        'set':             'a set',
+                        'tuple':           'a tuple',
+                        'bytes':           'bytes',
+                        'complex':         'a complex number'
+                    })[res.unsupported] || res.unsupported;
+                    expectedEl.value = '';
+                    expectedEl.placeholder = '⚠ solution returned ' + reasonText;
+                    expectedEl.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
+                    expectedEl.style.borderColor = 'var(--orange,#d80)';
+                    expectedEl.style.color = '';
+                    delete expectedEl.dataset.autoComputed;
                 } else {
                     // v0.4.112: surface the failure in the cell itself
                     // (not just the title tooltip) — typical user
