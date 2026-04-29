@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.133] - 2026-04-29
+
+### Fixed
+
+- **Save & Validate on every assignment edit page 403'd with "No CSRF
+  token provided".**  Pre-fix, `Public/suite-table.js`'s submit listener
+  flushed any pending suite/section-vars saves and then re-submitted the
+  form via `form.submit()` — but `form.submit()` deliberately bypasses
+  submit-event listeners, including [`base.leaf`](Resources/Views/base.leaf:78)'s
+  multipart-CSRF intercept that adds `x-csrf-token` to the request
+  headers.  Without that header the multipart body's `_csrf` field is
+  unreachable to the CSRF middleware (the body isn't buffered before the
+  middleware runs), so every save was rejected.  Switched to
+  `form.requestSubmit()` (which fires submit events) plus a one-shot
+  `__chickadeeFlushed` flag that skips suite-table's listener on the
+  re-fired event, letting base.leaf's intercept handle it.  Bug present
+  since v0.4.102 — masked on browsers with stale-cached pre-0.4.102
+  `suite-table.js`, hence the "works on my laptop, fails on my desktop"
+  asymmetry.
+
 ## [0.4.132] - 2026-04-29
 
 ### Added
