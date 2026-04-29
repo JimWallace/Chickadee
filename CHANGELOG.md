@@ -6,6 +6,86 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.131] - 2026-04-29
+
+### Refactor
+
+- **Shared core for the suite / families / checks / suite-sections
+  endpoints.**  Pre-fix, every `:assignmentID`-scoped editor handler had
+  a draft-scoped sibling at `/instructor/new/draft/...` that duplicated
+  the auth check, setup resolution, body decoding, DTO translation, and
+  JSON response building.  That duplication was the structural reason
+  the create page is multiple versions behind the edit page on
+  Sections, Notebook Checks, and Support Files: each new feature on the
+  edit side meant writing (and forgetting) a parallel draft handler.
+  The new `Sources/APIServer/Routes/Web/SuiteEditHelpers.swift` exposes
+  `requireInstructor`, `loadAssignmentAndSetup`, `loadDraftSetup`,
+  `applySuiteEdit`, `applyPatternFamiliesEdit`, `applyNotebookChecksEdit`,
+  and `jsonResponse` — `AssignmentRoutes+Suite.swift`,
+  `AssignmentRoutes+Families.swift`, `AssignmentRoutes+Checks.swift`,
+  `AssignmentRoutes+SuiteSections.swift`, and `AssignmentRoutes+Draft.swift`
+  all collapse to thin handlers that resolve their target and call into
+  the shared core.  Net: ~150 fewer lines, and adding a draft-scoped
+  Checks / Sections / SectionVariables endpoint is now a few lines of
+  routing rather than a duplicate handler.
+
+### Fixed
+
+- **Drafts now persist `sectionID` on suite items through `PUT /draft/suite`**
+  and preserve pattern-family `variables` on row-level edits.  Both
+  fields landed on the assignment-scoped path
+  (`AuthoredSuiteItem.sectionID` in v0.4.96, `PatternFamily.variables`
+  in v0.4.94) but the draft-side handler still used the pre-v0.4.96
+  payload shape — a section assignment made via the suite editor on
+  the create page would silently drop on save.  Routing draft saves
+  through `applySuiteEdit` (the same shared core the assignment-scoped
+  handler uses) closes the gap as a side effect of the refactor.  No
+  draft data has been lost; pre-fix the field simply wasn't accepted on
+  save (the create page hasn't shipped a Sections UI yet, so this only
+  manifested for clients sending the field directly).
+
+## [0.4.130] - 2026-04-29
+
+### Fixed
+
+- **Pattern family auto-compute now flags non-JSON-native return types
+  instead of silently storing the wrong value.**  When the instructor's
+  solution function returned a `coroutine` (async function used by
+  mistake), `generator`, `async-generator`, `set`, `tuple`, `bytes`, or
+  `complex`, the Pyodide auto-computer used `_json.dumps(..., default=str)`
+  as a fallback and landed `"<coroutine object f at 0x...>"` (or, for
+  tuples, a JSON array that compared `False` against the runner-side
+  tuple at grading time) in the Expected cell as if the instructor had
+  typed it.  The cell now shows a specific reason ("solution returned
+  an async function (returned a coroutine without awaiting it)", "…a
+  set", "…a tuple", etc.) with an actionable tooltip; `Expected` stays
+  blank so it can't accidentally round-trip the wrong value.
+- **Auto-compute now explains *why* a missing function is missing.**
+  When a solution-notebook cell raised before reaching the function
+  definition, the editor saw a generic "function `foo` not defined in
+  solution notebook" message that didn't mention the underlying cell
+  failure.  Per-cell errors are now collected during solution load and
+  folded into the missing-function message ("…not defined (cell 2
+  failed: NameError on line 3)") so the instructor knows which earlier
+  cell to fix.
+
+### Added
+
+- **Validation runner availability is pre-checked on every save path,
+  not just create-assignment.**  The live-edit save path
+  (`POST /instructor/:id/edit/save`) and the suite-edit auto-trigger
+  (`scheduleValidationAfterSuiteEdit`, fired by `PUT /suite` and
+  `PUT /families`) now pre-check
+  `ensureCompatibleValidationRunnerAvailability` against the
+  assignment's persisted requirements.  If no compatible runner is
+  available (and local-runner-autostart can't bring one up), the
+  assignment's `validationStatus` is set to a new `"no-runner"` state
+  and *no validation submission is enqueued* — pre-fix the row was
+  queued and sat indefinitely.  The assignments list shows a distinct
+  "no runner" badge with a tooltip directing the instructor to ask an
+  admin to start a compatible runner, then re-save.  Mirrors the
+  create-assignment path's pre-existing behaviour.
+
 ## [0.4.129] - 2026-04-28
 
 ### Fixed

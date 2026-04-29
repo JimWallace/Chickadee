@@ -1450,6 +1450,131 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
+    /// Regression for v0.4.130 / launch-readiness #4.  Pre-fix, a suite
+    /// edit (or save) when no compatible runner was available silently
+    /// enqueued a validation submission that would never grade — the
+    /// instructor saw `validationStatus = "pending"` indefinitely.  Now
+    /// the helper pre-checks runner availability and falls back to a
+    /// distinct `"no-runner"` status so the assignments view can show a
+    /// specific reason.
+    func testPutSuiteSetsNoRunnerStatusWhenNoCompatibleRunner() async throws {
+        let courseID = try await makeTestCourseID()
+        app.migrations.add(CreateRunnerProfiles())
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
+        let cookie = try await loginAsInstructor()
+
+        let setupID = "setup_no_runner"
+        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+        let manifest = """
+        {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+        """
+        let setup = APITestSetup(
+            id: setupID, manifest: manifest, zipPath: zipPath,
+            notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb",
+            courseID: courseID
+        )
+        try await setup.save(on: app.db)
+        let assignment = APIAssignment(
+            publicID: "NRN001", testSetupID: setupID,
+            title: "No Runner", dueAt: nil, isOpen: false,
+            courseID: courseID
+        )
+        try await assignment.save(on: app.db)
+
+        // Seed a validation submission with a real notebook on disk so
+        // `loadExistingSolution` returns data — otherwise
+        // `scheduleValidationAfterSuiteEdit` returns early before
+        // reaching the runner pre-check.
+        let solutionPath = tmpDir + "submissions/no_runner_solution.ipynb"
+        try defaultNotebookData(title: "Solution").write(to: URL(fileURLWithPath: solutionPath))
+        let validation = APISubmission(
+            id: "sub_no_runner_validation",
+            testSetupID: setupID,
+            zipPath: solutionPath,
+            attemptNumber: 1,
+            status: "complete",
+            filename: "solution.ipynb",
+            userID: nil,
+            kind: APISubmission.Kind.validation
+        )
+        try await validation.save(on: app.db)
+        assignment.validationSubmissionID = "sub_no_runner_validation"
+        try await assignment.save(on: app.db)
+
+        // Notably: no RunnerProfile rows.  `hasCompatibleValidationRunner`
+        // returns false; autostart is disabled in tests; so
+        // `ensureCompatibleValidationRunnerAvailability` returns false.
+
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/NRN001/edit", cookie: cookie, on: app)
+        let body = #"""
+        {"items":[
+            {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"Q1","dependsOn":[]}}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/NRN001/suite", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: body)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, res.body.string)
+        })
+
+        let after = try await APIAssignment.query(on: app.db)
+            .filter(\.$publicID == "NRN001")
+            .first()
+        XCTAssertEqual(after?.validationStatus, "no-runner",
+                       "scheduleValidationAfterSuiteEdit must set 'no-runner' when no compatible runner is available")
+
+        // No new pending validation submission should have been enqueued.
+        let pending = try await APISubmission.query(on: app.db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.validation)
+            .filter(\.$status == "pending")
+            .count()
+        XCTAssertEqual(pending, 0,
+                       "Pre-check must skip the enqueue path when no compatible runner exists; otherwise the row sits forever")
+    }
+
+    /// Unit test for the new `loadAssignmentRequirementSpec` helper —
+    /// confirms it round-trips a persisted `AssignmentRequirement` row
+    /// into an `AssignmentRequirementSpec` and returns nil when no row
+    /// exists.
+    func testLoadAssignmentRequirementSpecRoundTripsPersistedRow() async throws {
+        let courseID = try await makeTestCourseID()
+        app.migrations.add(CreateAssignmentRequirements())
+        try await app.autoMigrate()
+
+        try await insertSetup(id: "setup_load_req")
+        let assignment = APIAssignment(
+            testSetupID: "setup_load_req", title: "Load Req",
+            dueAt: nil, isOpen: false, courseID: courseID
+        )
+        try await assignment.save(on: app.db)
+
+        // No row → nil.
+        let none = try await loadAssignmentRequirementSpec(assignment: assignment, on: app.db)
+        XCTAssertNil(none)
+
+        // Row → spec with the same fields.
+        let spec = AssignmentRequirementSpec(
+            requiredPlatform: "linux",
+            requiredArchitecture: "x86_64",
+            requiredLanguages: [AssignmentLanguageRequirement(language: "python")],
+            requiredCapabilities: [RunnerCapability(name: "matplotlib")]
+        )
+        let row = AssignmentRequirement(assignmentID: try assignment.requireID(), specification: spec)
+        try await row.save(on: app.db)
+
+        let loaded = try await loadAssignmentRequirementSpec(assignment: assignment, on: app.db)
+        XCTAssertEqual(loaded?.requiredPlatform, "linux")
+        XCTAssertEqual(loaded?.requiredArchitecture, "x86_64")
+        XCTAssertEqual(loaded?.requiredLanguages.map(\.language), ["python"])
+        XCTAssertEqual(loaded?.requiredCapabilities.map(\.name), ["matplotlib"])
+    }
+
     func testAssignmentSubmissionsUsesDisplayNameAndWaterlooTime() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_submissions_display_name")

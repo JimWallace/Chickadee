@@ -1,0 +1,201 @@
+// APIServer/Routes/Web/SuiteEditHelpers.swift
+//
+// Shared core for the Suite / Families / Checks / Suite Sections handlers
+// — both the assignment-scoped variants (`/instructor/:assignmentID/...`)
+// and the draft-scoped variants used by the create page
+// (`/instructor/new/draft/...?draftID=<id>`).  Pre-v0.4.131 each pair of
+// endpoints (assignment vs draft) duplicated:
+//
+//   1. auth + role check
+//   2. setup resolution
+//   3. body decoding + DTO translation
+//   4. call into `applyPatternFamilies` with the appropriate next-state
+//   5. (assignment-only) `scheduleValidationAfterSuiteEdit`
+//
+// That duplication kept feature parity between the two pages a chore —
+// e.g. v0.4.96 sections, v0.4.113-118 notebook checks, and v0.4.114
+// support files all landed on the assignment-scoped side and have not
+// yet been wired into the create page.  Consolidating the apply cores
+// here makes adding a missing draft endpoint a few lines of routing
+// rather than a duplicate handler.
+//
+// Approach: shared pure functions, not a new enum or protocol.  Each
+// thin handler still reads as a complete unit; the shared core takes a
+// raw `APITestSetup` (already the unit applyPatternFamilies operates on)
+// plus the decoded body, returns the reconciled state, and trusts the
+// caller to deal with target-specific concerns (validation scheduling,
+// redirect targets).
+
+import Vapor
+import Fluent
+import Core
+import Foundation
+
+// MARK: - Auth + setup resolution
+
+/// Authenticates the request as an instructor.  Throws .unauthorized
+/// if no user, .forbidden if the user isn't at least an instructor.
+/// Returns the user for callers that need it (e.g. for retest stamping).
+@discardableResult
+func requireInstructor(_ req: Request) throws -> APIUser {
+    let user = try req.auth.require(APIUser.self)
+    guard user.isInstructor else { throw Abort(.forbidden) }
+    return user
+}
+
+/// Loads the (assignment, setup) pair from a `:assignmentID` path
+/// parameter.  Throws `.notFound` if either the assignment or its
+/// referenced test setup is missing.
+func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APITestSetup) {
+    let idStr = try assignmentPublicIDParameter(from: req)
+    guard
+        let assignment = try await assignmentByPublicID(idStr, on: req.db),
+        let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+    else { throw Abort(.notFound) }
+    return (assignment, setup)
+}
+
+/// Loads a draft test setup from the `?draftID=<id>` query parameter.
+/// The draft model is just an `APITestSetup` row that hasn't been
+/// linked to an `APIAssignment` yet — same row shape, no parent.
+/// Throws `.badRequest` if the parameter is missing/empty,
+/// `.notFound` if no row matches.
+func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
+    guard let draftID = try? req.query.get(String.self, at: "draftID"),
+          !draftID.isEmpty else {
+        throw Abort(.badRequest, reason: "Missing `draftID` query parameter")
+    }
+    guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
+        throw Abort(.notFound, reason: "Draft '\(draftID)' not found")
+    }
+    return setup
+}
+
+// MARK: - Suite-list editor core
+
+/// Translates a `SuitePayload` into `applyPatternFamilies` arguments and
+/// applies it.  Used by both `PUT /instructor/:id/suite` and
+/// `PUT /instructor/new/draft/suite`.
+///
+/// Errors:
+///   - `.badRequest` for malformed items (missing script payload, missing
+///     family payload, unknown kind).
+///   - whatever `applyPatternFamilies` throws for validation failures.
+func applySuiteEdit(
+    setup: APITestSetup,
+    body: AssignmentRoutes.SuitePayload,
+    on db: Database
+) async throws {
+    var authored: [AuthoredSuiteItem] = []
+    var nextFamilies: [PatternFamily] = []
+    for item in body.items {
+        switch item.kind {
+        case "script":
+            guard let s = item.script else {
+                throw Abort(.badRequest,
+                    reason: "Suite item kind=script is missing `script` payload.")
+            }
+            authored.append(.script(AuthoredRawScript(
+                script: s.script,
+                tier: s.tier,
+                points: s.points,
+                displayName: s.displayName,
+                dependsOn: s.dependsOn,
+                sectionID: item.sectionID
+            )))
+        case "family":
+            guard var f = item.family else {
+                throw Abort(.badRequest,
+                    reason: "Suite item kind=family is missing `family` payload.")
+            }
+            // Allow callers to carry the family's top-level dependsOn in
+            // either `family.dependsOn` or `item.dependsOn`; the row-level
+            // field wins so the UI can adopt a dep without rebuilding the
+            // whole family spec.  Preserves `variables` (added in v0.4.94)
+            // — without that an `argVarRefs` reference would fail
+            // validation on the next save.
+            if let rowDeps = item.dependsOn {
+                f = PatternFamily(
+                    id: f.id, name: f.name, kind: f.kind,
+                    functionName: f.functionName, paramNames: f.paramNames,
+                    defaults: f.defaults, cases: f.cases,
+                    variables: f.variables,
+                    dependsOn: rowDeps
+                )
+            }
+            authored.append(.family(id: f.id, sectionID: item.sectionID))
+            nextFamilies.append(f)
+        default:
+            throw Abort(.badRequest,
+                reason: "Unknown suite item kind '\(item.kind)'.")
+        }
+    }
+
+    // Section CRUD lives on dedicated endpoints (v0.4.98) — pass `nil`
+    // so applyPatternFamilies falls through to the manifest's existing
+    // sections list.  The client's body may include `sections` for
+    // back-compat but we don't act on it here.
+    _ = try await applyPatternFamilies(
+        to: setup,
+        nextFamilies: nextFamilies,
+        authoredItems: authored,
+        sections: nil,
+        on: db
+    )
+}
+
+// MARK: - Pattern families editor core
+
+/// Replaces the test setup's pattern family list and re-applies.
+/// Used by both `PUT /instructor/:id/families` and
+/// `PUT /instructor/new/draft/families`.
+func applyPatternFamiliesEdit(
+    setup: APITestSetup,
+    families: [PatternFamily],
+    on db: Database
+) async throws {
+    _ = try await applyPatternFamilies(
+        to: setup,
+        nextFamilies: families,
+        on: db
+    )
+}
+
+// MARK: - Notebook checks editor core
+
+/// Replaces the test setup's notebook check list, carrying forward the
+/// existing pattern families (so the shared apply path rewrites both
+/// generated-script sets in a single zip mutation).
+func applyNotebookChecksEdit(
+    setup: APITestSetup,
+    checks: [NotebookCheck],
+    on db: Database
+) async throws {
+    let currentFamilies: [PatternFamily] = {
+        guard let data = setup.manifest.data(using: .utf8),
+              let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+        else { return [] }
+        return props.patternFamilies
+    }()
+
+    _ = try await applyPatternFamilies(
+        to: setup,
+        nextFamilies: currentFamilies,
+        nextChecks: checks,
+        on: db
+    )
+}
+
+// MARK: - JSON response helper
+
+/// Encodes an `Encodable` payload as a sorted-keys JSON response with
+/// `Content-Type: application/json` and the given status.  Used by the
+/// PUT endpoints to echo their applied state back to the client.
+func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) throws -> Response {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = try encoder.encode(value)
+    return Response(status: status,
+                    headers: ["Content-Type": "application/json"],
+                    body: .init(data: data))
+}

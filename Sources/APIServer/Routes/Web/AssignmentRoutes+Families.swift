@@ -21,14 +21,8 @@ extension AssignmentRoutes {
 
     @Sendable
     func getPatternFamilies(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        try requireInstructor(req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
 
         let families: [PatternFamily] = {
             guard let data = setup.manifest.data(using: .utf8),
@@ -37,12 +31,7 @@ extension AssignmentRoutes {
             return props.patternFamilies
         }()
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(families)
-        return Response(status: .ok,
-                        headers: ["Content-Type": "application/json"],
-                        body: .init(data: data))
+        return try jsonResponse(families)
     }
 
     // MARK: - PUT /instructor/:assignmentID/families
@@ -59,14 +48,8 @@ extension AssignmentRoutes {
 
     @Sendable
     func putPatternFamilies(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
-
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        try requireInstructor(req)
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let families: [PatternFamily]
         do {
@@ -76,23 +59,12 @@ extension AssignmentRoutes {
                 reason: "Invalid pattern family list: \(error.localizedDescription)")
         }
 
-        _ = try await applyPatternFamilies(
-            to: setup,
-            nextFamilies: families,
-            on: req.db
-        )
+        try await applyPatternFamiliesEdit(setup: setup, families: families, on: req.db)
 
         // Re-kick validation so the runner picks up the edited manifest.
         // Debounced: a no-op when a pending validation already exists.
         await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
 
-        // Return the applied list so the client can reconcile state without
-        // a second round-trip.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(families)
-        return Response(status: .ok,
-                        headers: ["Content-Type": "application/json"],
-                        body: .init(data: data))
+        return try jsonResponse(families)
     }
 }
