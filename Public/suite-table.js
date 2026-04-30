@@ -319,9 +319,32 @@
 
         // ── Persistence (items only; sections go through dedicated endpoints) ──
 
+        /// Linearize items[] into one contiguous run per sectionID, in the
+        /// DOM section-block order.  The server enforces that items with
+        /// the same sectionID form a contiguous block; mutation paths
+        /// (root-drop, addExistingScript, syncFamilies) can otherwise
+        /// leave items[] non-contiguous while the rendered tables still
+        /// look correct (each <tbody> filters items[] by sectionID).
+        function itemsGroupedBySection() {
+            var blocks = container.querySelectorAll('.section-block[data-section-id]');
+            var seen = new Set();
+            var out = [];
+            blocks.forEach(function (b) {
+                var sid = b.getAttribute('data-section-id') || null;
+                items.forEach(function (item) {
+                    if ((item.sectionID || null) === (sid || null)) {
+                        out.push(item);
+                        seen.add(item);
+                    }
+                });
+            });
+            items.forEach(function (item) { if (!seen.has(item)) out.push(item); });
+            return out;
+        }
+
         function buildPayload() {
             return {
-                items: items.map(function (item) {
+                items: itemsGroupedBySection().map(function (item) {
                     if (item.kind === 'family') {
                         var family = Object.assign({}, item.family);
                         family.dependsOn = item.dependsOn ? item.dependsOn.slice() : [];
