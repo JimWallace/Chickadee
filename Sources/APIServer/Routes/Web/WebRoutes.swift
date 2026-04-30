@@ -18,7 +18,6 @@ import Fluent
 import Leaf
 import Core
 import Foundation
-import Crypto
 
 struct WebRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {

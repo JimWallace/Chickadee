@@ -7,7 +7,6 @@ import Vapor
 import Fluent
 import Core
 import Foundation
-import Crypto
 
 extension AssignmentRoutes {
     // MARK: - GET /instructor/:assignmentID/files/notebook

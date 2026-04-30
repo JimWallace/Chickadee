@@ -25,7 +25,6 @@ import Vapor
 import Fluent
 import Core
 import Foundation
-import Crypto
 
 struct AssignmentRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {

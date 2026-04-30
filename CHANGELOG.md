@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.138] - 2026-04-30
+
+### Changed
+
+- **Centralized SHA-256 hex hashing in `Core` (#445).**  Six places
+  across the server and runner had grown their own copy of the
+  `Data(SHA256.hash(...)).map { String(format: "%02x", ...) }.joined()`
+  one-liner — `WorkerJobRoutes` (test-setup download version),
+  `AssignmentHelpers.manifestHash` (the v0.4.93 retest dedup key),
+  `PatternFamilyRenderer` and `NotebookCheckRenderer` (manifest spec
+  hashes), `RunnerDaemon` (test-setup cache key), and
+  `WorkerRequestSigner` (X-Worker-Body-SHA256 header).  Both the server
+  and the runner have to agree byte-for-byte on the format of the
+  retest hash, but nothing was pinning that contract.
+
+  Adds `sha256HexDigest(_:)` (over `Data` and `String`) to
+  `Core/Hashing.swift` and migrates every site to call it.  Adds
+  `swift-crypto` as a direct dependency of `Core` (already present
+  transitively via Vapor; resolved version is unchanged).  New
+  `HashingTests` pins the digest format with FIPS 180-4 reference
+  vectors so a future algorithm change has to be intentional.
+
+  HMAC-SHA256 (the worker-auth signature primitive) stays where it is
+  — it's a different primitive with constant-time-equality concerns of
+  its own, not a content fingerprint.
+
+  Also cleaned up three pre-existing unused `import Crypto` lines
+  (`AssignmentRoutes`, `AssignmentRoutes+Editor`, `WebRoutes`) so every
+  remaining `import Crypto` in the tree corresponds to genuine
+  cryptographic use.
+
 ## [0.4.137] - 2026-04-29
 
 ### Fixed

@@ -8,7 +8,6 @@
 // from a hand-authored script.
 
 import Foundation
-import Crypto
 import Core
 
 /// Stable filename for one check's test script.  Format:
@@ -111,9 +110,7 @@ func notebookCheckSpecHash(_ check: NotebookCheck) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     let data = (try? encoder.encode(check)) ?? Data()
-    let digest = SHA256.hash(data: data)
-    let hex = digest.map { String(format: "%02x", $0) }.joined()
-    return String(hex.prefix(16))
+    return String(sha256HexDigest(data).prefix(16))
 }
 
 // MARK: - .dataFrameShape

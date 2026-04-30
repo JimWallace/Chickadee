@@ -7,7 +7,6 @@ import Vapor
 import Fluent
 import Core
 import Foundation
-import Crypto
 
 // MARK: - Helper-internal types
 
@@ -2135,8 +2134,7 @@ func retestAllSubmissionsForSetup(
 /// SHA-256 hex digest of `setup.manifest`.  Used by the auto-retest
 /// trigger as the dedup key for "manifest unchanged since last retest".
 func manifestHash(_ manifestJSON: String) -> String {
-    let digest = SHA256.hash(data: Data(manifestJSON.utf8))
-    return digest.map { String(format: "%02x", $0) }.joined()
+    sha256HexDigest(manifestJSON)
 }
 
 func waitForRunnerValidation(
