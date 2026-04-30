@@ -66,9 +66,12 @@ services:
       SSO_INSTRUCTOR_USERS:         ${SSO_INSTRUCTOR_USERS:-}
 
       # BrightSpace grade sync — leave unset to disable
+      # Credentials come from the UW D2L credential harvester (d2l-api-cred.fast.uwaterloo.ca)
       BRIGHTSPACE_URL:              ${BRIGHTSPACE_URL:-}
-      BRIGHTSPACE_CLIENT_ID:        ${BRIGHTSPACE_CLIENT_ID:-}
-      BRIGHTSPACE_CLIENT_SECRET:    ${BRIGHTSPACE_CLIENT_SECRET:-}
+      BRIGHTSPACE_APP_ID:           ${BRIGHTSPACE_APP_ID:-}
+      BRIGHTSPACE_APP_KEY:          ${BRIGHTSPACE_APP_KEY:-}
+      BRIGHTSPACE_USER_ID:          ${BRIGHTSPACE_USER_ID:-}
+      BRIGHTSPACE_USER_KEY:         ${BRIGHTSPACE_USER_KEY:-}
       BRIGHTSPACE_SYNC_DEBOUNCE_SECS: ${BRIGHTSPACE_SYNC_DEBOUNCE_SECS:-}
 
       LOG_LEVEL:                    ${LOG_LEVEL:-info}
