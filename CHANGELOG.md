@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.141] - 2026-04-30
+
+### Changed
+
+- **Decomposed three oversized handlers in `AssignmentRoutes.swift`
+  (#443).**  `list()` (~380 lines), `newAssignmentPage()` (~190 lines),
+  and `saveNewAssignment()` (~350 lines) each interleaved Fluent
+  queries, dashboard-metric computation, multipart fan-in, validation,
+  inline error redirects, and view-context assembly in one block —
+  every UI fix required re-reading hundreds of lines of unrelated
+  logic.  Each is now a thin orchestrator over focused helpers:
+
+  - `AssignmentRoutes+List.swift` — `loadCourseSetups`,
+    `loadCourseAssignments`, `loadCourseSections`, `buildCourseRoster`
+    (rolls up enrolled-student rows + the five dashboard metric cards
+    in one place), `loadUniqueSubmittersBySetup`, `buildAssignmentRows`,
+    `sortAssignmentRows`, `groupRowsBySection`, plus a
+    `placeholderDashboardMetrics()` for the no-active-course path.
+  - `AssignmentRoutes+NewPage.swift` — context-builders for the new-
+    assignment page: `newAssignmentNotebookContext`,
+    `newAssignmentSolutionNotebookContext`,
+    `newAssignmentSupportFileRows`,
+    `newAssignmentRequirementSuggestions`, plus three JSON-seed helpers
+    (`newAssignmentDraftIDJSON`, `newAssignmentPatternFamiliesJSON`,
+    `newAssignmentNotebookChecksJSON`) and `loadNewAssignmentSectionPicker`.
+  - `AssignmentRoutes+SaveValidation.swift` — `parseSaveNewAssignmentForm`
+    consolidates the dual `SaveBodyMany` / `SaveBodySingle` decode paths;
+    `validateSaveNewAssignment` returns
+    `SaveNewAssignmentValidation.valid(ValidatedSaveNewAssignment)` or
+    `.redirect(toURL:)` instead of the ~10 inline `req.redirect` calls
+    the original handler had; `newAssignmentErrorRedirect` is the single
+    place that composes the bounce-back URL.
+
+  Behaviour is unchanged: every guard, redirect, and dashboard-metric
+  formula is preserved.
+
+- **Adopted `WebAssignmentError` typed errors throughout the touched
+  code.**  New cases on `APIErrors.swift`: `notFound(resource:)`,
+  `invalidParameter(name:reason:)`, `noActiveCourse(action:)`,
+  `forbidden(action:)`, `conflict(reason:)`,
+  `validationRequired(reason:)`, `internalFailure(reason:)`.  All 19
+  `Abort(...)` sites in `AssignmentRoutes.swift` migrated to typed
+  throws; the remaining ~114 sites in the `+Editor`, `+Submissions`,
+  `+Sections`, `+SuiteSections`, `+DraftSections`, `+Draft`,
+  `+Enrollment`, `+Suite`, `+Families`, and `+Checks` extensions
+  follow the project's "migrate incrementally as those files are
+  touched for other reasons" strategy and stay unchanged in this PR.
+
 ## [0.4.140] - 2026-04-30
 
 ### Changed

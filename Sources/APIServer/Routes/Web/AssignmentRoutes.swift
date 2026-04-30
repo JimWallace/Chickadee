@@ -159,27 +159,8 @@ struct AssignmentRoutes: RouteCollection {
             }
         }
 
-        let allSetups: [APITestSetup]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            allSetups = try await APITestSetup.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .sort(\.$createdAt, .descending)
-                .all()
-        } else {
-            allSetups = try await APITestSetup.query(on: req.db)
-                .sort(\.$createdAt, .descending)
-                .all()
-        }
-
-        let allAssignments: [APIAssignment]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            allAssignments = try await APIAssignment.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .all()
-        } else {
-            allAssignments = try await APIAssignment.query(on: req.db).all()
-        }
-        // Map testSetupID → assignment for quick lookup
+        let allSetups = try await loadCourseSetups(req: req, activeCourseUUID: courseState.activeCourseUUID)
+        let allAssignments = try await loadCourseAssignments(req: req, activeCourseUUID: courseState.activeCourseUUID)
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -187,278 +168,45 @@ struct AssignmentRoutes: RouteCollection {
 
         let fmt = waterlooDateTimeFormatter()
         let isoFormatter = ISO8601DateFormatter()
-
+        let allSetupIDs = allSetups.compactMap { $0.id }
         let setupIndexByID: [String: Int] = Dictionary(
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
         )
-        let allSetupIDs = allSetups.compactMap { $0.id }
 
-        var enrolledStudents: [EnrolledStudentRow]
-        let metrics: [InstructorDashboardMetric]
-        // The per-assignment "X / Y students submitted" badge needs both
-        // counters scoped to enrolled users with role == "student".  We
-        // hoist these so the post-if `studentSubmissions` query (used to
-        // build `uniqueSubmittersBySetup`) and the `AssignmentsContext`
-        // both see the filtered set, instead of leaning on
-        // `enrolledStudents.count` (which includes admin/instructor users
-        // enrolled for testing purposes) and an unfiltered submission
-        // query (which counts admin/instructor test submissions).
-        let enrolledStudentIDs: Set<UUID>
-        let enrolledStudentCount: Int
+        let roster: CourseRosterData
         if let activeCourseUUID = courseState.activeCourseUUID {
-            let enrollments = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .all()
-            let enrolledUserIDs = enrollments.map(\.userID)
-            let enrolledUsers: [APIUser]
-
-            if enrolledUserIDs.isEmpty {
-                enrolledUsers = []
-                enrolledStudents = []
-            } else {
-                enrolledUsers = try await APIUser.query(on: req.db)
-                    .filter(\.$id ~~ enrolledUserIDs)
-                    .all()
-                    .sorted { lhs, rhs in
-                        switch (lhs.lastSeenAt, rhs.lastSeenAt) {
-                        case let (l?, r?):
-                            if l != r { return l > r }
-                        case (.some, nil):
-                            return true
-                        case (nil, .some):
-                            return false
-                        case (nil, nil):
-                            break
-                        }
-                        return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
-                    }
-                enrolledStudents = enrolledUsers.compactMap { u in
-                    guard let id = u.id else { return nil }
-                    return EnrolledStudentRow(
-                        id: id.uuidString,
-                        username: u.username,
-                        displayName: u.displayName ?? u.username,
-                        role: u.role,
-                        lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
-                        lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
-                        submissionsURL: "/instructor/students/\(id.uuidString)/submissions",
-                        unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
-                        isPending: false
-                    )
-                }
-            }
-
-            // Append pre-enrolled (pending) students — bulk-enroll-by-CSV
-            // entries that haven't been claimed yet by a first SSO/local
-            // login.  Showing them in the same roster list keeps the
-            // count matching what the instructor uploaded; the
-            // `isPending` flag drives muted styling in the template.
-            let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .sort(\.$username)
-                .all()
-            let pendingRows = pendingPreEnrollments.compactMap { p -> EnrolledStudentRow? in
-                guard let preID = p.id else { return nil }
-                return EnrolledStudentRow(
-                    id: preID.uuidString,
-                    username: p.username,
-                    displayName: p.username,
-                    role: "(pending)",
-                    lastSeenAtText: "—",
-                    lastSeenAtISO: nil,
-                    submissionsURL: "#",
-                    unenrollURL: "/courses/\(activeCourseUUID.uuidString)/pre-unenroll/\(preID.uuidString)",
-                    isPending: true
-                )
-            }
-            enrolledStudents = enrolledStudents + pendingRows
-
-            let now = Date()
-            let windowStart = now.addingTimeInterval(-24 * 60 * 60)
-            let courseSetupIDs = allSetupIDs
-            let recentSubmissions = courseSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ courseSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$submittedAt >= windowStart)
-                .all()
-            let allCourseStudentSubmissions = courseSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ courseSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all()
-            let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
-                for: courseSetupIDs,
-                on: req.db
+            roster = try await buildCourseRoster(
+                req: req,
+                activeCourseUUID: activeCourseUUID,
+                allSetupIDs: allSetupIDs,
+                fmt: fmt,
+                isoFormatter: isoFormatter
             )
-
-            let activeStudentIDs = Set(
-                enrolledUsers
-                    .filter { $0.role == "student" }
-                    .compactMap(\.id)
-            )
-            enrolledStudentIDs = activeStudentIDs
-            // Pending pre-enrollments are CSV-uploaded students who
-            // haven't logged in yet — count them toward the
-            // "Y students enrolled" denominator so the badge reflects
-            // the instructor's roster intent, not just who's logged in.
-            enrolledStudentCount = activeStudentIDs.count + pendingPreEnrollments.count
-            let active24h = enrolledUsers.reduce(into: 0) { count, user in
-                guard user.role == "student" else { return }
-                if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
-                    count += 1
-                }
-            }
-
-            let recentStudentSubmissions = recentSubmissions.filter { submission in
-                guard let userID = submission.userID else { return false }
-                return enrolledStudentIDs.contains(userID)
-            }
-            let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
-            let pendingNow = allCourseStudentSubmissions.filter { submission in
-                guard let userID = submission.userID else { return false }
-                return enrolledStudentIDs.contains(userID)
-                    && workerModeSetupIDs.contains(submission.testSetupID)
-                    && ["pending", "assigned"].contains(submission.status)
-            }.count
-            let submitterIDs = Set(
-                allCourseStudentSubmissions.compactMap { submission -> UUID? in
-                    guard let userID = submission.userID, enrolledStudentIDs.contains(userID) else { return nil }
-                    return userID
-                }
-            )
-            // Pending pre-enrollments are CSV-uploaded students who haven't
-            // logged in yet — by definition they have zero submissions.
-            // Including them keeps this card consistent with the
-            // `enrolledStudentCount` denominator used by the per-assignment
-            // badge (v0.4.126), so an instructor with a 151-student CSV
-            // upload doesn't see "12 without submissions" the day they
-            // bulk-enroll the class.
-            let noSubmissionYet = enrolledStudentIDs.subtracting(submitterIDs).count
-                                + pendingPreEnrollments.count
-
-            metrics = [
-                InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
-                InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
-                InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
-                InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
-                InstructorDashboardMetric(label: "Students With No Submissions", value: "\(noSubmissionYet)")
-            ]
         } else {
-            enrolledStudents = []
-            enrolledStudentIDs = []
-            enrolledStudentCount = 0
-            metrics = [
-                InstructorDashboardMetric(label: "24h Active", value: "—"),
-                InstructorDashboardMetric(label: "24h Submissions", value: "—"),
-                InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
-                InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
-                InstructorDashboardMetric(label: "Students With No Submissions", value: "—")
-            ]
-        }
-
-        // Batch-fetch unique submitter counts: [testSetupID: count of distinct userIDs].
-        // Filter by enrolledStudentIDs so admin/instructor test submissions
-        // don't inflate the per-assignment "X / Y students submitted" badge —
-        // only enrolled users with role == "student" count toward X.
-        let studentSubmissions = (allSetupIDs.isEmpty || enrolledStudentIDs.isEmpty)
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ allSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$userID ~~ Array(enrolledStudentIDs))
-                .all()
-        var submitterSets: [String: Set<UUID>] = [:]
-        for sub in studentSubmissions {
-            guard let uid = sub.userID else { continue }
-            submitterSets[sub.testSetupID, default: []].insert(uid)
-        }
-        let uniqueSubmittersBySetup: [String: Int] = submitterSets.mapValues { $0.count }
-
-        let unsortedRows: [AssignmentRow] = allSetups.map { setup in
-            let assignment = assignmentBySetup[setup.id ?? ""]
-            let setupID    = setup.id ?? ""
-            let suiteCount: Int = {
-                guard let data  = setup.manifest.data(using: .utf8),
-                      let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-                else { return 0 }
-                return props.testSuites.count
-            }()
-
-            let status: String
-            if let a = assignment {
-                // If isOpen is true → open; if false, check if it was ever open
-                // (We don't track "was previously open" separately, so draft vs closed
-                //  is distinguished by whether the title was explicitly set.)
-                status = a.isOpen ? "open" : "closed"
-            } else {
-                status = "unpublished"
-            }
-            let validationStatus = assignment?.validationStatus ?? (assignment == nil ? "unpublished" : "passed")
-            let validationSubmissionID = assignment?.validationSubmissionID
-
-            let vanityURL: String? = {
-                guard let title = assignment?.title, !title.isEmpty,
-                      let courseCode = courseState.active?.code, !courseCode.isEmpty
-                else { return nil }
-                guard !assignment!.slug.isEmpty else { return nil }
-                return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment!.slug)
-            }()
-
-            return AssignmentRow(
-                setupID:      setupID,
-                assignmentID: assignment?.publicID,
-                title:        assignment?.title,
-                isOpen:       assignment?.isOpen,
-                dueAt:        assignment?.dueAt.map { fmt.string(from: $0) },
-                status:       status,
-                sortOrder:    assignment?.sortOrder,
-                validationStatus: validationStatus,
-                validationSubmissionID: validationSubmissionID,
-                suiteCount:   suiteCount,
-                createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—",
-                submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil,
-                vanityURL:    vanityURL
+            roster = CourseRosterData(
+                enrolledStudents: [],
+                enrolledStudentIDs: [],
+                enrolledStudentCount: 0,
+                metrics: Self.placeholderDashboardMetrics()
             )
         }
 
-        let sortedRows = unsortedRows.sorted { lhs, rhs in
-            let lhsPublished = lhs.assignmentID != nil
-            let rhsPublished = rhs.assignmentID != nil
-            if lhsPublished != rhsPublished {
-                return lhsPublished && !rhsPublished
-            }
+        let uniqueSubmittersBySetup = try await loadUniqueSubmittersBySetup(
+            req: req,
+            allSetupIDs: allSetupIDs,
+            enrolledStudentIDs: roster.enrolledStudentIDs
+        )
 
-            if lhsPublished && rhsPublished {
-                switch (lhs.sortOrder, rhs.sortOrder) {
-                case let (l?, r?) where l != r:
-                    return l < r
-                case (_?, nil):
-                    return true
-                case (nil, _?):
-                    return false
-                default:
-                    break
-                }
-            }
+        let unsortedRows = buildAssignmentRows(
+            allSetups: allSetups,
+            assignmentBySetup: assignmentBySetup,
+            uniqueSubmittersBySetup: uniqueSubmittersBySetup,
+            activeCourse: courseState.active,
+            fmt: fmt
+        )
+        let sortedRows = sortAssignmentRows(unsortedRows, setupIndexByID: setupIndexByID)
 
-            let lhsIndex = setupIndexByID[lhs.setupID] ?? Int.max
-            let rhsIndex = setupIndexByID[rhs.setupID] ?? Int.max
-            return lhsIndex < rhsIndex
-        }
-
-        // Fetch sections for the active course, sorted by sort_order.
-        let allSections: [APICourseSection]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            allSections = try await APICourseSection.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .sort(\.$sortOrder, .ascending)
-                .all()
-        } else {
-            allSections = try await APICourseSection.query(on: req.db)
-                .sort(\.$sortOrder, .ascending)
-                .all()
-        }
-
-        // Build a lookup: assignment publicID → section UUID
+        let allSections = try await loadCourseSections(req: req, activeCourseUUID: courseState.activeCourseUUID)
         let sectionByPublicID: [String: UUID] = Dictionary(
             allAssignments.compactMap { a -> (String, UUID)? in
                 guard let sid = a.sectionID else { return nil }
@@ -466,28 +214,11 @@ struct AssignmentRoutes: RouteCollection {
             },
             uniquingKeysWith: { first, _ in first }
         )
-
-        // Group sorted rows by section; rows without a matching section → ungrouped.
-        var rowsBySectionID: [UUID: [AssignmentRow]] = [:]
-        var ungroupedRows: [AssignmentRow] = []
-        for row in sortedRows {
-            if let aID = row.assignmentID, let sID = sectionByPublicID[aID] {
-                rowsBySectionID[sID, default: []].append(row)
-            } else {
-                ungroupedRows.append(row)
-            }
-        }
-
-        let sectionContexts: [CourseSectionRow] = allSections.map { section in
-            let sID = section.id ?? UUID()
-            return CourseSectionRow(
-                sectionID: sID.uuidString,
-                name: section.name,
-                defaultGradingMode: section.defaultGradingMode,
-                sortOrder: section.sortOrder,
-                rows: rowsBySectionID[sID] ?? []
-            )
-        }
+        let (sectionContexts, ungroupedRows) = groupRowsBySection(
+            sortedRows: sortedRows,
+            allSections: allSections,
+            sectionByPublicID: sectionByPublicID
+        )
 
         // Fetch enrollment mode and archived state for the active course.
         var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
@@ -500,14 +231,14 @@ struct AssignmentRoutes: RouteCollection {
 
         let ctx = AssignmentsContext(
             currentUser: userContext,
-            metrics: metrics,
+            metrics: roster.metrics,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,
             hasUngrouped: !ungroupedRows.isEmpty,
-            enrolledStudents: enrolledStudents,
-            hasEnrolledStudents: !enrolledStudents.isEmpty,
-            enrolledStudentCount: enrolledStudentCount,
+            enrolledStudents: roster.enrolledStudents,
+            hasEnrolledStudents: !roster.enrolledStudents.isEmpty,
+            enrolledStudentCount: roster.enrolledStudentCount,
             courseEnrollmentMode: courseEnrollmentMode,
             courseIsArchived: courseIsArchived
         )
@@ -527,149 +258,36 @@ struct AssignmentRoutes: RouteCollection {
             var draftID: String?
         }
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else {
+            throw WebAssignmentError.forbidden(action: "open the new-assignment page")
+        }
         let courseState = try await req.resolveActiveCourse(for: user)
         let q = (try? req.query.decode(NewQuery.self))
 
-        let sections: [CourseSectionRow]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            sections = try await APICourseSection.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .sort(\.$sortOrder, .ascending)
-                .all()
-                .map { s in CourseSectionRow(
-                    sectionID: s.id?.uuidString ?? "",
-                    name: s.name,
-                    defaultGradingMode: s.defaultGradingMode,
-                    sortOrder: s.sortOrder,
-                    rows: []
-                )}
-        } else {
-            sections = []
-        }
+        let sections = try await loadNewAssignmentSectionPicker(
+            req: req,
+            activeCourseUUID: courseState.activeCourseUUID
+        )
 
         let draftID = (q?.draftID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let setup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
         let storedState = setup == nil ? NewAssignmentDraftFormState.empty : loadDraftFormState(req: req, draftID: draftID)
 
-        let assignmentNotebook: NewAssignmentNotebookContext? = {
-            guard let setup, let notebookPath = setup.notebookPath else { return nil }
-            let name = storedState.assignmentNotebookName
-                ?? URL(fileURLWithPath: notebookPath).lastPathComponent
-            return NewAssignmentNotebookContext(
-                name: name,
-                editURL: "/testsetups/\(setup.id!)/notebook?title=\(urlEncode((storedState.assignmentName.isEmpty ? "Assignment Notebook" : storedState.assignmentName)))"
-            )
-        }()
-
-        let solutionNotebook: NewAssignmentNotebookContext? = {
-            guard let setup else { return nil }
-            let draftPath = draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
-            let fallbackData = draftNotebookData(
-                req: req,
-                setupID: setup.id!,
-                userID: userID,
-                fileKind: .solution,
-                fallbackPath: draftPath
-            )
-            guard fallbackData != nil else { return nil }
-            let name = storedState.solutionNotebookName
-                ?? URL(fileURLWithPath: draftPath).lastPathComponent
-            return NewAssignmentNotebookContext(
-                name: name,
-                editURL: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
-            )
-        }()
+        let assignmentNotebook = newAssignmentNotebookContext(setup: setup, storedState: storedState)
+        let solutionNotebook = newAssignmentSolutionNotebookContext(
+            req: req,
+            userID: userID,
+            setup: setup,
+            storedState: storedState
+        )
 
         let suiteRows = setup.map(editableSuiteRowsForSetup) ?? []
-        // Split out support files (tier == "support") so they render in
-        // the notebook table alongside the starter / solution notebooks
-        // — parity with the edit page (parity PR 3 of #433).  The base
-        // helper sets `url: "#"` because it doesn't know the draft's id;
-        // rebuild the URL here so the filename is clickable.
-        let supportFileRows: [EditableSuiteRow] = {
-            guard let setup, let draftID = setup.id else { return [] }
-            return suiteRows
-                .filter { $0.tier == "support" }
-                .map { row in
-                    EditableSuiteRow(
-                        name: row.name,
-                        url: "/instructor/new/draft/files/item?draftID=\(urlEncode(draftID))&name=\(urlEncode(row.name))",
-                        isTest: row.isTest,
-                        tier: row.tier,
-                        order: row.order,
-                        dependsOn: row.dependsOn,
-                        points: row.points,
-                        displayName: row.displayName
-                    )
-                }
-        }()
-        let detected = {
-            guard let setup else { return DraftRequirementSuggestions(languages: [], capabilities: []) }
-            let assignmentData = draftNotebookData(
-                req: req,
-                setupID: setup.id!,
-                userID: userID,
-                fileKind: .assignment,
-                fallbackPath: setup.notebookPath
-            )
-            let solutionData = draftNotebookData(
-                req: req,
-                setupID: setup.id!,
-                userID: userID,
-                fileKind: .solution,
-                fallbackPath: draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
-            )
-            return detectRequirementSuggestions(
-                assignmentNotebookData: assignmentData,
-                solutionNotebookData: solutionData,
-                setup: setup
-            )
-        }()
+        let supportFileRows = newAssignmentSupportFileRows(setup: setup, suiteRows: suiteRows)
+        let detected = newAssignmentRequirementSuggestions(req: req, userID: userID, setup: setup)
 
         let assignmentName = (q?.assignmentName ?? storedState.assignmentName).trimmingCharacters(in: .whitespacesAndNewlines)
         let dueAt = q?.dueAt ?? storedState.dueAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
-
-        // Pattern families + draftID JSON for the pattern-family editor
-        // module.  The module on this page wires to draft-scoped routes
-        // (`/instructor/new/draft/families?draftID=...`) instead of the
-        // assignment-scoped ones on the edit page.
-        let draftIDJSON: String = {
-            guard let id = setup?.id else { return "null" }
-            let encoder = JSONEncoder()
-            return (try? String(data: encoder.encode(id), encoding: .utf8)) ?? "null"
-        }()
-        let patternFamiliesJSON: String = {
-            guard let setup,
-                  let manifestData = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
-            else { return "[]" }
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            return (try? String(data: encoder.encode(props.patternFamilies), encoding: .utf8)) ?? "[]"
-        }()
-        let notebookChecksJSON: String = {
-            guard let setup,
-                  let manifestData = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
-            else { return "[]" }
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            return (try? String(data: encoder.encode(props.notebookChecks), encoding: .utf8)) ?? "[]"
-        }()
-
-        // Suite editor seed + section shells (v0.4.132 parity work, #435).
-        // `suiteSectionShellRows` and `suiteStateJSON` already handle the
-        // no-draft case — the helpers return a single Ungrouped block /
-        // empty `{"items":[]}` payload when the manifest is missing or
-        // unparseable, which is exactly what we want before the
-        // instructor uploads a notebook.
-        let suiteStateSeedJSON = setup.map { suiteStateJSON(fromManifest: $0.manifest) }
-            ?? #"{"items":[]}"#
-        let suiteSectionShellRowsForView = setup.map { suiteSectionShellRows(fromManifest: $0.manifest) }
-            ?? [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
-                                      variables: [], hasVariables: false)]
 
         let ctx = NewAssignmentContext(
             currentUser: req.currentUserContext,
@@ -678,16 +296,16 @@ struct AssignmentRoutes: RouteCollection {
             sections: sections,
             preselectedSectionID: selectedSectionID,
             draftID: setup?.id,
-            draftIDJSON: draftIDJSON,
+            draftIDJSON: newAssignmentDraftIDJSON(setup: setup),
             assignmentNotebook: assignmentNotebook,
             solutionNotebook: solutionNotebook,
             suiteRows: suiteRows,
             hasSuiteRows: !suiteRows.isEmpty,
             supportFileRows: supportFileRows,
-            patternFamiliesJSON: patternFamiliesJSON,
-            notebookChecksJSON: notebookChecksJSON,
-            suiteStateJSON: suiteStateSeedJSON,
-            suiteSectionRows: suiteSectionShellRowsForView,
+            patternFamiliesJSON: newAssignmentPatternFamiliesJSON(setup: setup),
+            notebookChecksJSON: newAssignmentNotebookChecksJSON(setup: setup),
+            suiteStateJSON: newAssignmentSuiteStateSeedJSON(setup: setup),
+            suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
             requiredPlatform: storedState.requiredPlatform,
             requiredArchitecture: storedState.requiredArchitecture,
             requiredLanguagesCSV: storedState.requiredLanguagesCSV.isEmpty
@@ -709,10 +327,12 @@ struct AssignmentRoutes: RouteCollection {
     @Sendable
     func updateNewAssignmentDraft(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard let userID = user.id else {
+            throw WebAssignmentError.forbidden(action: "edit a new-assignment draft")
+        }
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected. Please select a course before creating an assignment.")
+            throw WebAssignmentError.noActiveCourse(action: "creating an assignment")
         }
 
         struct DraftBodyMany: Content {
@@ -749,7 +369,7 @@ struct AssignmentRoutes: RouteCollection {
         let bodyMany = try? req.content.decode(DraftBodyMany.self)
         let bodySingle = bodyMany == nil ? (try? req.content.decode(DraftBodySingle.self)) : nil
         guard bodyMany != nil || bodySingle != nil else {
-            throw Abort(.badRequest, reason: "Invalid assignment draft payload")
+            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
         }
 
         let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
@@ -1052,152 +672,35 @@ struct AssignmentRoutes: RouteCollection {
         let saveUser = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: saveUser)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected. Please select a course before creating an assignment.")
+            throw WebAssignmentError.noActiveCourse(action: "creating an assignment")
         }
 
-        struct SaveBodyMany: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-        struct SaveBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-
-        let bodyMany = try? req.content.decode(SaveBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
-            throw Abort(.badRequest, reason: "Invalid assignment upload payload")
-        }
-
-        let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
-            ?? bodyMany?.assignmentName
-            ?? bodySingle?.assignmentName
-        let dueAtRaw = try multipartTextField(named: ["dueAt"], from: req)
-            ?? bodyMany?.dueAt
-            ?? bodySingle?.dueAt
-        let sectionIDRaw = try multipartTextField(named: ["sectionID"], from: req)
-            ?? bodyMany?.sectionID
-            ?? bodySingle?.sectionID
-        let draftIDRaw = try multipartTextField(named: ["draftID"], from: req)
-            ?? bodyMany?.draftID
-            ?? bodySingle?.draftID
-        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
-        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? bodyMany?.suiteFiles
-            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw = try multipartTextField(named: ["suiteConfig"], from: req)
-            ?? bodyMany?.suiteConfig
-            ?? bodySingle?.suiteConfig
-        let requiredPlatform = try multipartTextField(named: ["requiredPlatform"], from: req)
-            ?? bodyMany?.requiredPlatform
-            ?? bodySingle?.requiredPlatform
-            ?? ""
-        let requiredArchitecture = try multipartTextField(named: ["requiredArchitecture"], from: req)
-            ?? bodyMany?.requiredArchitecture
-            ?? bodySingle?.requiredArchitecture
-            ?? ""
-        let requiredLanguagesCSV = try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
-            ?? bodyMany?.requiredLanguagesCSV
-            ?? bodySingle?.requiredLanguagesCSV
-            ?? ""
-        let requiredCapabilitiesCSV = try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
-            ?? bodyMany?.requiredCapabilitiesCSV
-            ?? bodySingle?.requiredCapabilitiesCSV
-            ?? ""
-
-        let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let due = parseDueDate(dueAtRaw)
-        let draftID = (draftIDRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let draftSetup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
-        let draftState = draftSetup == nil ? NewAssignmentDraftFormState.empty : loadDraftFormState(req: req, draftID: draftID)
-
-        guard !title.isEmpty else {
-            let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
-
-        let suiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
-
-        let uploadedAssignmentNotebookFilename: String? = {
-            guard let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 else { return nil }
-            return assignmentNotebookFile.filename
-        }()
-        let uploadedSolutionNotebookFilename: String? = {
-            guard let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 else { return nil }
-            return solutionNotebookFile.filename
-        }()
-
-        let assignmentNotebookRaw: Data = {
-            if let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 {
-                return Data(assignmentNotebookFile.data.readableBytesView)
-            }
-            guard let draftSetup, let saveUserID = saveUser.id else { return Data() }
-            return draftNotebookData(
-                req: req,
-                setupID: draftSetup.id!,
-                userID: saveUserID,
-                fileKind: .assignment,
-                fallbackPath: draftSetup.notebookPath
-            ) ?? Data()
-        }()
-        guard !assignmentNotebookRaw.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Assignment%20notebook%20(.ipynb)%20is%20required"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
-        let solutionNotebookRaw: Data = {
-            if let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 {
-                return Data(solutionNotebookFile.data.readableBytesView)
-            }
-            guard let draftSetup, let saveUserID = saveUser.id else { return Data() }
-            return draftNotebookData(
-                req: req,
-                setupID: draftSetup.id!,
-                userID: saveUserID,
-                fileKind: .solution,
-                fallbackPath: draftSolutionNotebookPath(testSetupsDirectory: req.application.testSetupsDirectory, setupID: draftSetup.id!)
-            ) ?? Data()
-        }()
-        guard !solutionNotebookRaw.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Solution%20notebook%20(.ipynb)%20is%20required"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
-        guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Assignment%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
-        guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&sectionID=\(urlEncode(sectionIDRaw ?? ""))&draftID=\(urlEncode(draftID))&error=Solution%20notebook%20is%20not%20valid%20JSON%20(.ipynb)"
-            return req.redirect(to: "/instructor/new?\(q)")
-        }
-
-        let requirementSpec = assignmentRequirementSpec(
-            platform: requiredPlatform,
-            architecture: requiredArchitecture,
-            languagesCSV: requiredLanguagesCSV,
-            capabilitiesCSV: requiredCapabilitiesCSV
+        let form = try parseSaveNewAssignmentForm(req: req)
+        let validation = try await validateSaveNewAssignment(
+            req: req,
+            saveUserID: saveUser.id,
+            form: form
         )
+        let validated: ValidatedSaveNewAssignment
+        switch validation {
+        case .valid(let v): validated = v
+        case .redirect(toURL: let url): return req.redirect(to: url)
+        }
+
+        let title = validated.title
+        let due = validated.dueAt
+        let dueAtRaw = validated.dueAtRaw
+        let sectionIDRaw = validated.sectionIDRaw
+        let draftID = validated.draftID
+        let draftSetup = validated.draftSetup
+        let draftState = validated.draftState
+        let assignmentNotebookRaw = validated.assignmentNotebookRaw
+        let solutionNotebookRaw = validated.solutionNotebookRaw
+        let uploadedAssignmentNotebookFilename = validated.uploadedAssignmentNotebookFilename
+        let uploadedSolutionNotebookFilename = validated.uploadedSolutionNotebookFilename
+        let suiteFiles = validated.suiteFiles
+        let suiteConfigRaw = validated.suiteConfigRaw
+        let requirementSpec = validated.requirementSpec
 
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
         let setupID = draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
@@ -1346,8 +849,8 @@ struct AssignmentRoutes: RouteCollection {
                     req: req,
                     draftID: draftID,
                     assignmentName: title,
-                    dueAt: dueAtRaw ?? "",
-                    sectionID: sectionIDRaw ?? "",
+                    dueAt: dueAtRaw,
+                    sectionID: sectionIDRaw,
                     notice: nil,
                     error: "No compatible active runner is available to validate this assignment."
                 )
@@ -1482,7 +985,10 @@ struct AssignmentRoutes: RouteCollection {
         let body = try req.content.decode(PublishBody.self)
 
         guard let _ = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID: \(body.testSetupID)")
+            throw WebAssignmentError.invalidParameter(
+                name: "testSetupID",
+                reason: "unknown test setup '\(body.testSetupID)'"
+            )
         }
 
         // Reject if a draft/open assignment already exists for this setup.
@@ -1512,7 +1018,7 @@ struct AssignmentRoutes: RouteCollection {
         }
 
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected. Please select a course before publishing an assignment.")
+            throw WebAssignmentError.noActiveCourse(action: "publishing an assignment")
         }
 
         let assignment = try await createAssignmentWithUniquePublicID(
@@ -1536,7 +1042,7 @@ struct AssignmentRoutes: RouteCollection {
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
         let suiteCount: Int = {
@@ -1567,10 +1073,12 @@ struct AssignmentRoutes: RouteCollection {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
         guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
-            throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
+            throw WebAssignmentError.validationRequired(
+                reason: "Assignment cannot be opened until runner validation passes."
+            )
         }
         assignment.isOpen = true
         assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
@@ -1589,7 +1097,10 @@ struct AssignmentRoutes: RouteCollection {
         let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
         guard !orderedIDs.isEmpty else { return .ok }
         guard orderedIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
-            throw Abort(.badRequest, reason: "Invalid assignment ID in reorder payload.")
+            throw WebAssignmentError.invalidParameter(
+                name: "assignmentIDs",
+                reason: "invalid assignment ID in reorder payload"
+            )
         }
 
         let assignments = try await APIAssignment.query(on: req.db)
@@ -1597,7 +1108,10 @@ struct AssignmentRoutes: RouteCollection {
             .all()
         let byID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
         guard byID.count == orderedIDs.count else {
-            throw Abort(.badRequest, reason: "Assignment set mismatch in reorder payload.")
+            throw WebAssignmentError.invalidParameter(
+                name: "assignmentIDs",
+                reason: "assignment set mismatch in reorder payload"
+            )
         }
 
         for (index, rawID) in orderedIDs.enumerated() {
@@ -1620,21 +1134,26 @@ struct AssignmentRoutes: RouteCollection {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
         let body = try req.content.decode(StatusBody.self)
         switch body.status {
         case "open":
             guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
-                throw Abort(.badRequest, reason: "Assignment cannot be opened until runner validation passes.")
+                throw WebAssignmentError.validationRequired(
+                    reason: "Assignment cannot be opened until runner validation passes."
+                )
             }
             assignment.isOpen = true
             assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
         case "closed":
             assignment.isOpen = false
         default:
-            throw Abort(.badRequest, reason: "Unsupported status '\(body.status)'")
+            throw WebAssignmentError.invalidParameter(
+                name: "status",
+                reason: "unsupported status '\(body.status)'"
+            )
         }
         try await assignment.save(on: req.db)
         return req.redirect(to: "/instructor")
@@ -1648,7 +1167,7 @@ struct AssignmentRoutes: RouteCollection {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
         assignment.isOpen = false
         try await assignment.save(on: req.db)
@@ -1663,7 +1182,7 @@ struct AssignmentRoutes: RouteCollection {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
         let setupID = assignment.testSetupID
 
@@ -1701,13 +1220,17 @@ struct AssignmentRoutes: RouteCollection {
     func deleteUnpublishedSetup(req: Request) async throws -> Response {
         let setupID = req.parameters.get("setupID") ?? ""
         guard let setup = try await APITestSetup.find(setupID, on: req.db) else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Test setup '\(setupID)'")
         }
         // Only allow deleting setups that have no associated assignment.
         let hasAssignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .count() > 0
-        guard !hasAssignment else { throw Abort(.conflict) }
+        guard !hasAssignment else {
+            throw WebAssignmentError.conflict(
+                reason: "Test setup '\(setupID)' has a published assignment and cannot be deleted from this endpoint."
+            )
+        }
 
         try? FileManager.default.removeItem(atPath: setup.zipPath)
         if let notebookPath = setup.notebookPath, !notebookPath.isEmpty {
@@ -1723,14 +1246,16 @@ struct AssignmentRoutes: RouteCollection {
     @Sendable
     func editPage(req: Request) async throws -> View {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "edit assignments")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
         _ = setup // keep existence check explicit
 
