@@ -46,6 +46,10 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
     case testSetupNotFound(id: String)
     /// The request body could not be decoded as the expected type.
     case invalidBody(reason: String)
+    /// The request body is syntactically valid but its semantic content
+    /// cannot be processed (e.g. a JSON payload that fails to decode into
+    /// the expected `WorkerExecutionReport` schema). Maps to HTTP 422.
+    case unprocessableBody(reason: String)
     /// A required resource was absent or in an unexpected state.
     case internalInconsistency(reason: String)
 
@@ -53,6 +57,7 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
         switch self {
         case .testSetupNotFound:        return .notFound
         case .invalidBody:              return .badRequest
+        case .unprocessableBody:        return .unprocessableEntity
         case .internalInconsistency:    return .internalServerError
         }
     }
@@ -65,6 +70,8 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
             return "Test setup \(id) not found"
         case .invalidBody(let reason):
             return "Invalid request body: \(reason)"
+        case .unprocessableBody(let reason):
+            return "Unprocessable request body: \(reason)"
         case .internalInconsistency(let reason):
             return "Internal error: \(reason)"
         }

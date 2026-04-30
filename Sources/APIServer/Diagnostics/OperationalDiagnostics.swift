@@ -131,27 +131,6 @@ struct CompatibilityCountersResponse: Content, Sendable {
     let jobsBlockedNoCompatibleRunner: Int
 }
 
-private struct RunnerBucketAccumulator {
-    var sampleCount = 0
-    var activeRunnerTotal = 0
-    var utilizationValues: [Int] = []
-}
-
-private struct RequestBucketAccumulator {
-    var requestCount = 0
-    var durationValues: [Int] = []
-}
-
-private struct JobBucketAccumulator {
-    var completedJobs = 0
-    var passedCount = 0
-    var failedCount = 0
-    var errorCount = 0
-    var timeoutCount = 0
-    var queueWaitValues: [Int] = []
-    var executionValues: [Int] = []
-}
-
 actor DiagnosticsMaintenanceStore {
     private var lastPrunedAt: Date?
 
@@ -535,16 +514,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
             metric.executionMs = workerDiagnostics?.wallClockMs ?? millisecondsBetween(startedAt, completedAt)
             metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, completedAt)
-            metric.workdirSetupMs = workerDiagnostics?.stageTimings?.workdirSetupMs
-            metric.submissionDirSetupMs = workerDiagnostics?.stageTimings?.submissionDirSetupMs
-            metric.submissionDownloadMs = workerDiagnostics?.stageTimings?.submissionDownloadMs
-            metric.testSetupAcquireMs = workerDiagnostics?.stageTimings?.testSetupAcquireMs
-            metric.submissionUnpackMs = workerDiagnostics?.stageTimings?.submissionUnpackMs
-            metric.starterCleanupMs = workerDiagnostics?.stageTimings?.starterCleanupMs
-            metric.submissionPrepareMs = workerDiagnostics?.stageTimings?.submissionPrepareMs
-            metric.makeStepMs = workerDiagnostics?.stageTimings?.makeStepMs
-            metric.runtimeHelperSetupMs = workerDiagnostics?.stageTimings?.runtimeHelperSetupMs
-            metric.testExecutionMs = workerDiagnostics?.stageTimings?.testExecutionMs
+            StageTimingAggregator(from: workerDiagnostics?.stageTimings).apply(to: metric)
             metric.finalStatus = finalStatus
             metric.testsPassed = collection.passCount
             metric.testsFailed = collection.failCount
@@ -839,127 +809,44 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
         hours requestedHours: Int?,
         bucketMinutes requestedBucketMinutes: Int?
     ) async throws -> InternalMetricsTimeSeriesResponse {
-        let hours = min(max(requestedHours ?? configuration.recentMetricsWindowHours, 1), 72)
-        let bucketMinutes = min(max(requestedBucketMinutes ?? 15, 1), 60)
         let now = Date()
-        let windowStart = now.addingTimeInterval(Double(-hours) * 3600)
-        let bucketSeconds = bucketMinutes * 60
-        let bucketCount = max(1, Int(ceil(Double(hours * 3600) / Double(bucketSeconds))))
+        let resolved = BucketWindow.resolve(
+            hours: requestedHours,
+            bucketMinutes: requestedBucketMinutes,
+            defaultHours: configuration.recentMetricsWindowHours,
+            now: now
+        )
+        let window = resolved.window
 
         let runnerSnapshots = try await RunnerSnapshot.query(on: req.db)
-            .filter(\.$recordedAt >= windowStart)
+            .filter(\.$recordedAt >= window.windowStart)
             .sort(\.$recordedAt, .ascending)
             .all()
 
         let requestMetrics = try await APIRequestMetric.query(on: req.db)
-            .filter(\.$finishedAt >= windowStart)
+            .filter(\.$finishedAt >= window.windowStart)
             .sort(\.$finishedAt, .ascending)
             .all()
 
         let jobMetrics = try await JobExecutionMetric.query(on: req.db)
-            .filter(\.$completedAt >= windowStart)
+            .filter(\.$completedAt >= window.windowStart)
             .sort(\.$completedAt, .ascending)
             .all()
 
-        var runnerSamplesByBucket = Array(repeating: RunnerBucketAccumulator(), count: bucketCount)
-        var requestSamplesByBucket = Array(repeating: RequestBucketAccumulator(), count: bucketCount)
-        var jobSamplesByBucket = Array(repeating: JobBucketAccumulator(), count: bucketCount)
-
-        for snapshot in runnerSnapshots {
-            guard let bucketIndex = bucketIndex(
-                for: snapshot.recordedAt,
-                windowStart: windowStart,
-                bucketSeconds: bucketSeconds,
-                bucketCount: bucketCount
-            ) else {
-                continue
-            }
-
-            runnerSamplesByBucket[bucketIndex].sampleCount += 1
-            runnerSamplesByBucket[bucketIndex].activeRunnerTotal += 1
-            if snapshot.maxJobs > 0 {
-                let utilization = Int((Double(snapshot.activeJobs) / Double(snapshot.maxJobs) * 100).rounded())
-                runnerSamplesByBucket[bucketIndex].utilizationValues.append(min(100, max(0, utilization)))
-            }
-        }
-
-        for metric in requestMetrics {
-            guard let bucketIndex = bucketIndex(
-                for: metric.finishedAt,
-                windowStart: windowStart,
-                bucketSeconds: bucketSeconds,
-                bucketCount: bucketCount
-            ) else {
-                continue
-            }
-
-            requestSamplesByBucket[bucketIndex].requestCount += 1
-            requestSamplesByBucket[bucketIndex].durationValues.append(metric.durationMs)
-        }
-
-        for metric in jobMetrics {
-            guard let completedAt = metric.completedAt,
-                  let bucketIndex = bucketIndex(
-                    for: completedAt,
-                    windowStart: windowStart,
-                    bucketSeconds: bucketSeconds,
-                    bucketCount: bucketCount
-                  ) else {
-                continue
-            }
-
-            jobSamplesByBucket[bucketIndex].completedJobs += 1
-            if let queueWaitMs = metric.queueWaitMs {
-                jobSamplesByBucket[bucketIndex].queueWaitValues.append(queueWaitMs)
-            }
-            if let executionMs = metric.executionMs {
-                jobSamplesByBucket[bucketIndex].executionValues.append(executionMs)
-            }
-
-            switch metric.finalStatus {
-            case JobFinalStatus.passed.rawValue:
-                jobSamplesByBucket[bucketIndex].passedCount += 1
-            case JobFinalStatus.failed.rawValue:
-                jobSamplesByBucket[bucketIndex].failedCount += 1
-            case JobFinalStatus.error.rawValue:
-                jobSamplesByBucket[bucketIndex].errorCount += 1
-            case JobFinalStatus.timeout.rawValue:
-                jobSamplesByBucket[bucketIndex].timeoutCount += 1
-            default:
-                break
-            }
-        }
-
-        let buckets = (0..<bucketCount).map { index in
-            let runner = runnerSamplesByBucket[index]
-            let request = requestSamplesByBucket[index]
-            let jobs = jobSamplesByBucket[index]
-            let avgActiveRunners = runner.sampleCount > 0
-                ? Int((Double(runner.activeRunnerTotal) / Double(runner.sampleCount)).rounded())
-                : 0
-
-            return InternalMetricsBucketResponse(
-                bucketStart: windowStart.addingTimeInterval(Double(index * bucketSeconds)),
-                avgRunnerUtilizationPercent: average(runner.utilizationValues),
-                maxRunnerUtilizationPercent: runner.utilizationValues.max(),
-                avgActiveRunners: avgActiveRunners,
-                requestCount: request.requestCount,
-                requestP95Ms: percentile95(request.durationValues),
-                completedJobs: jobs.completedJobs,
-                passedCount: jobs.passedCount,
-                failedCount: jobs.failedCount,
-                errorCount: jobs.errorCount,
-                timeoutCount: jobs.timeoutCount,
-                queueWaitP95Ms: percentile95(jobs.queueWaitValues),
-                executionP95Ms: percentile95(jobs.executionValues)
-            )
-        }
+        let runners = MetricBucketAccumulators.accumulateRunnerSnapshots(runnerSnapshots, window: window)
+        let requests = MetricBucketAccumulators.accumulateRequestMetrics(requestMetrics, window: window)
+        let jobs = MetricBucketAccumulators.accumulateJobMetrics(jobMetrics, window: window)
 
         return InternalMetricsTimeSeriesResponse(
             generatedAt: now,
-            windowHours: hours,
-            bucketMinutes: bucketMinutes,
-            buckets: buckets
+            windowHours: resolved.hours,
+            bucketMinutes: resolved.bucketMinutes,
+            buckets: MetricBucketAccumulators.buildBucketResponses(
+                window: window,
+                runners: runners,
+                requests: requests,
+                jobs: jobs
+            )
         )
     }
 
@@ -1230,19 +1117,6 @@ private extension OperationalDiagnosticsService {
         }
     }
 
-    func bucketIndex(
-        for date: Date,
-        windowStart: Date,
-        bucketSeconds: Int,
-        bucketCount: Int
-    ) -> Int? {
-        let delta = Int(date.timeIntervalSince(windowStart))
-        guard delta >= 0 else { return nil }
-        let index = delta / bucketSeconds
-        guard index >= 0, index < bucketCount else { return nil }
-        return index
-    }
-
     func inFlightJobCount(on db: Database) async throws -> Int {
         try await APISubmission.query(on: db)
             .group(.or) { group in
@@ -1257,28 +1131,11 @@ private extension OperationalDiagnosticsService {
             return DurationSummaryResponse(averageMs: nil, p50Ms: nil, p95Ms: nil)
         }
         let sorted = values.sorted()
-        let average = sorted.reduce(0, +) / sorted.count
         return DurationSummaryResponse(
-            averageMs: average,
-            p50Ms: percentile(sorted, percentile: 0.50),
-            p95Ms: percentile(sorted, percentile: 0.95)
+            averageMs: MetricBucketAccumulators.average(sorted),
+            p50Ms: MetricBucketAccumulators.percentile(sorted, percentile: 0.50),
+            p95Ms: MetricBucketAccumulators.percentile(sorted, percentile: 0.95)
         )
-    }
-
-    func percentile(_ sortedValues: [Int], percentile: Double) -> Int? {
-        guard !sortedValues.isEmpty else { return nil }
-        let index = min(sortedValues.count - 1, max(0, Int(Double(sortedValues.count - 1) * percentile)))
-        return sortedValues[index]
-    }
-
-    func average(_ values: [Int]) -> Int? {
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / values.count
-    }
-
-    func percentile95(_ values: [Int]) -> Int? {
-        guard !values.isEmpty else { return nil }
-        return percentile(values.sorted(), percentile: 0.95)
     }
 
     func skippedCount(in outcomes: [TestOutcome]) -> Int {
