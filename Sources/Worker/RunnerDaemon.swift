@@ -518,9 +518,7 @@ actor WorkerDaemon {
                     at: dest.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
-                if FileManager.default.fileExists(atPath: dest.path) {
-                    try FileManager.default.removeItem(at: dest)
-                }
+                try? FileManager.default.removeItem(at: dest)
                 try FileManager.default.copyItem(at: submissionZip, to: dest)
             } else {
                 try unzip(submissionZip, to: submissionDir)
@@ -864,9 +862,7 @@ actor WorkerDaemon {
                     body: "<download body unavailable>"
                 )
             }
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
+            try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: tmpURL, to: destination)
             await self.recordConnectionRestoredIfNeeded(stage: stage)
         }
@@ -1006,9 +1002,7 @@ actor WorkerDaemon {
 
     private func writeStudentModuleHint(in directory: URL, preferredFilename: String?) throws {
         let hintURL = directory.appendingPathComponent(".chickadee_student_module")
-        if FileManager.default.fileExists(atPath: hintURL.path) {
-            try FileManager.default.removeItem(at: hintURL)
-        }
+        try? FileManager.default.removeItem(at: hintURL)
 
         guard let preferredFilename, !preferredFilename.isEmpty else { return }
         try preferredFilename.write(to: hintURL, atomically: true, encoding: .utf8)
@@ -1033,9 +1027,7 @@ private func mergeDirectoryContents(from sourceDirectory: URL, into destinationD
             at: destinationURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        if FileManager.default.fileExists(atPath: destinationURL.path) {
-            try FileManager.default.removeItem(at: destinationURL)
-        }
+        try? FileManager.default.removeItem(at: destinationURL)
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
 }

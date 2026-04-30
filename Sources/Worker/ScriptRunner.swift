@@ -88,7 +88,7 @@ func executeScriptProcess(
             try? await Task.sleep(nanoseconds: UInt64(timeLimitSeconds) * 1_000_000_000)
             guard !Task.isCancelled, proc.isRunning else { return }
             timedOut.withLock { $0 = true }
-            terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
+            await terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
         }
     }
 
@@ -131,14 +131,14 @@ private func finishPipeCapture(for pipe: Pipe, buffer: CapturedPipeBuffer) -> Da
     return buffer.snapshot()
 }
 
-private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: Bool) {
+private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: Bool) async {
     if usesSeparateProcessGroup {
         _ = kill(-proc.processIdentifier, SIGTERM)
     } else {
         proc.terminate()
     }
 
-    Thread.sleep(forTimeInterval: 0.5)
+    try? await Task.sleep(nanoseconds: 500_000_000)
 
     guard proc.isRunning else { return }
     let signalTarget = usesSeparateProcessGroup ? -proc.processIdentifier : proc.processIdentifier
