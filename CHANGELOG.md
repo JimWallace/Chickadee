@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.146] - 2026-04-30
+
+### Changed
+
+- **BrightSpace auth switched to D2L Valence key signing (#463).** The initial
+  implementation used OAuth2 client credentials; UWaterloo LEARN uses the older
+  Valence "App + User" key model instead. Each request URL is now signed with
+  HMAC-SHA256 using App Key (`x_c`) and User Key (`x_d`) — no token endpoint
+  required. Env vars updated: `BRIGHTSPACE_CLIENT_ID` / `BRIGHTSPACE_CLIENT_SECRET`
+  replaced by `BRIGHTSPACE_APP_ID`, `BRIGHTSPACE_APP_KEY`, `BRIGHTSPACE_USER_ID`,
+  `BRIGHTSPACE_USER_KEY`. Credentials are obtained via the UW D2L credential
+  harvester (`d2l-api-cred.fast.uwaterloo.ca`).
+
 ## [0.4.145] - 2026-04-30
 
 ### Added
