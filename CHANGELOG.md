@@ -32,6 +32,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   — it's a different primitive with constant-time-equality concerns of
   its own, not a content fingerprint.
 
+  Also cleaned up three pre-existing unused `import Crypto` lines
+  (`AssignmentRoutes`, `AssignmentRoutes+Editor`, `WebRoutes`) so every
+  remaining `import Crypto` in the tree corresponds to genuine
+  cryptographic use.
+
 ## [0.4.137] - 2026-04-29
 
 ### Fixed
