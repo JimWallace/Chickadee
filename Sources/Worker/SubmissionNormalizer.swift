@@ -75,9 +75,7 @@ struct SubmissionNormalizer {
                     at: destinationURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
-                if FileManager.default.fileExists(atPath: destinationURL.path) {
-                    try FileManager.default.removeItem(at: destinationURL)
-                }
+                try? FileManager.default.removeItem(at: destinationURL)
                 try FileManager.default.copyItem(at: fileURL, to: destinationURL)
                 producedPythonFiles.append(destinationURL)
                 preferredStudentModule = preferredStudentModule ?? preferredModuleIfRootLevel(fileRelativePath)
@@ -169,9 +167,7 @@ struct SubmissionNormalizer {
                 at: compatibilityURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            if FileManager.default.fileExists(atPath: compatibilityURL.path) {
-                try FileManager.default.removeItem(at: compatibilityURL)
-            }
+            try? FileManager.default.removeItem(at: compatibilityURL)
             try FileManager.default.copyItem(at: sourceURL, to: compatibilityURL)
             producedPythonFiles.append(compatibilityURL)
             if preferredStudentModule == nil {

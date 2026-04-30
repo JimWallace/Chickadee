@@ -304,16 +304,20 @@ extension AdminRoutes {
             throw Abort(.notFound)
         }
 
-        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
-        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
+        async let enrollmentCountFetch = APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == courseID)
+            .count()
+        async let assignmentCountFetch = APIAssignment.query(on: req.db)
+            .filter(\.$courseID == courseID)
+            .count()
         let courseRow = AdminCourseRow(
             id:              idString,
             code:            course.code,
             name:            course.name,
             isArchived:      course.isArchived,
             enrollmentMode:  course.enrollmentMode.rawValue,
-            enrollmentCount: enrollmentCounts[courseID] ?? 0,
-            assignmentCount: assignmentCounts[courseID] ?? 0,
+            enrollmentCount: try await enrollmentCountFetch,
+            assignmentCount: try await assignmentCountFetch,
             createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
         )
 

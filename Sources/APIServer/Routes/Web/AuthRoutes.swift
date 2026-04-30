@@ -162,31 +162,29 @@ struct AuthRoutes: RouteCollection {
 
         let oidcConfig = req.application.oidcConfig
 
-        // Revoke any issued OAuth tokens at the IdP (fire-and-forget; never blocks logout).
+        // Revoke any issued OAuth tokens at the IdP. Runs concurrently and is
+        // bounded by a deadline so a slow/hung IdP can't keep the task alive
+        // indefinitely; the user-facing redirect still happens immediately.
         if let endpoint = oidcConfig?.discovery.revocationEndpoint,
            let config = oidcConfig
         {
             let app = req.application
             let logger = req.logger
-            Task {
-                let tokensToRevoke: [(token: String, hint: String)] = [
-                    accessToken.map { ($0, "access_token") },
-                    refreshToken.map { ($0, "refresh_token") },
-                ].compactMap { $0 }
+            let tokensToRevoke: [(token: String, hint: String)] = [
+                accessToken.map { ($0, "access_token") },
+                refreshToken.map { ($0, "refresh_token") },
+            ].compactMap { $0 }
 
-                for entry in tokensToRevoke {
-                    do {
-                        try await revokeToken(
-                            token: entry.token,
-                            tokenTypeHint: entry.hint,
-                            endpoint: endpoint,
-                            config: config,
-                            app: app,
-                            logger: logger
-                        )
-                    } catch {
-                        logger.warning("Token revocation failed (non-fatal): \(error)")
-                    }
+            if !tokensToRevoke.isEmpty {
+                Task { [tokensToRevoke] in
+                    await revokeTokensInParallel(
+                        tokens: tokensToRevoke,
+                        endpoint: endpoint,
+                        config: config,
+                        app: app,
+                        logger: logger,
+                        deadlineSeconds: 5
+                    )
                 }
             }
         }
@@ -216,7 +214,52 @@ struct AuthRoutes: RouteCollection {
     }
 }
 
-// MARK: - Token revocation helper
+// MARK: - Token revocation helpers
+
+/// Revokes all supplied tokens concurrently, bounded by `deadlineSeconds`.
+/// Per-token failures and the overall deadline are logged; the function
+/// always returns normally so callers can fire-and-forget without a leak.
+private func revokeTokensInParallel(
+    tokens: [(token: String, hint: String)],
+    endpoint: String,
+    config: OIDCConfiguration,
+    app: Application,
+    logger: Logger,
+    deadlineSeconds: Int
+) async {
+    await withTaskGroup(of: Bool.self) { group in
+        // Outer race: all revocations vs. a deadline timer.
+        group.addTask {
+            await withTaskGroup(of: Void.self) { revocations in
+                for entry in tokens {
+                    revocations.addTask {
+                        do {
+                            try await revokeToken(
+                                token: entry.token,
+                                tokenTypeHint: entry.hint,
+                                endpoint: endpoint,
+                                config: config,
+                                app: app,
+                                logger: logger
+                            )
+                        } catch {
+                            logger.warning("Token revocation failed (non-fatal): \(error)")
+                        }
+                    }
+                }
+            }
+            return true
+        }
+        group.addTask {
+            try? await Task.sleep(nanoseconds: UInt64(deadlineSeconds) * 1_000_000_000)
+            return false
+        }
+        if let completedNormally = await group.next(), !completedNormally {
+            logger.warning("Token revocation deadline (\(deadlineSeconds)s) reached; cancelling remaining work")
+        }
+        group.cancelAll()
+    }
+}
 
 /// Calls the IdP's RFC 7009 revocation endpoint for the given token.
 /// Failures are non-fatal — the caller is responsible for logging them.
