@@ -54,6 +54,10 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "last_seen_at")
     var lastSeenAt: Date?
 
+    /// Cached D2L BrightSpace internal user ID (looked up once by studentID and stored).
+    @OptionalField(key: "brightspace_user_id")
+    var brightspaceUserID: String?
+
     /// "student" | "instructor" | "admin"
     @Field(key: "role")
     var role: String

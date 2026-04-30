@@ -14,14 +14,16 @@ extension AdminRoutes {
     @Sendable
     func newCourseForm(req: Request) async throws -> View {
         let emptyCourse = AdminCourseRow(
-            id:              "",
-            code:            "",
-            name:            "",
-            isArchived:      false,
-            enrollmentMode:  CourseEnrollmentMode.open.rawValue,
-            enrollmentCount: 0,
-            assignmentCount: 0,
-            createdAt:       ""
+            id:                       "",
+            code:                     "",
+            name:                     "",
+            isArchived:               false,
+            enrollmentMode:           CourseEnrollmentMode.open.rawValue,
+            enrollmentCount:          0,
+            assignmentCount:          0,
+            createdAt:                "",
+            brightspaceOrgUnitID:     nil,
+            brightspaceSyncEnabled:   req.application.brightSpaceClient != nil
         )
         return try await req.view.render("admin-course", AdminCourseDetailContext(
             currentUser:   req.currentUserContext,
@@ -240,7 +242,11 @@ extension AdminRoutes {
 
     @Sendable
     func editCourse(req: Request) async throws -> Response {
-        struct EditCourseBody: Content { var code: String; var name: String }
+        struct EditCourseBody: Content {
+            var code: String
+            var name: String
+            var brightspaceOrgUnitID: String?
+        }
 
         guard
             let idString = req.parameters.get("courseID"),
@@ -267,6 +273,10 @@ extension AdminRoutes {
 
         course.code = code
         course.name = name
+        if req.application.brightSpaceClient != nil {
+            let rawOrgUnit = (body.brightspaceOrgUnitID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            course.brightspaceOrgUnitID = rawOrgUnit.isEmpty ? nil : rawOrgUnit
+        }
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
     }
@@ -311,14 +321,16 @@ extension AdminRoutes {
             .filter(\.$courseID == courseID)
             .count()
         let courseRow = AdminCourseRow(
-            id:              idString,
-            code:            course.code,
-            name:            course.name,
-            isArchived:      course.isArchived,
-            enrollmentMode:  course.enrollmentMode.rawValue,
-            enrollmentCount: try await enrollmentCountFetch,
-            assignmentCount: try await assignmentCountFetch,
-            createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
+            id:                     idString,
+            code:                   course.code,
+            name:                   course.name,
+            isArchived:             course.isArchived,
+            enrollmentMode:         course.enrollmentMode.rawValue,
+            enrollmentCount:        try await enrollmentCountFetch,
+            assignmentCount:        try await assignmentCountFetch,
+            createdAt:              course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+            brightspaceOrgUnitID:   course.brightspaceOrgUnitID,
+            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
 
         // Load enrollments for this course, then fetch the corresponding users.

@@ -131,6 +131,33 @@
     </div>
 </form>
 
+#if(brightspaceSyncEnabled):
+<!-- ── BrightSpace grade sync ─────────────────────────── -->
+<div style="margin-bottom:1.25rem">
+    <details>
+        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0">BrightSpace Grade Sync</summary>
+        <div style="margin-top:.75rem;max-width:520px">
+            <form method="post" action="/instructor/#(assignmentID)/brightspace">
+                #csrfFormField()
+                <label class="form-label" style="margin-bottom:.5rem">
+                    BrightSpace Grade Item ID
+                    <input class="form-input" type="text" name="gradeObjectID"
+                           value="#(brightspaceGradeObjectID)"
+                           placeholder="e.g. 78901"
+                           style="display:block;width:100%">
+                </label>
+                <p class="card-meta" style="margin:.3rem 0 .6rem">
+                    Enter the D2L grade item (grade object) ID for this assignment.
+                    Find it in BrightSpace → Grades → hover the column → Properties → Grade Object ID in the URL.
+                    Leave blank to disable sync for this assignment.
+                </p>
+                <button class="btn btn-primary" type="submit">Save grade item ID</button>
+            </form>
+        </div>
+    </details>
+</div>
+#endif
+
 <!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
      so its nested per-op <form> elements (Add Section, rename section,
      delete section) parse correctly.  The browser strips nested <form>

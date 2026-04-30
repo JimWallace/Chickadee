@@ -65,6 +65,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "section_id")
     var sectionID: UUID?
 
+    /// D2L BrightSpace grade item (grade object) ID for grade sync (instructor-entered).
+    @OptionalField(key: "brightspace_grade_object_id")
+    var brightspaceGradeObjectID: String?
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

@@ -205,4 +205,5 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
     app.migrations.add(AddUserLastSeenAt())
+    app.migrations.add(AddBrightSpaceSyncFields())
 }

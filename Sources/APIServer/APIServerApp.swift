@@ -157,6 +157,14 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
+    // BrightSpace grade sync (only registered when env vars are present).
+    if let bsConfig = BrightSpaceSyncConfig.fromEnvironment() {
+        app.brightSpaceSyncConfig = bsConfig
+        app.brightSpaceClient = BrightSpaceAPIClient(config: bsConfig)
+        app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
+        app.logger.info("BrightSpace grade sync enabled (org unit IDs configured per-course)")
+    }
+
     if authMode != .local {
         if !nonSSOModesEnabled {
             app.logger.info(

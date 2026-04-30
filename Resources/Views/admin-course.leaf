@@ -78,8 +78,23 @@
             <input class="form-input" type="text" name="name" value="#(course.name)"
                    required style="display:block;width:100%">
         </label>
+        #if(course.brightspaceSyncEnabled):
+        <label class="form-label" style="flex:1 1 140px">
+            BrightSpace Org Unit ID
+            <input class="form-input" type="text" name="brightspaceOrgUnitID"
+                   value="#(course.brightspaceOrgUnitID)"
+                   placeholder="e.g. 123456"
+                   style="display:block;width:100%">
+        </label>
+        #endif
         <button class="btn btn-primary" type="submit" style="align-self:flex-end">Save</button>
     </form>
+    #if(course.brightspaceSyncEnabled):
+    <p class="card-meta" style="margin-top:.5rem">
+        BrightSpace grade sync is active. Set the Org Unit ID to enable nightly grade push for this course.
+        Per-assignment grade item IDs are configured on each assignment's edit page.
+    </p>
+    #endif
 </section>
 #endif
 
