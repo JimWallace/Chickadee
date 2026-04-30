@@ -27,11 +27,11 @@ struct ResultRoutes: RouteCollection {
             )
             var readableBuffer = collectedBuffer
             guard let data = readableBuffer.readData(length: readableBuffer.readableBytes) else {
-                throw Abort(.badRequest, reason: "Empty request body")
+                throw WorkerJobError.invalidBody(reason: "Empty request body")
             }
             report = try decodeWorkerReport(from: data, using: decoder)
         } catch let decodingError as DecodingError {
-            throw Abort(.unprocessableEntity, reason: "Invalid worker result payload: \(decodingError)")
+            throw WorkerJobError.unprocessableBody(reason: "Invalid worker result payload: \(decodingError)")
         }
         let collection = report.collection
 

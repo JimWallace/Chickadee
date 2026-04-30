@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.144] - 2026-04-30
+
+### Changed
+
+- **Untangled `OperationalDiagnostics.swift` (#444).**  The 1523-line
+  file interleaved Fluent persistence, structured logging, and pure
+  bucket/stage math inside `recordWorkerExecutionReport()` (lines
+  477–630) and `metricsTimeSeriesSnapshot()` (lines 837–964).  Two
+  pure helpers now own the math:
+  - `StageTimingAggregator` (`Sources/APIServer/Diagnostics/StageTimingAggregator.swift`)
+    wraps `WorkerExecutionStageTimings`, applies the 10 stage fields
+    onto a `JobExecutionMetric` via `apply(to:)`, and exposes
+    `totalKnownStageMs` for downstream consumers.
+  - `MetricBucketAccumulators` + `BucketWindow`
+    (`Sources/APIServer/Diagnostics/MetricBucketAccumulators.swift`)
+    own window resolution (clamping hours/bucketMinutes), bucket
+    indexing, the three sample accumulators (runner/request/job),
+    response building, and the `percentile`/`average`/`percentile95`
+    helpers.
+  `OperationalDiagnosticsService` keeps every public signature; both
+  target functions now read top-to-bottom as orchestration.  File
+  drops from 1523 → 1380 lines.
+
+- **`ResultRoutes` migrated to typed errors.**  The two
+  `throw Abort(...)` sites in `reportResults` now raise
+  `WorkerJobError.invalidBody` / `WorkerJobError.unprocessableBody`,
+  matching the typed-error pattern adopted by `WorkerJobRoutes` and
+  the v0.4.143 `WebAssignmentError` work.  HTTP status codes are
+  preserved (400 for empty body, 422 for malformed JSON).
+
+### Added
+
+- **`WorkerJobError.unprocessableBody(reason:)`.**  New case mapping
+  to HTTP 422 (`unprocessableEntity`), used when a request body is
+  syntactically valid but its semantic content fails to decode into
+  the expected schema.  Complements the existing `.invalidBody`
+  (HTTP 400) case.
+
+- **`StageTimingAggregatorTests` and `MetricBucketAccumulatorsTests`
+  (25 new test cases).**  The pure helpers had no test coverage
+  previously because the math was buried inside async methods that
+  required a `Request` and a database.  New tests cover: stage
+  timing field round-trips, `totalKnownStageMs` aggregation,
+  `BucketWindow.resolve` clamping (`hours ∈ [1, 72]`,
+  `bucketMinutes ∈ [1, 60]`), `bucketIndex` boundary behaviour,
+  utilization clamping (0/100), `maxJobs == 0` handling, status
+  routing across all four `JobFinalStatus` values, percentile/average
+  edge cases, and one end-to-end pinned scenario that fixes
+  bucket-by-bucket expectations.
+
 ## [0.4.143] - 2026-04-30
 
 ### Changed
