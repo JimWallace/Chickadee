@@ -122,7 +122,7 @@ extension AssignmentRoutes {
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
 func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuitePayload {
     guard let data = manifest.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         return AssignmentRoutes.SuitePayload(items: [], sections: [])
     }
 
@@ -216,7 +216,7 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
 /// assignments.
 func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellRow] {
     guard let data = manifest.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         return [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
                                       variables: [], hasVariables: false)]
     }

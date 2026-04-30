@@ -182,7 +182,7 @@ func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
 private func notebookCandidateEntryNames(for setup: APITestSetup, entries: [String]) -> [String] {
     let manifestStarterName: String? = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
             return nil
         }
         return props.starterNotebook?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -244,10 +244,9 @@ struct TestSetupRoutes: RouteCollection {
 
         // Validate manifest JSON and schema version.
         let manifestData = Data(upload.manifest.utf8)
-        let decoder      = JSONDecoder()
         let manifest: TestProperties
         do {
-            manifest = try decoder.decode(TestProperties.self, from: manifestData)
+            manifest = try ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         } catch {
             throw Abort(.unprocessableEntity, reason: "Invalid manifest JSON: \(error)")
         }
@@ -279,8 +278,7 @@ struct TestSetupRoutes: RouteCollection {
         try zipBytes.write(to: URL(fileURLWithPath: zipPath))
 
         // Store metadata in DB.
-        let encoder = JSONEncoder()
-        let storedManifest = String(data: try encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
+        let storedManifest = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
 
         let setup = APITestSetup(
             id:       setupID,
@@ -419,7 +417,7 @@ struct TestSetupRoutes: RouteCollection {
 
         let testScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()

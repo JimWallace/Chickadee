@@ -173,7 +173,7 @@ func applyNotebookChecksEdit(
 ) async throws {
     let currentFamilies: [PatternFamily] = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
         else { return [] }
         return props.patternFamilies
     }()

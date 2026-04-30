@@ -263,7 +263,7 @@ extension AssignmentRoutes {
 
         let activeTestSuiteScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
@@ -449,7 +449,7 @@ extension AssignmentRoutes {
             // the bigger /edit/save flow.
             let activeTestSuiteScripts: Set<String> = {
                 guard let data = setup.manifest.data(using: .utf8),
-                      let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                      let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
                 else { return [] }
                 return Set(props.testSuites.map(\.script))
             }()
@@ -528,7 +528,7 @@ extension AssignmentRoutes {
         // entry in the zip, so a deleted file vanishes from there too.
         let activeTestSuiteScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()

@@ -59,7 +59,6 @@ struct WebRoutes: RouteCollection {
             }
         }
 
-        let decoder = JSONDecoder()
         let fmt = waterlooDateTimeFormatter()
 
         // Load assignments, filtering by active course when one is resolved.
@@ -231,7 +230,7 @@ struct WebRoutes: RouteCollection {
         let rows = sortedSetups.map { setup -> TestSetupRow in
             let setupID    = setup.id ?? ""
             let data       = Data(setup.manifest.utf8)
-            let props      = try? decoder.decode(TestProperties.self, from: data)
+            let props      = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             let assignment = assignmentBySetup[setupID]
             let latestSubmission = latestSubmissionBySetupID[setupID]
             let submissionCount = submissionCountBySetupID[setupID] ?? 0
@@ -347,10 +346,9 @@ struct WebRoutes: RouteCollection {
         let upload = try req.content.decode(TestSetupUpload.self)
 
         let manifestData = Data(upload.manifest.utf8)
-        let decoder      = JSONDecoder()
         let manifest: TestProperties
         do {
-            manifest = try decoder.decode(TestProperties.self, from: manifestData)
+            manifest = try ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         } catch {
             throw Abort(.badRequest, reason: "Invalid manifest JSON: \(error)")
         }
@@ -363,8 +361,7 @@ struct WebRoutes: RouteCollection {
         let zipPath   = setupsDir + "\(setupID).zip"
         try upload.files.write(to: URL(fileURLWithPath: zipPath))
 
-        let encoder = JSONEncoder()
-        let stored  = String(data: try encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
+        let stored  = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
 
         // Associate the setup with the instructor's active course.
         let courseState = try await req.resolveActiveCourse(for: setupUser)

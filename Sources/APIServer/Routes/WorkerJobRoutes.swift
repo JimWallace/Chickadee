@@ -97,7 +97,7 @@ struct WorkerJobRoutes: RouteCollection {
             for candidate in studentSubmissions {
                 guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
                 let data = Data(setup.manifest.utf8)
-                guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else { continue }
+                guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else { continue }
                 // Accept both worker-mode and browser-mode pending submissions.
                 // Browser-mode submissions only become pending when the client-side
                 // runner fails or times out; the worker serves as a backstop that
@@ -117,7 +117,7 @@ struct WorkerJobRoutes: RouteCollection {
                     throw WorkerJobError.testSetupNotFound(id: validation.testSetupID)
                 }
                 let valManifestData = Data(valSetup.manifest.utf8)
-                let valManifest     = try JSONDecoder().decode(TestProperties.self, from: valManifestData)
+                let valManifest     = try ManifestCodec.decoder.decode(TestProperties.self, from: valManifestData)
                 candidates.append((validation, valSetup, valManifest))
             }
 

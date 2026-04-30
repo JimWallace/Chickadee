@@ -80,7 +80,7 @@ extension WebRoutes {
             let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
             let manifestGradingMode: String = {
                 let data = Data(setup.manifest.utf8)
-                guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+                guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
                     return GradingMode.browser.rawValue
                 }
                 return manifest.gradingMode.rawValue
@@ -138,7 +138,7 @@ extension WebRoutes {
         // browser-runner.js for browser-graded assignments.
         let manifestGradingMode: String = {
             let data = Data(setup.manifest.utf8)
-            guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+            guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
                 return GradingMode.browser.rawValue
             }
             return manifest.gradingMode.rawValue
@@ -451,7 +451,7 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     // Derive the list of support files: everything in the zip except test suite scripts
     // and the canonical notebooks.
     guard let manifestData = setup.manifest.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
     else { return }
 
     let testScriptNames = Set(props.testSuites.map { $0.script })

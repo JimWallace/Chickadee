@@ -188,8 +188,6 @@ struct AssignmentRoutes: RouteCollection {
         let fmt = waterlooDateTimeFormatter()
         let isoFormatter = ISO8601DateFormatter()
 
-        let decoder = JSONDecoder()
-
         let setupIndexByID: [String: Int] = Dictionary(
             uniqueKeysWithValues: allSetups.enumerated().map { ($0.element.id ?? "", $0.offset) }
         )
@@ -380,7 +378,7 @@ struct AssignmentRoutes: RouteCollection {
             let setupID    = setup.id ?? ""
             let suiteCount: Int = {
                 guard let data  = setup.manifest.data(using: .utf8),
-                      let props = try? decoder.decode(TestProperties.self, from: data)
+                      let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
                 else { return 0 }
                 return props.testSuites.count
             }()
@@ -645,7 +643,7 @@ struct AssignmentRoutes: RouteCollection {
         let patternFamiliesJSON: String = {
             guard let setup,
                   let manifestData = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
             else { return "[]" }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
@@ -654,7 +652,7 @@ struct AssignmentRoutes: RouteCollection {
         let notebookChecksJSON: String = {
             guard let setup,
                   let manifestData = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
             else { return "[]" }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
@@ -1228,7 +1226,7 @@ struct AssignmentRoutes: RouteCollection {
                 return suiteConfigRaw
             }
             return draftSetup?.manifest.data(using: .utf8).flatMap { data in
-                guard let props = try? JSONDecoder().decode(TestProperties.self, from: data) else { return nil }
+                guard let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else { return nil }
                 let rows = props.testSuites.enumerated().map { index, entry in
                     ReindexedSuiteConfigRow(
                         index: index,
@@ -1278,7 +1276,7 @@ struct AssignmentRoutes: RouteCollection {
         let draftProps: TestProperties? = {
             guard let existingManifest = draftSetup?.manifest,
                   let data = existingManifest.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(TestProperties.self, from: data)
+            return try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
         }()
         let existingFamilies: [PatternFamily] = draftProps?.patternFamilies ?? []
         let existingChecks:   [NotebookCheck] = draftProps?.notebookChecks  ?? []
@@ -1541,10 +1539,9 @@ struct AssignmentRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        let decoder = JSONDecoder()
         let suiteCount: Int = {
             guard let data  = setup.manifest.data(using: .utf8),
-                  let props = try? decoder.decode(TestProperties.self, from: data)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return 0 }
             return props.testSuites.count
         }()
@@ -1759,7 +1756,7 @@ struct AssignmentRoutes: RouteCollection {
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
         let patternFamiliesJSON: String = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return "[]" }
             let enc = JSONEncoder()
             enc.outputFormatting = [.sortedKeys]
@@ -1768,7 +1765,7 @@ struct AssignmentRoutes: RouteCollection {
         }()
         let notebookChecksJSON: String = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return "[]" }
             let enc = JSONEncoder()
             enc.outputFormatting = [.sortedKeys]

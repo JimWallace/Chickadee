@@ -128,7 +128,7 @@ func applyPatternFamilies(
 
     let oldManifest = setup.manifest
     guard let data = oldManifest.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
     }
 
@@ -608,7 +608,7 @@ func applyPatternFamilies(
     // will actually consume.  It must not contain any `family:<id>` tokens,
     // must reference only existing scripts, and must still be acyclic.
     if let postData = newManifest.data(using: .utf8),
-       let postProps = try? JSONDecoder().decode(TestProperties.self, from: postData) {
+       let postProps = try? ManifestCodec.decoder.decode(TestProperties.self, from: postData) {
         try validateManifestDependencies(postProps)
     }
 
