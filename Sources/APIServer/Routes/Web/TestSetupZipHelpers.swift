@@ -284,7 +284,7 @@ func createRunnerSetupZip(
         try zip.run()
         zip.waitUntilExit()
         guard zip.terminationStatus == 0 else {
-            throw Abort(.internalServerError, reason: "Failed to package setup zip")
+            throw WebAssignmentError.internalFailure(reason: "Failed to package setup zip")
         }
     }
     let hasMakefile = storedNameByIndex.values.contains {

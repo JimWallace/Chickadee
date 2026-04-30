@@ -19,16 +19,16 @@ extension AssignmentRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
         let body = try req.content.decode(CreateSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw Abort(.badRequest, reason: "Section name must not be empty.")
+            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
         }
         let mode = body.defaultGradingMode
         guard mode == "browser" || mode == "worker" else {
-            throw Abort(.badRequest, reason: "defaultGradingMode must be 'browser' or 'worker'.")
+            throw WebAssignmentError.invalidParameter(name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
         }
         let maxOrder = try await APICourseSection.query(on: req.db)
             .filter(\.$courseID == courseID)
@@ -51,14 +51,14 @@ extension AssignmentRoutes {
         let body = try req.content.decode(ReorderBody.self)
         let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
         guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {
-            throw Abort(.badRequest, reason: "Invalid section ID in reorder payload.")
+            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Invalid section ID in reorder payload.")
         }
         let sections = try await APICourseSection.query(on: req.db)
             .filter(\.$courseID == courseID)
             .filter(\.$id ~~ uuids)
             .all()
         guard sections.count == uuids.count else {
-            throw Abort(.badRequest, reason: "Section set mismatch in reorder payload.")
+            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
         }
         let byID = Dictionary(uniqueKeysWithValues: sections.compactMap { s -> (UUID, APICourseSection)? in
             guard let id = s.id else { return nil }
@@ -83,24 +83,24 @@ extension AssignmentRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
         guard let sectionIDStr = req.parameters.get("sectionID"),
               let sectionUUID = UUID(uuidString: sectionIDStr) else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
               section.courseID == courseID else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(RenameSectionBody.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw Abort(.badRequest, reason: "Section name must not be empty.")
+            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
         }
         let mode = body.defaultGradingMode
         guard mode == "browser" || mode == "worker" else {
-            throw Abort(.badRequest, reason: "defaultGradingMode must be 'browser' or 'worker'.")
+            throw WebAssignmentError.invalidParameter(name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
         }
         section.name = name
         section.defaultGradingMode = mode
@@ -115,15 +115,15 @@ extension AssignmentRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
         guard let sectionIDStr = req.parameters.get("sectionID"),
               let sectionUUID = UUID(uuidString: sectionIDStr) else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
               section.courseID == courseID else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
         try await section.delete(on: req.db)
@@ -140,12 +140,12 @@ extension AssignmentRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
         let idStr = try assignmentPublicIDParameter(from: req)
         guard let assignment = try await assignmentByPublicID(idStr, on: req.db),
               assignment.courseID == courseID else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
         let body = (try? req.content.decode(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)

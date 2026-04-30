@@ -99,7 +99,8 @@ extension AssignmentRoutes {
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) }
         catch {
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
 

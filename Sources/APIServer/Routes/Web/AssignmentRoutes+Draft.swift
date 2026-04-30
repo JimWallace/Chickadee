@@ -53,7 +53,8 @@ extension AssignmentRoutes {
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) }
         catch {
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
         }
 
@@ -74,7 +75,8 @@ extension AssignmentRoutes {
         do {
             families = try req.content.decode([PatternFamily].self)
         } catch {
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
                 reason: "Invalid pattern family list: \(error.localizedDescription)")
         }
 
@@ -100,7 +102,8 @@ extension AssignmentRoutes {
         do {
             checks = try req.content.decode([NotebookCheck].self)
         } catch {
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
                 reason: "Invalid notebook check list: \(error.localizedDescription)")
         }
 
@@ -127,11 +130,11 @@ extension AssignmentRoutes {
 
         let cleaned = sanitizeSuiteFilename(body.filename)
         guard !cleaned.isEmpty, cleaned == body.filename else {
-            throw Abort(.badRequest, reason: "Invalid filename '\(body.filename)'")
+            throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
         }
 
         if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-            throw Abort(.conflict, reason: "A file named '\(cleaned)' already exists in this setup")
+            throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
         }
 
         try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
@@ -179,24 +182,24 @@ extension AssignmentRoutes {
         let filename = try safeScriptFilename(from: req)
 
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw Abort(.conflict,
+            throw WebAssignmentError.conflict(
                 reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor.")
         }
 
         let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
         guard dependents.isEmpty else {
-            throw Abort(.conflict,
+            throw WebAssignmentError.conflict(
                 reason: "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))")
         }
 
         do {
             try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
         } catch ScriptZipError.zipFailed {
-            throw Abort(.internalServerError, reason: "Failed to update setup zip")
+            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
 
         if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
@@ -223,11 +226,11 @@ extension AssignmentRoutes {
         let q = try req.query.decode(FileQuery.self)
         let fileName = (q.name as NSString).lastPathComponent
         guard !fileName.isEmpty, fileName == q.name else {
-            throw Abort(.badRequest, reason: "Invalid file name")
+            throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
         }
 
         guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
-            throw Abort(.notFound, reason: "File '\(fileName)' not found in setup")
+            throw WebAssignmentError.notFound(resource: "File '\(fileName)' in setup")
         }
         return buildFileResponse(data: data, filename: fileName)
     }

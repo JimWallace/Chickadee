@@ -13,7 +13,9 @@ extension AssignmentRoutes {
     @Sendable
     func enrollCSVForm(req: Request) async throws -> View {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
+        guard caller.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "manage enrollments")
+        }
 
         let courseState = try await req.resolveActiveCourse(for: caller)
         guard let courseContext = courseState.active,
@@ -21,7 +23,7 @@ extension AssignmentRoutes {
               let course = try await APICourse.find(courseID, on: req.db),
               !course.isArchived
         else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
         }
 
         struct EnrollCSVFormContext: Encodable {
@@ -51,7 +53,7 @@ extension AssignmentRoutes {
             let courseID = UUID(uuidString: idString),
             let course   = try await APICourse.find(courseID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Course")
         }
         let body = try? req.content.decode(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
@@ -71,7 +73,7 @@ extension AssignmentRoutes {
             let course   = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
-            throw Abort(.badRequest, reason: "Invalid or archived course.")
+            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid or archived course.")
         }
 
         let form = try req.content.decode(BulkEnrollForm.self)
@@ -100,7 +102,9 @@ extension AssignmentRoutes {
     @Sendable
     func instructorUnenrollUser(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
+        guard caller.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "manage enrollments")
+        }
 
         guard
             let courseIDString = req.parameters.get("courseID"),
@@ -108,7 +112,7 @@ extension AssignmentRoutes {
             let userIDString   = req.parameters.get("userID"),
             let userID         = UUID(uuidString: userIDString)
         else {
-            throw Abort(.badRequest)
+            throw WebAssignmentError.invalidParameter(name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
         try await APICourseEnrollment.query(on: req.db)
@@ -130,7 +134,9 @@ extension AssignmentRoutes {
     @Sendable
     func instructorCancelPreEnrollment(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
+        guard caller.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "manage enrollments")
+        }
 
         guard
             let courseIDString = req.parameters.get("courseID"),
@@ -138,7 +144,7 @@ extension AssignmentRoutes {
             let preIDString    = req.parameters.get("preEnrollmentID"),
             let preID          = UUID(uuidString: preIDString)
         else {
-            throw Abort(.badRequest)
+            throw WebAssignmentError.invalidParameter(name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
         try await APIPreEnrollment.query(on: req.db)

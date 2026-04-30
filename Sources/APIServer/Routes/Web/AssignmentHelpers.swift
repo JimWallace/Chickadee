@@ -29,7 +29,7 @@ import Foundation
 func resolveSectionID(_ raw: String?, courseID: UUID, db: Database) async throws -> UUID? {
     guard let raw, !raw.isEmpty, raw.lowercased() != "none" else { return nil }
     guard let uuid = UUID(uuidString: raw) else {
-        throw Abort(.badRequest, reason: "Invalid sectionID format.")
+        throw WebAssignmentError.invalidParameter(name: "sectionID", reason: "Invalid sectionID format.")
     }
     guard let section = try await APICourseSection.find(uuid, on: db),
           section.courseID == courseID else {

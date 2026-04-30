@@ -185,7 +185,7 @@ func waitForRunnerValidation(
     while Date().timeIntervalSince(started) < timeoutSeconds {
         guard let submission = try await APISubmission.find(submissionID, on: req.db),
               submission.kind == APISubmission.Kind.validation else {
-            throw Abort(.notFound, reason: "Validation submission missing")
+            throw WebAssignmentError.notFound(resource: "Validation submission")
         }
 
         if submission.status == "complete" || submission.status == "failed" {

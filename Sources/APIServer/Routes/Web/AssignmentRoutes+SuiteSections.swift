@@ -39,7 +39,7 @@ extension AssignmentRoutes {
         let body = try req.content.decode(Body.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw Abort(.badRequest, reason: "Section name must not be empty.")
+            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
         }
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
@@ -63,20 +63,20 @@ extension AssignmentRoutes {
         try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(Body.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw Abort(.badRequest, reason: "Section name must not be empty.")
+            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
         }
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
             guard var sections = dict["sections"] as? [[String: Any]] else {
-                throw Abort(.notFound, reason: "Section '\(sectionID)' not found.")
+                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
             }
             guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
-                throw Abort(.notFound, reason: "Section '\(sectionID)' not found.")
+                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
             }
             sections[idx]["name"] = name
             dict["sections"] = sections
@@ -92,7 +92,7 @@ extension AssignmentRoutes {
         try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
@@ -133,7 +133,7 @@ extension AssignmentRoutes {
         try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(Body.self)
 
@@ -144,11 +144,11 @@ extension AssignmentRoutes {
         var seenNames: Set<String> = []
         for v in body.variables {
             guard isValidPythonIdentifier(v.name) else {
-                throw Abort(.unprocessableEntity,
+                throw WebAssignmentError.unprocessable(
                     reason: "Section variable name '\(v.name)' is not a valid Python identifier.")
             }
             guard seenNames.insert(v.name).inserted else {
-                throw Abort(.unprocessableEntity,
+                throw WebAssignmentError.unprocessable(
                     reason: "Duplicate section variable name '\(v.name)'.")
             }
         }
@@ -160,15 +160,15 @@ extension AssignmentRoutes {
         encoder.outputFormatting = [.sortedKeys]
         let varData = try encoder.encode(body.variables)
         guard let parsed = try JSONSerialization.jsonObject(with: varData) as? [Any] else {
-            throw Abort(.internalServerError, reason: "Failed to re-serialise section variables.")
+            throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise section variables.")
         }
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
             guard var sections = dict["sections"] as? [[String: Any]] else {
-                throw Abort(.notFound, reason: "Section '\(sectionID)' not found.")
+                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
             }
             guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
-                throw Abort(.notFound, reason: "Section '\(sectionID)' not found.")
+                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
             }
             if parsed.isEmpty {
                 sections[idx].removeValue(forKey: "variables")
@@ -202,7 +202,7 @@ extension AssignmentRoutes {
             // Validate the set of ids matches exactly.
             guard Set(body.sectionIDs) == Set(byID.keys),
                   body.sectionIDs.count == existing.count else {
-                throw Abort(.badRequest, reason: "Section set mismatch in reorder payload.")
+                throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
             }
             dict["sections"] = body.sectionIDs.compactMap { byID[$0] }
         }
