@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.139] - 2026-04-30
+
+### Changed
+
+- **Reuse a static `JSONDecoder` / `JSONEncoder` for `TestProperties`
+  manifest I/O (#446).**  Roughly 40 sites across the server and
+  runner were allocating a fresh `JSONDecoder` (and a few a fresh
+  `JSONEncoder`) per request to decode the manifest — every
+  assignment edit, suite save, validate, and student submission view
+  paid the allocation.  Several routes also kept a local
+  `let decoder = JSONDecoder()` followed by a single decode call.
+
+  Adds `Core/ManifestCodec.swift` with
+  `nonisolated(unsafe) public static let decoder/encoder` (default
+  config; `TestProperties` has no `Date` fields).  Migrates every
+  call site that decodes or encodes a manifest to use the shared
+  instances.
+
+  Sites that decode `Date`-bearing types (`TestOutcomeCollection`,
+  `WorkerExecutionReport`, `Job`) keep their iso8601-configured
+  decoders; sites that need `outputFormatting = [.sortedKeys]` for
+  canonical hash input (`PatternFamilyRenderer`, `NotebookCheckRenderer`,
+  the in-line manifest sub-encoders in `AssignmentRoutes`) also stay
+  local, since their config isn't `ManifestCodec`'s default.
+
 ## [0.4.138] - 2026-04-30
 
 ### Changed

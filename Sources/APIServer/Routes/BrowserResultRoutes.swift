@@ -140,7 +140,7 @@ struct BrowserResultRoutes: RouteCollection {
         _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
 
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),
+        if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
            manifest.gradingMode == .browser {
             throw Abort(.badRequest, reason: "Browser-graded assignments must be submitted through the browser runner.")
         }
@@ -182,7 +182,7 @@ struct BrowserResultRoutes: RouteCollection {
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
         // (WorkerJobRoutes filters out browser-mode submissions).
-        let isWorkerMode = (try? JSONDecoder().decode(TestProperties.self, from: manifestData))
+        let isWorkerMode = (try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData))
             .map { $0.gradingMode == .worker } ?? true
         if isWorkerMode {
             await ensureLocalRunnerForSubmissionIfNeeded(req: req)

@@ -1095,8 +1095,7 @@ private func shouldNormalizePythonSubmission(
 }
 
 private func testSetupCacheKey(for job: Job) -> String {
-    let encoder = JSONEncoder()
-    let manifestBytes = (try? encoder.encode(job.manifest)) ?? Data()
+    let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()
     var material = Data()
     material.append(Data(job.testSetupID.utf8))
     material.append(0)

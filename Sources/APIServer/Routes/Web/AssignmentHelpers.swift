@@ -345,7 +345,7 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
 
     let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, isGenerated: Bool)] = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
             return []
         }
         return props.testSuites.enumerated().map { (idx, item) in
@@ -656,7 +656,7 @@ func removeScriptFromZip(zipPath: String, filename: String) throws {
 /// Returns the scripts in the manifest that list `filename` in their `dependsOn`.
 func manifestDependents(manifestJSON: String, filename: String) -> [String] {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         return []
     }
     return props.testSuites
@@ -670,7 +670,7 @@ func manifestDependents(manifestJSON: String, filename: String) -> [String] {
 /// that must instead go through the family editor.
 func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         return nil
     }
     return props.testSuites.first(where: { $0.script == filename })?.generatedBy
@@ -681,7 +681,7 @@ func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
 /// to refuse saving an empty suite.
 func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
     else { return false }
     return !props.testSuites.isEmpty
 }
@@ -695,7 +695,7 @@ func updateManifestAddingScript(
     entry: ConfiguredSuiteEntry
 ) -> String? {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         return nil
     }
     let existing = props.testSuites.enumerated().map { idx, e in
@@ -734,7 +734,7 @@ func updateManifestAddingScript(
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
         return nil
     }
     let updated = props.testSuites
@@ -825,7 +825,7 @@ func resolveEditSuiteFiles(
 
         let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
             guard let data = setupManifestJSON.data(using: .utf8),
-                  let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
                 return [:]
             }
             var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = [:]
@@ -1117,7 +1117,7 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
     }
     let manifestTests: [String: ManifestRow] = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? JSONDecoder().decode(TestProperties.self, from: data) else {
+              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
             return [:]
         }
         var map: [String: ManifestRow] = [:]
@@ -1240,7 +1240,7 @@ func authoredSuiteItemsFromDraftManifest(
 /// Used to populate the family rows in the assignment editor's suite table.
 func familySuiteRowsForSetup(_ setup: APITestSetup) -> [FamilySuiteRow] {
     guard let data = setup.manifest.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
     else { return [] }
     return props.patternFamilies.map { family in
         let totalPoints = family.cases
