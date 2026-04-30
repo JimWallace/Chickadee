@@ -1737,8 +1737,18 @@
                 });
             }).catch(function (err) {
                 // Solution-load failures (no-solution, empty-solution,
-                // network).  These come *before* any callSolution-specific
-                // error wrapping, so cellErrors is not in scope.
+                // network, load-timeout).  These come *before* any
+                // callSolution-specific error wrapping, so cellErrors
+                // is not in scope.  v0.4.137: translate the
+                // load-timeout sentinel into the same {timedOut: true}
+                // shape the run-timeout produces, so the UI's
+                // `res.timedOut` branch handles both — pre-fix the
+                // load timeout leaked the literal '__chickadee_timeout__'
+                // string into the Expected cell.
+                if (err && err.message === '__chickadee_timeout__') {
+                    return { ok: false, timedOut: true,
+                             error: 'solution notebook load timed out after ' + (LOAD_TIMEOUT_MS / 1000) + 's' };
+                }
                 var msg = (err && err.message) ? String(err.message) : String(err);
                 return { ok: false, error: msg || 'error' };
             });
@@ -1886,7 +1896,15 @@
                 } else if (res.timedOut) {
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ ' + res.error;
-                    expectedEl.title = 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
+                    // v0.4.137: distinguish load-phase timeouts (a
+                    // top-level cell hung — e.g. `while True: pass`
+                    // outside the function under test) from run-phase
+                    // timeouts (the function itself hung).  Pre-fix
+                    // both surfaced the run-phase tooltip, which
+                    // pointed instructors at the wrong cell.
+                    expectedEl.title = res.error.indexOf('notebook load') >= 0
+                        ? 'A top-level cell in the solution notebook ran longer than ' + (LOAD_TIMEOUT_MS / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
+                        : 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
                     expectedEl.style.borderColor = 'var(--red,#c00)';
                 } else if (res.unsupported) {
                     // The solution returned a value of a type that

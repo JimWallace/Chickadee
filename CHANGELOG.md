@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.137] - 2026-04-29
+
+### Fixed
+
+- **Solution-notebook load timeout now surfaces a clear error
+  instead of leaking the internal sentinel.**  v0.4.136 added the
+  30s `LOAD_TIMEOUT_MS` cap on the cell-load phase but the rejection
+  fell through to the outer `catch` in `callSolution`, which had no
+  branch for `__chickadee_timeout__` (only the inner `catch` did).
+  Result: the Expected cell showed `⚠ __chickadee_timeout__` —
+  technically correct (the load DID time out) but unhelpful.  Now
+  translates the sentinel into `solution notebook load timed out
+  after 30s`, sets `res.timedOut = true` so the UI's existing
+  timed-out branch handles it, and shows a load-specific tooltip
+  pointing the instructor at top-level setup cells (vs the
+  function-under-test, which is what the run-phase tooltip
+  describes).  Closes the polish gap on the
+  "infinite loop in the first cell of the solution notebook"
+  scenario.
+
 ## [0.4.136] - 2026-04-29
 
 ### Fixed
