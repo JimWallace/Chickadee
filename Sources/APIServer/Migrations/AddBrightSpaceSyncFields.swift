@@ -28,8 +28,14 @@ struct AddBrightSpaceSyncFields: AsyncMigration {
 
         try await database.schema("results")
             .field("brightspace_sync_pending", .bool)
+            .update()
+        try await database.schema("results")
             .field("brightspace_pending_since", .datetime)
+            .update()
+        try await database.schema("results")
             .field("brightspace_synced_at", .datetime)
+            .update()
+        try await database.schema("results")
             .field("brightspace_sync_error", .string)
             .update()
     }
@@ -49,8 +55,14 @@ struct AddBrightSpaceSyncFields: AsyncMigration {
 
         try await database.schema("results")
             .deleteField("brightspace_sync_pending")
+            .update()
+        try await database.schema("results")
             .deleteField("brightspace_pending_since")
+            .update()
+        try await database.schema("results")
             .deleteField("brightspace_synced_at")
+            .update()
+        try await database.schema("results")
             .deleteField("brightspace_sync_error")
             .update()
     }
