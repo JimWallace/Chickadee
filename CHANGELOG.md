@@ -6,6 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.142] - 2026-04-30
+
+### Changed
+
+- **Split `AssignmentHelpers.swift` (#442).**  The 2310-line file mixed
+  manifest mutation, zip member ops, notebook scaffolding, multipart
+  helpers, draft state, slug allocation, requirement detection, suite-row
+  builders, and runner-validation glue.  Each concern now has its own
+  file:
+
+  - `ManifestFileHelpers.swift` — `manifestDependents`,
+    `generatedByFamilyID`, `setupHasAnyTestEntries`,
+    `updateManifestAddingScript`, `updateManifestRemovingScript`,
+    `makeWorkerManifestJSON`, `topologicallySorted` (private),
+    `manifestHash`.
+  - `TestSetupZipHelpers.swift` — `ScriptZipError`, `RunnerSetupPackage`,
+    `listZipEntries`, `readScriptFromZip`, `updateScriptInZip`,
+    `applyScriptChangesToZip`, `removeScriptFromZip`, `extractZipEntry`,
+    `buildFileResponse`, `contentType`, `createRunnerSetupZip`,
+    `writeEmptyZip` (private), `extractSupportFilesToSharedDirectory`.
+  - `NotebookScaffoldHelpers.swift` — `minimalEmptyNotebookData`,
+    `notebookFilenameForStorage`, `submissionFilenameForStorage`,
+    `autoScaffoldFromSolutionNotebook`, `defaultNotebookData`,
+    `removeMaterializedNotebookFiles`.
+  - `MultipartHelpers.swift` — `urlEncode`, `multipartParts`,
+    `multipartFiles`, `multipartTextField`.
+  - `AssignmentDraftHelpers.swift` — `ExistingSolution`,
+    `NewAssignmentDraftFormState`, `DraftRequirementSuggestions`,
+    `loadExistingSolution`, `existingSolutionFilename`,
+    `draftFormStateSessionKey`, `loadDraftFormState`,
+    `saveDraftFormState`, `clearDraftFormState`,
+    `draftNotebookDirectory`, `draftSolutionNotebookPath`,
+    `ensureDraftNotebookDirectory`, `draftNotebookData`,
+    `removeDraftNotebookFiles`.
+  - `AssignmentSlugHelpers.swift` — `assignmentByPublicID`,
+    `uniqueAssignmentSlug`, `isValidAssignmentPublicID`,
+    `assignmentPublicIDParameter`, `createAssignmentWithUniquePublicID`.
+  - `AssignmentRequirementHelpers.swift` — `parsedRequirementCSV`,
+    `assignmentRequirementSpec`, `detectRequirementSuggestions`,
+    `pythonCapabilitySuggestions` (private),
+    `loadAssignmentRequirementSpec`.
+  - `RunnerValidationHelpers.swift` — `RunnerValidationOutcome`,
+    `enqueueRunnerValidationSubmission`,
+    `scheduleValidationAfterSuiteEdit`, `retestAllSubmissionsForSetup`,
+    `waitForRunnerValidation`, `ensureValidationRunnerAvailability`,
+    `hasCompatibleValidationRunner`,
+    `ensureCompatibleValidationRunnerAvailability`.
+  - `SuiteRowHelpers.swift` — `EditSuiteConfigRow`,
+    `ReindexedSuiteConfigRow`, `ResolvedEditSuiteFiles`,
+    `SuiteConfigRow`, `ConfiguredSuiteEntry`, `currentSetupFiles`,
+    `resolveEditSuiteFiles`, `editableSuiteRowsForSetup`,
+    `authoredSuiteItemsFromDraftManifest`, `familySuiteRowsForSetup`,
+    `mergeExistingFilesIntoSuiteFiles`, `sanitizeSuiteFilename`,
+    `buildSuiteEntries`, `inferredOrder`, `normalizeTier`,
+    `isLikelyTestSuiteFile`, `hasRecognizedScriptShebang`.
+
+  `AssignmentHelpers.swift` (181 lines residual) keeps the small
+  cross-cutting helpers — section-ID resolution, due-date
+  parsing/formatting, human-name splitting, return-path sanitization,
+  deadline-override helpers, sort-order allocation, grade extraction,
+  CSV escaping, and student-ID name inference.  No behaviour changes —
+  pure relocation; `swift test` is green pre- and post-split.
+
 ## [0.4.141] - 2026-04-30
 
 ### Changed
