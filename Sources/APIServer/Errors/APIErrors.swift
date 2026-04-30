@@ -70,3 +70,64 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
         }
     }
 }
+
+// MARK: - Web instructor assignment routes
+
+/// Errors raised by the instructor-facing assignment management web routes
+/// (`AssignmentRoutes` and its `+Draft`, `+Editor`, `+Sections`, `+Submissions`
+/// extensions).  Adopted incrementally — handlers migrate from `Abort(...)`
+/// to these cases as the surrounding code is touched for other reasons.
+enum WebAssignmentError: AbortError, CustomStringConvertible {
+    /// A required entity (assignment, test setup, section, submission, …)
+    /// could not be found.  The `resource` label is plain English so the
+    /// rendered 404 reads naturally.
+    case notFound(resource: String)
+    /// Bad request — invalid body, missing parameter, malformed value.
+    case invalidParameter(name: String, reason: String)
+    /// The session has no active course but the action requires one.
+    case noActiveCourse(action: String)
+    /// The current user lacks the role required for this action.
+    case forbidden(action: String)
+    /// The request is well-formed but conflicts with current server state
+    /// (e.g. duplicate filename, attempt to delete a setup that still has
+    /// an associated assignment).
+    case conflict(reason: String)
+    /// An assignment-validation precondition was not satisfied (e.g. the
+    /// runner has not produced a passing validation result yet).
+    case validationRequired(reason: String)
+    /// A server-side write or external operation failed unexpectedly.
+    case internalFailure(reason: String)
+
+    var status: HTTPResponseStatus {
+        switch self {
+        case .notFound:             return .notFound
+        case .invalidParameter:     return .badRequest
+        case .noActiveCourse:       return .badRequest
+        case .forbidden:            return .forbidden
+        case .conflict:             return .conflict
+        case .validationRequired:   return .badRequest
+        case .internalFailure:      return .internalServerError
+        }
+    }
+
+    var reason: String { description }
+
+    var description: String {
+        switch self {
+        case .notFound(let resource):
+            return "\(resource) not found"
+        case .invalidParameter(let name, let reason):
+            return "Invalid \(name): \(reason)"
+        case .noActiveCourse(let action):
+            return "No active course selected. Please select a course before \(action)."
+        case .forbidden(let action):
+            return "You do not have permission to \(action)."
+        case .conflict(let reason):
+            return reason
+        case .validationRequired(let reason):
+            return reason
+        case .internalFailure(let reason):
+            return reason
+        }
+    }
+}
