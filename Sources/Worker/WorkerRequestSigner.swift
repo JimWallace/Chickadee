@@ -1,4 +1,5 @@
 import Crypto
+import Core
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -42,7 +43,7 @@ struct WorkerRequestSigner: Sendable {
         let bodyBytes = request.httpBody.map { Array($0) } ?? []
 
         let tsString  = String(timestamp)
-        let bodyHash  = sha256Hex(bodyBytes)
+        let bodyHash  = sha256HexDigest(Data(bodyBytes))
         let payload   = [method, path, bodyHash, tsString, nonce].joined(separator: "\n")
         let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
 
@@ -53,10 +54,6 @@ struct WorkerRequestSigner: Sendable {
         if let workerID, !workerID.isEmpty {
             request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
         }
-    }
-
-    private func sha256Hex(_ bytes: [UInt8]) -> String {
-        Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
     }
 
     private func hmacSHA256Hex(message: String, secret: String) -> String {

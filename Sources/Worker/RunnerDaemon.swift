@@ -6,7 +6,6 @@ import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
 import ArgumentParser
 import Core
-import Crypto
 
 private enum RunnerJobStatus: String {
     case passed
@@ -1104,7 +1103,7 @@ private func testSetupCacheKey(for job: Job) -> String {
     material.append(Data(job.testSetupURL.absoluteString.utf8))
     material.append(0)
     material.append(manifestBytes)
-    let digest = Data(SHA256.hash(data: material)).map { String(format: "%02x", $0) }.joined()
+    let digest = sha256HexDigest(material)
     return "\(job.testSetupID)-\(digest.prefix(16))"
 }
 

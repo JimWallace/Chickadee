@@ -10,7 +10,6 @@
 // generated script from one an instructor wrote by hand.
 
 import Foundation
-import Crypto
 import Core
 
 /// One rendered case: a filename, the Python source to write to the zip, and
@@ -82,9 +81,7 @@ func patternFamilySpecHash(
     var buf = Data()
     buf.append(familyData)
     buf.append(sectionVarsData)
-    let digest = SHA256.hash(data: buf)
-    let hex = digest.map { String(format: "%02x", $0) }.joined()
-    return String(hex.prefix(16))
+    return String(sha256HexDigest(buf).prefix(16))
 }
 
 // MARK: - Per-kind dispatch

@@ -3,7 +3,6 @@ import Fluent
 import Core
 import Foundation
 import FluentSQLiteDriver
-import Crypto
 
 struct WorkerJobRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -318,8 +317,7 @@ private func testSetupDownloadVersion(for setup: APITestSetup) -> String {
         material.append(Data("|zip=".utf8))
         material.append(zipData)
     }
-    let digest = Data(SHA256.hash(data: material)).map { String(format: "%02x", $0) }.joined()
-    return String(digest.prefix(16))
+    return String(sha256HexDigest(material).prefix(16))
 }
 
 // MARK: - Application-level claim serializer
