@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.145] - 2026-04-30
+
+### Added
+
+- **BrightSpace grade sync (#462).** Chickadee now pushes grades to the D2L
+  BrightSpace REST API automatically whenever a grading result arrives.
+  A 60-second background sweep picks up pending results after a configurable
+  debounce window (default 90 s) so rapid resubmissions coalesce into a
+  single API call.  The student's best grade across all attempts is what
+  gets pushed.  On BrightSpace error the row stays pending and is retried
+  on the next sweep.
+  - New env vars: `BRIGHTSPACE_URL`, `BRIGHTSPACE_CLIENT_ID`,
+    `BRIGHTSPACE_CLIENT_SECRET`, `BRIGHTSPACE_SYNC_DEBOUNCE_SECS` (optional).
+    Sync is entirely disabled when the vars are absent — zero overhead for
+    non-BrightSpace deployments.
+  - Per-course **Org Unit ID** field on the Admin → Course page.
+  - Per-assignment **Grade Item ID** field in a collapsible "BrightSpace Grade
+    Sync" section on the assignment editor.
+  - D2L internal user IDs are resolved by `OrgDefinedId` (student number) on
+    first sync and cached on `APIUser`.
+  - New migration `AddBrightSpaceSyncFields` adds sync-pending columns to
+    `courses`, `assignments`, `users`, and `results`.
+
 ## [0.4.144] - 2026-04-30
 
 ### Changed

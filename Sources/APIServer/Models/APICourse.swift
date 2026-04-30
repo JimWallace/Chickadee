@@ -39,6 +39,10 @@ final class APICourse: Model, Content, @unchecked Sendable {
         set { enrollmentModeRaw = newValue.rawValue }
     }
 
+    /// D2L BrightSpace org unit ID for this course (enables grade sync when set).
+    @OptionalField(key: "brightspace_org_unit_id")
+    var brightspaceOrgUnitID: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -48,11 +52,13 @@ final class APICourse: Model, Content, @unchecked Sendable {
     init() {}
 
     init(id: UUID? = nil, code: String, name: String,
-         isArchived: Bool = false, enrollmentMode: CourseEnrollmentMode = .open) {
-        self.id                 = id
-        self.code               = code
-        self.name               = name
-        self.isArchived         = isArchived
-        self.enrollmentModeRaw  = enrollmentMode.rawValue
+         isArchived: Bool = false, enrollmentMode: CourseEnrollmentMode = .open,
+         brightspaceOrgUnitID: String? = nil) {
+        self.id                   = id
+        self.code                 = code
+        self.name                 = name
+        self.isArchived           = isArchived
+        self.enrollmentModeRaw    = enrollmentMode.rawValue
+        self.brightspaceOrgUnitID = brightspaceOrgUnitID
     }
 }

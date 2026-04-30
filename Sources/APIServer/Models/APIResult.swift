@@ -25,6 +25,24 @@ final class APIResult: Model, Content, @unchecked Sendable {
     @Timestamp(key: "received_at", on: .create)
     var receivedAt: Date?
 
+    // MARK: - BrightSpace grade sync fields
+
+    /// True when this result is waiting to be pushed to BrightSpace (after debounce).
+    @OptionalField(key: "brightspace_sync_pending")
+    var brightspaceSyncPending: Bool?
+
+    /// When the pending flag was set — used as the debounce anchor.
+    @OptionalField(key: "brightspace_pending_since")
+    var brightspacePendingSince: Date?
+
+    /// When the grade was successfully pushed to BrightSpace.
+    @OptionalField(key: "brightspace_synced_at")
+    var brightspaceSyncedAt: Date?
+
+    /// Last push error, if any (cleared on next successful push).
+    @OptionalField(key: "brightspace_sync_error")
+    var brightspaceSyncError: String?
+
     init() {}
 
     init(id: String, submissionID: String, collectionJSON: String, source: String = "worker") {

@@ -92,17 +92,20 @@ struct AdminRoutes: RouteCollection {
         async let assignmentsFetch  = assignmentCountsByCourse(on: req.db)
         let (allCourses, enrollmentCounts, assignmentCounts) =
             try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
+        let bsSyncEnabled = req.application.brightSpaceClient != nil
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
             guard let id = course.id else { return nil }
             return AdminCourseRow(
-                id: id.uuidString,
-                code: course.code,
-                name: course.name,
-                isArchived: course.isArchived,
-                enrollmentMode: course.enrollmentMode.rawValue,
-                enrollmentCount: enrollmentCounts[id] ?? 0,
-                assignmentCount: assignmentCounts[id] ?? 0,
-                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
+                id:                     id.uuidString,
+                code:                   course.code,
+                name:                   course.name,
+                isArchived:             course.isArchived,
+                enrollmentMode:         course.enrollmentMode.rawValue,
+                enrollmentCount:        enrollmentCounts[id] ?? 0,
+                assignmentCount:        assignmentCounts[id] ?? 0,
+                createdAt:              course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                brightspaceOrgUnitID:   course.brightspaceOrgUnitID,
+                brightspaceSyncEnabled: bsSyncEnabled
             )
         }
 

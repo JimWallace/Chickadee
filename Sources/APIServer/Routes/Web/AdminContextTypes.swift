@@ -40,6 +40,8 @@ struct AdminCourseRow: Encodable {
     let enrollmentCount: Int
     let assignmentCount: Int
     let createdAt: String
+    var brightspaceOrgUnitID: String?
+    var brightspaceSyncEnabled: Bool
 }
 
 struct AdminRunnerSummary: Encodable {

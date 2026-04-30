@@ -90,6 +90,7 @@ struct AssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "files", "notebook", use: downloadCurrentNotebookFile)
         r.get(":assignmentID", "files", "solution", use: downloadCurrentSolutionFile)
         r.get(":assignmentID", "files", "item", use: downloadCurrentSetupItem)
+        r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "status",  use: updateStatus)
         r.post(":assignmentID", "open",    use: openAssignment)
         r.post(":assignmentID", "close",   use: closeAssignment)
@@ -1174,6 +1175,22 @@ struct AssignmentRoutes: RouteCollection {
         return req.redirect(to: "/instructor")
     }
 
+    // MARK: - POST /instructor/:assignmentID/brightspace
+
+    @Sendable
+    func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
+        let idStr = try assignmentPublicIDParameter(from: req)
+        guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+        }
+        struct BSBody: Content { var gradeObjectID: String? }
+        let body = try req.content.decode(BSBody.self)
+        let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
+        try await assignment.save(on: req.db)
+        return req.redirect(to: "/instructor/\(idStr)/edit?notice=BrightSpace+grade+item+ID+saved")
+    }
+
     // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
@@ -1318,6 +1335,8 @@ struct AssignmentRoutes: RouteCollection {
             notebookChecksJSON: notebookChecksJSON,
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
+            brightspaceSyncEnabled: req.application.brightSpaceClient != nil,
+            brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             notice: q?.notice,
             error: q?.error
         )

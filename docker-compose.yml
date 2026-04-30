@@ -65,6 +65,12 @@ services:
       SSO_ADMIN_USERS:              ${SSO_ADMIN_USERS:-}
       SSO_INSTRUCTOR_USERS:         ${SSO_INSTRUCTOR_USERS:-}
 
+      # BrightSpace grade sync — leave unset to disable
+      BRIGHTSPACE_URL:              ${BRIGHTSPACE_URL:-}
+      BRIGHTSPACE_CLIENT_ID:        ${BRIGHTSPACE_CLIENT_ID:-}
+      BRIGHTSPACE_CLIENT_SECRET:    ${BRIGHTSPACE_CLIENT_SECRET:-}
+      BRIGHTSPACE_SYNC_DEBOUNCE_SECS: ${BRIGHTSPACE_SYNC_DEBOUNCE_SECS:-}
+
       LOG_LEVEL:                    ${LOG_LEVEL:-info}
     networks:
       - chickadee

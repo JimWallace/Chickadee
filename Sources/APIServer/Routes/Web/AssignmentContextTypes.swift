@@ -209,6 +209,8 @@ struct EditAssignmentContext: Encodable {
     /// template uses these to render the `.section-block` + `<tbody
     /// data-section-id>` shells that `suite-table.js` populates.
     let suiteSectionRows: [SuiteSectionShellRow]
+    let brightspaceSyncEnabled: Bool
+    let brightspaceGradeObjectID: String?
     let notice: String?
     let error: String?
 }

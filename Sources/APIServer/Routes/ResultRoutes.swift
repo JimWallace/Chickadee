@@ -107,6 +107,24 @@ struct ResultRoutes: RouteCollection {
             submissionID:   collection.submissionID,
             collectionJSON: json
         )
+
+        // Mark for BrightSpace sync if the assignment is configured for it.
+        if req.application.brightSpaceClient != nil {
+            if let assignment = try await APIAssignment.query(on: req.db)
+                .filter(\.$testSetupID == collection.testSetupID)
+                .first(),
+               let gradeObjectID = assignment.brightspaceGradeObjectID,
+               !gradeObjectID.isEmpty,
+               let course = try await APICourse.find(assignment.courseID, on: req.db),
+               let orgUnitID = course.brightspaceOrgUnitID,
+               !orgUnitID.isEmpty
+            {
+                let now = Date()
+                result.brightspaceSyncPending = true
+                result.brightspacePendingSince = now
+            }
+        }
+
         try await result.save(on: req.db)
     }
 
