@@ -39,7 +39,9 @@ import Foundation
 @discardableResult
 func requireInstructor(_ req: Request) throws -> APIUser {
     let user = try req.auth.require(APIUser.self)
-    guard user.isInstructor else { throw Abort(.forbidden) }
+    guard user.isInstructor else {
+        throw WebAssignmentError.forbidden(action: "edit assignments")
+    }
     return user
 }
 
@@ -51,7 +53,7 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
     guard
         let assignment = try await assignmentByPublicID(idStr, on: req.db),
         let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-    else { throw Abort(.notFound) }
+    else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
     return (assignment, setup)
 }
 
@@ -63,10 +65,10 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
 func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
     guard let draftID = try? req.query.get(String.self, at: "draftID"),
           !draftID.isEmpty else {
-        throw Abort(.badRequest, reason: "Missing `draftID` query parameter")
+        throw WebAssignmentError.invalidParameter(name: "draftID", reason: "Missing `draftID` query parameter")
     }
     guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
-        throw Abort(.notFound, reason: "Draft '\(draftID)' not found")
+        throw WebAssignmentError.notFound(resource: "Draft '\(draftID)'")
     }
     return setup
 }
@@ -92,7 +94,8 @@ func applySuiteEdit(
         switch item.kind {
         case "script":
             guard let s = item.script else {
-                throw Abort(.badRequest,
+                throw WebAssignmentError.invalidParameter(
+                    name: "items",
                     reason: "Suite item kind=script is missing `script` payload.")
             }
             authored.append(.script(AuthoredRawScript(
@@ -105,7 +108,8 @@ func applySuiteEdit(
             )))
         case "family":
             guard var f = item.family else {
-                throw Abort(.badRequest,
+                throw WebAssignmentError.invalidParameter(
+                    name: "items",
                     reason: "Suite item kind=family is missing `family` payload.")
             }
             // Allow callers to carry the family's top-level dependsOn in
@@ -126,7 +130,8 @@ func applySuiteEdit(
             authored.append(.family(id: f.id, sectionID: item.sectionID))
             nextFamilies.append(f)
         default:
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "items",
                 reason: "Unknown suite item kind '\(item.kind)'.")
         }
     }
@@ -220,12 +225,12 @@ func mutateManifest(
     _ mutate: (inout [String: Any]) throws -> Void
 ) async throws {
     guard var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any] else {
-        throw Abort(.internalServerError, reason: "Test setup manifest is not a JSON object.")
+        throw WebAssignmentError.internalFailure(reason: "Test setup manifest is not a JSON object.")
     }
     try mutate(&dict)
     let data = try JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
     guard let json = String(data: data, encoding: .utf8) else {
-        throw Abort(.internalServerError, reason: "Failed to re-serialise manifest.")
+        throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise manifest.")
     }
     setup.manifest = json
     try await setup.save(on: db)

@@ -92,6 +92,10 @@ enum WebAssignmentError: AbortError, CustomStringConvertible {
     /// (e.g. duplicate filename, attempt to delete a setup that still has
     /// an associated assignment).
     case conflict(reason: String)
+    /// The request was syntactically valid but its semantic content can't
+    /// be processed (e.g. an invalid Python identifier, a duplicate name
+    /// in a list that requires uniqueness).  Maps to HTTP 422.
+    case unprocessable(reason: String)
     /// An assignment-validation precondition was not satisfied (e.g. the
     /// runner has not produced a passing validation result yet).
     case validationRequired(reason: String)
@@ -105,6 +109,7 @@ enum WebAssignmentError: AbortError, CustomStringConvertible {
         case .noActiveCourse:       return .badRequest
         case .forbidden:            return .forbidden
         case .conflict:             return .conflict
+        case .unprocessable:        return .unprocessableEntity
         case .validationRequired:   return .badRequest
         case .internalFailure:      return .internalServerError
         }
@@ -123,6 +128,8 @@ enum WebAssignmentError: AbortError, CustomStringConvertible {
         case .forbidden(let action):
             return "You do not have permission to \(action)."
         case .conflict(let reason):
+            return reason
+        case .unprocessable(let reason):
             return reason
         case .validationRequired(let reason):
             return reason

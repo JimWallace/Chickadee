@@ -14,14 +14,16 @@ extension AssignmentRoutes {
     @Sendable
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "download assignment files")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
         let data = try notebookData(for: setup)
@@ -38,14 +40,16 @@ extension AssignmentRoutes {
     @Sendable
     func downloadCurrentSetupItem(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "download assignment files")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
         struct FileQuery: Content {
@@ -54,11 +58,11 @@ extension AssignmentRoutes {
         let q = try req.query.decode(FileQuery.self)
         let fileName = (q.name as NSString).lastPathComponent
         guard !fileName.isEmpty, fileName == q.name else {
-            throw Abort(.badRequest, reason: "Invalid file name")
+            throw WebAssignmentError.invalidParameter(name: "name", reason: "Invalid file name")
         }
 
         guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: fileName) else {
-            throw Abort(.notFound, reason: "File '\(fileName)' not found in setup")
+            throw WebAssignmentError.notFound(resource: "File '\(fileName)' in setup")
         }
         return buildFileResponse(data: data, filename: fileName)
     }
@@ -68,14 +72,16 @@ extension AssignmentRoutes {
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "download assignment files")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
         // Look for a solution.* entry inside the test setup zip.
@@ -105,7 +111,7 @@ extension AssignmentRoutes {
             return buildFileResponse(data: data, filename: fallbackSubmission.filename ?? "solution.ipynb")
         }
 
-        throw Abort(.notFound, reason: "No solution notebook is available for this assignment yet")
+        throw WebAssignmentError.notFound(resource: "Solution notebook for this assignment")
     }
 
     // MARK: - POST /instructor/:assignmentID/edit/save
@@ -113,14 +119,16 @@ extension AssignmentRoutes {
     @Sendable
     func saveEditedAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "edit assignments")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
         struct SaveBodyMany: Content {
@@ -143,7 +151,7 @@ extension AssignmentRoutes {
         let bodyMany = try? req.content.decode(SaveBodyMany.self)
         let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
         guard bodyMany != nil || bodySingle != nil else {
-            throw Abort(.badRequest, reason: "Invalid assignment upload payload")
+            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment upload payload")
         }
 
         let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
@@ -327,7 +335,9 @@ extension AssignmentRoutes {
     @Sendable
     func getScript(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "edit assignment scripts")
+        }
 
         let idStr    = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
@@ -335,10 +345,10 @@ extension AssignmentRoutes {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
         var headers = HTTPHeaders()
         headers.contentType = .plainText
@@ -353,7 +363,9 @@ extension AssignmentRoutes {
     @Sendable
     func updateScript(req: Request) async throws -> HTTPStatus {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "edit assignment scripts")
+        }
 
         let idStr    = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
@@ -364,22 +376,22 @@ extension AssignmentRoutes {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         // Verify the file exists before writing.
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw Abort(.conflict,
+            throw WebAssignmentError.conflict(
                 reason: "'\(filename)' is generated from pattern family '\(familyID)'. Edit the family rather than the generated script.")
         }
 
         do {
             try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: body.content)
         } catch ScriptZipError.zipFailed {
-            throw Abort(.internalServerError, reason: "Failed to update setup zip")
+            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
         return .noContent
     }
@@ -393,7 +405,9 @@ extension AssignmentRoutes {
     @Sendable
     func createScript(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "create assignment scripts")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
 
@@ -409,17 +423,17 @@ extension AssignmentRoutes {
         // Validate filename: must be a simple filename (no path separators).
         let cleaned = sanitizeSuiteFilename(body.filename)
         guard !cleaned.isEmpty, cleaned == body.filename else {
-            throw Abort(.badRequest, reason: "Invalid filename '\(body.filename)'")
+            throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
         }
 
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         // Reject duplicate filenames.
         if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-            throw Abort(.conflict, reason: "A file named '\(cleaned)' already exists in this setup")
+            throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
         }
 
         try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
@@ -486,7 +500,9 @@ extension AssignmentRoutes {
     @Sendable
     func deleteScript(req: Request) async throws -> HTTPStatus {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "delete assignment scripts")
+        }
 
         let idStr    = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
@@ -494,27 +510,27 @@ extension AssignmentRoutes {
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw Abort(.notFound, reason: "File '\(filename)' not found in setup zip")
+            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
         }
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw Abort(.conflict,
+            throw WebAssignmentError.conflict(
                 reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family).")
         }
 
         let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
         guard dependents.isEmpty else {
-            throw Abort(.conflict,
+            throw WebAssignmentError.conflict(
                 reason: "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))")
         }
 
         do {
             try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
         } catch ScriptZipError.zipFailed {
-            throw Abort(.internalServerError, reason: "Failed to update setup zip")
+            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
 
         if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
@@ -549,19 +565,21 @@ extension AssignmentRoutes {
     @Sendable
     func draftSolutionNotebook(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor, let userID = user.id else { throw Abort(.forbidden) }
+        guard user.isInstructor, let userID = user.id else {
+            throw WebAssignmentError.forbidden(action: "view draft solution notebooks")
+        }
 
         guard let draftID = try? req.query.get(String.self, at: "draftID"),
               !draftID.isEmpty,
               let setup = try await APITestSetup.find(draftID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Draft assignment") }
 
         let fallbackPath = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
         guard let data = draftNotebookData(
             req: req, setupID: setup.id!, userID: userID,
             fileKind: .solution, fallbackPath: fallbackPath)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Draft solution notebook") }
 
         return Response(status: .ok,
                         headers: ["Content-Type": "application/json"],
@@ -596,14 +614,16 @@ extension AssignmentRoutes {
     @Sendable
     func scanNotebook(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        guard user.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "scan notebooks")
+        }
 
         guard let buffer = req.body.data else {
-            throw Abort(.badRequest, reason: "Request body is empty")
+            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Request body is empty")
         }
         let notebookData = Data(buffer.readableBytesView)
         guard !notebookData.isEmpty else {
-            throw Abort(.badRequest, reason: "Notebook data is empty")
+            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Notebook data is empty")
         }
 
         // v0.4.111: switched from `scanNotebookForFunctions` to the
@@ -664,13 +684,15 @@ extension AssignmentRoutes {
     @Sendable
     func createSolutionFromAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor, let userID = user.id else { throw Abort(.forbidden) }
+        guard user.isInstructor, let userID = user.id else {
+            throw WebAssignmentError.forbidden(action: "create a solution notebook")
+        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw Abort(.notFound) }
+        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         let sourceData = (try? notebookData(for: setup))
             ?? defaultNotebookData(title: "\(assignment.title) Solution")
@@ -700,11 +722,11 @@ extension AssignmentRoutes {
 /// the same sanitisation for its draft-scoped `delete` handler.
 func safeScriptFilename(from req: Request) throws -> String {
     guard let raw = req.parameters.get("filename"), !raw.isEmpty else {
-        throw Abort(.badRequest, reason: "Missing filename parameter")
+        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Missing filename parameter")
     }
     let cleaned = (raw as NSString).lastPathComponent
     guard cleaned == raw, !cleaned.isEmpty, cleaned != ".", cleaned != ".." else {
-        throw Abort(.badRequest, reason: "Invalid filename '\(raw)'")
+        throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(raw)'")
     }
     return cleaned
 }

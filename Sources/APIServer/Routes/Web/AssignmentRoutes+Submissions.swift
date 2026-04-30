@@ -159,7 +159,7 @@ extension AssignmentRoutes {
             let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw)
         else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw WebAssignmentError.noActiveCourse(action: "viewing student submissions")
         }
 
         let isEnrolled = try await APICourseEnrollment.query(on: req.db)
@@ -171,7 +171,7 @@ extension AssignmentRoutes {
             let student = try await APIUser.find(studentID, on: req.db),
             student.role == "student"
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Student")
         }
 
         let setups = try await APITestSetup.query(on: req.db)
@@ -250,7 +250,7 @@ extension AssignmentRoutes {
     func assignmentSubmissionsPage(req: Request) async throws -> View {
         let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
         guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
         let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
@@ -387,7 +387,7 @@ extension AssignmentRoutes {
             let student = try await APIUser.find(studentID, on: req.db),
             student.role == "student"
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment or student")
         }
 
         let submissions = try await APISubmission.query(on: req.db)
@@ -450,14 +450,14 @@ extension AssignmentRoutes {
             let submissionID = req.parameters.get("submissionID"),
             let submission = try await APISubmission.find(submissionID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Submission")
         }
 
         guard submission.testSetupID == assignment.testSetupID else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Submission")
         }
         guard submission.kind == APISubmission.Kind.student else {
-            throw Abort(.badRequest, reason: "Only student submissions can be re-tested.")
+            throw WebAssignmentError.invalidParameter(name: "submissionID", reason: "Only student submissions can be re-tested.")
         }
 
         // Prevent duplicate queue entries for in-flight jobs.
@@ -500,7 +500,7 @@ extension AssignmentRoutes {
             let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else {
-            throw Abort(.notFound)
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
         let count = try await retestAllSubmissionsForSetup(

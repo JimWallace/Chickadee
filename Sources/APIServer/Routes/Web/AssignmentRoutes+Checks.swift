@@ -53,7 +53,8 @@ extension AssignmentRoutes {
         do {
             checks = try req.content.decode([NotebookCheck].self)
         } catch {
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
                 reason: "Invalid notebook check list: \(error.localizedDescription)")
         }
 

@@ -55,7 +55,8 @@ extension AssignmentRoutes {
         do {
             families = try req.content.decode([PatternFamily].self)
         } catch {
-            throw Abort(.badRequest,
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
                 reason: "Invalid pattern family list: \(error.localizedDescription)")
         }
 

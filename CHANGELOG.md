@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.143] - 2026-04-30
+
+### Changed
+
+- **Completed `WebAssignmentError` typed-errors migration across the
+  instructor assignment routes (#442).**  PR 456 (#443) introduced
+  `WebAssignmentError` and migrated the 19 sites in
+  `AssignmentRoutes.swift` itself, leaving ~120 `Abort(...)` sites in
+  the sibling extensions and helpers as deferred work.  This release
+  finishes that migration: every `throw Abort(...)` in
+  `Routes/Web/Assignment*.swift`, `SuiteEditHelpers.swift`,
+  `TestSetupZipHelpers.swift`, `RunnerValidationHelpers.swift`,
+  `AssignmentSlugHelpers.swift`, and `AssignmentHelpers.swift` is now
+  a typed `WebAssignmentError` throw.  Files migrated this release
+  (count of original sites): `AssignmentRoutes+Editor.swift` (40),
+  `AssignmentRoutes+Sections.swift` (15), `+SuiteSections.swift` (13),
+  `+DraftSections.swift` (13), `+Draft.swift` (11), `+Submissions.swift`
+  (8), `+Enrollment.swift` (8), `+Suite.swift` (1), `+Families.swift`
+  (1), `+Checks.swift` (1), `SuiteEditHelpers.swift` (9),
+  `AssignmentSlugHelpers.swift` (3), `TestSetupZipHelpers.swift` (1),
+  `RunnerValidationHelpers.swift` (1), `AssignmentHelpers.swift` (1).
+  HTTP status codes are preserved across the migration — every
+  `Abort(.X, ...)` was mapped to the `WebAssignmentError` case whose
+  `status` is `.X`.
+
+### Added
+
+- **`WebAssignmentError.unprocessable(reason:)`.**  Maps to HTTP 422
+  (`unprocessableEntity`).  Used by the four section-variable validation
+  sites that reject malformed Python identifiers and duplicate names —
+  these are well-formed requests with semantically invalid content,
+  which is exactly what 422 means.  Pre-existing cases
+  (`notFound`, `invalidParameter`, `noActiveCourse`, `forbidden`,
+  `conflict`, `validationRequired`, `internalFailure`) cover the
+  remaining four statuses (404, 400, 403, 409, 500).
+
+- **`WebAssignmentErrorTests.swift`.**  Two regression guards: (i) a
+  parameterised test that walks every `WebAssignmentError` case and
+  asserts the rendered HTTP status matches its documented contract,
+  catching switch-statement typos that the compiler can't; (ii) a
+  source-grep test that fails if any in-scope file reverts to a raw
+  `throw Abort(`, locking in the migration so a future copy-paste
+  regression gets caught at PR time instead of in production traffic.
+
 ## [0.4.142] - 2026-04-30
 
 ### Changed
