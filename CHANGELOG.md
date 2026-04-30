@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.140] - 2026-04-30
+
+### Changed
+
+- **Centralized runner env-var reads in a `RunnerDaemonConfig` struct
+  (#450).**  Eight `RUNNER_*` env vars were read independently from
+  three different files (`RunnerDaemon`, `RunnerNetworkResilience`,
+  `RunnerProfileDetector`).  Each subsystem decided on its own when to
+  read and how to parse, so a misconfigured env var only surfaced once
+  the relevant code path ran.
+
+  Adds `Sources/Worker/RunnerDaemonConfig.swift`.  `WorkerCommand.run()`
+  now builds the config once at startup via
+  `RunnerDaemonConfig.loadFromEnvironment()` and threads it through
+  `Reporter`, `WorkerDaemon`, and the `RunnerRetryPolicy.poll/heartbeat/
+  resultUpload/download` factories.  The factories' `config:` parameter
+  has a `.loadFromEnvironment()` default so existing tests that
+  construct `WorkerDaemon` without an explicit config still work.
+
+  The legacy `runnerEnvironmentBool` / `runnerEnvironmentInt` helpers
+  in `RunnerProfileDetector.swift` and `RunnerNetworkResilience.swift`
+  are removed — no production callers remain.  New
+  `RunnerDaemonConfigTests` exercises the env-parsing rules
+  (bool aliases, invalid-value fallback, empty-string-as-absent for
+  `RUNNER_TEST_SETUP_CACHE_DIR`).
+
+### Removed
+
+- **Dead `validateManifest()` umbrella in `ManifestValidation.swift`.**
+  Defined but never called; folded the cleanup into this PR while
+  triaging #447 (which was closed as not-planned — its premise of
+  duplicate validation was not borne out by the actual call graph).
+
 ## [0.4.139] - 2026-04-30
 
 ### Changed
