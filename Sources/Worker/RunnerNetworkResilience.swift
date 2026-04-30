@@ -19,39 +19,39 @@ struct RunnerRetryPolicy: Sendable {
     let baseDelayMs: Int
     let maxDelayMs: Int
 
-    static func poll() -> Self {
+    static func poll(config: RunnerDaemonConfig = .loadFromEnvironment()) -> Self {
         Self(
-            enabled: runnerEnvironmentBool("RUNNER_NETWORK_RETRY_ENABLED", default: true),
+            enabled: config.networkRetryEnabled,
             maxAttempts: Int.max,
-            baseDelayMs: runnerEnvironmentInt("RUNNER_RETRY_BASE_DELAY_MS", default: 1000),
-            maxDelayMs: runnerEnvironmentInt("RUNNER_RETRY_MAX_DELAY_MS", default: 30_000)
+            baseDelayMs: config.retryBaseDelayMs,
+            maxDelayMs: config.retryMaxDelayMs
         )
     }
 
-    static func heartbeat() -> Self {
+    static func heartbeat(config: RunnerDaemonConfig = .loadFromEnvironment()) -> Self {
         Self(
-            enabled: runnerEnvironmentBool("RUNNER_NETWORK_RETRY_ENABLED", default: true),
-            maxAttempts: runnerEnvironmentInt("RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS", default: 4),
-            baseDelayMs: runnerEnvironmentInt("RUNNER_RETRY_BASE_DELAY_MS", default: 1000),
-            maxDelayMs: runnerEnvironmentInt("RUNNER_RETRY_MAX_DELAY_MS", default: 30_000)
+            enabled: config.networkRetryEnabled,
+            maxAttempts: config.heartbeatRetryMaxAttempts,
+            baseDelayMs: config.retryBaseDelayMs,
+            maxDelayMs: config.retryMaxDelayMs
         )
     }
 
-    static func resultUpload() -> Self {
+    static func resultUpload(config: RunnerDaemonConfig = .loadFromEnvironment()) -> Self {
         Self(
-            enabled: runnerEnvironmentBool("RUNNER_NETWORK_RETRY_ENABLED", default: true),
-            maxAttempts: runnerEnvironmentInt("RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS", default: 8),
-            baseDelayMs: runnerEnvironmentInt("RUNNER_RETRY_BASE_DELAY_MS", default: 1000),
-            maxDelayMs: runnerEnvironmentInt("RUNNER_RETRY_MAX_DELAY_MS", default: 30_000)
+            enabled: config.networkRetryEnabled,
+            maxAttempts: config.resultUploadRetryMaxAttempts,
+            baseDelayMs: config.retryBaseDelayMs,
+            maxDelayMs: config.retryMaxDelayMs
         )
     }
 
-    static func download() -> Self {
+    static func download(config: RunnerDaemonConfig = .loadFromEnvironment()) -> Self {
         Self(
-            enabled: runnerEnvironmentBool("RUNNER_NETWORK_RETRY_ENABLED", default: true),
-            maxAttempts: runnerEnvironmentInt("RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS", default: 6),
-            baseDelayMs: runnerEnvironmentInt("RUNNER_RETRY_BASE_DELAY_MS", default: 1000),
-            maxDelayMs: runnerEnvironmentInt("RUNNER_RETRY_MAX_DELAY_MS", default: 30_000)
+            enabled: config.networkRetryEnabled,
+            maxAttempts: config.downloadRetryMaxAttempts,
+            baseDelayMs: config.retryBaseDelayMs,
+            maxDelayMs: config.retryMaxDelayMs
         )
     }
 
@@ -141,15 +141,6 @@ func withRunnerRetry<T>(
     }
 
     throw lastError ?? CancellationError()
-}
-
-func runnerEnvironmentInt(_ key: String, default defaultValue: Int) -> Int {
-    guard let raw = ProcessInfo.processInfo.environment[key]?
-        .trimmingCharacters(in: .whitespacesAndNewlines),
-        let value = Int(raw) else {
-        return defaultValue
-    }
-    return value
 }
 
 struct ExponentialBackoff {

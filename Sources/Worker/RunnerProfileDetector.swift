@@ -134,21 +134,3 @@ struct RunnerProfileDetector {
         return nil
     }
 }
-
-func runnerEnvironmentBool(_ key: String, default defaultValue: Bool) -> Bool {
-    guard let raw = ProcessInfo.processInfo.environment[key]?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .lowercased(),
-        !raw.isEmpty else {
-        return defaultValue
-    }
-
-    switch raw {
-    case "1", "true", "yes", "on":
-        return true
-    case "0", "false", "no", "off":
-        return false
-    default:
-        return defaultValue
-    }
-}

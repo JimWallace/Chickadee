@@ -6,35 +6,6 @@
 import Core
 import Vapor
 
-/// Validates families + dependency graph in one call.  Throws
-/// `Abort(.unprocessableEntity)` with a student-friendly reason on any
-/// structural problem.
-func validateManifest(_ manifest: TestProperties) throws {
-    // Pass section data through so family cases that reference section-
-    // level `$variables` (v0.4.100) validate correctly.  Map each family
-    // to its section by finding the sectionID on its first generated
-    // testSuites entry; families with no generated entries default to
-    // no section (no extra variable names in scope).
-    var familySectionID: [String: String] = [:]
-    for entry in manifest.testSuites {
-        if let fid = entry.generatedBy, let sid = entry.sectionID, familySectionID[fid] == nil {
-            familySectionID[fid] = sid
-        }
-    }
-    try validatePatternFamilies(
-        manifest.patternFamilies,
-        testSuites: manifest.testSuites,
-        sections: manifest.sections,
-        familySectionID: familySectionID
-    )
-    try validateNotebookChecks(
-        manifest.notebookChecks,
-        patternFamilies: manifest.patternFamilies,
-        testSuites: manifest.testSuites
-    )
-    try validateManifestDependencies(manifest)
-}
-
 /// Validates the `dependsOn` references and dependency graph in a manifest.
 ///
 /// Throws an `Abort(.unprocessableEntity)` if:
@@ -95,8 +66,7 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
 }
 
 /// Validates a list of pattern families before they are applied to a test
-/// setup.  Called by `validateManifest` and also directly from family CRUD
-/// endpoints when rendering a preview.
+/// setup.  Called by `applyPatternFamilies` and from family CRUD endpoints.
 ///
 /// Checks:
 /// - family `id` is unique across the assignment, is a valid filename fragment,

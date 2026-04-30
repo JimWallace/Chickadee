@@ -112,8 +112,8 @@ struct WorkerCommand: AsyncParsableCommand {
         }
 
         let env = ProcessInfo.processInfo.environment
-        let capabilityDiscoveryEnabled = runnerEnvironmentBool("RUNNER_CAPABILITY_DISCOVERY_ENABLED", default: true)
-        let runnerProfile = RunnerProfileDetector(discoveryEnabled: capabilityDiscoveryEnabled).detect()
+        let config = RunnerDaemonConfig.loadFromEnvironment(env)
+        let runnerProfile = RunnerProfileDetector(discoveryEnabled: config.capabilityDiscoveryEnabled).detect()
         guard let effectiveWorkerSecret = resolveWorkerSharedSecret(
             cliWorkerSecret: workerSecret,
             environment: env
@@ -129,11 +129,17 @@ struct WorkerCommand: AsyncParsableCommand {
             maxConcurrentJobs: maxJobs,
             profile: runnerProfile
         )
-        let reporter = Reporter(apiBaseURL: baseURL, workerID: workerID, workerSecret: effectiveWorkerSecret)
+        let reporter = Reporter(
+            apiBaseURL: baseURL,
+            workerID: workerID,
+            workerSecret: effectiveWorkerSecret,
+            heartbeatRetryPolicy: .heartbeat(config: config),
+            resultUploadRetryPolicy: .resultUpload(config: config)
+        )
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
         let cacheDirPath = testSetupCacheDir
-            ?? env["RUNNER_TEST_SETUP_CACHE_DIR"]
+            ?? config.testSetupCacheDir
             ?? TestSetupCache.defaultCacheRoot.path
         let testSetupCache = TestSetupCache(cacheRoot: URL(fileURLWithPath: cacheDirPath))
 
@@ -146,7 +152,9 @@ struct WorkerCommand: AsyncParsableCommand {
             workerSecret:      effectiveWorkerSecret,
             maxConcurrentJobs: maxJobs,
             runnerProfile:     runnerProfile,
-            testSetupCache:    testSetupCache
+            downloadRetryPolicy: .download(config: config),
+            testSetupCache:    testSetupCache,
+            config:            config
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
@@ -240,6 +248,7 @@ actor WorkerDaemon {
     private let runnerProfile: RunnerCapabilityProfile?
     private let downloadRetryPolicy: RunnerRetryPolicy
     private let testSetupCache: TestSetupCache
+    private let config: RunnerDaemonConfig
     private var serverConnectionLost = false
     private var activeJobs = 0
 
@@ -253,7 +262,8 @@ actor WorkerDaemon {
         maxConcurrentJobs: Int,
         runnerProfile: RunnerCapabilityProfile? = nil,
         downloadRetryPolicy: RunnerRetryPolicy = .download(),
-        testSetupCache: TestSetupCache = TestSetupCache()
+        testSetupCache: TestSetupCache = TestSetupCache(),
+        config: RunnerDaemonConfig = .loadFromEnvironment()
     ) {
         self.poller            = poller
         self.reporter          = reporter
@@ -265,6 +275,7 @@ actor WorkerDaemon {
         self.runnerProfile     = runnerProfile
         self.downloadRetryPolicy = downloadRetryPolicy
         self.testSetupCache    = testSetupCache
+        self.config            = config
     }
 
     func run() async throws {
@@ -285,8 +296,8 @@ actor WorkerDaemon {
 
     private func workerLoop(slot: Int) async throws {
         var backoff = ExponentialBackoff(
-            initial: .milliseconds(runnerEnvironmentInt("RUNNER_RETRY_BASE_DELAY_MS", default: 1000)),
-            max: .milliseconds(runnerEnvironmentInt("RUNNER_RETRY_MAX_DELAY_MS", default: 30_000))
+            initial: .milliseconds(config.retryBaseDelayMs),
+            max: .milliseconds(config.retryMaxDelayMs)
         )
         while !Task.isCancelled {
             do {
