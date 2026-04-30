@@ -2,37 +2,51 @@
 //
 // Thin D2L BrightSpace REST API client used for grade sync.
 //
-// Auth: OAuth2 client credentials (POST /d2l/auth/oauth2/token).
+// Auth: D2L Valence "App + User" key signing — each request URL is signed
+//       with HMAC-SHA256 using the App Key (x_c) and User Key (x_d).
+//       No token endpoint; signatures are computed per-request.
+//
 // Grade push: PUT /d2l/api/le/{ver}/{orgUnitId}/grades/{gradeObjectId}/values/{userId}
 // User lookup: GET /d2l/api/lp/{ver}/users/?orgDefinedId={id}
 //
-// Tokens are cached in memory until 60 seconds before expiry.
+// Required env vars: BRIGHTSPACE_URL, BRIGHTSPACE_APP_ID, BRIGHTSPACE_APP_KEY,
+//                    BRIGHTSPACE_USER_ID, BRIGHTSPACE_USER_KEY
+// Optional:          BRIGHTSPACE_SYNC_DEBOUNCE_SECS (default 90)
 
 import Vapor
 import Foundation
+import Crypto
 
 // MARK: - Config
 
 struct BrightSpaceSyncConfig: Sendable {
-    let baseURL: String        // e.g. "https://uw.brightspace.com"
-    let clientID: String
-    let clientSecret: String
-    let debounceSecs: TimeInterval  // default 90
+    let baseURL: String
+    let appID: String
+    let appKey: String
+    let userID: String
+    let userKey: String
+    let debounceSecs: TimeInterval
 
     static let leAPIVersion = "1.85"
     static let lpAPIVersion = "1.28"
 
     static func fromEnvironment() -> Self? {
         guard
-            let base   = Environment.get("BRIGHTSPACE_URL")?
-                            .trimmingCharacters(in: .whitespacesAndNewlines),
+            let base    = Environment.get("BRIGHTSPACE_URL")?
+                              .trimmingCharacters(in: .whitespacesAndNewlines),
             !base.isEmpty,
-            let id     = Environment.get("BRIGHTSPACE_CLIENT_ID")?
-                            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !id.isEmpty,
-            let secret = Environment.get("BRIGHTSPACE_CLIENT_SECRET")?
-                            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !secret.isEmpty
+            let appID   = Environment.get("BRIGHTSPACE_APP_ID")?
+                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            !appID.isEmpty,
+            let appKey  = Environment.get("BRIGHTSPACE_APP_KEY")?
+                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            !appKey.isEmpty,
+            let userID  = Environment.get("BRIGHTSPACE_USER_ID")?
+                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            !userID.isEmpty,
+            let userKey = Environment.get("BRIGHTSPACE_USER_KEY")?
+                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            !userKey.isEmpty
         else { return nil }
 
         let debounce: TimeInterval
@@ -47,8 +61,10 @@ struct BrightSpaceSyncConfig: Sendable {
         let trimmedBase = base.hasSuffix("/") ? String(base.dropLast()) : base
         return BrightSpaceSyncConfig(
             baseURL: trimmedBase,
-            clientID: id,
-            clientSecret: secret,
+            appID: appID,
+            appKey: appKey,
+            userID: userID,
+            userKey: userKey,
             debounceSecs: debounce
         )
     }
@@ -58,7 +74,6 @@ struct BrightSpaceSyncConfig: Sendable {
 
 enum BrightSpaceSyncError: Error, CustomStringConvertible {
     case notConfigured
-    case tokenFetchFailed(status: Int, body: String)
     case userLookupFailed(orgDefinedId: String, status: Int)
     case userNotFound(orgDefinedId: String)
     case gradePushFailed(status: Int, body: String)
@@ -68,8 +83,6 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
         switch self {
         case .notConfigured:
             return "BrightSpace sync is not configured (missing env vars)"
-        case .tokenFetchFailed(let s, let b):
-            return "BrightSpace token fetch failed (HTTP \(s)): \(b)"
         case .userLookupFailed(let id, let s):
             return "BrightSpace user lookup for '\(id)' failed (HTTP \(s))"
         case .userNotFound(let id):
@@ -82,27 +95,46 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
     }
 }
 
-// MARK: - Token cache
-
-private struct CachedToken: Sendable {
-    let value: String
-    let expiresAt: Date
-}
-
 // MARK: - Client
 
 actor BrightSpaceAPIClient {
     private let config: BrightSpaceSyncConfig
-    private var cachedToken: CachedToken?
 
     init(config: BrightSpaceSyncConfig) {
         self.config = config
     }
 
+    // MARK: - Valence auth signing
+
+    // Appends Valence auth query parameters to a URL.
+    //
+    // Signing base string: "<unix_timestamp>\n<METHOD>\n<lowercase_path>"
+    // where path is the URL path only (no query string, no host).
+    // x_c = HMAC-SHA256(appKey, baseString) as base64url (no padding)
+    // x_d = HMAC-SHA256(userKey, baseString) as base64url (no padding)
+    private func signed(url urlString: String, method: String) -> String {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        guard let path = URL(string: urlString)?.path else { return urlString }
+        let baseString = "\(timestamp)\n\(method.uppercased())\n\(path.lowercased())"
+        let appSig  = hmacSHA256Base64URL(key: config.appKey,  message: baseString)
+        let userSig = hmacSHA256Base64URL(key: config.userKey, message: baseString)
+        let sep = urlString.contains("?") ? "&" : "?"
+        return "\(urlString)\(sep)x_a=\(config.appID)&x_b=\(config.userID)&x_c=\(appSig)&x_d=\(userSig)&x_t=\(timestamp)"
+    }
+
+    private func hmacSHA256Base64URL(key: String, message: String) -> String {
+        let symmetricKey = SymmetricKey(data: Data(key.utf8))
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: symmetricKey)
+        return Data(mac).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
     // MARK: - Push grade
 
     /// Push `earnedPoints` for `bsUserID` to the BrightSpace grade item.
-    /// Callers should resolve `bsUserID` first via `resolveUserID(orgDefinedId:on:)`.
+    /// Callers should resolve `bsUserID` first via `lookupUserID(orgDefinedId:on:)`.
     func pushGrade(
         orgUnitID: String,
         gradeObjectID: String,
@@ -110,8 +142,8 @@ actor BrightSpaceAPIClient {
         earnedPoints: Double,
         on application: Application
     ) async throws {
-        let token = try await fetchToken(on: application)
-        let url = "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
+        let rawURL = "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
+        let url = signed(url: rawURL, method: "PUT")
 
         struct NumericGradeValue: Content {
             let GradeObjectType: Int
@@ -120,7 +152,6 @@ actor BrightSpaceAPIClient {
         let body = NumericGradeValue(GradeObjectType: 1, PointsNumerator: earnedPoints)
 
         let response = try await application.client.put(URI(string: url)) { req in
-            req.headers.bearerAuthorization = BearerAuthorization(token: token)
             req.headers.contentType = .json
             try req.content.encode(body, as: .json)
         }
@@ -140,13 +171,11 @@ actor BrightSpaceAPIClient {
     func lookupUserID(orgDefinedId: String, on application: Application) async throws -> String? {
         guard !orgDefinedId.isEmpty else { return nil }
 
-        let token = try await fetchToken(on: application)
         let encoded = orgDefinedId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? orgDefinedId
-        let url = "\(config.baseURL)/d2l/api/lp/\(BrightSpaceSyncConfig.lpAPIVersion)/users/?orgDefinedId=\(encoded)"
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(BrightSpaceSyncConfig.lpAPIVersion)/users/?orgDefinedId=\(encoded)"
+        let url = signed(url: rawURL, method: "GET")
 
-        let response = try await application.client.get(URI(string: url)) { req in
-            req.headers.bearerAuthorization = BearerAuthorization(token: token)
-        }
+        let response = try await application.client.get(URI(string: url))
 
         guard response.status == .ok else {
             throw BrightSpaceSyncError.userLookupFailed(
@@ -165,44 +194,6 @@ actor BrightSpaceAPIClient {
         let decoded = try response.content.decode(UserListResponse.self)
         guard let first = decoded.Items.first else { return nil }
         return String(first.UserId)
-    }
-
-    // MARK: - Token management
-
-    private func fetchToken(on application: Application) async throws -> String {
-        let now = Date()
-        if let cached = cachedToken, cached.expiresAt > now {
-            return cached.value
-        }
-
-        let url = "\(config.baseURL)/d2l/auth/oauth2/token"
-        let credentials = "\(config.clientID):\(config.clientSecret)"
-        let encoded = Data(credentials.utf8).base64EncodedString()
-
-        let response = try await application.client.post(URI(string: url)) { req in
-            req.headers.add(name: .authorization, value: "Basic \(encoded)")
-            req.headers.contentType = .urlEncodedForm
-            try req.content.encode(
-                ["grant_type": "client_credentials", "scope": "core:*:*"],
-                as: .urlEncodedForm
-            )
-        }
-
-        guard response.status == .ok else {
-            var tokenBuf = response.body
-            let tokenLen = tokenBuf?.readableBytes ?? 0
-            let bodyText = tokenBuf?.readString(length: tokenLen) ?? ""
-            throw BrightSpaceSyncError.tokenFetchFailed(status: Int(response.status.code), body: bodyText)
-        }
-
-        struct TokenResponse: Decodable {
-            let access_token: String
-            let expires_in: Int
-        }
-        let token = try response.content.decode(TokenResponse.self)
-        let expiresAt = now.addingTimeInterval(TimeInterval(token.expires_in) - 60)
-        cachedToken = CachedToken(value: token.access_token, expiresAt: expiresAt)
-        return token.access_token
     }
 }
 
