@@ -43,9 +43,12 @@ piplite_urls = (
 if not piplite_urls:
     fail("pipliteUrls missing from pyodide kernel settings")
 
-remote_entry = build_dir / "extensions" / "@jupyterlite" / "pyodide-kernel-extension" / "static" / "remoteEntry.a117bd216cefa0b341fe.js"
-if not remote_entry.is_file():
-    fail(f"missing extension asset: {remote_entry}")
+remote_entry_dir = build_dir / "extensions" / "@jupyterlite" / "pyodide-kernel-extension" / "static"
+remote_entries = [p for p in sorted(remote_entry_dir.glob("remoteEntry.*.js")) if not p.name.endswith(".map")]
+if not remote_entries:
+    fail(f"missing extension asset: no remoteEntry.*.js under {remote_entry_dir}")
+if len(remote_entries) > 1:
+    fail(f"unexpected: multiple remoteEntry.*.js under {remote_entry_dir}: {[p.name for p in remote_entries]}")
 
 config_utils = (build_dir / "config-utils.js").read_text()
 if "const originalList = (config || {}).federated_extensions || [];" not in config_utils:
