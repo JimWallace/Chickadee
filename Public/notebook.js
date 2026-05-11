@@ -20,7 +20,6 @@
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
     const uploadFile = document.getElementById('nb-upload-file');
-    const frameError = document.getElementById('nb-frame-error');
     const setupID     = frame ? frame.dataset.setupId : null;
     const gradingMode = frame ? frame.dataset.gradingMode : null;
 
@@ -52,39 +51,177 @@
     let lastForcedEditorResetMs = 0;
     let serverSyncInFlight = false;
     let serverSyncComplete = false;
-    frame.src = editorURL;
 
-    // Quick reachability check helps explain blank/failed editor loads.
-    fetch(notebookURL, { method: 'GET' }).then((res) => {
-        if (!res.ok) {
-            setStatus('error', `Notebook source unavailable (${res.status})`);
-            if (frameError) frameError.style.display = '';
+    // Capability preflight: gate iframe mounting on the browser actually
+    // supporting JupyterLite + Pyodide.  If the preflight module isn't
+    // loaded (older cached page, network glitch) fall through to the
+    // legacy behaviour of mounting unconditionally.
+    const failures = window.ChickadeeNotebookFailures;
+    const preflightPromise = failures
+        ? failures.runPreflight()
+        : Promise.resolve({ ok: true, failed: [] });
+
+    preflightPromise.then((result) => {
+        if (!result.ok) {
+            if (failures) {
+                failures.showFailure({
+                    kind:         'preflight_fail',
+                    failedChecks: result.failed
+                });
+            }
+            // Re-enable Submit so the upload-fallback handler runs.
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.title = '';
+            }
+            setStatus('error', 'In-browser editor unavailable — upload your notebook below.');
+            return;
         }
-    }).catch(() => {
-        setStatus('error', 'Notebook source unavailable');
-        if (frameError) frameError.style.display = '';
+        mountEditor();
     });
 
-    // Detect blank/failed iframe loads and provide an explicit fallback path.
-    let loaded = false;
-    frame.addEventListener('load', () => {
-        loaded = true;
-        if (frameError) frameError.style.display = 'none';
-        if (!serverSyncComplete && !serverSyncInFlight) {
-            void syncNotebookFromServerSnapshot();
+    function mountEditor() {
+        frame.src = editorURL;
+
+        // Quick reachability check helps explain blank/failed editor loads.
+        fetch(notebookURL, { method: 'GET' }).then((res) => {
+            if (!res.ok) {
+                setStatus('error', `Notebook source unavailable (${res.status})`);
+            }
+        }).catch(() => {
+            setStatus('error', 'Notebook source unavailable');
+        });
+
+        frame.addEventListener('load', () => {
+            if (!serverSyncComplete && !serverSyncInFlight) {
+                void syncNotebookFromServerSnapshot();
+            }
+            applyLockedNotebookUI();
+            enforceLockedNotebookPath();
+        });
+        setInterval(() => {
+            applyLockedNotebookUI();
+            enforceLockedNotebookPath();
+        }, 1500);
+
+        armEditorWatchdog();
+    }
+
+    // Watchdog: two-phase readiness check on the iframe's JupyterLite.
+    //
+    //   Phase 1 (shell) — wait up to 45s for `jupyterapp` (the
+    //       JupyterFrontEnd) to mount on the iframe's contentWindow.
+    //       Failure here means the iframe never started — fallback fires
+    //       with kind=watchdog_timeout (no failedChecks).
+    //
+    //   Phase 2 (kernel) — once the shell is up, wait up to 30s for the
+    //       Pyodide kernel to reach an `idle` or `busy` status.  This
+    //       catches the "JupyterLite loaded but kernel is Unknown"
+    //       failure mode where the app shell is fine but the kernel never
+    //       comes online.  Fallback fires with
+    //       failedChecks=["kernel-unhealthy"] so dashboard telemetry can
+    //       distinguish it from a true app-shell timeout.
+    function armEditorWatchdog() {
+        if (!failures) return;
+        const startedAt    = Date.now();
+        const shellDeadline  = 45000;
+        const kernelDeadline = 30000;
+        let shellLoadedAt = null;
+        let cancelled     = false;
+
+        function tick() {
+            if (cancelled) return;
+
+            let shellReady    = false;
+            let kernelHealthy = false;
+            try {
+                const win = frame.contentWindow;
+                if (win && win.jupyterapp) {
+                    shellReady = true;
+                    kernelHealthy = isKernelHealthy(win);
+                }
+            } catch (_) { /* cross-origin or transient — keep polling */ }
+
+            if (!shellReady) {
+                if (Date.now() - startedAt >= shellDeadline) {
+                    cancelled = true;
+                    failures.showFailure({ kind: 'watchdog_timeout' });
+                    reenableSubmit();
+                    return;
+                }
+                setTimeout(tick, 500);
+                return;
+            }
+
+            // Shell is up — start (or continue) the kernel-readiness timer.
+            if (shellLoadedAt === null) shellLoadedAt = Date.now();
+
+            if (kernelHealthy) {
+                cancelled = true; // clean success
+                return;
+            }
+
+            if (Date.now() - shellLoadedAt >= kernelDeadline) {
+                cancelled = true;
+                failures.showFailure({
+                    kind:         'watchdog_timeout',
+                    failedChecks: ['kernel-unhealthy']
+                });
+                reenableSubmit();
+                return;
+            }
+            setTimeout(tick, 500);
         }
-        applyLockedNotebookUI();
-        enforceLockedNotebookPath();
-    });
-    setInterval(() => {
-        applyLockedNotebookUI();
-        enforceLockedNotebookPath();
-    }, 1500);
-    setTimeout(() => {
-        if (!loaded && frameError) {
-            frameError.style.display = '';
+        // First poll after 1s — the shell is never up before that.
+        setTimeout(tick, 1000);
+    }
+
+    function reenableSubmit() {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.title = '';
         }
-    }, 5000);
+    }
+
+    // Returns true iff JupyterLite has a running kernel that's reached an
+    // `idle` or `busy` state — i.e. it can actually execute cells.  Other
+    // states (`unknown`, `dead`, `starting`, etc.) are treated as not-yet
+    // and the watchdog keeps polling.
+    //
+    // Two layered probes, in order of preference:
+    //   1. ServiceManager API   — authoritative when JupyterLite exposes it
+    //   2. DOM scrape           — fallback if the API surface changed
+    //
+    // Both are wrapped in try/catch so a thrown TypeError or cross-origin
+    // boundary doesn't kill the watchdog.
+    function isKernelHealthy(win) {
+        try {
+            const app = win.jupyterapp;
+            const sm  = app && app.serviceManager;
+            if (sm && sm.sessions && typeof sm.sessions.running === 'function') {
+                const running = sm.sessions.running();
+                if (running) {
+                    const sessions = Array.from(running);
+                    for (let i = 0; i < sessions.length; i++) {
+                        const status = sessions[i] && sessions[i].kernel && sessions[i].kernel.status;
+                        if (status === 'idle' || status === 'busy') return true;
+                    }
+                }
+            }
+        } catch (_) { /* fall through */ }
+
+        try {
+            const doc = win.document;
+            const txt = (doc && doc.body && doc.body.textContent) || '';
+            // JupyterLite renders kernel status as "Python (Pyodide) | Idle"
+            // or "Python (Pyodide) | Busy" once the kernel is up; "Unknown"
+            // means the kernel never started.
+            if (txt.indexOf('| Idle') !== -1)  return true;
+            if (txt.indexOf('| Busy') !== -1)  return true;
+        } catch (_) { /* fall through */ }
+
+        return false;
+    }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
     // iframe never loaded) re-enable Submit so the student isn't stuck. The

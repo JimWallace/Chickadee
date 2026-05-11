@@ -201,24 +201,34 @@ extension AssignmentRoutes {
                 && workerModeSetupIDs.contains(submission.testSetupID)
                 && ["pending", "assigned"].contains(submission.status)
         }.count
-        let submitterIDs = Set(
-            allCourseStudentSubmissions.compactMap { submission -> UUID? in
-                guard let userID = submission.userID, activeStudentIDs.contains(userID) else { return nil }
-                return userID
+        // Students With Browser Errors: distinct students who posted a
+        // client-side diagnostic (preflight_fail or watchdog_timeout) for
+        // one of this course's test setups within the 24h window.  Captures
+        // the in-browser editor failing to start — JupyterLite / Pyodide
+        // blocked by browser policy, IndexedDB disabled, service worker
+        // blocked, etc. — before the student can even open the assignment.
+        // Diagnostics with a null test_setup_id (the supplied setup ID didn't
+        // resolve) are excluded since they can't be attributed to a course.
+        let setupIDSet = Set(allSetupIDs)
+        let recentClientDiagnostics = allSetupIDs.isEmpty ? [] : try await APIClientDiagnostic.query(on: req.db)
+            .filter(\.$createdAt >= windowStart)
+            .all()
+        let studentsWithBrowserErrors = Set(
+            recentClientDiagnostics.compactMap { record -> UUID? in
+                guard let setupID = record.testSetupID,
+                      setupIDSet.contains(setupID),
+                      activeStudentIDs.contains(record.userID)
+                else { return nil }
+                return record.userID
             }
-        )
-        // Pending pre-enrollments by definition have zero submissions —
-        // including them keeps this metric consistent with the
-        // `enrolledStudentCount` denominator.
-        let noSubmissionYet = activeStudentIDs.subtracting(submitterIDs).count
-                            + pendingPreEnrollments.count
+        ).count
 
         let metrics = [
             InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
             InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
             InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
             InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
-            InstructorDashboardMetric(label: "Students With No Submissions", value: "\(noSubmissionYet)")
+            InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)")
         ]
 
         return CourseRosterData(
@@ -236,7 +246,7 @@ extension AssignmentRoutes {
             InstructorDashboardMetric(label: "24h Submissions", value: "—"),
             InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
             InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
-            InstructorDashboardMetric(label: "Students With No Submissions", value: "—")
+            InstructorDashboardMetric(label: "Students With Browser Errors", value: "—")
         ]
     }
 

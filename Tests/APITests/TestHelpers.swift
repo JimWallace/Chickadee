@@ -131,6 +131,7 @@ private func registerBaseTestMigrations(on app: Application) {
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(AddUserLastSeenAt())
     app.migrations.add(AddBrightSpaceSyncFields())
+    app.migrations.add(CreateClientDiagnostics())
 }
 
 private func registerObservabilityTestMigrations(on app: Application) {
