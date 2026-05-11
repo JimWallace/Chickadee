@@ -11,7 +11,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         switch self {
         case .runnerOffline:       return "Runner offline while jobs queued"
         case .queueBackedUp:       return "Submission queue backed up"
-        case .errorRateSpike:      return "Error/timeout rate spike"
+        case .errorRateSpike:      return "System-level failure rate spike"
         case .databaseUnreachable: return "Database unreachable"
         }
     }

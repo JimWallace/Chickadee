@@ -134,8 +134,11 @@ private func evaluateErrorRateSpike(
     guard recent.count >= configuration.errorRateMinimumSamples else { return .ok }
 
     let bad = recent.filter {
-        $0.finalStatus == JobFinalStatus.error.rawValue
-            || $0.finalStatus == JobFinalStatus.timeout.rawValue
+        JobFailureClassification.isSystemFailure(
+            finalStatus: $0.finalStatus,
+            testsErrored: $0.testsErrored,
+            testsTimedOut: $0.testsTimedOut
+        )
     }.count
     let ratio = Double(bad) / Double(recent.count)
     guard ratio >= configuration.errorRateThreshold else { return .ok }
@@ -143,14 +146,39 @@ private func evaluateErrorRateSpike(
     let percent = Int((ratio * 100).rounded())
     return RuleEvaluation(
         isFiring: true,
-        summary: "\(bad)/\(recent.count) recent jobs errored or timed out (\(percent)%)",
+        summary: "\(bad)/\(recent.count) recent jobs failed at the system level (\(percent)%)",
         details: [
-            "error_count": String(bad),
+            "system_failure_count": String(bad),
             "sample_size": String(recent.count),
-            "error_rate_percent": String(percent),
+            "system_failure_rate_percent": String(percent),
             "threshold_percent": String(Int((configuration.errorRateThreshold * 100).rounded())),
         ]
     )
+}
+
+/// Distinguishes job-level (infrastructure) failures from per-test student-code
+/// failures rolled up into `JobExecutionMetric.finalStatus`.
+///
+/// `inferredFinalStatus(from:)` marks the whole job `.error`/`.timeout` whenever
+/// any individual test reports `error` or `timeout` — i.e. whenever a student's
+/// own code raises or runs long.  The health alert wants the opposite: only
+/// jobs whose error/timeout is *not* explained by per-test outcomes (so the
+/// runner itself crashed or the worker timed out a job before it finished).
+enum JobFailureClassification {
+    static func isSystemFailure(
+        finalStatus: String?,
+        testsErrored: Int?,
+        testsTimedOut: Int?
+    ) -> Bool {
+        switch finalStatus {
+        case JobFinalStatus.timeout.rawValue:
+            return (testsTimedOut ?? 0) == 0
+        case JobFinalStatus.error.rawValue:
+            return (testsErrored ?? 0) == 0
+        default:
+            return false
+        }
+    }
 }
 
 private func evaluateDatabaseUnreachable(on application: Application) async -> RuleEvaluation {

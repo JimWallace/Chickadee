@@ -162,4 +162,81 @@ final class ServerHealthAlertTests: XCTestCase {
         XCTAssertEqual(HealthRule.queueBackedUp.severity, "warning")
         XCTAssertEqual(HealthRule.errorRateSpike.severity, "warning")
     }
+
+    // MARK: - JobFailureClassification
+
+    func testJobFailureClassification_studentTestErrorIsNotSystemFailure() {
+        // `inferredFinalStatus` rolls a single student-code exception up into a
+        // job-level `error`.  That must NOT trip the error-rate alert.
+        XCTAssertFalse(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.error.rawValue,
+            testsErrored: 1,
+            testsTimedOut: 0
+        ))
+    }
+
+    func testJobFailureClassification_studentTestTimeoutIsNotSystemFailure() {
+        // Same for per-test timeouts: a student's slow loop is a student problem,
+        // not a platform problem.
+        XCTAssertFalse(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.timeout.rawValue,
+            testsErrored: 0,
+            testsTimedOut: 1
+        ))
+    }
+
+    func testJobFailureClassification_jobErrorWithNoPerTestErrorsIsSystemFailure() {
+        // finalStatus=error but no test was recorded as errored → runner-level failure.
+        XCTAssertTrue(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.error.rawValue,
+            testsErrored: 0,
+            testsTimedOut: 0
+        ))
+    }
+
+    func testJobFailureClassification_jobTimeoutWithNoPerTestTimeoutsIsSystemFailure() {
+        // finalStatus=timeout but no test was recorded as timed out → job-level timeout.
+        XCTAssertTrue(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.timeout.rawValue,
+            testsErrored: 0,
+            testsTimedOut: 0
+        ))
+    }
+
+    func testJobFailureClassification_passedOrFailedIsNeverSystemFailure() {
+        XCTAssertFalse(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.passed.rawValue,
+            testsErrored: 0,
+            testsTimedOut: 0
+        ))
+        XCTAssertFalse(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.failed.rawValue,
+            testsErrored: 0,
+            testsTimedOut: 0
+        ))
+    }
+
+    func testJobFailureClassification_nilFinalStatusIsNotSystemFailure() {
+        // Defensive: a metric row mid-write with no finalStatus shouldn't count.
+        XCTAssertFalse(JobFailureClassification.isSystemFailure(
+            finalStatus: nil,
+            testsErrored: nil,
+            testsTimedOut: nil
+        ))
+    }
+
+    func testJobFailureClassification_nilCountsTreatedAsZero() {
+        // Test counts can be null for older rows; treat as 0 so the row qualifies
+        // as a system failure when finalStatus is error/timeout.
+        XCTAssertTrue(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.error.rawValue,
+            testsErrored: nil,
+            testsTimedOut: nil
+        ))
+        XCTAssertTrue(JobFailureClassification.isSystemFailure(
+            finalStatus: JobFinalStatus.timeout.rawValue,
+            testsErrored: nil,
+            testsTimedOut: nil
+        ))
+    }
 }
