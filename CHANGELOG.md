@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.148] - 2026-05-11
+
+### Added
+
+- **Client-side diagnostics for the in-browser notebook editor.**  The
+  student submit page now runs a capability preflight (WebAssembly, Web
+  Workers, service-worker registration, IndexedDB open) before mounting
+  the JupyterLite iframe, and arms a 45-second watchdog on the
+  JupyterLite kernel readiness signal after mount.  On either failure
+  mode the iframe is hidden, a fallback section is revealed with a
+  direct `.ipynb` upload picker (the existing upload-fallback JS
+  re-used unchanged), and a record is posted to a new endpoint
+  `POST /api/v1/client-diagnostics` (kinds: `preflight_fail`,
+  `watchdog_timeout`).  When all checks pass the page is visually
+  identical to before — no UI changes are made unless a failure
+  occurs.  Records are stored in a new `client_diagnostics` table and
+  rate-limited per (user, setup, kind) to one row per hour.
+  Files: `Public/notebook-preflight.js`, `Public/sw-preflight.js`,
+  `Public/notebook.js` (preflight gate + watchdog),
+  `Resources/Views/notebook.leaf`,
+  `Sources/APIServer/Routes/ClientDiagnosticsRoutes.swift`,
+  `Sources/APIServer/Models/APIClientDiagnostic.swift`,
+  `Sources/APIServer/Migrations/CreateClientDiagnostics.swift`.
+
+### Changed
+
+- **Instructor dashboard card "Students With No Submissions" replaced
+  with "Students With Browser Errors".**  The new card counts distinct
+  students who posted a `client_diagnostics` record (preflight or
+  watchdog failure) for one of the course's test setups within the
+  same 24-hour window as the other dashboard metrics.  Diagnostics with
+  a null `test_setup_id` (the supplied ID didn't resolve, e.g. the
+  setup was deleted) are excluded since they can't be attributed to a
+  course.  The regression test
+  `testInstructorDashboardCountsPendingPreEnrollmentsAsNoSubmissionYet`
+  is replaced with
+  `testInstructorDashboardCountsStudentsWithBrowserErrors`.
+
 ## [0.4.147] - 2026-05-11
 
 ### Changed

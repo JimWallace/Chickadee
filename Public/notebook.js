@@ -20,7 +20,6 @@
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
     const uploadFile = document.getElementById('nb-upload-file');
-    const frameError = document.getElementById('nb-frame-error');
     const setupID     = frame ? frame.dataset.setupId : null;
     const gradingMode = frame ? frame.dataset.gradingMode : null;
 
@@ -52,39 +51,95 @@
     let lastForcedEditorResetMs = 0;
     let serverSyncInFlight = false;
     let serverSyncComplete = false;
-    frame.src = editorURL;
 
-    // Quick reachability check helps explain blank/failed editor loads.
-    fetch(notebookURL, { method: 'GET' }).then((res) => {
-        if (!res.ok) {
-            setStatus('error', `Notebook source unavailable (${res.status})`);
-            if (frameError) frameError.style.display = '';
+    // Capability preflight: gate iframe mounting on the browser actually
+    // supporting JupyterLite + Pyodide.  If the preflight module isn't
+    // loaded (older cached page, network glitch) fall through to the
+    // legacy behaviour of mounting unconditionally.
+    const failures = window.ChickadeeNotebookFailures;
+    const preflightPromise = failures
+        ? failures.runPreflight()
+        : Promise.resolve({ ok: true, failed: [] });
+
+    preflightPromise.then((result) => {
+        if (!result.ok) {
+            if (failures) {
+                failures.showFailure({
+                    kind:         'preflight_fail',
+                    failedChecks: result.failed
+                });
+            }
+            // Re-enable Submit so the upload-fallback handler runs.
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.title = '';
+            }
+            setStatus('error', 'In-browser editor unavailable — upload your notebook below.');
+            return;
         }
-    }).catch(() => {
-        setStatus('error', 'Notebook source unavailable');
-        if (frameError) frameError.style.display = '';
+        mountEditor();
     });
 
-    // Detect blank/failed iframe loads and provide an explicit fallback path.
-    let loaded = false;
-    frame.addEventListener('load', () => {
-        loaded = true;
-        if (frameError) frameError.style.display = 'none';
-        if (!serverSyncComplete && !serverSyncInFlight) {
-            void syncNotebookFromServerSnapshot();
+    function mountEditor() {
+        frame.src = editorURL;
+
+        // Quick reachability check helps explain blank/failed editor loads.
+        fetch(notebookURL, { method: 'GET' }).then((res) => {
+            if (!res.ok) {
+                setStatus('error', `Notebook source unavailable (${res.status})`);
+            }
+        }).catch(() => {
+            setStatus('error', 'Notebook source unavailable');
+        });
+
+        frame.addEventListener('load', () => {
+            if (!serverSyncComplete && !serverSyncInFlight) {
+                void syncNotebookFromServerSnapshot();
+            }
+            applyLockedNotebookUI();
+            enforceLockedNotebookPath();
+        });
+        setInterval(() => {
+            applyLockedNotebookUI();
+            enforceLockedNotebookPath();
+        }, 1500);
+
+        armEditorWatchdog();
+    }
+
+    // Watchdog: poll for JupyterLite's `jupyterapp` global on the iframe's
+    // contentWindow (the same readiness signal used elsewhere in this file).
+    // If the kernel doesn't come up within 45s, surface the fallback panel.
+    function armEditorWatchdog() {
+        if (!failures) return;
+        const startedAt = Date.now();
+        const deadline  = 45000; // 45s — generous for mid-spec Windows laptops.
+        let cancelled = false;
+
+        function tick() {
+            if (cancelled) return;
+            let ready = false;
+            try {
+                ready = !!(frame.contentWindow && frame.contentWindow.jupyterapp);
+            } catch (_) { /* cross-origin or transient — keep polling */ }
+
+            if (ready) { cancelled = true; return; }
+
+            if (Date.now() - startedAt >= deadline) {
+                cancelled = true;
+                failures.showFailure({ kind: 'watchdog_timeout' });
+                // Re-enable Submit so the upload-fallback handler runs.
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.title = '';
+                }
+                return;
+            }
+            setTimeout(tick, 500);
         }
-        applyLockedNotebookUI();
-        enforceLockedNotebookPath();
-    });
-    setInterval(() => {
-        applyLockedNotebookUI();
-        enforceLockedNotebookPath();
-    }, 1500);
-    setTimeout(() => {
-        if (!loaded && frameError) {
-            frameError.style.display = '';
-        }
-    }, 5000);
+        // First poll after 1s — the kernel is never up before that.
+        setTimeout(tick, 1000);
+    }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
     // iframe never loaded) re-enable Submit so the student isn't stuck. The
