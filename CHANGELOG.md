@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.147] - 2026-05-11
+
+### Changed
+
+- **Server health alert "error rate spike" no longer counts student-code
+  failures.** Previously the rule fired whenever ≥ 30% of recent
+  `JobExecutionMetric` rows had `finalStatus` of `error` or `timeout` — but
+  `inferredFinalStatus(from:)` rolls a single per-test `error`/`timeout` up to
+  the job level, so any assignment with buggy starter code or aggressive
+  per-test time limits could trip the alert.  The rule now classifies a row
+  as a system failure only when `finalStatus` is `error`/`timeout` AND the
+  matching per-test counter (`testsErrored` / `testsTimedOut`) is zero — i.e.
+  the runner itself failed or the worker timed out a job before any test
+  reported.  Alert label renamed to "System-level failure rate spike";
+  webhook detail keys renamed (`error_count` → `system_failure_count`,
+  `error_rate_percent` → `system_failure_rate_percent`).  Helper
+  `JobFailureClassification.isSystemFailure(finalStatus:testsErrored:testsTimedOut:)`
+  added so the predicate is unit-testable without spinning up a DB.
+
 ## [0.4.146] - 2026-04-30
 
 ### Changed
