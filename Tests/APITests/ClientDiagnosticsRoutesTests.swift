@@ -139,6 +139,26 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
         XCTAssertNil(records.first?.testSetupID)
     }
 
+    func testPersistsWatchdogKernelUnhealthySubtype() async throws {
+        // The watchdog distinguishes two failure modes by populating
+        // failedChecks=["kernel-unhealthy"] when the JupyterLite app shell
+        // mounted but the Pyodide kernel never reached idle/busy.  Both
+        // count toward "Students With Browser Errors" but the subtype is
+        // preserved on the record for debugging.
+        let auth = try await loginAsStudent()
+        try await insertSetup(id: "setup_kernel_unhealthy")
+        let body = #"""
+        {"kind":"watchdog_timeout","testSetupID":"setup_kernel_unhealthy","failedChecks":["kernel-unhealthy"]}
+        """#
+        let res = try await postJSON(body, auth: auth, userAgent: "TestUA/2.0")
+        XCTAssertEqual(res.status, .accepted)
+
+        let records = try await APIClientDiagnostic.query(on: app.db).all()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.kind, "watchdog_timeout")
+        XCTAssertEqual(records.first?.failedChecks, "kernel-unhealthy")
+    }
+
     func testAcceptsMissingTestSetupID() async throws {
         let auth = try await loginAsStudent()
         let body = #"{"kind":"watchdog_timeout"}"#

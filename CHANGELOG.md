@@ -13,18 +13,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Client-side diagnostics for the in-browser notebook editor.**  The
   student submit page now runs a capability preflight (WebAssembly, Web
   Workers, service-worker registration, IndexedDB open) before mounting
-  the JupyterLite iframe, and arms a 45-second watchdog on the
-  JupyterLite kernel readiness signal after mount.  On either failure
-  mode the iframe is hidden, a fallback section is revealed with a
-  direct `.ipynb` upload picker (the existing upload-fallback JS
-  re-used unchanged), and a record is posted to a new endpoint
-  `POST /api/v1/client-diagnostics` (kinds: `preflight_fail`,
-  `watchdog_timeout`).  When all checks pass the page is visually
-  identical to before — no UI changes are made unless a failure
-  occurs.  Records are stored in a new `client_diagnostics` table and
-  rate-limited per (user, setup, kind) to one row per hour.
+  the JupyterLite iframe, then arms a two-phase watchdog on the
+  JupyterLite readiness signals after mount: 45 s for the JupyterFrontEnd
+  app shell to come up, plus a further 30 s for the Pyodide kernel to
+  reach `idle`/`busy`.  The second phase catches the
+  "JupyterLite loaded but kernel is Unknown" failure mode — a real one
+  we've observed in the wild on Windows machines where the app shell
+  mounts fine but the kernel never starts.  Watchdog records of that
+  shape post `failedChecks: ["kernel-unhealthy"]` so the subtype is
+  preserved on the row.  On either failure mode the iframe is hidden,
+  a fallback section is revealed with a direct `.ipynb` upload picker
+  (the existing upload-fallback JS re-used unchanged), and a record is
+  posted to a new endpoint `POST /api/v1/client-diagnostics` (kinds:
+  `preflight_fail`, `watchdog_timeout`).  When all checks pass the page
+  is visually identical to before — no UI changes are made unless a
+  failure occurs.  Records are stored in a new `client_diagnostics`
+  table and rate-limited per (user, setup, kind) to one row per hour.
   Files: `Public/notebook-preflight.js`, `Public/sw-preflight.js`,
-  `Public/notebook.js` (preflight gate + watchdog),
+  `Public/notebook.js` (preflight gate + two-phase watchdog),
   `Resources/Views/notebook.leaf`,
   `Sources/APIServer/Routes/ClientDiagnosticsRoutes.swift`,
   `Sources/APIServer/Models/APIClientDiagnostic.swift`,

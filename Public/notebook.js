@@ -107,38 +107,120 @@
         armEditorWatchdog();
     }
 
-    // Watchdog: poll for JupyterLite's `jupyterapp` global on the iframe's
-    // contentWindow (the same readiness signal used elsewhere in this file).
-    // If the kernel doesn't come up within 45s, surface the fallback panel.
+    // Watchdog: two-phase readiness check on the iframe's JupyterLite.
+    //
+    //   Phase 1 (shell) — wait up to 45s for `jupyterapp` (the
+    //       JupyterFrontEnd) to mount on the iframe's contentWindow.
+    //       Failure here means the iframe never started — fallback fires
+    //       with kind=watchdog_timeout (no failedChecks).
+    //
+    //   Phase 2 (kernel) — once the shell is up, wait up to 30s for the
+    //       Pyodide kernel to reach an `idle` or `busy` status.  This
+    //       catches the "JupyterLite loaded but kernel is Unknown"
+    //       failure mode where the app shell is fine but the kernel never
+    //       comes online.  Fallback fires with
+    //       failedChecks=["kernel-unhealthy"] so dashboard telemetry can
+    //       distinguish it from a true app-shell timeout.
     function armEditorWatchdog() {
         if (!failures) return;
-        const startedAt = Date.now();
-        const deadline  = 45000; // 45s — generous for mid-spec Windows laptops.
-        let cancelled = false;
+        const startedAt    = Date.now();
+        const shellDeadline  = 45000;
+        const kernelDeadline = 30000;
+        let shellLoadedAt = null;
+        let cancelled     = false;
 
         function tick() {
             if (cancelled) return;
-            let ready = false;
+
+            let shellReady    = false;
+            let kernelHealthy = false;
             try {
-                ready = !!(frame.contentWindow && frame.contentWindow.jupyterapp);
+                const win = frame.contentWindow;
+                if (win && win.jupyterapp) {
+                    shellReady = true;
+                    kernelHealthy = isKernelHealthy(win);
+                }
             } catch (_) { /* cross-origin or transient — keep polling */ }
 
-            if (ready) { cancelled = true; return; }
-
-            if (Date.now() - startedAt >= deadline) {
-                cancelled = true;
-                failures.showFailure({ kind: 'watchdog_timeout' });
-                // Re-enable Submit so the upload-fallback handler runs.
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.title = '';
+            if (!shellReady) {
+                if (Date.now() - startedAt >= shellDeadline) {
+                    cancelled = true;
+                    failures.showFailure({ kind: 'watchdog_timeout' });
+                    reenableSubmit();
+                    return;
                 }
+                setTimeout(tick, 500);
+                return;
+            }
+
+            // Shell is up — start (or continue) the kernel-readiness timer.
+            if (shellLoadedAt === null) shellLoadedAt = Date.now();
+
+            if (kernelHealthy) {
+                cancelled = true; // clean success
+                return;
+            }
+
+            if (Date.now() - shellLoadedAt >= kernelDeadline) {
+                cancelled = true;
+                failures.showFailure({
+                    kind:         'watchdog_timeout',
+                    failedChecks: ['kernel-unhealthy']
+                });
+                reenableSubmit();
                 return;
             }
             setTimeout(tick, 500);
         }
-        // First poll after 1s — the kernel is never up before that.
+        // First poll after 1s — the shell is never up before that.
         setTimeout(tick, 1000);
+    }
+
+    function reenableSubmit() {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.title = '';
+        }
+    }
+
+    // Returns true iff JupyterLite has a running kernel that's reached an
+    // `idle` or `busy` state — i.e. it can actually execute cells.  Other
+    // states (`unknown`, `dead`, `starting`, etc.) are treated as not-yet
+    // and the watchdog keeps polling.
+    //
+    // Two layered probes, in order of preference:
+    //   1. ServiceManager API   — authoritative when JupyterLite exposes it
+    //   2. DOM scrape           — fallback if the API surface changed
+    //
+    // Both are wrapped in try/catch so a thrown TypeError or cross-origin
+    // boundary doesn't kill the watchdog.
+    function isKernelHealthy(win) {
+        try {
+            const app = win.jupyterapp;
+            const sm  = app && app.serviceManager;
+            if (sm && sm.sessions && typeof sm.sessions.running === 'function') {
+                const running = sm.sessions.running();
+                if (running) {
+                    const sessions = Array.from(running);
+                    for (let i = 0; i < sessions.length; i++) {
+                        const status = sessions[i] && sessions[i].kernel && sessions[i].kernel.status;
+                        if (status === 'idle' || status === 'busy') return true;
+                    }
+                }
+            }
+        } catch (_) { /* fall through */ }
+
+        try {
+            const doc = win.document;
+            const txt = (doc && doc.body && doc.body.textContent) || '';
+            // JupyterLite renders kernel status as "Python (Pyodide) | Idle"
+            // or "Python (Pyodide) | Busy" once the kernel is up; "Unknown"
+            // means the kernel never started.
+            if (txt.indexOf('| Idle') !== -1)  return true;
+            if (txt.indexOf('| Busy') !== -1)  return true;
+        } catch (_) { /* fall through */ }
+
+        return false;
     }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
