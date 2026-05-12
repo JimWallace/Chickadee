@@ -32,7 +32,6 @@ func routes(_ app: Application) throws {
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())
     try auth.register(collection: BrowserRunnerRoutes())
-    try auth.register(collection: ClientDiagnosticsRoutes())
     try auth.register(collection: JupyterLiteContentsRoutes())
     // TestSetupRoutes is in the auth group so students can fetch/download notebooks.
     // Instructor-only handlers (upload, zip-download, save) guard themselves inline.

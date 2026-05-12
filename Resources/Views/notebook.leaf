@@ -33,23 +33,11 @@ Notebook
     src="#(jupyterLiteEditorURL)"
     loading="eager">
 </iframe>
-<section id="nb-fallback" class="nb-fallback" role="alert" hidden>
-    <h2 style="margin:.2rem 0">Editor didn&rsquo;t load</h2>
-    <p style="margin:.4rem 0">
-        The in-browser notebook editor didn&rsquo;t start in your browser.
-        You can still submit your assignment by uploading your <code>.ipynb</code> file directly.
-    </p>
-    <p style="margin:.4rem 0">
-        <input type="file" id="nb-upload-file" accept=".ipynb,application/json">
-    </p>
-    <details style="margin-top:.6rem">
-        <summary>Diagnostic details</summary>
-        <pre id="nb-fallback-details" style="white-space:pre-wrap;font-size:.85em;margin:.4rem 0"></pre>
-    </details>
-</section>
+<p id="nb-frame-error" class="empty" role="alert" style="display:none;margin-top:.6rem">
+    The embedded editor did not load.
+</p>
 <div id="nb-results" class="nb-results" hidden></div>
 <div id="browser-runner-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-<script src="/notebook-preflight.js?v=#appVersion()"></script>
 <script src="/notebook.js?v=#appVersion()"></script>
 <script src="/browser-runner.js?v=#appVersion()" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
 #endexport

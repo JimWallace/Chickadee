@@ -535,105 +535,69 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
-    /// Dashboard card "Students With Browser Errors" counts distinct
-    /// students who posted a client-side diagnostic (preflight or watchdog
-    /// failure) on one of this course's test setups within the 24h window.
-    /// Diagnostics outside the window, on other courses' setups, or with
-    /// a null test_setup_id (stale) must not inflate the count.
-    func testInstructorDashboardCountsStudentsWithBrowserErrors() async throws {
+    /// Regression guard for v0.4.129 — the "Students With No Submissions"
+    /// dashboard card subtracted submitters from the *active* student set,
+    /// ignoring pending pre-enrollments.  An instructor who bulk-enrolled
+    /// a class via CSV (e.g. 151 students) and had only 12 of them log in
+    /// would see "12 without submissions" on the day of upload, which
+    /// massively understates the real engagement gap (139 students who
+    /// haven't even logged in yet).  Pending pre-enrollments now roll
+    /// into this count — by definition they have zero submissions.
+    func testInstructorDashboardCountsPendingPreEnrollmentsAsNoSubmissionYet() async throws {
+        let courseID = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
 
-        let s1 = try await insertStudent(username: "browserErr_s1")
+        // Two enrolled students: one submits, one doesn't.
+        let s1 = try await insertStudent(username: "noSubMetric_s1")
         try await enrollStudentInTestCourse(s1)
-        let s2 = try await insertStudent(username: "browserErr_s2")
+        let s2 = try await insertStudent(username: "noSubMetric_s2")
         try await enrollStudentInTestCourse(s2)
-        let s3 = try await insertStudent(username: "browserErr_s3")
-        try await enrollStudentInTestCourse(s3)
 
-        try await insertSetup(id: "setup_browser_err")
+        try await insertSetup(id: "setup_no_sub_metric")
         try await insertAssignment(
-            testSetupID: "setup_browser_err",
-            title: "Browser-error Metric Test",
+            testSetupID: "setup_no_sub_metric",
+            title: "No-Sub Metric Test",
             isOpen: true
         )
-
-        // s1 hit a preflight failure right now → counts.
-        let d1 = APIClientDiagnostic(
-            userID: try s1.requireID(),
-            testSetupID: "setup_browser_err",
-            kind: "preflight_fail",
-            failedChecks: "serviceWorker",
-            userAgent: "TestUA"
+        try await insertSubmission(
+            id: "sub_metric_s1",
+            testSetupID: "setup_no_sub_metric",
+            userID: try s1.requireID()
         )
-        try await d1.save(on: app.db)
 
-        // s2 hit a watchdog timeout right now → counts.
-        let d2 = APIClientDiagnostic(
-            userID: try s2.requireID(),
-            testSetupID: "setup_browser_err",
-            kind: "watchdog_timeout",
-            failedChecks: nil,
-            userAgent: "TestUA"
+        // One pending pre-enrollment: bulk-uploaded student who hasn't
+        // logged in yet.  Has no APIUser row, no submissions, but
+        // belongs to the course's roster intent.
+        let pending = APIPreEnrollment(
+            courseID: courseID, username: "noSubMetric_pending"
         )
-        try await d2.save(on: app.db)
+        try await pending.save(on: app.db)
 
-        // s1 again, just to verify deduplication-by-user in the metric.
-        let d1b = APIClientDiagnostic(
-            userID: try s1.requireID(),
-            testSetupID: "setup_browser_err",
-            kind: "watchdog_timeout",
-            failedChecks: nil,
-            userAgent: "TestUA"
-        )
-        try await d1b.save(on: app.db)
-
-        // s3 hit a diagnostic 48h ago → outside the window, must NOT count.
-        let staleStudent = try await insertStudent(username: "browserErr_stale")
-        try await enrollStudentInTestCourse(staleStudent)
-        let dStale = APIClientDiagnostic(
-            userID: try staleStudent.requireID(),
-            testSetupID: "setup_browser_err",
-            kind: "watchdog_timeout",
-            failedChecks: nil,
-            userAgent: "TestUA"
-        )
-        try await dStale.save(on: app.db)
-        // Manually back-date so it falls outside the 24h window.
-        dStale.createdAt = Date().addingTimeInterval(-48 * 60 * 60)
-        try await dStale.save(on: app.db)
-
-        // s3 hit a diagnostic with a null test_setup_id → unattributable,
-        // must NOT count.
-        let dOrphan = APIClientDiagnostic(
-            userID: try s3.requireID(),
-            testSetupID: nil,
-            kind: "watchdog_timeout",
-            failedChecks: nil,
-            userAgent: "TestUA"
-        )
-        try await dOrphan.save(on: app.db)
-
-        // Expected: 2 distinct students (s1, s2).
+        // Active students without submissions: just s2 (1).
+        // Pending students: 1.
+        // Expected card value: 2.
         try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
             req.headers.add(name: .cookie, value: cookie)
         }, afterResponse: { res in
             XCTAssertEqual(res.status, .ok)
             let html = res.body.string
 
-            let pattern = #"Students With Browser Errors</div>\s*<div class="diagnostic-value">(\d+)</div>"#
+            // Match the literal card structure so a regression in
+            // ANOTHER metric's value can't accidentally pass this test.
+            let pattern = #"Students With No Submissions</div>\s*<div class="diagnostic-value">(\d+)</div>"#
             let re = try NSRegularExpression(pattern: pattern)
             let nsr = NSRange(html.startIndex..., in: html)
             guard let match = re.firstMatch(in: html, range: nsr),
                   let valueRange = Range(match.range(at: 1), in: html)
             else {
-                XCTFail("Could not locate 'Students With Browser Errors' metric card in dashboard HTML")
+                XCTFail("Could not locate 'Students With No Submissions' metric card in dashboard HTML")
                 return
             }
             XCTAssertEqual(
                 String(html[valueRange]), "2",
-                "Expected 2 students (s1 + s2 with recent diagnostics).  "
-                + "Out-of-window diagnostics and diagnostics with a null "
-                + "test_setup_id must not inflate the count."
+                "Expected card to read 2 (1 enrolled student without submissions + "
+                + "1 pending pre-enrollment).  Pre-fix the card showed only the "
+                + "enrolled-student gap (1) and ignored pending pre-enrollments."
             )
         })
     }
