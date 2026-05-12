@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.153] - 2026-05-12
+
+### Added
+
+- **Instructor action: reset a student's working-copy notebook back to
+  the assignment starter.**  Used when a student corrupts their own
+  notebook — most commonly by uploading a broken `.ipynb` via the
+  fallback panel that overwrites their working copy.  New button in
+  the Action column on
+  `/instructor/:assignmentID/submissions`, sitting alongside the
+  existing "Re-test" action.  Confirmation dialog warns that past
+  submissions are NOT affected (they remain in the DB for forensic
+  review) and that the student may need to clear site data on their
+  next visit for the browser to pick up the fresh starter.
+
+  New endpoint:
+  `POST /instructor/:assignmentID/students/:studentID/reset-notebook`.
+  Hard-gated to instructor role (existing `RoleMiddleware`).  Resolves
+  the assignment → test setup, verifies the target student is
+  enrolled in the same course, reads the canonical starter via
+  `notebookData(for: setup)` (which extracts it from the test-setup
+  zip or `setup.notebookPath`), and calls `ensureUserNotebookWorkingCopy`
+  with `overwriteWith:` to force a clean re-seed.
+
+  Files: `Public/styles.css` (uses existing `.action-danger` class —
+  no new CSS), `Resources/Views/assignment-submissions.leaf` (new
+  button), `Sources/APIServer/Routes/Web/AssignmentRoutes.swift`
+  (route registration), `Sources/APIServer/Routes/Web/AssignmentRoutes+Submissions.swift`
+  (new handler), `Sources/APIServer/Routes/Web/AssignmentContextTypes.swift`
+  (new `studentUUID` field on `AssignmentStudentRow`).
+  Tests: 3 cases in `Tests/APITests/AssignmentRoutesTests.swift`
+  covering successful overwrite, prior submissions preserved, and
+  the unenrolled-student rejection path.
+
 ## [0.4.152] - 2026-05-12
 
 ### Fixed

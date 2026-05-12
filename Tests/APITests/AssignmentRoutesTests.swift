@@ -1677,6 +1677,180 @@ final class AssignmentRoutesTests: XCTestCase {
         })
     }
 
+    // MARK: - POST /instructor/:assignmentID/students/:studentID/reset-notebook
+    //
+    // Instructor-driven reset of a student's working-copy notebook back to
+    // the canonical starter from the test setup.  Used when a student
+    // corrupts their own notebook (e.g. uploading a broken .ipynb that
+    // overwrites their working copy on the server).  Past submissions are
+    // NOT affected.
+
+    /// Helper: write a starter notebook to disk and point a setup at it
+    /// via `notebookPath`.  `notebookData(for:)` then returns these bytes
+    /// when the reset handler asks for the starter.
+    @discardableResult
+    private func attachStarterNotebook(
+        to setup: APITestSetup,
+        bytes: Data
+    ) async throws -> String {
+        try FileManager.default.createDirectory(atPath: tmpDir + "starters/", withIntermediateDirectories: true)
+        let starterPath = tmpDir + "starters/\(setup.id ?? "x").ipynb"
+        try bytes.write(to: URL(fileURLWithPath: starterPath))
+        setup.notebookPath = starterPath
+        try await setup.save(on: app.db)
+        return starterPath
+    }
+
+    /// Helper: write a "corrupted" working-copy notebook to the location
+    /// the student's browser would have written one to.  Returns the path
+    /// so the test can verify it gets overwritten.
+    private func seedStudentWorkingCopy(
+        setupID: String,
+        userID: UUID,
+        bytes: Data
+    ) throws -> String {
+        let path = app.directory.publicDirectory
+            + "jupyterlite/files/users/\(userID.uuidString.lowercased())/\(setupID)/assignment.ipynb"
+        let dir = (path as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try bytes.write(to: URL(fileURLWithPath: path))
+        return path
+    }
+
+    func testResetStudentNotebookOverwritesWorkingCopyWithStarter() async throws {
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+        let setup = try await insertSetup(id: "setup_reset_ok")
+        let starterBytes = Data(#"""
+        {"nbformat":4,"nbformat_minor":5,"metadata":{"kernelspec":{"name":"python"}},"cells":[{"cell_type":"markdown","metadata":{},"source":["# Original assignment"]}]}
+        """#.utf8)
+        try await attachStarterNotebook(to: setup, bytes: starterBytes)
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_reset_ok", title: "Reset Lab", isOpen: true
+        )
+        let assignmentID = assignment.publicID
+
+        let student = try await insertStudent(username: "reset_student_ok")
+        try await enrollStudentInTestCourse(student)
+        let studentUUID = try student.requireID()
+
+        let brokenBytes = Data(#"""
+        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","source":["# student-uploaded-garbage"]}]}
+        """#.utf8)
+        let workingCopyPath = try seedStudentWorkingCopy(
+            setupID: "setup_reset_ok", userID: studentUUID, bytes: brokenBytes
+        )
+
+        try await app.asyncTest(
+            .POST,
+            "/instructor/\(assignmentID)/students/\(studentUUID.uuidString)/reset-notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["returnTo": "/instructor/\(assignmentID)/submissions", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor/\(assignmentID)/submissions")
+            }
+        )
+
+        // Working copy MUST have been overwritten — the bytes the route
+        // writes are the starter notebook passed through
+        // `normalizeNotebookForJupyterLite` (which adds/normalizes
+        // kernelspec metadata), so they won't equal `starterBytes`
+        // verbatim.  Instead, verify the broken content is GONE and a
+        // valid Python-kernel notebook is in its place.
+        let afterReset = try Data(contentsOf: URL(fileURLWithPath: workingCopyPath))
+        XCTAssertNotEqual(afterReset, brokenBytes,
+            "Working copy must no longer contain the student's broken bytes.")
+        guard let resetJSON = try JSONSerialization.jsonObject(with: afterReset) as? [String: Any],
+              let metadata  = resetJSON["metadata"] as? [String: Any],
+              let kernelspec = metadata["kernelspec"] as? [String: Any]
+        else {
+            XCTFail("Reset working copy is not a valid normalized notebook"); return
+        }
+        XCTAssertEqual(kernelspec["name"] as? String, "python",
+            "Starter must be normalized to Python (Pyodide) kernel.")
+        // Sanity: starter contains the original markdown cell content
+        let resetText = String(data: afterReset, encoding: .utf8) ?? ""
+        XCTAssertTrue(resetText.contains("Original assignment"),
+            "Reset must have come from the starter, not the student upload.")
+    }
+
+    /// The reset must NOT delete past submissions — they remain on disk
+    /// and in the DB for instructor review.  Only the live working-copy
+    /// notebook is overwritten.
+    func testResetStudentNotebookDoesNotTouchPriorSubmissions() async throws {
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+        let setup = try await insertSetup(id: "setup_reset_keep_subs")
+        try await attachStarterNotebook(
+            to: setup,
+            bytes: Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.utf8)
+        )
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_reset_keep_subs", title: "Lab", isOpen: true
+        )
+        let assignmentID = assignment.publicID
+        let student = try await insertStudent(username: "reset_student_keep_subs")
+        try await enrollStudentInTestCourse(student)
+        let studentUUID = try student.requireID()
+
+        try await insertSubmission(
+            id: "sub_kept_1",
+            testSetupID: "setup_reset_keep_subs",
+            userID: studentUUID
+        )
+
+        try await app.asyncTest(
+            .POST,
+            "/instructor/\(assignmentID)/students/\(studentUUID.uuidString)/reset-notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            }
+        )
+
+        let surviving = try await APISubmission.find("sub_kept_1", on: app.db)
+        XCTAssertNotNil(surviving, "Prior submission must remain after notebook reset.")
+    }
+
+    func testResetStudentNotebookRejectsUnenrolledStudent() async throws {
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+        let setup = try await insertSetup(id: "setup_reset_unenrolled")
+        try await attachStarterNotebook(
+            to: setup,
+            bytes: Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.utf8)
+        )
+        let assignment = try await insertAssignment(
+            testSetupID: "setup_reset_unenrolled", title: "Lab", isOpen: true
+        )
+        let assignmentID = assignment.publicID
+        let strangerID = UUID()  // not enrolled in this course
+
+        try await app.asyncTest(
+            .POST,
+            "/instructor/\(assignmentID)/students/\(strangerID.uuidString)/reset-notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            }
+        )
+    }
+
     // MARK: - Regression tests: assignment creation bug fixes
 
     /// Bug #2 regression: browser posts suiteFiles with "suiteFiles[]" field name and includes extra
