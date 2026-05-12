@@ -42,7 +42,8 @@ func notebookCheckAllGeneratedFilenames(_ check: NotebookCheck) -> [String] {
     var out = [generatedCheckFilename(checkID: check.id, tier: check.tier)]
     switch check.kind {
     case .dataFrameShape, .dataFrameColumns, .numericArrayClose,
-         .figureCount, .cellContains, .functionExists, .astStructure:
+         .figureCount, .cellContains, .functionExists,
+         .variableExists, .astStructure:
         break  // no sidecars
     case .dataFrameEquality, .seriesEquality:
         out.append(expectedCSVSidecarFilename(checkID: check.id))
@@ -86,6 +87,9 @@ func renderNotebookCheck(_ check: NotebookCheck) -> GeneratedCheck {
     case .functionExists:
         source      = renderFunctionExists(check, specHash: hash)
         displayName = check.name ?? defaultFunctionExistsLabel(check)
+    case .variableExists:
+        source      = renderVariableExists(check, specHash: hash)
+        displayName = check.name ?? defaultVariableExistsLabel(check)
     case .astStructure:
         source      = renderASTStructure(check, specHash: hash)
         displayName = check.name ?? defaultASTStructureLabel(check)
@@ -741,6 +745,94 @@ private func renderFunctionExists(_ check: NotebookCheck, specHash: String) -> S
     \(arityCheck)
 
     passed(f"`{name}` is defined and callable")
+    """
+}
+
+// MARK: - .variableExists
+
+private func defaultVariableExistsLabel(_ check: NotebookCheck) -> String {
+    let name = check.variable ?? "variable"
+    if let typeName = check.expectedType, !typeName.isEmpty {
+        return "`\(name)` is defined and is a \(typeName)"
+    }
+    return "`\(name)` is defined"
+}
+
+/// Maps an instructor-typed Python type name to a runtime check
+/// expression against an arbitrary value variable.  Mirrors
+/// `PatternFamilyRenderer.returnTypeCheckExpression` byte-for-byte
+/// (parameterised by the value variable so we don't have to import a
+/// shared helper; the comment at the bottom of this file calls out the
+/// duplication convention).  Builtins use `isinstance` directly; library
+/// types are matched by walking the MRO by class name so we don't have to
+/// import pandas/numpy at the top of the generated test.
+private func variableExistsTypeCheckExpression(typeName: String, valueExpr: String) -> String {
+    switch typeName {
+    case "int":      return "isinstance(\(valueExpr), int) and not isinstance(\(valueExpr), bool)"
+    case "float":    return "isinstance(\(valueExpr), float)"
+    case "bool":     return "isinstance(\(valueExpr), bool)"
+    case "str":      return "isinstance(\(valueExpr), str)"
+    case "list":     return "isinstance(\(valueExpr), list)"
+    case "tuple":    return "isinstance(\(valueExpr), tuple)"
+    case "dict":     return "isinstance(\(valueExpr), dict)"
+    case "set":      return "isinstance(\(valueExpr), set)"
+    case "NoneType": return "\(valueExpr) is None"
+    case "DataFrame":
+        return #"any(getattr(b, "__name__", "") == "DataFrame" for b in type(\#(valueExpr)).__mro__)"#
+    case "Series":
+        return #"any(getattr(b, "__name__", "") == "Series" for b in type(\#(valueExpr)).__mro__)"#
+    case "ndarray":
+        return #"any(getattr(b, "__name__", "") == "ndarray" for b in type(\#(valueExpr)).__mro__)"#
+    default:
+        // Fallback: treat the name as a class to MRO-walk.  Catches
+        // student-defined classes referenced by name and lets new
+        // library types work without a Swift edit.
+        return "any(getattr(b, \"__name__\", \"\") == \"\(typeName)\" for b in type(\(valueExpr)).__mro__)"
+    }
+}
+
+private func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
+    let name  = check.variable ?? "variable"
+    let label = check.name ?? defaultVariableExistsLabel(check)
+    let nameLiteral = "\"" + escapeForPythonStringLiteralCheck(name) + "\""
+
+    let typeCheck: String
+    let passMessage: String
+    if let typeName = check.expectedType, !typeName.isEmpty {
+        let typeNameLiteral = "\"" + escapeForPythonStringLiteralCheck(typeName) + "\""
+        let typeCheckExpr = variableExistsTypeCheckExpression(typeName: typeName, valueExpr: "actual")
+        typeCheck = """
+        expected_type_name = \(typeNameLiteral)
+        if not (\(typeCheckExpr)):
+            failed(
+                f"Variable `{name}` has the wrong type.\\n"
+                f"  expected: {expected_type_name}\\n"
+                f"  got:      {type(actual).__name__}\\n"
+            )
+        """
+        passMessage = #"f"`{name}` is defined and is a {expected_type_name}""#
+    } else {
+        typeCheck = "# (no type check; existence only)"
+        passMessage = #"f"`{name}` is defined""#
+    }
+
+    return """
+    # Test: \(label)
+    # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=variable_exists spec_hash=\(specHash) — edit the check, not this file.
+
+    name = \(nameLiteral)
+
+    _MISSING = object()
+    actual = getattr(student_module, name, _MISSING)
+    if actual is _MISSING:
+        failed(
+            f"Variable `{name}` is not defined in the student notebook.\\n"
+            f"  expected: a module-level variable named `{name}`\\n"
+        )
+
+    \(typeCheck)
+
+    passed(\(passMessage))
     """
 }
 

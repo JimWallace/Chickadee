@@ -163,6 +163,8 @@
             $('check-cc-must-differ').value = '';
             $('check-fexists-name').value = '';
             $('check-fexists-arity').value = '';
+            $('check-vexists-name').value = '';
+            $('check-vexists-type').value = '';
             $('check-ast-constructs').value = '';
             showFieldsForKind('data_frame_shape');
         }
@@ -208,6 +210,9 @@
             } else if (c.kind === 'function_exists') {
                 $('check-fexists-name').value = c.variable || '';
                 $('check-fexists-arity').value = (c.expectedArity != null) ? c.expectedArity : '';
+            } else if (c.kind === 'variable_exists') {
+                $('check-vexists-name').value = c.variable || '';
+                $('check-vexists-type').value = c.expectedType || '';
             } else if (c.kind === 'ast_structure') {
                 $('check-ast-constructs').value = (c.requiredConstructs || []).join('\n');
             }
@@ -300,6 +305,10 @@
                     var arity = parseInt(arityRaw, 10);
                     if (!isNaN(arity)) c.expectedArity = arity;
                 }
+            } else if (kind === 'variable_exists') {
+                c.variable = $('check-vexists-name').value.trim();
+                var typeRaw = $('check-vexists-type').value.trim();
+                if (typeRaw !== '') c.expectedType = typeRaw;
             } else if (kind === 'ast_structure') {
                 c.requiredConstructs = $('check-ast-constructs').value
                     .split('\n')
