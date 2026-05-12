@@ -114,31 +114,42 @@
     //       started — fallback fires with kind=watchdog_timeout (no
     //       failedChecks).
     //
-    //   Phase 2 (kernel) — once the shell is up, wait up to 60s for the
-    //       Pyodide kernel to reach an `idle` or `busy` status.  This
-    //       catches the "JupyterLite loaded but kernel is Unknown"
-    //       failure mode where the app shell is fine but the kernel never
-    //       comes online.  Fallback fires with
-    //       failedChecks=["kernel-unhealthy"] so dashboard telemetry can
-    //       distinguish it from a true app-shell timeout.
+    //   Phase 2 (kernel) — once the shell is up, fire ONLY if we see
+    //       POSITIVE EVIDENCE the kernel is in a failure state — i.e.
+    //       "Kernel Unknown" text in the iframe DOM (Hans's symptom
+    //       from PR #467) or a `dead`/`unknown` kernel status reported
+    //       via the ServiceManager API.  Absence of positive evidence
+    //       of *health* (e.g. the kernel is in "Starting" /
+    //       "Connecting" state, or the status text isn't visible to
+    //       our probe) is NOT treated as failure.  Phase 2 deadline is
+    //       a maximum after which we silently give up watching (we
+    //       were wrong about a problem; the page is the user's now).
     //
-    // Readiness signal: prefer DOM inspection over JS-property access on
-    // the iframe's contentWindow.  Same-origin contentWindow access works
-    // in Chromium but is unreliable in Safari (cross-process iframe
-    // isolation can make `frame.contentWindow.jupyterapp` invisible from
-    // the parent even when JupyterLite is fully alive — bug surfaced in
-    // production v0.4.150).  DOM access is more permissive and matches
-    // what the user actually sees on screen.
+    // Background: v0.4.149's original probe required positive evidence
+    // of kernel health (status text "| Idle" or "| Busy"); v0.4.150 +
+    // v0.4.151 didn't fix that.  In production Safari, Pyodide can
+    // legitimately take >60s to bootstrap, and the status indicator
+    // text doesn't always render the way our probe expects.  We were
+    // firing phase-2 timeouts on healthy kernels because we couldn't
+    // *prove* they were healthy — which is the wrong contract.
+    //
+    // Readiness signal: prefer DOM inspection over JS-property access
+    // on the iframe's contentWindow.  Same-origin contentWindow access
+    // works in Chromium but is unreliable in Safari (cross-process
+    // iframe isolation can make `frame.contentWindow.jupyterapp`
+    // invisible from the parent even when JupyterLite is fully alive).
+    // DOM access is more permissive and matches what the user actually
+    // sees on screen.
     //
     // Once the shell is confirmed loaded, `shellLoadedAt` is latched:
-    // even if a later poll fails to see the UI (intra-iframe navigation,
-    // transient cross-origin error), we don't regress to a phase-1
-    // timeout.
+    // even if a later poll fails to see the UI (intra-iframe
+    // navigation, transient cross-origin error), we don't regress to a
+    // phase-1 timeout.
     function armEditorWatchdog() {
         if (!failures) return;
-        const startedAt    = Date.now();
-        const shellDeadline  = 60000;
-        const kernelDeadline = 60000;
+        const startedAt          = Date.now();
+        const shellDeadline      = 60000;
+        const kernelMaxObserveMs = 120000;
         let shellLoadedAt = null;
         let cancelled     = false;
 
@@ -162,14 +173,9 @@
                 return;
             }
 
-            // Shell loaded at some point.  Check kernel health.
-            if (probe.kernelHealthy) {
-                cancelled = true; // clean success
-                return;
-            }
-
-            // Phase 2: shell up, kernel never reached idle/busy
-            if (Date.now() - shellLoadedAt >= kernelDeadline) {
+            // Shell loaded.  Phase 2 fires ONLY on positive evidence
+            // the kernel has hit a known failure state.
+            if (probe.kernelInFailureState) {
                 cancelled = true;
                 failures.showFailure({
                     kind:         'watchdog_timeout',
@@ -178,24 +184,41 @@
                 reenableSubmit();
                 return;
             }
-            setTimeout(tick, 500);
+
+            // No failure evidence + shell loaded.  Stop watching after
+            // a generous observation window — the user has a working
+            // editor and we shouldn't keep polling forever.
+            if (Date.now() - shellLoadedAt >= kernelMaxObserveMs) {
+                cancelled = true; // silent give-up; assume healthy
+                return;
+            }
+            setTimeout(tick, 1000);
         }
         // First poll after 1s — the shell is never up before that.
         setTimeout(tick, 1000);
     }
 
-    // Probes the JupyterLite iframe for shell + kernel readiness using a
-    // layered approach.  Each layer is wrapped in try/catch so a cross-
-    // origin or transient access error doesn't kill the watchdog.
+    // Probes the JupyterLite iframe for shell readiness + kernel failure
+    // evidence using a layered approach.  Each layer is wrapped in
+    // try/catch so a cross-origin or transient access error doesn't kill
+    // the watchdog.
     //
     // For shell readiness, we accept ANY of:
     //   * `frame.contentWindow.jupyterapp` truthy  — works in Chromium
     //   * a JupyterLab toolbar element in the iframe's DOM
     //   * any `.jp-` prefixed class on the iframe's body
     // The DOM checks work in Safari where the JS-property probe doesn't.
+    //
+    // For kernel state, we look for POSITIVE EVIDENCE OF FAILURE only:
+    //   * "Kernel Unknown" text in the iframe DOM (Hans's symptom)
+    //   * a session with status `dead` or `unknown` via ServiceManager
+    // Absence of failure evidence is NOT treated as failure — kernels
+    // that are still bootstrapping ("starting", "connecting") look the
+    // same to us as healthy ones, and that's fine; the watchdog only
+    // fires when we're sure something has broken.
     function probeIframeReadiness(frame) {
         let shellReady = false;
-        let kernelHealthy = false;
+        let kernelInFailureState = false;
         let win = null;
         let doc = null;
 
@@ -206,7 +229,9 @@
         try {
             if (win && win.jupyterapp) {
                 shellReady = true;
-                kernelHealthy = isKernelHealthy(win);
+                if (isKernelInFailureState(win)) {
+                    kernelInFailureState = true;
+                }
             }
         } catch (_) { /* fall through */ }
 
@@ -224,16 +249,20 @@
             } catch (_) { /* fall through */ }
         }
 
-        // Probe 3: kernel status by DOM text (works even when JS-API access fails)
-        if (shellReady && !kernelHealthy) {
+        // Probe 3: kernel failure by DOM text (covers Safari where the
+        // JS-API path returns nothing).  We specifically look for the
+        // "Kernel Unknown" badge JupyterLite shows when the kernel
+        // session failed to register.
+        if (shellReady && !kernelInFailureState) {
             try {
                 const txt = (doc && doc.body && doc.body.textContent) || '';
-                if (txt.indexOf('| Idle') !== -1)  kernelHealthy = true;
-                else if (txt.indexOf('| Busy') !== -1)  kernelHealthy = true;
+                if (txt.indexOf('Kernel Unknown') !== -1) {
+                    kernelInFailureState = true;
+                }
             } catch (_) { /* fall through */ }
         }
 
-        return { shellReady, kernelHealthy };
+        return { shellReady, kernelInFailureState };
     }
 
     function reenableSubmit() {
@@ -243,18 +272,21 @@
         }
     }
 
-    // Returns true iff JupyterLite has a running kernel that's reached an
-    // `idle` or `busy` state — i.e. it can actually execute cells.  Other
-    // states (`unknown`, `dead`, `starting`, etc.) are treated as not-yet
-    // and the watchdog keeps polling.
+    // Returns true iff we have POSITIVE EVIDENCE the kernel has hit a
+    // known failure state.  Used by the watchdog to decide whether to
+    // fire phase-2 ("kernel-unhealthy").  We deliberately return false
+    // for the "I don't know" case — kernels that are still bootstrapping
+    // look the same as healthy ones to us, and that's fine.  We'd
+    // rather miss a genuine failure than false-positive on a working
+    // editor.
     //
-    // Two layered probes, in order of preference:
-    //   1. ServiceManager API   — authoritative when JupyterLite exposes it
-    //   2. DOM scrape           — fallback if the API surface changed
+    // Failure signals (any of):
+    //   * ServiceManager session with status `dead` or `unknown`
+    //   * "Kernel Unknown" text in the iframe DOM (the Hans symptom)
     //
-    // Both are wrapped in try/catch so a thrown TypeError or cross-origin
-    // boundary doesn't kill the watchdog.
-    function isKernelHealthy(win) {
+    // Each probe is wrapped in try/catch so a TypeError or cross-origin
+    // access error doesn't propagate.
+    function isKernelInFailureState(win) {
         try {
             const app = win.jupyterapp;
             const sm  = app && app.serviceManager;
@@ -264,7 +296,7 @@
                     const sessions = Array.from(running);
                     for (let i = 0; i < sessions.length; i++) {
                         const status = sessions[i] && sessions[i].kernel && sessions[i].kernel.status;
-                        if (status === 'idle' || status === 'busy') return true;
+                        if (status === 'unknown' || status === 'dead') return true;
                     }
                 }
             }
@@ -273,11 +305,7 @@
         try {
             const doc = win.document;
             const txt = (doc && doc.body && doc.body.textContent) || '';
-            // JupyterLite renders kernel status as "Python (Pyodide) | Idle"
-            // or "Python (Pyodide) | Busy" once the kernel is up; "Unknown"
-            // means the kernel never started.
-            if (txt.indexOf('| Idle') !== -1)  return true;
-            if (txt.indexOf('| Busy') !== -1)  return true;
+            if (txt.indexOf('Kernel Unknown') !== -1) return true;
         } catch (_) { /* fall through */ }
 
         return false;
@@ -1256,7 +1284,7 @@ else:
             extractTracebackText,
             parseStructuredPayload,
             probeIframeReadiness,
-            isKernelHealthy,
+            isKernelInFailureState,
         };
     }
 })();

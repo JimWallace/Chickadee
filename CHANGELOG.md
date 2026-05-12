@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.152] - 2026-05-12
+
+### Fixed
+
+- **Watchdog phase-2 (kernel-unhealthy) was false-positiving on healthy
+  kernels.**  Hotfix on top of v0.4.151.  The kernel probe required
+  *positive evidence of health* — specifically the strings `| Idle`
+  or `| Busy` in the iframe DOM text, or `idle`/`busy` from
+  `ServiceManager.sessions.running()`.  In Safari, where Pyodide WASM
+  bootstrap can legitimately take longer than 60 s, and where the
+  status indicator's exact DOM text may not match what we look for, a
+  healthy kernel still in "Starting" / "Connecting" state would be
+  flagged as failed and the fallback panel would hide the live editor.
+
+  Jim observed this directly: notebook visibly loaded, Pyodide
+  running, assignment rendered — and ~1 minute later the watchdog
+  hid it all and posted a phase-2 `watchdog_timeout` row with
+  `failed_checks=["kernel-unhealthy"]`.  Same class of false positive
+  as v0.4.150's phase-1 bug, different probe.
+
+  Inverted the probe semantics: `isKernelHealthy` is now
+  `isKernelInFailureState`, returning true ONLY on **positive
+  evidence of failure** — `Kernel Unknown` text in the iframe DOM
+  (the original Hans symptom), or a session reporting
+  `dead`/`unknown` kernel status via the ServiceManager API.
+  Absence of evidence (kernels still bootstrapping, status text
+  rendered differently than expected, cross-origin access blocked)
+  is now treated as healthy.  Watchdog only fires phase 2 on the
+  specific failures we know how to recognise.
+
+  Phase-2 logic in `armEditorWatchdog` rewritten to match: instead of
+  a kernel-readiness deadline, we have a kernel max-observation
+  window (120 s) after which we silently stop polling — the user has
+  a working editor and we shouldn't keep watching forever.  We fire
+  the fallback only if `isKernelInFailureState` returns true at any
+  poll within that window.
+
+  Regression tests expanded from 10 → 18 cases in
+  `Tests/BrowserRunnerJSTests/watchdog-probe.test.mjs`, including
+  explicit guards for "starting", "no status text visible", and
+  "API access throws" — all of which now correctly return *not in
+  failure state*.
+
 ## [0.4.151] - 2026-05-12
 
 ### Fixed
