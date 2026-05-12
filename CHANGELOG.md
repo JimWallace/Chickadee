@@ -13,13 +13,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Instructor action: reset a student's working-copy notebook back to
   the assignment starter.**  Used when a student corrupts their own
   notebook — most commonly by uploading a broken `.ipynb` via the
-  fallback panel that overwrites their working copy.  New button in
-  the Action column on
+  fallback panel that overwrites their working copy.  New icon-only
+  trash-can button in the Action column on
   `/instructor/:assignmentID/submissions`, sitting alongside the
-  existing "Re-test" action.  Confirmation dialog warns that past
-  submissions are NOT affected (they remain in the DB for forensic
-  review) and that the student may need to clear site data on their
-  next visit for the browser to pick up the fresh starter.
+  existing Re-test action (also restyled as an icon for consistency
+  with the assignments list on `/instructor`).  Confirmation dialog
+  warns that past submissions are NOT affected (they remain in the DB
+  for forensic review).
 
   New endpoint:
   `POST /instructor/:assignmentID/students/:studentID/reset-notebook`.
@@ -30,15 +30,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   zip or `setup.notebookPath`), and calls `ensureUserNotebookWorkingCopy`
   with `overwriteWith:` to force a clean re-seed.
 
-  Files: `Public/styles.css` (uses existing `.action-danger` class —
-  no new CSS), `Resources/Views/assignment-submissions.leaf` (new
-  button), `Sources/APIServer/Routes/Web/AssignmentRoutes.swift`
+  **End-to-end cache-bust** so the student's browser actually sees
+  the reset without any manual cache-clear: every render of the
+  notebook page now stamps the iframe with
+  `data-working-copy-mtime="<unix-epoch-seconds>"` (the on-disk mtime
+  of the user's working copy).  `Public/notebook.js`'s
+  `syncNotebookFromServerSnapshot` persists the last-seen mtime per
+  setup in `localStorage`; when the server's mtime is *newer*, the
+  client force-overwrites the in-browser IndexedDB copy with the
+  server snapshot instead of preserving local edits.  This makes the
+  instructor reset visible on the student's next page load with no
+  cache-clear required.  After a student submission the mtime also
+  bumps (the working-copy file is rewritten with the submitted
+  bytes) — force-reseed in that case is a no-op because the bytes
+  match what's already in IndexedDB.
+
+  Files: `Resources/Views/assignment-submissions.leaf` (icon
+  buttons + reset action), `Resources/Views/notebook.leaf`
+  (new iframe attribute), `Sources/APIServer/Routes/Web/AssignmentRoutes.swift`
   (route registration), `Sources/APIServer/Routes/Web/AssignmentRoutes+Submissions.swift`
   (new handler), `Sources/APIServer/Routes/Web/AssignmentContextTypes.swift`
-  (new `studentUUID` field on `AssignmentStudentRow`).
+  (new `studentUUID` field on `AssignmentStudentRow`),
+  `Sources/APIServer/Routes/Web/WebContextTypes.swift` (new
+  `workingCopyMtime` on `NotebookContext`),
+  `Sources/APIServer/Routes/Web/WebRoutes+Notebook.swift`
+  (`workingCopyMtimeEpoch` helper + populated context),
+  `Public/notebook.js` (mtime-aware preservation logic).
+
   Tests: 3 cases in `Tests/APITests/AssignmentRoutesTests.swift`
-  covering successful overwrite, prior submissions preserved, and
-  the unenrolled-student rejection path.
+  covering successful overwrite, prior-submissions-preserved, and
+  the unenrolled-student rejection path — plus an assertion that the
+  reset bumps the file mtime (the cache-bust signal).
+  `Tests/APITests/NotebookWebRoutesTests.swift`'s notebook-page
+  render test now asserts `data-working-copy-mtime` is a positive
+  integer.
 
 ## [0.4.152] - 2026-05-12
 

@@ -1742,6 +1742,12 @@ final class AssignmentRoutesTests: XCTestCase {
             setupID: "setup_reset_ok", userID: studentUUID, bytes: brokenBytes
         )
 
+        // Capture mtime before the reset so we can prove the file was
+        // overwritten (mtime bumped) — that's the signal `notebook.js`
+        // uses to force-reseed the browser's IndexedDB copy.
+        let mtimeBefore = (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date) ?? Date.distantPast
+        try await Task.sleep(nanoseconds: 1_100_000_000)  // ensure ≥1s mtime resolution
+
         try await app.asyncTest(
             .POST,
             "/instructor/\(assignmentID)/students/\(studentUUID.uuidString)/reset-notebook",
@@ -1779,6 +1785,13 @@ final class AssignmentRoutesTests: XCTestCase {
         let resetText = String(data: afterReset, encoding: .utf8) ?? ""
         XCTAssertTrue(resetText.contains("Original assignment"),
             "Reset must have come from the starter, not the student upload.")
+
+        // mtime must have advanced — this is the signal `notebook.js` uses
+        // to force-reseed the browser's IndexedDB on the student's next
+        // visit.  Without the bump, the v0.4.153 cache-bust wouldn't fire.
+        let mtimeAfter = (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date) ?? Date.distantPast
+        XCTAssertGreaterThan(mtimeAfter, mtimeBefore,
+            "Reset must bump the working-copy file mtime so notebook.js force-reseeds the browser's local copy.")
     }
 
     /// The reset must NOT delete past submissions — they remain on disk

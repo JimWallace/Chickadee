@@ -72,7 +72,7 @@
                             </button>
                         </form>
                     #endif
-                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student may need to clear site data on their next visit for the reset to take effect in their browser.')" style="margin:0">
+                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit.')" style="margin:0">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                         <button class="btn action-btn action-danger" type="submit"

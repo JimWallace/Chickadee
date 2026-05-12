@@ -30,6 +30,7 @@ Notebook
     data-grading-mode="#(gradingMode)"
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
+    data-working-copy-mtime="#(workingCopyMtime)"
     src="#(jupyterLiteEditorURL)"
     loading="eager">
 </iframe>
