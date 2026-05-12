@@ -4,20 +4,22 @@
 // `Public/notebook.js`'s `armEditorWatchdog`.
 //
 // History:
-//   * v0.4.149 introduced the watchdog.  Phase-1 readiness signal was
-//     `frame.contentWindow.jupyterapp` truthy from the parent frame.
-//     Worked in Chromium.
-//   * v0.4.150 deploy: Safari students saw spurious phase-1 timeouts —
-//     JupyterLite was clearly running in the iframe, but the parent
-//     couldn't see `jupyterapp` due to cross-process iframe isolation.
-//   * v0.4.151 fix: `probeIframeReadiness` now layers DOM probes
-//     (`.jp-Toolbar` / `.jp-Notebook` / any `.jp-*` class on body,
-//     plus kernel status text `| Idle`/`| Busy`) on top of the JS
-//     property probe.  DOM access is more permissive across process
-//     boundaries.
+//   * v0.4.149 introduced the watchdog.  Phase-1 signal was
+//     `frame.contentWindow.jupyterapp` truthy.  Worked in Chromium.
+//   * v0.4.150 deploy: Safari students saw spurious phase-1 timeouts
+//     because of cross-process iframe isolation.
+//   * v0.4.151: layered shell probe (DOM `.jp-Toolbar` / `.jp-Notebook`
+//     / `.jp-*` selectors).  Latched `shellLoadedAt`.
+//   * v0.4.152: phase-2 (kernel) probe inverted.  Previously fired on
+//     ABSENCE of positive health evidence ("| Idle" / "| Busy" text);
+//     this false-positived on healthy kernels in valid states like
+//     "Starting" / "Connecting" or when the DOM text didn't render the
+//     way our probe expected.  Now phase 2 fires ONLY on POSITIVE
+//     EVIDENCE of failure ("Kernel Unknown" text, or session status
+//     `dead`/`unknown` via ServiceManager API).
 //
 // These tests pin the probe's behaviour under each path so a future
-// refactor doesn't regress to the Safari-broken signal.
+// refactor doesn't regress.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -30,9 +32,6 @@ const notebookSource = await fs.readFile(
   'utf8',
 );
 
-// Loads notebook.js inside a sandboxed VM context with mocked DOM
-// globals and returns the testHooks export.  Mirrors the setup in
-// notebook.test.mjs.
 async function loadHarness() {
   const hooks = {};
   const elements = new Map();
@@ -86,9 +85,6 @@ async function loadHarness() {
   return hooks.exports;
 }
 
-// Builds a fake iframe whose `contentWindow` and `contentDocument`
-// are computed lazily so tests can simulate cross-origin throws by
-// passing factories.
 function makeFrame({ winFactory, docFactory } = {}) {
   return {
     get contentWindow() { return winFactory ? winFactory() : null; },
@@ -96,14 +92,11 @@ function makeFrame({ winFactory, docFactory } = {}) {
   };
 }
 
-// Minimal DOM-element stub that satisfies the probe's calls.
 function makeDoc({ classList = [], bodyText = '' } = {}) {
   const body = { textContent: bodyText };
   return {
     body,
     querySelector(sel) {
-      // The probe asks specifically for these selectors; honor them by
-      // checking if the corresponding class appears in `classList`.
       if (sel === '.jp-Toolbar' && classList.includes('jp-Toolbar')) return {};
       if (sel === '.jp-Notebook' && classList.includes('jp-Notebook')) return {};
       if ((sel === '[class^="jp-"]' || sel === '[class*=" jp-"]') &&
@@ -116,7 +109,7 @@ function makeDoc({ classList = [], bodyText = '' } = {}) {
 }
 
 // ----------------------------------------------------------------
-// Tests
+// Shell readiness — unchanged semantics from v0.4.151
 // ----------------------------------------------------------------
 
 test('probeIframeReadiness: Chromium path — jupyterapp truthy on contentWindow', async () => {
@@ -126,29 +119,25 @@ test('probeIframeReadiness: Chromium path — jupyterapp truthy on contentWindow
     docFactory: () => null,
   });
   const r = probeIframeReadiness(frame);
-  assert.equal(r.shellReady, true, 'shellReady should be true when jupyterapp is visible');
+  assert.equal(r.shellReady, true);
 });
 
 test('probeIframeReadiness: Safari path — contentWindow inaccessible, DOM has jp-Toolbar', async () => {
   const { probeIframeReadiness } = await loadHarness();
-  // Simulate Safari cross-process iframe isolation: contentWindow access
-  // returns undefined (or could throw — handled below).  DOM is reachable
-  // and shows JupyterLite UI.
   const frame = makeFrame({
     winFactory: () => undefined,
-    docFactory: () => makeDoc({ classList: ['jp-Toolbar'], bodyText: '' }),
+    docFactory: () => makeDoc({ classList: ['jp-Toolbar'] }),
   });
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, true,
-    'shellReady should be true when JupyterLite UI is visible in iframe DOM ' +
-    '(v0.4.151 regression guard — Safari spurious-phase-1 fix)');
+    'v0.4.151 regression guard — Safari spurious-phase-1 fix');
 });
 
 test('probeIframeReadiness: Safari path — DOM has .jp-Notebook', async () => {
   const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
-    docFactory: () => makeDoc({ classList: ['jp-Notebook'], bodyText: '' }),
+    docFactory: () => makeDoc({ classList: ['jp-Notebook'] }),
   });
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, true);
@@ -158,7 +147,7 @@ test('probeIframeReadiness: Safari path — DOM has generic jp-* class', async (
   const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
-    docFactory: () => makeDoc({ classList: ['jp-Cell'], bodyText: '' }),
+    docFactory: () => makeDoc({ classList: ['jp-Cell'] }),
   });
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, true);
@@ -170,12 +159,11 @@ test('probeIframeReadiness: contentWindow access throws — does not crash', asy
     winFactory: () => { throw new Error('cross-origin'); },
     docFactory: () => makeDoc({ classList: ['jp-Toolbar'] }),
   });
-  // Should fall through to DOM probe rather than throwing.
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, true, 'must recover from contentWindow access throw');
 });
 
-test('probeIframeReadiness: both probes fail → not ready (clean false)', async () => {
+test('probeIframeReadiness: nothing detectable → not ready', async () => {
   const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
@@ -183,10 +171,17 @@ test('probeIframeReadiness: both probes fail → not ready (clean false)', async
   });
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, false);
-  assert.equal(r.kernelHealthy, false);
+  assert.equal(r.kernelInFailureState, false);
 });
 
-test('probeIframeReadiness: kernel-healthy via DOM text "| Idle"', async () => {
+// ----------------------------------------------------------------
+// Kernel state — v0.4.152 semantics: failure-evidence only
+// ----------------------------------------------------------------
+
+test('probeIframeReadiness: shell up, kernel idle → NOT in failure state', async () => {
+  // v0.4.152 regression guard — pre-v0.4.152 this required "| Idle" text
+  // to confirm health and would false-positive when text wasn't visible.
+  // Now we only flag failure on POSITIVE evidence of failure.
   const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
@@ -197,11 +192,10 @@ test('probeIframeReadiness: kernel-healthy via DOM text "| Idle"', async () => {
   });
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, true);
-  assert.equal(r.kernelHealthy, true,
-    'kernelHealthy should detect "| Idle" in DOM text');
+  assert.equal(r.kernelInFailureState, false);
 });
 
-test('probeIframeReadiness: kernel-healthy via DOM text "| Busy"', async () => {
+test('probeIframeReadiness: shell up, kernel busy → NOT in failure state', async () => {
   const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
@@ -211,38 +205,69 @@ test('probeIframeReadiness: kernel-healthy via DOM text "| Busy"', async () => {
     }),
   });
   const r = probeIframeReadiness(frame);
-  assert.equal(r.kernelHealthy, true);
+  assert.equal(r.kernelInFailureState, false);
 });
 
-test('probeIframeReadiness: shell up but kernel "Unknown" → kernelHealthy=false', async () => {
-  // This is the Hans failure mode (pre-v0.4.150) — JupyterLite is loaded
-  // but the kernel never reached idle.  Probe should report shellReady
-  // but NOT kernelHealthy, so the watchdog can fire a phase-2
-  // (kernel-unhealthy) timeout.
+test('probeIframeReadiness: kernel starting (no idle text visible) → NOT in failure state', async () => {
+  // v0.4.152 regression guard — the watchdog must NOT fire kernel-unhealthy
+  // just because the kernel is still bootstrapping and the status text
+  // hasn't rendered as "| Idle" yet.  Pyodide WASM load can take minutes
+  // on slow networks.
   const { probeIframeReadiness } = await loadHarness();
   const frame = makeFrame({
     winFactory: () => null,
     docFactory: () => makeDoc({
       classList: ['jp-Toolbar'],
-      bodyText: 'Python (Pyodide) | Kernel Unknown',
+      bodyText: 'Python (Pyodide) | Starting',
     }),
   });
   const r = probeIframeReadiness(frame);
   assert.equal(r.shellReady, true);
-  assert.equal(r.kernelHealthy, false);
+  assert.equal(r.kernelInFailureState, false,
+    'starting kernels must not be flagged as failed');
 });
 
-test('probeIframeReadiness: Chromium-style sessions API reports idle kernel', async () => {
+test('probeIframeReadiness: shell up, no kernel status text at all → NOT in failure state', async () => {
+  // The most defensive case: we can\'t see kernel status text in the DOM
+  // (maybe rendered in shadow DOM, maybe different markup version).
+  // Absence of evidence must NOT be treated as evidence of failure.
   const { probeIframeReadiness } = await loadHarness();
-  // Simulate JupyterLite's ServiceManager API surface in the iframe's
-  // contentWindow.  `running()` returns an iterable of sessions whose
-  // `kernel.status` is "idle".
+  const frame = makeFrame({
+    winFactory: () => null,
+    docFactory: () => makeDoc({
+      classList: ['jp-Toolbar'],
+      bodyText: 'Some notebook content but no status indicator visible to the parent frame',
+    }),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.shellReady, true);
+  assert.equal(r.kernelInFailureState, false,
+    'v0.4.152 regression guard — no failure evidence means do not fire');
+});
+
+test('probeIframeReadiness: "Kernel Unknown" text in DOM → IN failure state', async () => {
+  // The Hans symptom from PR #467.  This IS positive evidence of failure;
+  // the watchdog should fire phase-2 kernel-unhealthy.
+  const { probeIframeReadiness } = await loadHarness();
+  const frame = makeFrame({
+    winFactory: () => null,
+    docFactory: () => makeDoc({
+      classList: ['jp-Toolbar'],
+      bodyText: 'Python (Pyodide) Kernel Unknown',
+    }),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.shellReady, true);
+  assert.equal(r.kernelInFailureState, true,
+    'Kernel Unknown text is positive evidence of failure (Hans symptom)');
+});
+
+test('probeIframeReadiness: ServiceManager reports kernel status "unknown" → IN failure state', async () => {
+  const { probeIframeReadiness } = await loadHarness();
   const fakeApp = {
     serviceManager: {
       sessions: {
-        running() {
-          return [{ kernel: { status: 'idle' } }];
-        },
+        running() { return [{ kernel: { status: 'unknown' } }]; },
       },
     },
   };
@@ -251,7 +276,77 @@ test('probeIframeReadiness: Chromium-style sessions API reports idle kernel', as
     docFactory: () => makeDoc(),
   });
   const r = probeIframeReadiness(frame);
-  assert.equal(r.shellReady, true);
-  assert.equal(r.kernelHealthy, true,
-    'kernelHealthy via ServiceManager.sessions.running() with idle status');
+  assert.equal(r.kernelInFailureState, true);
+});
+
+test('probeIframeReadiness: ServiceManager reports kernel status "dead" → IN failure state', async () => {
+  const { probeIframeReadiness } = await loadHarness();
+  const fakeApp = {
+    serviceManager: {
+      sessions: {
+        running() { return [{ kernel: { status: 'dead' } }]; },
+      },
+    },
+  };
+  const frame = makeFrame({
+    winFactory: () => ({ jupyterapp: fakeApp, document: makeDoc() }),
+    docFactory: () => makeDoc(),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.kernelInFailureState, true);
+});
+
+test('probeIframeReadiness: ServiceManager reports kernel status "idle" → NOT in failure state', async () => {
+  const { probeIframeReadiness } = await loadHarness();
+  const fakeApp = {
+    serviceManager: {
+      sessions: {
+        running() { return [{ kernel: { status: 'idle' } }]; },
+      },
+    },
+  };
+  const frame = makeFrame({
+    winFactory: () => ({ jupyterapp: fakeApp, document: makeDoc() }),
+    docFactory: () => makeDoc(),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.kernelInFailureState, false);
+});
+
+test('probeIframeReadiness: ServiceManager reports kernel status "starting" → NOT in failure state', async () => {
+  const { probeIframeReadiness } = await loadHarness();
+  const fakeApp = {
+    serviceManager: {
+      sessions: {
+        running() { return [{ kernel: { status: 'starting' } }]; },
+      },
+    },
+  };
+  const frame = makeFrame({
+    winFactory: () => ({ jupyterapp: fakeApp, document: makeDoc() }),
+    docFactory: () => makeDoc(),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.kernelInFailureState, false,
+    'starting kernels must not be flagged as failed (v0.4.152 regression guard)');
+});
+
+test('isKernelInFailureState: empty running sessions → not in failure', async () => {
+  const { isKernelInFailureState } = await loadHarness();
+  const fakeWin = {
+    jupyterapp: {
+      serviceManager: { sessions: { running() { return []; } } },
+    },
+    document: { body: { textContent: '' } },
+  };
+  assert.equal(isKernelInFailureState(fakeWin), false);
+});
+
+test('isKernelInFailureState: API access throws → not in failure (no evidence)', async () => {
+  const { isKernelInFailureState } = await loadHarness();
+  const fakeWin = {
+    get jupyterapp() { throw new Error('cross-origin'); },
+    document: { body: { textContent: '' } },
+  };
+  assert.equal(isKernelInFailureState(fakeWin), false);
 });
