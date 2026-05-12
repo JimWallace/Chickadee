@@ -1255,6 +1255,8 @@ else:
             structuredSummaryText,
             extractTracebackText,
             parseStructuredPayload,
+            probeIframeReadiness,
+            isKernelHealthy,
         };
     }
 })();
