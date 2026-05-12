@@ -259,20 +259,15 @@ func executeLinuxScriptProcess(
     let executable = strdup(launch.executablePath)
     let rawArguments = [launch.executablePath] + launch.arguments
     let argvStorage = rawArguments.map { strdup($0) }
-    // env passed to execve as KEY=VALUE entries.
-    let envStorage: [UnsafeMutablePointer<CChar>?] = launch.env
-        .map { "\($0.key)=\($0.value)" }
-        .map { strdup($0) }
+    // env overrides are applied via setenv() in the child below — cheaper
+    // than building an envp array and avoids depending on the glibc-only
+    // execvpe symbol surface.
+    let envOverrides = launch.env
     defer {
         if let executable {
             free(executable)
         }
         for pointer in argvStorage {
-            if let pointer {
-                free(pointer)
-            }
-        }
-        for pointer in envStorage {
             if let pointer {
                 free(pointer)
             }
@@ -326,12 +321,15 @@ func executeLinuxScriptProcess(
             _exit(127)
         }
 
+        // Apply env overrides to the child's `environ` before exec.  setenv()
+        // with overwrite=1 mutates the child's copy of the parent env; execvp
+        // then inherits it.
+        for (key, value) in envOverrides {
+            _ = setenv(key, value, 1)
+        }
+
         var argv = argvStorage + [nil]
-        var envp = envStorage + [nil]
-        // execvpe honours PATH lookup AND uses our explicit envp.
-        // Glibc exposes it; if unavailable on the toolchain in use, this will
-        // need to swap to a path-resolution helper + execve.
-        execvpe(executable, &argv, &envp)
+        execvp(executable, &argv)
         _exit(127)
     }
 
