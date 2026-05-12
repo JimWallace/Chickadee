@@ -78,6 +78,8 @@ extension WebRoutes {
             let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
             let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
             let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
+            let submissionViewAbsPath = req.application.directory.publicDirectory
+                + "jupyterlite/files/" + submissionRelativePath
             let manifestGradingMode: String = {
                 let data = Data(setup.manifest.utf8)
                 guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
@@ -94,6 +96,7 @@ extension WebRoutes {
                     downloadURL: nil,           // download link lives on the submission page
                     gradingMode: manifestGradingMode,
                     showSubmit: false,          // read-only view
+                    workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                     currentUser: req.currentUserContext
                 ))
         }
@@ -144,6 +147,8 @@ extension WebRoutes {
             return manifest.gradingMode.rawValue
         }()
 
+        let workingCopyAbsPath = req.application.directory.publicDirectory
+            + "jupyterlite/files/" + jupyterLiteNotebookPath
         return try await req.view.render("notebook",
             NotebookContext(
                 testSetupID: setupID,
@@ -153,6 +158,7 @@ extension WebRoutes {
                 downloadURL: downloadURL,
                 gradingMode: manifestGradingMode,
                 showSubmit: fileKind == .assignment,
+                workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
     }
@@ -249,6 +255,21 @@ func userNotebookWorkingCopyAbsolutePath(req: Request, setupID: String, userID: 
     req.application.directory.publicDirectory
         + "jupyterlite/files/"
         + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
+}
+
+/// Reads the mtime (Unix epoch seconds) of the working-copy notebook
+/// file at `absolutePath`.  Returns 0 if the file is missing or its
+/// attributes can't be read.  Used by the notebook page to surface
+/// `data-working-copy-mtime` to the client so the in-browser
+/// IndexedDB sync can detect server-side overwrites (e.g. instructor
+/// reset) and force-reseed.
+func workingCopyMtimeEpoch(absolutePath: String) -> Int {
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: absolutePath),
+          let mtime = attrs[.modificationDate] as? Date
+    else {
+        return 0
+    }
+    return Int(mtime.timeIntervalSince1970)
 }
 
 func ensureUserNotebookWorkingCopy(

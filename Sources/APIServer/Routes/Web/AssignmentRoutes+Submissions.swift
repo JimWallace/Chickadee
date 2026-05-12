@@ -311,6 +311,7 @@ extension AssignmentRoutes {
                 ?? inferNameFromStudentID(student.username)
             return AssignmentStudentRow(
                 studentID: student.username,
+                studentUUID: studentID.uuidString,
                 surname: inferredName.surname,
                 givenNames: inferredName.givenNames,
                 gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
@@ -518,6 +519,84 @@ extension AssignmentRoutes {
         let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
         struct RetestAllBody: Content { var returnTo: String? }
         let body = try? req.content.decode(RetestAllBody.self)
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body?.returnTo,
+            assignmentIDRaw: assignmentIDRaw,
+            fallbackPath: fallbackPath
+        )
+        return req.redirect(to: redirectPath)
+    }
+
+    // MARK: - POST /instructor/:assignmentID/students/:studentID/reset-notebook
+    //
+    // Instructor-driven reset of a student's working-copy notebook back to
+    // the canonical starter from the test setup.  Used when a student has
+    // corrupted their own notebook (e.g. uploaded a broken `.ipynb` that
+    // overwrote their working copy) and needs to start over from the
+    // original assignment.
+    //
+    // Past submissions are NOT deleted — they remain in the database and
+    // on disk for forensic / grading review.  Only the live working copy
+    // at jupyterlite/files/users/{userID}/{setupID}/<filename> is
+    // overwritten.
+    //
+    // Note for the student: the new starter is on the server, but the
+    // student's browser may still have the broken version cached in
+    // JupyterLite's IndexedDB.  The student should clear site data for
+    // chickadee.uwaterloo.ca (or use an incognito window) on their next
+    // visit for the reset to take effect end-to-end.
+    @Sendable
+    func resetStudentNotebook(req: Request) async throws -> Response {
+        struct ResetBody: Content {
+            var returnTo: String?
+        }
+
+        let user = try req.auth.require(APIUser.self)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+        }
+        guard let studentIDRaw = req.parameters.get("studentID"),
+              let studentID = UUID(uuidString: studentIDRaw)
+        else {
+            throw WebAssignmentError.notFound(resource: "Student")
+        }
+        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Test setup")
+        }
+
+        let isEnrolled = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == assignment.courseID)
+            .filter(\.$userID == studentID)
+            .count() > 0
+        guard isEnrolled else {
+            throw WebAssignmentError.notFound(resource: "Enrolled student '\(studentIDRaw)'")
+        }
+
+        let starter: Data
+        do {
+            starter = try notebookData(for: setup)
+        } catch {
+            throw WebAssignmentError.invalidParameter(
+                name: "setup",
+                reason: "Test setup has no starter notebook to reset to."
+            )
+        }
+
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setup.id ?? assignment.testSetupID,
+            userID: studentID,
+            fallbackSetup: setup,
+            overwriteWith: starter
+        )
+
+        req.logger.info(
+            "student_notebook_reset assignment=\(assignmentIDRaw) student=\(studentIDRaw) by=\(user.id?.uuidString ?? "nil")"
+        )
+
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        let body = try? req.content.decode(ResetBody.self)
         let redirectPath = sanitizedAssignmentReturnPath(
             body?.returnTo,
             assignmentIDRaw: assignmentIDRaw,

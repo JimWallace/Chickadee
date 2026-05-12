@@ -209,6 +209,19 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             XCTAssertTrue(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
             XCTAssertTrue(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
             XCTAssertTrue(html.contains("&amp;path=users/"))
+            // v0.4.153 cache-bust: the iframe is stamped with the
+            // working-copy mtime so notebook.js can force-reseed when the
+            // server overwrites the file (instructor "Reset" action).
+            // Extract the value and assert it's a positive integer.
+            let mtimeRegex = try NSRegularExpression(pattern: #"data-working-copy-mtime="(\d+)""#)
+            let nsr = NSRange(html.startIndex..., in: html)
+            guard let match = mtimeRegex.firstMatch(in: html, range: nsr),
+                  let valueRange = Range(match.range(at: 1), in: html),
+                  let mtime = Int(html[valueRange])
+            else {
+                XCTFail("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
+            }
+            XCTAssertGreaterThan(mtime, 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
         })
 
         let workingCopy = try String(

@@ -80,6 +80,10 @@ struct AssignmentSubmissionsContext: Encodable {
 
 struct AssignmentStudentRow: Encodable {
     let studentID: String
+    /// Student's UUID (as string), used in URLs that target the student by
+    /// their stable identifier — e.g. the per-student "reset notebook"
+    /// action.  Distinct from `studentID` which is the username for display.
+    let studentUUID: String
     let surname: String
     let givenNames: String
     let gradeText: String

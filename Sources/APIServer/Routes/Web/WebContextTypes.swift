@@ -73,6 +73,14 @@ struct NotebookContext: Encodable {
     let downloadURL: String?
     let gradingMode: String          // "browser" | "worker"
     let showSubmit: Bool
+    /// Unix-epoch mtime (seconds) of the user's working-copy notebook file
+    /// on disk at render time.  Embedded in the iframe as
+    /// `data-working-copy-mtime`; `notebook.js` compares it against a
+    /// per-setup value in `localStorage` and force-overwrites the
+    /// in-browser IndexedDB copy when the server's mtime is newer (e.g.
+    /// after an instructor "Reset notebook" action).  0 if the working
+    /// copy could not be stat'd.
+    let workingCopyMtime: Int
     let currentUser: CurrentUserContext?
 }
 

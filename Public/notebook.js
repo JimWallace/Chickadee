@@ -585,13 +585,28 @@
 
             const contents = app.serviceManager && app.serviceManager.contents;
 
-            // Before writing the server snapshot into JupyterLite, check whether
-            // this browser already has a copy of the notebook in local storage
-            // (IndexedDB). If it does, preserve it — the local version is the
-            // student's most-recent in-progress work and must not be clobbered
-            // with the (potentially older) server copy. The server copy is only
-            // authoritative for seeding a fresh browser or a different device;
-            // in both of those cases local storage will be empty.
+            // Server-side overwrite detection.  The server stamps the iframe
+            // with `data-working-copy-mtime` = the Unix-epoch mtime of the
+            // working-copy file on disk.  We persist the last mtime this
+            // browser has *seen* (per setup) in localStorage.  If the server
+            // mtime is newer, the server overwrote the working copy since
+            // our last visit — usually because an instructor clicked
+            // "Reset notebook" or the student just submitted (which also
+            // bumps the file).  In either case we must NOT preserve the
+            // local IndexedDB copy: we force-overwrite it with the server
+            // snapshot.  Without this, an instructor reset would be invisible
+            // until the student manually cleared site data.
+            const serverMtime = parseInt(frame.dataset.workingCopyMtime || '0', 10) || 0;
+            const seenKey = 'chickadee_nb_mtime_' + setupID;
+            let seenMtime = 0;
+            try { seenMtime = parseInt(localStorage.getItem(seenKey) || '0', 10) || 0; } catch (_) {}
+            const serverIsNewer = serverMtime > 0 && serverMtime > seenMtime;
+
+            // Preservation logic: if the browser already has the notebook in
+            // IndexedDB AND the server hasn't overwritten it since we last
+            // saw it, keep the local version — that's the student's
+            // in-progress work.  Otherwise (no local copy, OR server is
+            // newer) seed from the server.
             let hasLocalContent = false;
             if (contents && typeof contents.get === 'function') {
                 try {
@@ -602,12 +617,21 @@
                 }
             }
 
-            if (!hasLocalContent && contents && typeof contents.save === 'function') {
+            const shouldSeed = !hasLocalContent || serverIsNewer;
+            if (shouldSeed && contents && typeof contents.save === 'function') {
                 await contents.save(lockedNotebookPath, {
                     type: 'notebook',
                     format: 'json',
                     content: snapshotNotebook
                 });
+            }
+
+            // Stamp the mtime we just synced from so subsequent visits know
+            // what we've already seen.  Skip if localStorage is unavailable
+            // (private mode etc.) — the preservation logic still works on
+            // hasLocalContent alone in that case.
+            if (serverMtime > 0) {
+                try { localStorage.setItem(seenKey, String(serverMtime)); } catch (_) {}
             }
 
             if (app.commands && typeof app.commands.execute === 'function') {
