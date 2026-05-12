@@ -6,6 +6,71 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.156] - 2026-05-12
+
+### Added
+
+- **Personalized per-student inputs — Phase 1 (issue #461).**  A
+  stable per-(student, assignment) random seed is now surfaced to
+  every grading subprocess via the `CHICKADEE_ASSIGNMENT_SEED`
+  environment variable.  This is the minimum plumbing instructors
+  need to write tests that derive per-student expected outputs from
+  inside the test script — no editor UI, no generator subprocess,
+  no notebook touchpoint, no manifest changes ship yet.
+
+  Pieces:
+
+  - New table `assignment_personalization_seeds` with
+    `UNIQUE(user_id, assignment_id)` and cascade-delete from
+    `users` and `assignments`.  Migration
+    `CreateAssignmentPersonalizationSeeds`.
+  - `AssignmentSeedStore.ensureSeed(userID:assignmentID:on:)` —
+    lazy generator returning a 64-char lowercase hex string
+    (32 random bytes from `SystemRandomNumberGenerator`).
+    Idempotent under concurrent first-opens; the DB UNIQUE
+    constraint serializes the race and the loser re-fetches the
+    winner's row.
+  - `Job.assignmentSeed: String?` — new optional field on the
+    runner job descriptor; nil-defaulted so older runner versions
+    continue to decode cleanly.
+  - `WorkerJobRoutes.requestJob` calls `ensureSeed` at job-claim
+    time, populating `assignmentSeed` from
+    `submission.userID` + the assignment matched by the existing
+    requirement loader.  Browser-graded submissions falling back to
+    the worker (v0.4.56 backstop) get a seed via the same site.
+    Nil-user submissions (rare legacy / no-user path) propagate
+    nil and the runner skips env-var injection.
+  - `ScriptRunner` protocol grew an `env: [String: String]`
+    parameter (with a `[:]` default-overload so existing call
+    sites compile unchanged).  Both `UnsandboxedScriptRunner` and
+    `SandboxedScriptRunner` propagate the env: macOS uses
+    `proc.environment`, Linux uses `execvpe` directly from the
+    fork child.  `make` build-step subprocesses are not touched —
+    builds remain non-personalized.
+  - `RunnerDaemon` injects `CHICKADEE_ASSIGNMENT_SEED` into the
+    per-script env only when the Job carries a non-empty seed, so
+    non-personalized assignments observe no behaviour change.
+  - Instructor-facing contract documented in
+    `docs/personalization-phase1.md` with a worked Caesar-cipher
+    example, env-var format notes, and an operational warning
+    that the seed table is now load-bearing for grading
+    correctness (treat as standard DB backup material).
+
+  Phase 2 (manifest field, generator subprocess, submission/
+  solution storage split, notebook `{{varname}}` substitution,
+  Personalization editor card, `.personalized` pattern kind)
+  remains out of scope and is tracked in issue #461.
+
+  New tests:
+
+  - `AssignmentSeedStoreTests` — 6 cases covering creation,
+    idempotence, per-student / per-assignment uniqueness,
+    concurrent first-access race, and hex output format.
+  - `WorkerTests.testScriptReceivesEnvVarFromRunner` /
+    `testScriptEnvVarUnsetWhenNoOverride` — end-to-end checks
+    that the env actually reaches the spawned subprocess and that
+    empty overrides do not leak a value.
+
 ## [0.4.155] - 2026-05-12
 
 ### Added

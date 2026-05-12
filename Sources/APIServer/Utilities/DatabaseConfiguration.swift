@@ -207,4 +207,5 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddUserLastSeenAt())
     app.migrations.add(AddBrightSpaceSyncFields())
     app.migrations.add(CreateClientDiagnostics())
+    app.migrations.add(CreateAssignmentPersonalizationSeeds())
 }

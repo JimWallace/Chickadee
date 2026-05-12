@@ -17,11 +17,12 @@ import Foundation
 
 struct SandboxedScriptRunner: ScriptRunner {
 
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
 #if os(Linux)
         let launch = configureLinuxSandboxedProcess(
             script: script,
-            workDir: workDir
+            workDir: workDir,
+            env: env
         )
 
         return await executeLinuxScriptProcess(
@@ -36,7 +37,8 @@ struct SandboxedScriptRunner: ScriptRunner {
             proc,
             script: script,
             workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds
+            timeLimitSeconds: timeLimitSeconds,
+            env: env
         )
 
         return await executeScriptProcess(
@@ -56,7 +58,8 @@ private func configureSandboxedProcess(
     _ proc: Process,
     script: URL,
     workDir: URL,
-    timeLimitSeconds: Int
+    timeLimitSeconds: Int,
+    env: [String: String]
 ) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
 #if os(macOS)
@@ -64,6 +67,7 @@ private func configureSandboxedProcess(
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
     proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
     proc.currentDirectoryURL = workDir
+    proc.environment = mergedScriptEnvironment(overrides: env)
     return ProcessLaunchConfiguration(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
@@ -74,6 +78,7 @@ private func configureSandboxedProcess(
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
     proc.currentDirectoryURL = workDir
+    proc.environment = mergedScriptEnvironment(overrides: env)
     return ProcessLaunchConfiguration(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
@@ -86,9 +91,13 @@ private func configureSandboxedProcess(
 #if os(Linux)
 private func configureLinuxSandboxedProcess(
     script: URL,
-    workDir: URL
+    workDir: URL,
+    env: [String: String]
 ) -> LinuxProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
+    // `unshare` inherits envp from the parent on Linux, but we drive the child
+    // through execvpe directly (see executeLinuxScriptProcess) so the env in
+    // the LinuxProcessLaunchConfiguration is what reaches the script.
     return LinuxProcessLaunchConfiguration(
         executablePath: "/usr/bin/unshare",
         arguments: [
@@ -98,7 +107,8 @@ private func configureLinuxSandboxedProcess(
             "--net",
             "--map-root-user",
             invocation.executableURL.path
-        ] + invocation.arguments
+        ] + invocation.arguments,
+        env: mergedScriptEnvironment(overrides: env)
     )
 }
 #endif

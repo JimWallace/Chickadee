@@ -12,8 +12,19 @@ import Glibc
 
 /// Runs a single test script and returns raw output.
 /// Implementations are responsible for enforcing the time limit.
+///
+/// `env` is merged into the process environment on top of the parent
+/// process's environment. Empty dictionary = no overrides (parent env is
+/// inherited verbatim).
 protocol ScriptRunner: Sendable {
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput
+}
+
+extension ScriptRunner {
+    /// Convenience overload — call sites without per-run env-var needs can omit `env:`.
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
+        await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: [:])
+    }
 }
 
 struct ProcessLaunchConfiguration {
@@ -25,6 +36,7 @@ struct ProcessLaunchConfiguration {
 struct LinuxProcessLaunchConfiguration {
     let executablePath: String
     let arguments: [String]
+    let env: [String: String]
 }
 #endif
 
@@ -148,11 +160,12 @@ private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: B
 /// Phase 1: direct subprocess execution, no sandbox.
 struct UnsandboxedScriptRunner: ScriptRunner {
 
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
 #if os(Linux)
         let launch = configureLinuxUnsandboxedProcess(
             script: script,
-            workDir: workDir
+            workDir: workDir,
+            env: env
         )
 
         return await executeLinuxScriptProcess(
@@ -167,7 +180,8 @@ struct UnsandboxedScriptRunner: ScriptRunner {
             proc,
             script: script,
             workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds
+            timeLimitSeconds: timeLimitSeconds,
+            env: env
         )
 
         return await executeScriptProcess(
@@ -185,28 +199,44 @@ private func configureUnsandboxedProcess(
     _ proc: Process,
     script: URL,
     workDir: URL,
-    timeLimitSeconds: Int
+    timeLimitSeconds: Int,
+    env: [String: String]
 ) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
     proc.currentDirectoryURL = workDir
 
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
+    proc.environment = mergedScriptEnvironment(overrides: env)
     return ProcessLaunchConfiguration(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
 }
 
+/// Merge `overrides` into the current process's environment. Overrides win
+/// on key collision. Returns nil only when overrides is empty AND the caller
+/// wants to inherit the parent env verbatim — but since we always copy via
+/// `ProcessInfo.processInfo.environment`, we always return a non-nil dict.
+func mergedScriptEnvironment(overrides: [String: String]) -> [String: String] {
+    var base = ProcessInfo.processInfo.environment
+    for (key, value) in overrides {
+        base[key] = value
+    }
+    return base
+}
+
 #if os(Linux)
 private func configureLinuxUnsandboxedProcess(
     script: URL,
-    workDir: URL
+    workDir: URL,
+    env: [String: String]
 ) -> LinuxProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
     return LinuxProcessLaunchConfiguration(
         executablePath: invocation.executableURL.path,
-        arguments: invocation.arguments
+        arguments: invocation.arguments,
+        env: mergedScriptEnvironment(overrides: env)
     )
 }
 
@@ -229,11 +259,20 @@ func executeLinuxScriptProcess(
     let executable = strdup(launch.executablePath)
     let rawArguments = [launch.executablePath] + launch.arguments
     let argvStorage = rawArguments.map { strdup($0) }
+    // env passed to execve as KEY=VALUE entries.
+    let envStorage: [UnsafeMutablePointer<CChar>?] = launch.env
+        .map { "\($0.key)=\($0.value)" }
+        .map { strdup($0) }
     defer {
         if let executable {
             free(executable)
         }
         for pointer in argvStorage {
+            if let pointer {
+                free(pointer)
+            }
+        }
+        for pointer in envStorage {
             if let pointer {
                 free(pointer)
             }
@@ -288,7 +327,11 @@ func executeLinuxScriptProcess(
         }
 
         var argv = argvStorage + [nil]
-        execvp(executable, &argv)
+        var envp = envStorage + [nil]
+        // execvpe honours PATH lookup AND uses our explicit envp.
+        // Glibc exposes it; if unavailable on the toolchain in use, this will
+        // need to swap to a path-resolution helper + execve.
+        execvpe(executable, &argv, &envp)
         _exit(127)
     }
 

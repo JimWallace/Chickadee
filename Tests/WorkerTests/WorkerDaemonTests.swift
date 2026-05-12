@@ -309,7 +309,7 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             self.output = output
         }
 
-        func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
+        func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
             invocationCount += 1
             return output
         }

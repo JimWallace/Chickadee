@@ -634,10 +634,19 @@ actor WorkerDaemon {
                 "submission_id": job.submissionID,
                 "test_id": entry.script,
             ])
+            // Phase 1 of issue #461 — surface the per-(student, assignment)
+            // seed to the grading subprocess. Nil seed means non-personalized
+            // job; we leave the env var unset so existing scripts behave
+            // identically.
+            var scriptEnv: [String: String] = [:]
+            if let seed = job.assignmentSeed, !seed.isEmpty {
+                scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
+            }
             let output = await runner.run(
                 script:           scriptURL,
                 workDir:          testSetupDir,
-                timeLimitSeconds: manifest.timeLimitSeconds
+                timeLimitSeconds: manifest.timeLimitSeconds,
+                env:              scriptEnv
             )
 
             let isFirstAttempt = job.attemptNumber == 1

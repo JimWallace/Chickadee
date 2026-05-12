@@ -214,6 +214,24 @@ struct WorkerJobRoutes: RouteCollection {
 
         let base = resolvedWorkerBaseURL(req: req)
 
+        // Per-(student, assignment) seed for personalized inputs (issue #461, Phase 1).
+        // Generated lazily on first grading attempt; stable for the lifetime of the
+        // (user, assignment) pair. Nil when the submission has no associated user
+        // (legacy / unauthenticated path) or no assignment row was matched.
+        var assignmentSeed: String? = nil
+        if let userID = submission.userID, let resolvedAssignmentID = assignmentID {
+            do {
+                assignmentSeed = try await AssignmentSeedStore.ensureSeed(
+                    userID: userID,
+                    assignmentID: resolvedAssignmentID,
+                    on: req.db
+                )
+            } catch {
+                req.logger.error("Failed to ensure assignment seed: \(error)")
+                // Grading continues without a seed — non-personalized assignments are unaffected.
+            }
+        }
+
         let setupDownloadVersion = testSetupDownloadVersion(for: setup)
         let job = Job(
             submissionID:       submission.id!,
@@ -222,7 +240,8 @@ struct WorkerJobRoutes: RouteCollection {
             submissionURL:      URL(string: "\(base)/api/v1/worker/submissions/\(submission.id!)/download")!,
             testSetupURL:       URL(string: "\(base)/api/v1/worker/testsetups/\(setup.id!)/download?v=\(setupDownloadVersion)")!,
             manifest:           manifest.runnerSanitized(),
-            submissionFilename: submission.filename
+            submissionFilename: submission.filename,
+            assignmentSeed:     assignmentSeed
         )
 
         let encoder = JSONEncoder()
