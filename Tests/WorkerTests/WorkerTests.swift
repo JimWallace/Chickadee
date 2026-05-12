@@ -94,6 +94,52 @@ final class WorkerTests: XCTestCase {
         XCTAssertFalse(output.stderr.contains("out"))
     }
 
+    // MARK: - UnsandboxedScriptRunner: env passthrough (Phase 1, issue #461)
+
+    func testScriptReceivesEnvVarFromRunner() async throws {
+        let script = try writeScript("""
+        #!/bin/sh
+        echo "seed=$CHICKADEE_ASSIGNMENT_SEED" >&2
+        exit 0
+        """)
+        let runner = UnsandboxedScriptRunner()
+        let output = await runner.run(
+            script: script,
+            workDir: tmpDir,
+            timeLimitSeconds: 5,
+            env: ["CHICKADEE_ASSIGNMENT_SEED": "deadbeef" + String(repeating: "c0ffee", count: 9) + "ba"]
+        )
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertTrue(
+            output.stderr.contains("seed=deadbeef"),
+            "Expected env var to reach subprocess stderr; got: \(output.stderr)"
+        )
+    }
+
+    func testScriptEnvVarUnsetWhenNoOverride() async throws {
+        // Sanity check: empty env override = no var set. The script prints the
+        // raw env-var expansion; an unset var expands to an empty string.
+        let script = try writeScript("""
+        #!/bin/sh
+        echo "seed=[$CHICKADEE_ASSIGNMENT_SEED]" >&2
+        exit 0
+        """)
+        let runner = UnsandboxedScriptRunner()
+        // Ensure parent doesn't have the var set in this test's environment.
+        unsetenv("CHICKADEE_ASSIGNMENT_SEED")
+        let output = await runner.run(
+            script: script,
+            workDir: tmpDir,
+            timeLimitSeconds: 5,
+            env: [:]
+        )
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertTrue(
+            output.stderr.contains("seed=[]"),
+            "Expected unset env var when overrides is empty and parent didn't set it; got: \(output.stderr)"
+        )
+    }
+
     // MARK: - UnsandboxedScriptRunner: timeout
 
     func testScriptTimesOut() async throws {

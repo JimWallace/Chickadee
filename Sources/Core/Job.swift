@@ -22,6 +22,13 @@ public struct Job: Codable, Sendable {
     /// The worker copies it into the test directory under this filename.
     public let submissionFilename: String?
 
+    /// Per-(student, assignment) random hex seed. Surfaced to grading
+    /// subprocesses via `CHICKADEE_ASSIGNMENT_SEED`. Nil when the submission
+    /// has no associated student (e.g. very old pre-Phase-6 submissions) or
+    /// the server cannot resolve the student's assignment — in which case the
+    /// runner skips env-var injection and grading proceeds without a seed.
+    public let assignmentSeed: String?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -29,7 +36,8 @@ public struct Job: Codable, Sendable {
         submissionURL: URL,
         testSetupURL: URL,
         manifest: TestProperties,
-        submissionFilename: String? = nil
+        submissionFilename: String? = nil,
+        assignmentSeed: String? = nil
     ) {
         self.submissionID       = submissionID
         self.testSetupID        = testSetupID
@@ -38,5 +46,6 @@ public struct Job: Codable, Sendable {
         self.testSetupURL       = testSetupURL
         self.manifest           = manifest
         self.submissionFilename = submissionFilename
+        self.assignmentSeed     = assignmentSeed
     }
 }
