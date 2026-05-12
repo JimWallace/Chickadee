@@ -2,12 +2,9 @@
   "jupyter-config-data": {
     "appName": "JupyterLite",
     "appUrl": "./lab",
-    "appVersion": "0.7.6-chickadee.1",
+    "appVersion": "0.7.1-chickadee.2",
     "baseUrl": "./",
     "defaultKernelName": "python",
-    "disabledExtensions": [
-      "@jupyterlite/application-extension:service-worker-manager"
-    ],
     "faviconUrl": "./lab/favicon.ico",
     "federated_extensions": [
       {

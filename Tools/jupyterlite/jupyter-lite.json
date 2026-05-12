@@ -1,11 +1,8 @@
 {
   "jupyter-config-data": {
-    "appVersion": "0.7.6-chickadee.1",
+    "appVersion": "0.7.1-chickadee.2",
     "defaultKernelName": "python",
     "fullLabextensionsUrl": "./extensions",
-    "disabledExtensions": [
-      "@jupyterlite/application-extension:service-worker-manager"
-    ],
     "federated_extensions": [
       {
         "name": "@jupyterlite/pyodide-kernel-extension",

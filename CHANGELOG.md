@@ -6,62 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.4.150] - 2026-05-11
-
-### Fixed
-
-- **"Kernel Unknown" failure in the in-browser notebook editor.**
-  Hans reported (and reproduced on a managed-device MC Mac) that
-  JupyterLite was hanging in "Kernel Unknown" after ~10 seconds, with
-  the network panel showing POSTs to `/jupyterlite/api/drive`
-  returning **404**.  Root cause: in JupyterLite 0.7.x the
-  pyodide-kernel auto-mounts the JupyterLite Drive whenever the
-  `serviceWorkerManager?.enabled` is truthy
-  (`mountDrive = !!(serviceWorkerManager?.enabled || crossOriginIsolated)`).
-  With `mountDrive=true` the kernel POSTs to `/api/drive` expecting
-  the service worker to intercept them and broadcast the calls to the
-  in-browser drive plugin — but on Chickadee the SW interception was
-  not reliable (the precise reason is still unclear; checked MIME and
-  scope, both correct; suspect a registration / `controller` race
-  with managed-device browsers).  The requests reached the server and
-  404'd, the kernel's promise chain broke with
-  `Uncaught (in promise)` at `client.js:148`, and the session ended
-  in "Unknown" forever.
-
-  The fix disables the JupyterLite service-worker-manager plugin via
-  `disabledExtensions` in `Tools/jupyterlite/jupyter-lite.json`.
-  That makes `serviceWorkerManager?.enabled` falsy in the kernel, so
-  `mountDrive` is forced to `false` and the kernel logs
-  *"Pyodide contents will NOT be synced with Jupyter Contents"*
-  instead of attempting the broken sync.  We don't rely on the
-  JupyterLite Drive — Chickadee has its own server-side snapshot
-  mechanism (`syncNotebookFromServerSnapshot` in `Public/notebook.js`,
-  `ensureUserNotebookWorkingCopy` in
-  `Sources/APIServer/Routes/Web/WebRoutes+Notebook.swift`) that
-  predates the Drive feature and remains the source of truth.
-
-  Bonus while editing the bundle config: the stale `appVersion` label
-  is corrected from `0.7.1-chickadee.2` to `0.7.6-chickadee.1` so the
-  reported version matches the actual JupyterLite pin from
-  `Tools/jupyterlite/requirements.txt`.
-
-  Side-effects to be aware of: with the service worker manager
-  disabled, JupyterLite's SW no longer registers at all.  That means
-  no stdin (rare in our coursework; `input()` in cells will hang) and
-  no SW-based asset caching (asset reloads each visit, negligible at
-  our scale).  Whether to revisit and adopt JupyterLite's native
-  Drive sync for storage — replacing our snapshot bridge — is
-  captured as a separate roadmap issue on GitHub.
-
-- **JupyterLite config regression tests.**  Added
-  `Tests/APITests/JupyterLiteConfigTests.swift` with two guards on
-  the built `Public/jupyterlite/jupyter-lite.json`:
-  `testBundleDisablesServiceWorkerManager` (the disable above must
-  be present), and `testBundleAppVersionMatchesRequirementsPin`
-  (the `appVersion` label must match the pinned `jupyterlite==X.Y.Z`
-  in `Tools/jupyterlite/requirements.txt`).  Both fail loudly if a
-  future JupyterLite bump forgets to update the source config.
-
 ## [0.4.149] - 2026-05-11
 
 ### Added
