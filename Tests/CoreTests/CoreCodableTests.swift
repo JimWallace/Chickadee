@@ -453,6 +453,33 @@ struct CoreCodableTests {
         #expect(decoded.expectedArity == nil)
     }
 
+    @Test func notebookCheckVariableExistsRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "var_df",
+            kind: .variableExists,
+            tier: .pub,
+            points: 1,
+            variable: "df",
+            expectedType: "DataFrame"
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.expectedType == "DataFrame")
+    }
+
+    @Test func notebookCheckVariableExistsNoTypeRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "var_results",
+            kind: .variableExists,
+            variable: "results"
+        )
+        let data = try encoder.encode(check)
+        let decoded = try decoder.decode(NotebookCheck.self, from: data)
+        #expect(decoded == check)
+        #expect(decoded.expectedType == nil)
+    }
+
     @Test func patternFamilyReturnTypeCheckRoundTrip() throws {
         let check = PatternCase(
             key: "01",

@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.155] - 2026-05-12
+
+### Added
+
+- **`NotebookCheckKind.variableExists` — sibling to `.functionExists`.**
+  Asserts that a named module-level variable is defined on the student
+  module, optionally with a runtime type precondition.  Used as a cheap
+  gate before downstream value / shape checks so a missing variable
+  fails clearly instead of erroring every dependent test.
+
+  - **Bare existence**:
+    `getattr(student_module, name, _MISSING) is _MISSING → fail`.
+    `None` counts as defined, matching `.functionExists`'s "defined"
+    semantics.
+  - **Optional `expectedType`** (e.g. `"int"`, `"list"`, `"DataFrame"`,
+    `"ndarray"`): appends an `isinstance` check for Python builtins or
+    an MRO-name walk for library types, matching `PatternFamilyRenderer`'s
+    `.returnTypeCheck` mapping byte-for-byte.  Unknown names fall back
+    to a class-name MRO walk so student-defined classes and new library
+    types work without a Swift edit.
+  - **Validator** requires `variable` to be a non-empty Python
+    identifier; rejects empty / whitespace-only `expectedType`.
+  - **Editor UI** ships a "Variable exists (defined, optional type)"
+    option in the notebook-check kind dropdown, with a free-form
+    variable name input and a free-form type input.
+  - **Runner-safe**: `TestProperties.runnerSanitized()` already strips
+    `notebookChecks` before encoding to the runner manifest, so older
+    runner binaries never see the new enum case.
+
 ## [0.4.154] - 2026-05-12
 
 ### Fixed

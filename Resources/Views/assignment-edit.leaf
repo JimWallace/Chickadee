@@ -365,6 +365,7 @@
                         <option value="figure_count">Figure count (matplotlib)</option>
                         <option value="cell_contains">Cell contains (substring / regex)</option>
                         <option value="function_exists">Function exists (callable, optional arity)</option>
+                        <option value="variable_exists">Variable exists (defined, optional type)</option>
                         <option value="ast_structure">AST structure (uses for-loop, lambda, etc.)</option>
                     </select>
                 </label>
@@ -544,6 +545,23 @@
                 </label>
                 <p class="card-meta" style="font-size:.72rem;margin:0">
                     Useful as a precondition before correctness tests so a missing function fails clearly instead of erroring every dependent test.
+                </p>
+            </div>
+
+            <div class="check-fields" data-kind="variable_exists" style="display:none;flex-direction:column;gap:.5rem">
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Variable name (must be defined at module level in the student notebook)
+                    <input type="text" class="form-input" id="check-vexists-name" placeholder="df"
+                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
+                </label>
+                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                    Required type (optional — leave blank for any)
+                    <input type="text" class="form-input" id="check-vexists-type"
+                           placeholder="e.g. int, list, DataFrame, ndarray"
+                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
+                </label>
+                <p class="card-meta" style="font-size:.72rem;margin:0">
+                    Useful as a precondition before shape / value checks so a missing variable fails clearly instead of erroring every dependent test.  Recognised types include Python builtins (<code>int</code>, <code>float</code>, <code>bool</code>, <code>str</code>, <code>list</code>, <code>tuple</code>, <code>dict</code>, <code>set</code>, <code>NoneType</code>) and library types matched by MRO name (<code>DataFrame</code>, <code>Series</code>, <code>ndarray</code>); unknown names fall back to a class-name MRO walk.
                 </p>
             </div>
 

@@ -76,6 +76,17 @@ public enum NotebookCheckKind: String, Codable, Sendable, Equatable {
     /// this as a cheap precondition for downstream tests so a missing
     /// function fails clearly instead of erroring every dependent.
     case functionExists = "function_exists"
+    /// Asserts that a named module-level variable exists on the
+    /// student module, optionally with a specific runtime type
+    /// (e.g. `int`, `list`, `DataFrame`, `ndarray`).  Required
+    /// field: `variable`.  Optional `expectedType` adds an
+    /// `isinstance` / MRO check; when nil, only existence is
+    /// verified.  `None` counts as "exists" — same semantics as
+    /// `.functionExists` treats a defined-but-uncallable name.
+    /// Use this as a cheap precondition for downstream value /
+    /// shape checks so a missing variable fails clearly instead
+    /// of erroring every dependent.
+    case variableExists = "variable_exists"
     /// Asserts that the student notebook source has (or doesn't have)
     /// specified AST constructs: `for_loop`, `while_loop`,
     /// `list_comprehension`, `lambda`, `recursion`, or
@@ -205,6 +216,14 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// student function's positional parameter count must equal this
     /// value.  When nil, only existence + callability is checked.
     public let expectedArity: Int?
+    /// `.variableExists`: optional Python type name (e.g. `"int"`,
+    /// `"list"`, `"DataFrame"`, `"ndarray"`).  When set, the
+    /// generated test also asserts the variable's runtime type
+    /// matches via `isinstance` (builtins) or an MRO-name walk
+    /// (library types — same trick `.returnTypeCheck` uses to avoid
+    /// forcing pandas / numpy imports at the top of the test).
+    /// When nil, only existence is checked.
+    public let expectedType: String?
     /// `.astStructure`: list of structural predicates the student's
     /// code must satisfy.  Each entry is a plain predicate (e.g.
     /// `"for_loop"`) or a negated predicate (e.g. `"!for_loop"`).
@@ -230,6 +249,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
                 regex: Bool? = nil,
                 mustDifferFrom: String? = nil,
                 expectedArity: Int? = nil,
+                expectedType: String? = nil,
                 requiredConstructs: [String]? = nil) {
         self.id              = id
         self.name            = name
@@ -255,6 +275,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.regex           = regex
         self.mustDifferFrom  = mustDifferFrom
         self.expectedArity   = expectedArity
+        self.expectedType    = expectedType
         self.requiredConstructs = requiredConstructs
     }
 
@@ -284,6 +305,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         regex           = try c.decodeIfPresent(Bool.self,      forKey: .regex)
         mustDifferFrom  = try c.decodeIfPresent(String.self,    forKey: .mustDifferFrom)
         expectedArity   = try c.decodeIfPresent(Int.self,       forKey: .expectedArity)
+        expectedType    = try c.decodeIfPresent(String.self,    forKey: .expectedType)
         requiredConstructs = try c.decodeIfPresent([String].self, forKey: .requiredConstructs)
     }
 }

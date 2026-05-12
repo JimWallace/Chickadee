@@ -504,6 +504,27 @@ func validateNotebookChecks(
                     reason: "Notebook check '\(check.id)' (function_exists): expectedArity must be non-negative")
             }
 
+        case .variableExists:
+            guard let name = check.variable, !name.isEmpty else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (variable_exists): variable name is required")
+            }
+            guard isValidPythonIdentifier(name) else {
+                throw Abort(.unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (variable_exists): variable name '\(name)' is not a valid Python identifier")
+            }
+            // expectedType (if present) must be non-empty and non-whitespace.
+            // Unknown type names fall through to the renderer's MRO-walk
+            // fallback (same behaviour as `.returnTypeCheck`), so we don't
+            // need a known-name allowlist here.
+            if let typeName = check.expectedType {
+                let trimmed = typeName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    throw Abort(.unprocessableEntity,
+                        reason: "Notebook check '\(check.id)' (variable_exists): expectedType must be a non-empty type name when set (e.g. \"int\", \"list\", \"DataFrame\")")
+                }
+            }
+
         case .astStructure:
             guard let constructs = check.requiredConstructs, !constructs.isEmpty else {
                 throw Abort(.unprocessableEntity,
