@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.154] - 2026-05-12
+
+### Fixed
+
+- **Critical: v0.4.153 cache-bust would wipe every existing student's
+  in-progress IndexedDB work on their first post-deploy visit.**  The
+  decision in `syncNotebookFromServerSnapshot` was
+  `serverMtime > 0 && serverMtime > seenMtime`.  On the first post-
+  deploy visit `localStorage["chickadee_nb_mtime_<setupID>"]` is empty,
+  so `seenMtime = 0`, so any positive server mtime (i.e. any working
+  copy file that exists) would be treated as "newer than my baseline"
+  and force-overwrite the local IndexedDB copy.  v0.4.153 was
+  identified-but-never-deployed; this fix went in before
+  Jim pulled to production.
+
+  Extracted the decision into a pure function
+  `shouldForceReseed({ serverMtime, seenMtime })` (now exposed via
+  the existing test-hooks export for unit-testing) and added a
+  baseline-required guard:
+
+      if (!serverMtime || serverMtime <= 0) return false;
+      if (!seenMtime  || seenMtime  <= 0) return false;
+      return serverMtime > seenMtime;
+
+  Absence of a baseline (`seenMtime === 0`) is now treated as "no
+  prior observation, do nothing destructive" — the localStorage stamp
+  is still written at the end of the sync function so the *second*
+  visit has a baseline to compare against, and only resets that
+  happen *after* the baseline is recorded fire the force-reseed.
+
+  Regression tests: 8 cases in new
+  `Tests/BrowserRunnerJSTests/sync-force-reseed.test.mjs`, pinning
+  the safety-critical cases (first-visit-after-deploy, missing
+  server mtime, negative/NaN inputs) and the working-as-designed
+  cases (server unchanged, after-instructor-reset).
+
 ## [0.4.153] - 2026-05-12
 
 ### Added

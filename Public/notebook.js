@@ -588,25 +588,35 @@
             // Server-side overwrite detection.  The server stamps the iframe
             // with `data-working-copy-mtime` = the Unix-epoch mtime of the
             // working-copy file on disk.  We persist the last mtime this
-            // browser has *seen* (per setup) in localStorage.  If the server
-            // mtime is newer, the server overwrote the working copy since
-            // our last visit — usually because an instructor clicked
-            // "Reset notebook" or the student just submitted (which also
-            // bumps the file).  In either case we must NOT preserve the
-            // local IndexedDB copy: we force-overwrite it with the server
-            // snapshot.  Without this, an instructor reset would be invisible
-            // until the student manually cleared site data.
+            // browser has *seen* (per setup) in localStorage.  When the
+            // server mtime is newer than the saved baseline, the server
+            // overwrote the file since our last visit — usually because an
+            // instructor clicked "Reset notebook" — and we must NOT
+            // preserve the local IndexedDB copy: we force-overwrite it
+            // with the server snapshot so the reset is visible without a
+            // manual cache-clear.
+            //
+            // CRITICAL SAFETY: a missing localStorage entry (`seenMtime`
+            // === 0) is treated as "no baseline" — NOT as "any server
+            // mtime is newer."  Otherwise the very first visit AFTER this
+            // code is deployed would wipe every student's in-progress
+            // IndexedDB work because `localStorage` doesn't have the new
+            // key yet but the working-copy file already has a non-zero
+            // mtime.  The baseline gets stamped at the end of this
+            // function so the *second* post-deploy visit has something to
+            // compare against, and only resets that bump the mtime after
+            // that baseline are treated as force-reseed events.
             const serverMtime = parseInt(frame.dataset.workingCopyMtime || '0', 10) || 0;
             const seenKey = 'chickadee_nb_mtime_' + setupID;
             let seenMtime = 0;
             try { seenMtime = parseInt(localStorage.getItem(seenKey) || '0', 10) || 0; } catch (_) {}
-            const serverIsNewer = serverMtime > 0 && serverMtime > seenMtime;
+            const serverIsNewer = shouldForceReseed({ serverMtime, seenMtime });
 
             // Preservation logic: if the browser already has the notebook in
             // IndexedDB AND the server hasn't overwritten it since we last
             // saw it, keep the local version — that's the student's
             // in-progress work.  Otherwise (no local copy, OR server is
-            // newer) seed from the server.
+            // newer than our baseline) seed from the server.
             let hasLocalContent = false;
             if (contents && typeof contents.get === 'function') {
                 try {
@@ -655,6 +665,30 @@
             }
             setStatus('', '');
         }
+    }
+
+    // Pure decision function used by `syncNotebookFromServerSnapshot` to
+    // decide whether to force-overwrite the browser's IndexedDB copy
+    // with the server snapshot, OR preserve the local copy and let the
+    // student's in-progress edits stand.
+    //
+    //   serverMtime  — Unix-epoch seconds of the working-copy file on
+    //                  the server.  0 if the server couldn't stat it.
+    //   seenMtime    — Unix-epoch seconds of the last server mtime this
+    //                  browser observed, persisted in localStorage.  0
+    //                  if no baseline has been recorded yet (first visit
+    //                  ever, or first visit after this code deployed).
+    //
+    // Returns true iff we should treat the server file as "freshly
+    // overwritten since we last looked" and discard the local IndexedDB
+    // copy.  Returns false when we have no baseline (seenMtime === 0),
+    // because absence of a baseline must NOT mean "any server mtime is
+    // newer" — that would clobber every student's pre-existing local
+    // work on the first post-deploy visit.
+    function shouldForceReseed({ serverMtime, seenMtime }) {
+        if (!serverMtime || serverMtime <= 0) return false;
+        if (!seenMtime  || seenMtime  <= 0) return false;
+        return serverMtime > seenMtime;
     }
 
     async function waitForJupyterApp(timeoutMs) {
@@ -1309,6 +1343,7 @@ else:
             parseStructuredPayload,
             probeIframeReadiness,
             isKernelInFailureState,
+            shouldForceReseed,
         };
     }
 })();
