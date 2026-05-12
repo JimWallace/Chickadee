@@ -109,40 +109,49 @@
 
     // Watchdog: two-phase readiness check on the iframe's JupyterLite.
     //
-    //   Phase 1 (shell) — wait up to 45s for `jupyterapp` (the
-    //       JupyterFrontEnd) to mount on the iframe's contentWindow.
-    //       Failure here means the iframe never started — fallback fires
-    //       with kind=watchdog_timeout (no failedChecks).
+    //   Phase 1 (shell) — wait up to 60s for the JupyterLite UI to appear
+    //       in the iframe's DOM.  Failure here means the iframe never
+    //       started — fallback fires with kind=watchdog_timeout (no
+    //       failedChecks).
     //
-    //   Phase 2 (kernel) — once the shell is up, wait up to 30s for the
+    //   Phase 2 (kernel) — once the shell is up, wait up to 60s for the
     //       Pyodide kernel to reach an `idle` or `busy` status.  This
     //       catches the "JupyterLite loaded but kernel is Unknown"
     //       failure mode where the app shell is fine but the kernel never
     //       comes online.  Fallback fires with
     //       failedChecks=["kernel-unhealthy"] so dashboard telemetry can
     //       distinguish it from a true app-shell timeout.
+    //
+    // Readiness signal: prefer DOM inspection over JS-property access on
+    // the iframe's contentWindow.  Same-origin contentWindow access works
+    // in Chromium but is unreliable in Safari (cross-process iframe
+    // isolation can make `frame.contentWindow.jupyterapp` invisible from
+    // the parent even when JupyterLite is fully alive — bug surfaced in
+    // production v0.4.150).  DOM access is more permissive and matches
+    // what the user actually sees on screen.
+    //
+    // Once the shell is confirmed loaded, `shellLoadedAt` is latched:
+    // even if a later poll fails to see the UI (intra-iframe navigation,
+    // transient cross-origin error), we don't regress to a phase-1
+    // timeout.
     function armEditorWatchdog() {
         if (!failures) return;
         const startedAt    = Date.now();
-        const shellDeadline  = 45000;
-        const kernelDeadline = 30000;
+        const shellDeadline  = 60000;
+        const kernelDeadline = 60000;
         let shellLoadedAt = null;
         let cancelled     = false;
 
         function tick() {
             if (cancelled) return;
 
-            let shellReady    = false;
-            let kernelHealthy = false;
-            try {
-                const win = frame.contentWindow;
-                if (win && win.jupyterapp) {
-                    shellReady = true;
-                    kernelHealthy = isKernelHealthy(win);
-                }
-            } catch (_) { /* cross-origin or transient — keep polling */ }
+            const probe = probeIframeReadiness(frame);
+            if (probe.shellReady && shellLoadedAt === null) {
+                shellLoadedAt = Date.now();
+            }
 
-            if (!shellReady) {
+            // Phase 1: shell never seen
+            if (shellLoadedAt === null) {
                 if (Date.now() - startedAt >= shellDeadline) {
                     cancelled = true;
                     failures.showFailure({ kind: 'watchdog_timeout' });
@@ -153,14 +162,13 @@
                 return;
             }
 
-            // Shell is up — start (or continue) the kernel-readiness timer.
-            if (shellLoadedAt === null) shellLoadedAt = Date.now();
-
-            if (kernelHealthy) {
+            // Shell loaded at some point.  Check kernel health.
+            if (probe.kernelHealthy) {
                 cancelled = true; // clean success
                 return;
             }
 
+            // Phase 2: shell up, kernel never reached idle/busy
             if (Date.now() - shellLoadedAt >= kernelDeadline) {
                 cancelled = true;
                 failures.showFailure({
@@ -174,6 +182,58 @@
         }
         // First poll after 1s — the shell is never up before that.
         setTimeout(tick, 1000);
+    }
+
+    // Probes the JupyterLite iframe for shell + kernel readiness using a
+    // layered approach.  Each layer is wrapped in try/catch so a cross-
+    // origin or transient access error doesn't kill the watchdog.
+    //
+    // For shell readiness, we accept ANY of:
+    //   * `frame.contentWindow.jupyterapp` truthy  — works in Chromium
+    //   * a JupyterLab toolbar element in the iframe's DOM
+    //   * any `.jp-` prefixed class on the iframe's body
+    // The DOM checks work in Safari where the JS-property probe doesn't.
+    function probeIframeReadiness(frame) {
+        let shellReady = false;
+        let kernelHealthy = false;
+        let win = null;
+        let doc = null;
+
+        try { win = frame.contentWindow; } catch (_) { /* nope */ }
+        try { doc = frame.contentDocument; } catch (_) { /* nope */ }
+
+        // Probe 1: JS global on contentWindow (Chromium-friendly)
+        try {
+            if (win && win.jupyterapp) {
+                shellReady = true;
+                kernelHealthy = isKernelHealthy(win);
+            }
+        } catch (_) { /* fall through */ }
+
+        // Probe 2: DOM presence in the iframe (Safari-friendly)
+        if (!shellReady) {
+            try {
+                if (doc && doc.body) {
+                    if (doc.querySelector('.jp-Toolbar') ||
+                        doc.querySelector('.jp-Notebook') ||
+                        doc.querySelector('[class^="jp-"]') ||
+                        doc.querySelector('[class*=" jp-"]')) {
+                        shellReady = true;
+                    }
+                }
+            } catch (_) { /* fall through */ }
+        }
+
+        // Probe 3: kernel status by DOM text (works even when JS-API access fails)
+        if (shellReady && !kernelHealthy) {
+            try {
+                const txt = (doc && doc.body && doc.body.textContent) || '';
+                if (txt.indexOf('| Idle') !== -1)  kernelHealthy = true;
+                else if (txt.indexOf('| Busy') !== -1)  kernelHealthy = true;
+            } catch (_) { /* fall through */ }
+        }
+
+        return { shellReady, kernelHealthy };
     }
 
     function reenableSubmit() {

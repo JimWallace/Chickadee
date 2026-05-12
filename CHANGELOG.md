@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.151] - 2026-05-12
+
+### Fixed
+
+- **Watchdog spuriously fires "Editor didn't load" while JupyterLite is
+  actually working (Safari).**  The phase-1 readiness signal introduced
+  in v0.4.149 was `frame.contentWindow.jupyterapp` truthy from the
+  parent frame.  In Chromium this works fine; in Safari (and possibly
+  other WebKit builds) cross-process iframe isolation can make that
+  JS-property probe return undefined from the parent even when
+  JupyterLite is fully loaded and the kernel is alive in the iframe.
+  Result: students saw the editor running, then ~45 s later the
+  fallback panel hid the iframe and posted a
+  `watchdog_timeout` (phase-1) row — even though they could see the
+  notebook and Pyodide was idle.
+
+  Two fixes:
+  1. **Layered readiness probe**: `Public/notebook.js`'s
+     `probeIframeReadiness()` now also looks at the iframe's *DOM*
+     (`.jp-Toolbar`, `.jp-Notebook`, any `.jp-*` class on the body)
+     and the kernel status text (`| Idle` / `| Busy`).  DOM access
+     is more permissive than arbitrary JS-property access from the
+     parent, so the probe sees what the user sees on screen.
+  2. **Latch `shellLoadedAt`**: once the shell is detected, the
+     watchdog never regresses to phase 1 — even if a later poll
+     fails to see the UI (intra-iframe navigation, transient access
+     errors, etc.).  Phase 2 (kernel-unhealthy) is still possible
+     after latch.
+
+  Deadlines raised to be more forgiving given the campus-network
+  packet-loss we observed on the night of v0.4.150 deployment:
+  shell phase 45 s → 60 s, kernel phase 30 s → 60 s.
+
 ## [0.4.150] - 2026-05-11
 
 ### Fixed
