@@ -140,40 +140,30 @@
      PUT endpoint (`/instructor/:id/global-variables`) and re-renders
      through `applyPatternFamilies`.
 -->
-<section class="section-block" id="global-inputs-block"
+<section id="global-inputs-block"
          data-assignment-id="#(assignmentID)"
          style="margin:0 0 1.25rem">
-    <div style="display:flex;align-items:baseline;gap:.5rem;margin-bottom:.4rem">
-        <h2 style="margin:0;font-size:1rem">Global Inputs</h2>
-        <span class="card-meta" style="font-size:.8rem">
-            Named values for every pattern family, every test script, and every
-            <code>{{name}}</code> placeholder in the starter notebook.
-            Use <code>= expression</code> for per-student values
-            (e.g. <code>= seed % 26</code>) that substitute into the notebook
-            at student first-open.
-        </span>
-    </div>
-    <table class="results-table" id="global-inputs-table" style="font-size:.78rem;width:100%">
+    <table class="results-table" id="global-inputs-table">
         <tbody class="global-inputs-body">
             #for(v in globalVariableRows):
             <tr class="global-input-row">
+                <td><strong>Global input</strong></td>
                 <td style="width:14rem;white-space:nowrap">
                     <span class="global-input-row-valid"
                           style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
                     <input type="text" class="form-input global-input-name"
                            value="#(v.name)" placeholder="Input Name"
-                           style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                           style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-family:monospace">
                 </td>
                 <td>
                     <input type="text" class="form-input global-input-value"
                            value="#(v.valueJSON)"
-                           placeholder='12, "hello", [1, 2, 3], {"k": 1}'
-                           style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                           placeholder='12, "hello", [1, 2, 3], or = seed % 26'
+                           style="width:100%;padding:.2rem .4rem;font-family:monospace">
                 </td>
-                <td style="width:2.5rem;text-align:right">
+                <td class="time">
                     <button type="button" class="btn action-btn action-danger global-input-remove"
-                            title="Remove input" aria-label="Remove input"
-                            style="padding:.2rem .4rem;display:inline-flex;align-items:center">
+                            title="Remove input" aria-label="Remove input">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
                              viewBox="0 0 24 24" fill="none" stroke="currentColor"
                              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -187,14 +177,15 @@
                 </td>
             </tr>
             #endfor
+            <tr>
+                <td><strong>Add input</strong></td>
+                <td colspan="3">
+                    <button type="button" class="btn action-btn" id="global-input-add">+ Add Input</button>
+                    <span id="global-inputs-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
+                </td>
+            </tr>
         </tbody>
     </table>
-    <div style="display:flex;align-items:center;gap:.5rem;margin-top:.4rem">
-        <button type="button" class="btn action-btn" id="global-input-add"
-                style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
-        <span id="global-inputs-status" class="card-meta"
-              style="font-size:.75rem;color:var(--gray-500)"></span>
-    </div>
 </section>
 
 #if(brightspaceSyncEnabled):

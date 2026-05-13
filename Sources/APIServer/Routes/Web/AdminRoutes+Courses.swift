@@ -314,9 +314,7 @@ extension AdminRoutes {
             throw Abort(.notFound)
         }
 
-        async let enrollmentCountFetch = APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .count()
+        async let enrollmentCountFetch = enrolledStudentCount(forCourse: courseID, on: req.db)
         async let assignmentCountFetch = APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .count()

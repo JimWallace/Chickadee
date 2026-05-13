@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.4.160] - 2026-05-13
+## [0.4.161] - 2026-05-13
 
 ### Added
 
@@ -56,6 +56,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   round-trip with both kinds populated; missing-field decode; manifest
   round-trip; runner-sanitized policy; end-to-end evaluator
   integration via a section expression referencing a global variable.
+
+## [0.4.160] - 2026-05-13
+
+### Changed
+
+- **UI consistency: "enrolled students" count unified across pages.**
+  Three places displayed different values for the same course because
+  each ran its own enrollment query: `/admin` counted every enrollment
+  row (instructors and admins included), `/instructor/:id/submissions`
+  counted only logged-in student-role users, and `/instructor` counted
+  student-role users plus pre-enrollments.  All three now resolve
+  through new helpers in `CourseRosterCounts.swift`
+  (`enrolledStudentCountsByCourse`, `enrolledStudentCount(forCourse:)`)
+  using one definition: `role=="student"` enrollments plus
+  `APIPreEnrollment` rows.  Instructors and admins enrolled in a
+  course are excluded.  Affects the admin dashboard "Students"
+  column, the admin course-detail "Enrolled students (N)" heading,
+  and the assignment submissions page's "Students Submitted X/Y"
+  denominator.  No schema changes; the submissions-page table still
+  only lists logged-in students, so its denominator may exceed the
+  row count when pre-enrolled students haven't signed in yet.
+- **Global Inputs panel restyled to match the support-files table.**
+  Dropped the standalone `<h2>Global Inputs</h2>` heading and the
+  explanatory paragraph.  Each input row now leads with a
+  `<strong>Global input</strong>` label cell, and the `+ Add Input`
+  control moved into a trailing `<tr>` mirroring the support-files
+  "Add support file → + Upload file" pattern.  Stacked back-to-back
+  with the support-files table, the two read as one continuous
+  table.  Persistence is unchanged (still its own
+  `PUT /global-variables` endpoint outside the multipart form).
 
 ## [0.4.158] - 2026-05-13
 

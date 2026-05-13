@@ -253,6 +253,12 @@ extension AssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
+        // Canonical roster size: role=="student" enrolled users + pre-enrollments.
+        // Matches /admin and /instructor; the table below still only lists
+        // logged-in students, so the "Students Submitted" denominator may exceed
+        // the row count when pre-enrolled students haven't signed in yet.
+        async let enrolledStudentCountFetch = enrolledStudentCount(forCourse: assignment.courseID, on: req.db)
+
         let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == assignment.courseID)
             .all()
@@ -356,8 +362,9 @@ extension AssignmentRoutes {
             let avg = Double(total) / Double(submittedRows.count)
             avgAttempts = String(format: "%.1f", avg)
         }
+        let enrolledStudentRosterCount = try await enrolledStudentCountFetch
         let metrics = [
-            InstructorDashboardMetric(label: "Students Submitted", value: "\(submittedCount)/\(rows.count)"),
+            InstructorDashboardMetric(label: "Students Submitted", value: "\(submittedCount)/\(enrolledStudentRosterCount)"),
             InstructorDashboardMetric(label: "Avg Attempts/Student", value: avgAttempts),
             InstructorDashboardMetric(label: "Submissions (24h)", value: "\(submissions24h)"),
             InstructorDashboardMetric(label: "Queued Jobs", value: "\(pendingLatestCount)"),
