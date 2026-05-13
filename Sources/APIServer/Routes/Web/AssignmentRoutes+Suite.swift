@@ -272,9 +272,19 @@ func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellR
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     var rows: [SuiteSectionShellRow] = props.sections.map { section in
-        let vars: [SuiteSectionVariableShellRow] = section.variables.map { v in
+        var vars: [SuiteSectionVariableShellRow] = section.variables.map { v in
             let json = (try? encoder.encode(v.value)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"
             return SuiteSectionVariableShellRow(name: v.name, valueJSON: json)
+        }
+        // Slice 4 — render per-student expressions with the same `=`
+        // prefix convention used by the global panel.  The editor JS
+        // (`section-inputs-editor.js`) classifies them on load and
+        // sends them back as `expressions: [...]` on save.
+        for e in section.expressions {
+            vars.append(SuiteSectionVariableShellRow(
+                name: e.name,
+                valueJSON: "= \(e.expression)"
+            ))
         }
         return SuiteSectionShellRow(sectionID: section.id, name: section.name,
                                      isUngrouped: false,

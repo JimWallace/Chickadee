@@ -6,6 +6,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.160] - 2026-05-13
+
+### Added
+
+- **Section variables can carry `=` expressions — Slice 4 of issue
+  #461 personalization.**  The per-section "+ Add Input" panel now
+  accepts the same `= seed % 26` syntax Slice 2 added to the global
+  panel.  Section expressions evaluate per-student at notebook
+  first-open with `seed` and every static input (global + every
+  section's variables) in scope, and substitute into starter-notebook
+  `{{name}}` placeholders alongside literal values.
+
+  Pieces:
+
+  - `TestSuiteSection.expressions: [PersonalizationExpression]`
+    (Core).  Optional decode + default `[]` so older manifests
+    round-trip cleanly.
+  - `POST /instructor/:assignmentID/suite-sections/:sectionID/variables`
+    accepts an optional `expressions` array.  Validates
+    identifier-shape names, `seed` reservation, cross-namespace
+    uniqueness against globals + every other section, and runs a
+    save-time eval against the instructor's seed so broken
+    expressions surface as 400s before students see them.
+  - `applyNotebookSubstitutionsIfNeeded` merges global + section
+    expressions into one evaluator input (declared order: globals
+    first, then sections, matching the literal precedence).
+  - Inline section-vars JS block in `assignment-edit.leaf`
+    extracted to `Public/section-inputs-editor.js`, gaining the same
+    `=` prefix classification + subtle-green-tint visual cue Slice 2
+    added to the global panel.  Per-section toolbar JS
+    (`+ Add Script`, `+ Add Family`, etc.) stays inline.
+  - `suiteSectionShellRows` renders section expressions in each
+    section's editor table with a leading `=` so the JS classifier
+    picks them up on load.
+
+  Out of scope this slice (still in the #461 backlog):
+
+  - Test-script substitution via runner-side bootstrap binding.
+  - File-shaped personalized inputs.
+  - NotebookCheck `$varname` resolution.
+
+  Backwards compatibility: zero runner changes.  Older editor builds
+  that POST only `{ variables }` to the section-vars endpoint keep
+  working (server defaults the new `expressions` field to `[]`).
+  Manifest's `sections[].expressions` decodes empty when absent.
+
+  Tests (`Tests/APITests/SectionInputsTests.swift`, 5 cases): schema
+  round-trip with both kinds populated; missing-field decode; manifest
+  round-trip; runner-sanitized policy; end-to-end evaluator
+  integration via a section expression referencing a global variable.
+
 ## [0.4.158] - 2026-05-13
 
 ### Added

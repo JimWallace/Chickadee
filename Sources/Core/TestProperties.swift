@@ -98,17 +98,29 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
     /// shadow section-level ones in the generated test.
     public let variables: [FamilyVariable]
 
-    public init(id: String, name: String, variables: [FamilyVariable] = []) {
-        self.id        = id
-        self.name      = name
-        self.variables = variables
+    /// Slice 4 of #461 — per-student expressions in section scope.
+    /// Evaluated per-student at notebook first-open alongside global
+    /// expressions; results substitute into `{{name}}` placeholders.
+    /// Stays literal-only for pattern-family `$name` references and
+    /// raw-script inlining (matches Slice 2's notebooks-only constraint
+    /// for personalization expressions).
+    public let expressions: [PersonalizationExpression]
+
+    public init(id: String, name: String,
+                variables: [FamilyVariable] = [],
+                expressions: [PersonalizationExpression] = []) {
+        self.id          = id
+        self.name        = name
+        self.variables   = variables
+        self.expressions = expressions
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id        = try c.decode(String.self, forKey: .id)
-        name      = try c.decode(String.self, forKey: .name)
-        variables = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
+        id          = try c.decode(String.self, forKey: .id)
+        name        = try c.decode(String.self, forKey: .name)
+        variables   = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
+        expressions = try c.decodeIfPresent([PersonalizationExpression].self, forKey: .expressions) ?? []
     }
 }
 
