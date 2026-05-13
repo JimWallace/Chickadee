@@ -88,7 +88,7 @@ struct AdminRoutes: RouteCollection {
 
         // Course management data — all three queries are independent so run in parallel.
         async let coursesFetch      = APICourse.query(on: req.db).sort(\.$createdAt).all()
-        async let enrollmentsFetch  = enrollmentCountsByCourse(on: req.db)
+        async let enrollmentsFetch  = enrolledStudentCountsByCourse(on: req.db)
         async let assignmentsFetch  = assignmentCountsByCourse(on: req.db)
         let (allCourses, enrollmentCounts, assignmentCounts) =
             try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
@@ -665,15 +665,6 @@ private func sum(_ values: [Int?]) -> Int? {
 
 private func iso8601String(_ date: Date) -> String {
     ISO8601DateFormatter().string(from: date)
-}
-
-func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    let enrollments = try await APICourseEnrollment.query(on: db).all()
-    var counts: [UUID: Int] = [:]
-    for e in enrollments {
-        counts[e.$course.id, default: 0] += 1
-    }
-    return counts
 }
 
 func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
