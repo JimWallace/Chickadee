@@ -106,6 +106,22 @@
                         sectionID: sid
                     };
                 }
+                if (i.kind === 'check' && i.check) {
+                    var cid = i.check.id;
+                    return {
+                        kind: 'check',
+                        id: 'check:' + cid,
+                        checkID: cid,
+                        check: i.check,
+                        // Read-only on the row; carried so re-PUTs include
+                        // the full spec back.  The server only acts on
+                        // (id, sectionID) for kind:"check", so mutations
+                        // here are ignored on save — check fields belong
+                        // in the notebook-check modal.
+                        dependsOn: (i.check.dependsOn || []).slice(),
+                        sectionID: sid
+                    };
+                }
                 var s = i.script || {};
                 return {
                     kind: 'script',
@@ -246,8 +262,36 @@
                 + '</tr>';
         }
 
+        function checkRowHTML(item, depth) {
+            var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
+            var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
+            var check  = item.check || {};
+            var label  = check.name || check.id || '';
+            var kind   = check.kind || '';
+            var tier   = check.tier  || 'public';
+            var points = Math.max(0, parseInt(check.points) || 0);
+            return '<tr data-id="' + escAttr(item.id) + '" data-kind="check" data-source="check" data-check-id="' + escAttr(check.id || '') + '">'
+                + '<td' + indent + '><div class="suite-name-cell">'
+                +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder">⋮⋮</span>'
+                +   connector
+                +   '<div style="display:flex;flex-direction:column;gap:.15rem">'
+                +     '<strong style="font-size:.85rem">' + escHtml(label) + '</strong>'
+                +     '<span class="card-meta" style="font-size:.72rem">' + escHtml(kind || 'notebook check') + '</span>'
+                +   '</div>'
+                + '</div></td>'
+                + '<td><span class="card-meta" style="font-size:.8rem">' + escHtml(tier) + '</span></td>'
+                + '<td><span class="card-meta" style="font-size:.8rem">' + points + '</span></td>'
+                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
+                +   '<button class="btn action-btn check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
+                +   '<button class="btn action-btn action-danger check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
+                + '</div></td>'
+                + '</tr>';
+        }
+
         function rowHTML(item, depth) {
-            return item.kind === 'family' ? familyRowHTML(item, depth) : scriptRowHTML(item, depth);
+            if (item.kind === 'family') return familyRowHTML(item, depth);
+            if (item.kind === 'check')  return checkRowHTML(item, depth);
+            return scriptRowHTML(item, depth);
         }
 
         /// Preserves which script-row input (display-name, tier, points)
@@ -352,6 +396,17 @@
                             kind: 'family',
                             family: family,
                             dependsOn: family.dependsOn.slice(),
+                            sectionID: item.sectionID || null
+                        };
+                    }
+                    if (item.kind === 'check') {
+                        // Server acts on (check.id, sectionID); the full
+                        // spec is echoed so the response can re-emit the
+                        // row without a separate /checks fetch.  Spec
+                        // mutations route through PUT /checks (the modal).
+                        return {
+                            kind: 'check',
+                            check: item.check,
                             sectionID: item.sectionID || null
                         };
                     }
@@ -525,11 +580,19 @@
             var sameSection = dragItem && ((dragItem.sectionID || '') === (targetSid || ''));
             var rect  = target.getBoundingClientRect();
             var relY  = (e.clientY - rect.top) / rect.height;
+            // Adopt onto a check row would produce a `check:<id>` dep
+            // token, which the server doesn't expand — checks are always
+            // leaf nodes in the dependency graph for v0.4.x.
+            var targetItem = findByID(tid);
+            var targetIsCheck = targetItem && targetItem.kind === 'check';
+            var dragItemHover = findByID(dragID);
+            var dragIsCheck = dragItemHover && dragItemHover.kind === 'check';
             if (relY < 0.3) {
                 target.classList.add('drop-before');
             } else if (relY > 0.7) {
                 target.classList.add('drop-after');
-            } else if (sameSection && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)) {
+            } else if (sameSection && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)
+                       && !targetIsCheck && !dragIsCheck) {
                 target.classList.add('drop-adopt');
             } else {
                 target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
@@ -587,7 +650,11 @@
             var rect = target.getBoundingClientRect();
             var relY = (e.clientY - rect.top) / rect.height;
 
-            if (sameSection && relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)) {
+            var dropTargetItem = findByID(tid);
+            var dropTargetIsCheck = dropTargetItem && dropTargetItem.kind === 'check';
+            var dropDragIsCheck = dragItem.kind === 'check';
+            if (sameSection && relY >= 0.3 && relY <= 0.7 && !isChild(tid) && !hasChildrenInSection(dragID, targetSid)
+                && !dropTargetIsCheck && !dropDragIsCheck) {
                 dragItem.dependsOn = [tid];
                 items = items.filter(function (it) { return it.id !== dragID; });
                 var aIdx = items.findIndex(function (it) { return it.id === tid; });
@@ -670,8 +737,62 @@
             schedulePush();
         });
 
-        // Delete script row (family delete is handled by pattern-family-editor.js).
+        // Notebook-check row Edit/Delete (family edit/delete is handled by
+        // pattern-family-editor.js).  Edit opens the existing modal; Delete
+        // PUTs the filtered check list and lets `onChecksChange` reload.
         container.addEventListener('click', function (e) {
+            var editBtn = e.target.closest && e.target.closest('.check-edit-btn');
+            if (editBtn) {
+                var row = editBtn.closest('tr[data-kind="check"]');
+                if (!row) return;
+                var cid = row.getAttribute('data-check-id');
+                var item = findByID('check:' + cid);
+                if (!item) return;
+                var modal = window.chickadeeNotebookCheckEditor;
+                if (modal && typeof modal.open === 'function') {
+                    modal.open(cid, item.sectionID || null);
+                }
+                return;
+            }
+            var delBtn = e.target.closest && e.target.closest('.check-delete-btn');
+            if (delBtn) {
+                var row2 = delBtn.closest('tr[data-kind="check"]');
+                if (!row2) return;
+                var cid2 = row2.getAttribute('data-check-id');
+                var item2 = findByID('check:' + cid2);
+                if (!item2) return;
+                var label = (item2.check && (item2.check.name || item2.check.id)) || cid2;
+                if (!confirm('Delete notebook check "' + label + '"? This removes the generated test script.')) {
+                    return;
+                }
+                if (typeof urls.putChecks !== 'function') {
+                    // Fallback: open the modal so the user can use its Delete button.
+                    var modal2 = window.chickadeeNotebookCheckEditor;
+                    if (modal2 && typeof modal2.open === 'function') modal2.open(cid2);
+                    return;
+                }
+                // Gather remaining checks from items[] (modulo our deletion).
+                var remaining = items
+                    .filter(function (it) { return it.kind === 'check' && it.checkID !== cid2; })
+                    .map(function (it) { return it.check; });
+                fetch(urls.putChecks(), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                    body: JSON.stringify(remaining)
+                })
+                .then(function (r) {
+                    if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+                    // The notebook-check modal's onChecksChange reloads
+                    // the page on save; reuse the same UX so suite-table
+                    // and the manifest stay in lockstep.
+                    window.location.reload();
+                })
+                .catch(function (err) {
+                    alert('Could not delete check: ' + (err.message || err));
+                });
+                return;
+            }
+
             var btn = e.target.closest && e.target.closest('.suite-delete-btn');
             if (!btn) return;
             var row = btn.closest('tr[data-kind="script"]');

@@ -66,6 +66,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   traceback in stderr, undefined names → `NameError`), repr-output
   shape, and `TestProperties.globalExpressions` round-trip + sanitize.
 
+## [0.4.159] - 2026-05-13
+
+### Fixed
+
+- **Suite editor: drag-and-drop for notebook-check rows.**  v0.4.157
+  shipped the notebook-check generator (e.g. `variableExists`) but
+  rendered each generated row in the suite editor as if it were a
+  hand-written script.  Dragging a check row between sections fired a
+  `PUT /suite` that re-asserted the row as `kind: "script"` with the
+  generated filename — the server then saw that hand-written script
+  *and* the still-active notebook check pointing at the same file and
+  refused the save with "would generate '…', but a hand-written file
+  with that name already exists."
+
+  The unified suite editor now has a third row kind (`"check"`) that
+  round-trips cleanly:
+
+  - `SuiteItemDTO` gains a `check: NotebookCheck?` field; the GET
+    handler in `AssignmentRoutes+Suite.swift` emits one `kind: "check"`
+    row per check, the PUT handler in `SuiteEditHelpers.swift` accepts
+    it and stamps a `.check(id:, sectionID:)` authored item that
+    `applyPatternFamilies` already knows how to place.
+  - `suite-table.js` recognises check items in `normaliseItems` and
+    `buildPayload`, renders a dedicated check row (read-only tier and
+    points, label = check name or id), and wires inline Edit / Delete
+    buttons.  Edit opens the existing notebook-check modal; Delete
+    `PUT`s `/checks` with the check filtered out and reloads.
+  - Drop-adopt is suppressed when either side of a drag is a check
+    row — there is no `check:<id>` dep token form, so adopting onto
+    a check would have produced an invalid manifest dependency.
+  - The author-facing rows for hand-written scripts and pattern
+    families are unchanged.
+
 ## [0.4.157] - 2026-05-12
 
 ### Added

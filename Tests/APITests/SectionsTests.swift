@@ -114,6 +114,50 @@ final class SectionsTests: XCTestCase {
         XCTAssertEqual(payload.items[2].sectionID, "s2")
     }
 
+    // Regression for v0.4.157→0.4.158: notebook-check entries in the
+    // manifest were emitted by buildSuitePayload as kind:"script" rows,
+    // which made the suite-editor drag-and-drop round-trip fail with a
+    // bogus "hand-written file already exists" collision.  After the fix
+    // they emit as kind:"check" rows carrying the check spec + sectionID.
+    func testBuildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let check = NotebookCheck(
+            id: "var_exists_x",
+            name: "x exists",
+            kind: .variableExists,
+            tier: .pub,
+            points: 2,
+            variable: "x"
+        )
+        let props = TestProperties(
+            testSuites: [
+                TestSuiteEntry(tier: .pub, script: "a.py", sectionID: "s1"),
+                TestSuiteEntry(
+                    tier: .pub,
+                    script: "publiccheck_var_exists_x.py",
+                    points: 2,
+                    generatedByCheck: "var_exists_x",
+                    sectionID: nil
+                ),
+            ],
+            notebookChecks: [check],
+            sections: [TestSuiteSection(id: "s1", name: "One")]
+        )
+        let manifest = String(data: try encoder.encode(props), encoding: .utf8)!
+
+        let payload = buildSuitePayload(fromManifest: manifest)
+        XCTAssertEqual(payload.items.count, 2)
+        XCTAssertEqual(payload.items[0].kind, "script")
+        XCTAssertEqual(payload.items[0].sectionID, "s1")
+        XCTAssertEqual(payload.items[1].kind, "check")
+        XCTAssertEqual(payload.items[1].check?.id, "var_exists_x")
+        XCTAssertEqual(payload.items[1].check?.kind, .variableExists)
+        XCTAssertNil(payload.items[1].sectionID)
+        // The script's filename must not leak into a check row's script DTO.
+        XCTAssertNil(payload.items[1].script)
+    }
+
     func testBuildSuitePayloadLegacyManifestReturnsEmptySections() throws {
         let legacyJSON = """
         {
