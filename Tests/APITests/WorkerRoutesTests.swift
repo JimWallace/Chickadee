@@ -420,6 +420,83 @@ final class WorkerRoutesTests: XCTestCase {
         XCTAssertNotNil(updated?.workerID)
     }
 
+    func testRequestJob_freshSubmissionClaimedAheadOfOlderRetest() async throws {
+        // Even when a retest has an older submittedAt, a fresh student
+        // submission must be claimed first so manifest-revision sweeps
+        // can't starve active students (#427).
+        let setup = try await makeTestSetup(id: "prio_setup", manifest: workerManifestJSON)
+
+        let now = Date()
+        let earlier = now.addingTimeInterval(-3600)
+        let later   = now.addingTimeInterval(-60)
+
+        // Retest with the OLDER submittedAt (would win under pure FIFO).
+        let retest = try await makeSubmission(id: "prio_retest", setupID: setup.id!)
+        retest.submittedAt = earlier
+        retest.retestedAt = now
+        try await retest.save(on: app.db)
+
+        // Fresh submission with a NEWER submittedAt — should still be claimed first.
+        let fresh = try await makeSubmission(id: "prio_fresh", setupID: setup.id!)
+        fresh.submittedAt = later
+        try await fresh.save(on: app.db)
+
+        let path = "/api/v1/worker/request"
+        let body1 = try workerRequestBody(workerID: "w1")
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body1)
+            req.body = body1
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let job = try res.content.decode(Job.self)
+            XCTAssertEqual(job.submissionID, fresh.id,
+                           "Fresh submission must be claimed before retest, regardless of submittedAt order")
+        })
+
+        // Second poll should now drain the retest.
+        let body2 = try workerRequestBody(workerID: "w2")
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body2)
+            req.body = body2
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let job = try res.content.decode(Job.self)
+            XCTAssertEqual(job.submissionID, retest.id,
+                           "Retest must be claimed once fresh work has drained")
+        })
+    }
+
+    func testRequestJob_amongRetests_oldestSubmittedAtFirst() async throws {
+        // With no fresh work, retests drain in submittedAt order (oldest first).
+        let setup = try await makeTestSetup(id: "rprio_setup", manifest: workerManifestJSON)
+
+        let now = Date()
+        let earlier = now.addingTimeInterval(-3600)
+        let later   = now.addingTimeInterval(-60)
+
+        let olderRetest = try await makeSubmission(id: "rprio_r1", setupID: setup.id!)
+        olderRetest.submittedAt = earlier
+        olderRetest.retestedAt = now
+        try await olderRetest.save(on: app.db)
+
+        let newerRetest = try await makeSubmission(id: "rprio_r2", setupID: setup.id!)
+        newerRetest.submittedAt = later
+        newerRetest.retestedAt = now
+        try await newerRetest.save(on: app.db)
+
+        let path = "/api/v1/worker/request"
+        let body = try workerRequestBody(workerID: "w1")
+        try await app.asyncTest(.POST, path, beforeRequest: { req in
+            req.headers = workerHeaders(method: .POST, path: path, body: body)
+            req.body = body
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let job = try res.content.decode(Job.self)
+            XCTAssertEqual(job.submissionID, olderRetest.id,
+                           "Among retests with no fresh work, oldest submittedAt is claimed first")
+        })
+    }
+
     // MARK: - GET /api/v1/worker/submissions/:id/download
 
     func testDownloadSubmission_existingFile_returns200() async throws {

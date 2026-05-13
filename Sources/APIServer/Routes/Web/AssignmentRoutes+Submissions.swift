@@ -162,14 +162,17 @@ extension AssignmentRoutes {
             throw WebAssignmentError.noActiveCourse(action: "viewing student submissions")
         }
 
+        // Any enrolled user (student, instructor enrolled for testing, admin)
+        // can have submissions in the course; gate only on enrollment, not on
+        // role. The dashboard roster table lists all enrolled users, so this
+        // mirrors what's clickable there.
         let isEnrolled = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == activeCourseUUID)
             .filter(\.$userID == studentID)
             .count() > 0
         guard
             isEnrolled,
-            let student = try await APIUser.find(studentID, on: req.db),
-            student.role == "student"
+            let student = try await APIUser.find(studentID, on: req.db)
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
