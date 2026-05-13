@@ -124,6 +124,7 @@ func applyPatternFamilies(
     authoredItems: [AuthoredSuiteItem]? = nil,
     sections: [TestSuiteSection]? = nil,
     globalVariables: [FamilyVariable]? = nil,
+    globalExpressions: [PersonalizationExpression]? = nil,
     on db: Database
 ) async throws -> PatternFamilyApplyResult {
 
@@ -144,6 +145,14 @@ func applyPatternFamilies(
     // Resolve assignment-scope variables (Slice 1): caller wins; otherwise
     // carry forward whatever was on the manifest already.
     let resolvedGlobalVariables: [FamilyVariable] = globalVariables ?? props.globalVariables
+
+    // Resolve assignment-scope expressions (Slice 2): same carry-forward
+    // semantics.  Expressions don't reach the runner or get inlined into
+    // raw scripts — they only participate in notebook substitution
+    // at student first-open — so they bypass the renderer below and
+    // flow straight into the manifest write.
+    let resolvedGlobalExpressions: [PersonalizationExpression] =
+        globalExpressions ?? props.globalExpressions
     var seenSectionIDs: Set<String> = []
     for s in resolvedSections {
         guard seenSectionIDs.insert(s.id).inserted else {
@@ -637,7 +646,8 @@ func applyPatternFamilies(
         patternFamilies: nextFamilies,
         notebookChecks:  resolvedChecks,
         sections:        resolvedSections,
-        globalVariables: resolvedGlobalVariables
+        globalVariables: resolvedGlobalVariables,
+        globalExpressions: resolvedGlobalExpressions
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner

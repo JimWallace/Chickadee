@@ -1,16 +1,25 @@
 // Public/global-inputs-editor.js
 //
-// Slice 1 of issue #461 — wires the "Global Inputs" panel at the top of
-// the assignment edit page.  Mirrors the section-vars editor in
-// assignment-edit.leaf (parses bare-typed JSON + Python-ish shortcuts,
-// debounced auto-save) but persists to PUT /instructor/:id/global-variables
-// with a JSON response (no 303 redirect — the server returns the
-// reconciled list plus warnings, which we render into the status pill).
+// Slice 1 + Slice 2 of issue #461 — wires the "Global Inputs" panel at
+// the top of the assignment edit page.
 //
-// Validation locally rejects bad rows so the save isn't fired with
-// known-broken data.  Server validates again and surfaces server-side
-// errors (e.g. unknown {{name}} in the starter notebook) into the
-// status pill below the panel.
+// A row is one of two kinds, picked by the Value cell's prefix:
+//   - "literal"     : `42`, `"hello"`, `[1, 2, 3]`, `{"k": 1}`, `True`
+//                     Parsed via tryParseValue (JSON + Python shortcuts).
+//                     Inlined at save time everywhere section variables
+//                     are inlined.  Substituted into starter-notebook
+//                     `{{name}}` markers as a literal.
+//   - "expression"  : starts with `=`, e.g. `= seed % 26`.
+//                     Evaluated server-side per-student at notebook
+//                     first-open with the seed bound; the result
+//                     substitutes into starter-notebook `{{name}}`
+//                     markers.  Does NOT participate in pattern-family
+//                     `$name` references or raw-script inlining (Slice 2
+//                     scope: notebooks only).
+//
+// Persists to PUT /instructor/:id/global-variables with a JSON body
+// `{ variables: [...], expressions: [...] }`.  Old clients sending only
+// `variables` keep working server-side.
 
 (function () {
     'use strict';
@@ -26,14 +35,32 @@
         return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
     }
 
-    /// Parses a value cell.  Returns:
+    /// Classifies a row's value cell.  Returns one of:
+    ///   { kind: 'empty' }
+    ///   { kind: 'expression', expression: '<python>' }
+    ///   { kind: 'literal', value: <JSON-able>, strict: true|false }
+    /// Expression mode is signalled by a leading `=` (spreadsheet-style).
+    function classifyValue(raw) {
+        var t = String(raw == null ? '' : raw);
+        var trimmed = t.trim();
+        if (!trimmed) return { kind: 'empty' };
+        if (trimmed.charAt(0) === '=') {
+            var body = trimmed.slice(1).trim();
+            if (!body) return { kind: 'expression', expression: '', empty: true };
+            return { kind: 'expression', expression: body };
+        }
+        var lit = tryParseLiteral(trimmed);
+        if (!lit.ok) return { kind: 'empty' };
+        return { kind: 'literal', value: lit.value, strict: lit.strict };
+    }
+
+    /// Parses a literal value cell.  Returns:
     ///   { ok: true,  value: <JSON-able>, strict: true|false }
-    ///   { ok: false, empty: true }
+    ///   { ok: false }
     /// Matches the section-vars editor's `tryParseValue` byte-for-byte so
     /// the on-disk shape is identical across the two panels.
-    function tryParseValue(raw) {
-        var t = String(raw == null ? '' : raw).trim();
-        if (!t) return { ok: false, empty: true };
+    function tryParseLiteral(t) {
+        if (!t) return { ok: false };
         if (t === 'True')  return { ok: true, value: true,  strict: true };
         if (t === 'False') return { ok: true, value: false, strict: true };
         if (t === 'None')  return { ok: true, value: null,  strict: true };
@@ -47,7 +74,7 @@
             try { return { ok: true, value: JSON.parse(pyish), strict: false }; }
             catch (_) { /* fall through */ }
         }
-        return { ok: true, value: String(raw), strict: false };
+        return { ok: true, value: t, strict: false };
     }
 
     function refreshRow(tr, tbody) {
@@ -71,12 +98,40 @@
             ? "'" + name + "' is reserved for Chickadee's personalization seed."
             : '';
 
-        var parsed = tryParseValue(rawVal);
-        var valueOk = parsed.ok && !parsed.empty && parsed.strict;
-        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber,#b38600)';
-        valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
-            ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.'
-            : '';
+        var classified = classifyValue(rawVal);
+        var valueOk = false;
+        var hint = '';
+        if (classified.kind === 'empty') {
+            valueOk = false;
+        } else if (classified.kind === 'expression') {
+            // Expression mode: green tint to signal "per-student"; no
+            // local syntax check — server validates at save time.
+            valueOk = !classified.empty;
+            hint = classified.empty
+                ? 'Expression body is empty after the leading `=`.'
+                : 'Per-student expression. Server evaluates with `seed` bound and substitutes the result.';
+        } else {
+            valueOk = classified.strict;
+            hint = classified.strict
+                ? ''
+                : 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.';
+        }
+
+        // Reset all classification cues, then apply the current one so
+        // toggling between modes doesn't leave stale colours.
+        valueEl.style.borderColor = '';
+        valueEl.style.backgroundColor = '';
+        valueEl.title = hint;
+        if (classified.kind === 'expression') {
+            // Subtle highlight to make the per-student rows visually
+            // distinct from the literal rows.  Stays inside the table's
+            // existing greyscale palette so it doesn't clash on light or
+            // dark themes.
+            valueEl.style.backgroundColor = 'rgba(45, 143, 71, .07)';   // green tint
+            if (!valueOk) valueEl.style.borderColor = 'var(--amber,#b38600)';
+        } else if (rawVal && !valueOk) {
+            valueEl.style.borderColor = 'var(--amber,#b38600)';
+        }
 
         if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
     }
@@ -95,7 +150,7 @@
           +   '<span class="global-input-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
           +   '<input type="text" class="form-input global-input-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">'
           + '</td>'
-          + '<td><input type="text" class="form-input global-input-value" value="" placeholder=\'12, "hello", [1, 2, 3], {"k": 1}\' style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
+          + '<td><input type="text" class="form-input global-input-value" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\' style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
           + '<td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger global-input-remove" title="Remove input" aria-label="Remove input" style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
         tbody.appendChild(tr);
         refreshRow(tr, tbody);
@@ -106,6 +161,7 @@
     function buildPayload(tbody) {
         var rows = Array.from(tbody.querySelectorAll('tr.global-input-row'));
         var variables = [];
+        var expressions = [];
         var valid = true;
         for (var i = 0; i < rows.length; i++) {
             var tr = rows[i];
@@ -113,16 +169,23 @@
             var rawVal = tr.querySelector('.global-input-value').value || '';
             if (!name && !rawVal.trim()) continue;
             if (!isValidPyIdent(name) || RESERVED_NAMES[name]) { valid = false; continue; }
-            var parsed = tryParseValue(rawVal);
-            if (parsed.empty) { valid = false; continue; }
-            variables.push({ name: name, value: parsed.value });
+            var classified = classifyValue(rawVal);
+            if (classified.kind === 'empty') { valid = false; continue; }
+            if (classified.kind === 'expression') {
+                if (classified.empty) { valid = false; continue; }
+                expressions.push({ name: name, expression: classified.expression });
+            } else {
+                variables.push({ name: name, value: classified.value });
+            }
         }
+        // Duplicate-name guard across both kinds (same Python namespace).
         var seen = {};
-        for (var k = 0; k < variables.length; k++) {
-            if (seen[variables[k].name]) { valid = false; break; }
-            seen[variables[k].name] = true;
+        var all = variables.concat(expressions);
+        for (var k = 0; k < all.length; k++) {
+            if (seen[all[k].name]) { valid = false; break; }
+            seen[all[k].name] = true;
         }
-        return valid ? { variables: variables } : null;
+        return valid ? { variables: variables, expressions: expressions } : null;
     }
 
     function init() {

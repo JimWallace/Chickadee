@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.158] - 2026-05-13
+
+### Added
+
+- **Per-student expressions on Global Inputs — Slice 2 of issue #461
+  personalization (notebooks-only).**  The Global Inputs panel now
+  accepts rows where the Value cell starts with `=` — e.g.
+  `= seed % 26`, `= quotes[seed % len(quotes)]`.  These are
+  evaluated server-side at student-notebook first-open with `seed`
+  (the per-(student, assignment) integer from Phase 1) and every
+  literal global / section variable in scope.  The result
+  substitutes into starter-notebook `{{name}}` placeholders
+  alongside Slice 1's literal values.
+
+  Pieces:
+
+  - New `PersonalizationExpression` type in Core and a parallel
+    `TestProperties.globalExpressions` field.  Decodes empty when
+    absent; `runnerSanitized()` strips it (expressions never reach
+    the runner — they're a server-side first-open concern).
+  - New `PersonalizationEvaluator` service spawns `python3` with a
+    generated driver script that binds `seed` + static vars + each
+    expression in declared order, then emits a JSON map of
+    `{name: repr(value)}`.  5-second timeout; instructor-authored
+    code runs with the same trust model as validation submissions.
+  - `applyNotebookSubstitutionsIfNeeded` (`WebRoutes+Notebook.swift`)
+    now also evaluates expressions per-student before substituting,
+    merging the evaluated map on top of literal values so a
+    same-named expression overrides a literal (consistent with how
+    the editor enforces no name clashes at save time).
+  - `PUT /instructor/:assignmentID/global-variables` extended to
+    accept `{ variables, expressions }`.  Same-namespace validation
+    across both; save-time eval against the instructor's seed
+    surfaces broken expressions (`= 1/0`, references to undefined
+    names, etc.) as 400s before any student sees them.
+  - Editor: `=` prefix in the Value cell switches a row to
+    expression mode.  Distinct subtle green background marks
+    per-student rows visually; placeholder text and panel hint were
+    updated to surface the new syntax.  Pre-existing literal rows
+    work unchanged.
+
+  Out of scope (deferred):
+
+  - Test-script access to per-student values.  Test scripts continue
+    using the v0.4.156 env-var seed contract (`CHICKADEE_ASSIGNMENT_SEED`)
+    for any per-student logic — Slice 2 ships notebook substitution
+    only.
+  - Section variables with expressions (globals-only this slice).
+
+  Backwards compatibility: zero runner changes — `runnerSanitized()`
+  strips `globalExpressions` from the Job manifest, so existing
+  runners decode it identically to today.  Older editor builds that
+  send only `variables` in the PUT body keep working.
+
+  New tests (`PersonalizationEvaluatorTests`, 12 cases): driver-script
+  shape, end-to-end arithmetic + variable + chained-expression
+  evaluation, error surfaces (`1/0` → nonZeroExit with the Python
+  traceback in stderr, undefined names → `NameError`), repr-output
+  shape, and `TestProperties.globalExpressions` round-trip + sanitize.
+
 ## [0.4.157] - 2026-05-12
 
 ### Added
