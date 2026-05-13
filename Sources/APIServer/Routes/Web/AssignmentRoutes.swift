@@ -137,6 +137,16 @@ struct AssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "suite-sections", ":sectionID", "rename", use: renameSuiteSection)
         r.post(":assignmentID", "suite-sections", ":sectionID", "delete", use: deleteSuiteSection)
         r.post(":assignmentID", "suite-sections", ":sectionID", "variables", use: updateSuiteSectionVariables)
+
+        // Slice 1 — assignment-scope global variables.  Same `+ Add Input`
+        // shape as section vars but visible to every pattern family,
+        // every raw test script, and every `{{name}}` placeholder in the
+        // starter notebook.  Triggers a full `applyPatternFamilies`
+        // re-render so generated tests get the new values inlined and
+        // raw scripts get re-prepended (idempotent — unchanged scripts
+        // stay byte-identical).
+        r.get(":assignmentID", "global-variables", use: getGlobalVariables)
+        r.put(":assignmentID", "global-variables", use: putGlobalVariables)
     }
 
     // MARK: - GET /instructor
@@ -1336,6 +1346,7 @@ struct AssignmentRoutes: RouteCollection {
             notebookChecksJSON: notebookChecksJSON,
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
+            globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             notice: q?.notice,

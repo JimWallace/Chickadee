@@ -213,6 +213,11 @@ struct EditAssignmentContext: Encodable {
     /// template uses these to render the `.section-block` + `<tbody
     /// data-section-id>` shells that `suite-table.js` populates.
     let suiteSectionRows: [SuiteSectionShellRow]
+    /// Slice 1 — assignment-scope global inputs, rendered as the same
+    /// `name + valueJSON` shape section variables use.  The new
+    /// "Global Inputs" panel at the top of the edit page iterates this
+    /// list to seed its initial rows.  Empty when no globals declared.
+    let globalVariableRows: [SuiteSectionVariableShellRow]
     let brightspaceSyncEnabled: Bool
     let brightspaceGradeObjectID: String?
     let notice: String?

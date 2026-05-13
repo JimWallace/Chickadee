@@ -317,12 +317,65 @@ func ensureUserNotebookWorkingCopy(
         ).data
     }
 
+    // Slice 1: substitute `{{name}}` placeholders in the starter notebook
+    // with global + section variable literals.  Failures (malformed JSON,
+    // unknown placeholders at runtime — should have been caught at save
+    // time) fall back to the un-substituted seedData so the student isn't
+    // blocked; the editor's save-time scan is the primary gate.
+    let processedData = applyNotebookSubstitutionsIfNeeded(
+        seedData: seedData,
+        setup: fallbackSetup,
+        logger: req.logger
+    )
+
     try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-    try seedData.write(to: URL(fileURLWithPath: workingCopyPath))
+    try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
     createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
 
     removeLegacyUserNotebookCopies(req: req, userID: userID)
-    return seedData
+    return processedData
+}
+
+/// Slice 1: applies any `{{name}}` substitutions defined by global +
+/// section variables to a notebook's data.  Returns the original data
+/// unchanged when:
+/// - The manifest can't be decoded.
+/// - The manifest has no global or section variables.
+/// - The notebook JSON is malformed (logged; never crashes).
+private func applyNotebookSubstitutionsIfNeeded(
+    seedData: Data,
+    setup: APITestSetup,
+    logger: Logger
+) -> Data {
+    guard let manifestData = setup.manifest.data(using: .utf8),
+          let manifest = try? ManifestCodec.decoder.decode(TestProperties.self,
+                                                          from: manifestData) else {
+        return seedData
+    }
+    // Collect every (name → pythonLiteral) substitution from global and
+    // section scopes.  Sections appear after globals so a same-named
+    // section variable overrides a global one — matches the Python
+    // last-assignment-wins precedence the runner sees.
+    var substitutions: [String: String] = [:]
+    for v in manifest.globalVariables {
+        substitutions[v.name] = v.value.pythonLiteral
+    }
+    for section in manifest.sections {
+        for v in section.variables {
+            substitutions[v.name] = v.value.pythonLiteral
+        }
+    }
+    guard !substitutions.isEmpty else { return seedData }
+    do {
+        return try NotebookSubstitution.apply(
+            notebookData: seedData,
+            substitutions: substitutions,
+            strict: false   // editor save-time scan is authoritative; soft-fail at runtime
+        )
+    } catch {
+        logger.warning("Notebook substitution failed for setup \(setup.id ?? "<nil>"): \(error)")
+        return seedData
+    }
 }
 
 private func solutionNotebookData(

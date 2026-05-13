@@ -123,6 +123,7 @@ func applyPatternFamilies(
     nextChecks: [NotebookCheck]? = nil,
     authoredItems: [AuthoredSuiteItem]? = nil,
     sections: [TestSuiteSection]? = nil,
+    globalVariables: [FamilyVariable]? = nil,
     on db: Database
 ) async throws -> PatternFamilyApplyResult {
 
@@ -139,6 +140,10 @@ func applyPatternFamilies(
 
     // ── 1. Resolve section list (caller wins; otherwise carry old manifest).
     let resolvedSections: [TestSuiteSection] = sections ?? props.sections
+
+    // Resolve assignment-scope variables (Slice 1): caller wins; otherwise
+    // carry forward whatever was on the manifest already.
+    let resolvedGlobalVariables: [FamilyVariable] = globalVariables ?? props.globalVariables
     var seenSectionIDs: Set<String> = []
     for s in resolvedSections {
         guard seenSectionIDs.insert(s.id).inserted else {
@@ -398,7 +403,7 @@ func applyPatternFamilies(
 
     var renderedByFilename: [String: GeneratedScript] = [:]
     for family in nextFamilies {
-        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id)) {
+        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables) {
             renderedByFilename[generated.filename] = generated
         }
     }
@@ -430,6 +435,36 @@ func applyPatternFamilies(
     var toWrite = renderedByFilename.mapValues(\.source)
     for (name, content) in sidecarFilesToWrite {
         toWrite[name] = content
+    }
+
+    // Slice 1: re-inline global + section variables into every raw
+    // (non-generated) Python test script.  Idempotent — the prepender
+    // strips any existing Chickadee inputs block before adding the new
+    // one, so unchanged scripts stay byte-identical and unchanged
+    // toWrite entries skip the zip rewrite.  Raw scripts are
+    // identified from `itemsForOrdering` (.script case) so we use the
+    // new authored sectionID, not whatever the old manifest had.
+    for item in itemsForOrdering {
+        guard case .script(let s) = item else { continue }
+        let filename = s.script
+        guard filename.lowercased().hasSuffix(".py") else { continue }
+        // If this filename was just generated (e.g. instructor renamed a
+        // raw script to clash with a family-generated name), the family
+        // version wins — skip the raw-script overlay.
+        guard renderedByFilename[filename] == nil else { continue }
+        guard let existing = readScriptFromZip(zipPath: setup.zipPath,
+                                               filename: filename) else { continue }
+        let sectionVars: [FamilyVariable] = {
+            guard let sid = s.sectionID else { return [] }
+            return sectionVarsByID[sid] ?? []
+        }()
+        let updated = TestScriptVariablePrepender.prependToRawScript(
+            existing,
+            variables: resolvedGlobalVariables + sectionVars
+        )
+        if updated != existing {
+            toWrite[filename] = updated
+        }
     }
 
     try applyScriptChangesToZip(
@@ -504,7 +539,7 @@ func applyPatternFamilies(
             guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
             emittedFamilyIDs.insert(fid)
             let inherited = expandDeps(family.dependsOn)
-            for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: fid)) {
+            for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables) {
                 order += 1
                 let prior = oldEntryByScript[generated.filename]
                 let perCase = expandDeps(prior?.dependsOn ?? [])
@@ -552,7 +587,7 @@ func applyPatternFamilies(
     // the caller forgot to include a newly added family).
     for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
         let inherited = expandDeps(family.dependsOn)
-        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id)) {
+        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables) {
             order += 1
             let prior = oldEntryByScript[generated.filename]
             let perCase = expandDeps(prior?.dependsOn ?? [])
@@ -601,7 +636,8 @@ func applyPatternFamilies(
         starterNotebook: props.starterNotebook,
         patternFamilies: nextFamilies,
         notebookChecks:  resolvedChecks,
-        sections:        resolvedSections
+        sections:        resolvedSections,
+        globalVariables: resolvedGlobalVariables
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner
