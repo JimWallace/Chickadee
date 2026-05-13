@@ -29,19 +29,26 @@ struct GeneratedScript: Equatable {
 /// in the family; disabled cases are skipped.  Ordering follows `family.cases`.
 ///
 /// `sectionVariables` (v0.4.100+) are prepended to every generated test
-/// before the family's own variables, so variables declared on the section
-/// are visible to each case's Python assignments.  A family variable with
-/// the same name as a section variable shadows it (standard Python "last
-/// assignment wins"); the spec_hash reflects both lists.
+/// before the family's own variables.  `globalVariables` (Slice 1) are
+/// prepended before section variables.  Effective precedence in the
+/// generated Python is `family > section > global` (Python's
+/// last-assignment-wins on identical names); the spec_hash reflects all
+/// three lists.
 func renderPatternFamily(
     _ family: PatternFamily,
-    sectionVariables: [FamilyVariable] = []
+    sectionVariables: [FamilyVariable] = [],
+    globalVariables: [FamilyVariable] = []
 ) -> [GeneratedScript] {
-    let hash = patternFamilySpecHash(family, sectionVariables: sectionVariables)
+    // Pre-combine globals and section vars into a single "scope" list so the
+    // existing render-* helpers stay parameterised on a single prepend list.
+    let scopeVariables = globalVariables + sectionVariables
+    let hash = patternFamilySpecHash(family,
+                                     sectionVariables: sectionVariables,
+                                     globalVariables: globalVariables)
     return family.cases.compactMap { c in
         guard c.enabled else { return nil }
         return renderCase(family: family, case: c,
-                          sectionVariables: sectionVariables, specHash: hash)
+                          sectionVariables: scopeVariables, specHash: hash)
     }
 }
 
@@ -70,17 +77,20 @@ func generatedScriptFilename(familyID: String, caseKey: String, tier: TestTier) 
 /// about the family changes.
 func patternFamilySpecHash(
     _ family: PatternFamily,
-    sectionVariables: [FamilyVariable] = []
+    sectionVariables: [FamilyVariable] = [],
+    globalVariables: [FamilyVariable] = []
 ) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     let familyData = (try? encoder.encode(family)) ?? Data()
-    // Mix section variables into the hash so changing them busts the
-    // manifest cache the same way changing the family itself does.
+    // Mix section + global variables into the hash so changing either busts
+    // the manifest cache the same way changing the family itself does.
     let sectionVarsData = (try? encoder.encode(sectionVariables)) ?? Data()
+    let globalVarsData  = (try? encoder.encode(globalVariables))  ?? Data()
     var buf = Data()
     buf.append(familyData)
     buf.append(sectionVarsData)
+    buf.append(globalVarsData)
     return String(sha256HexDigest(buf).prefix(16))
 }
 
@@ -233,18 +243,17 @@ private func callContext(for family: PatternFamily, case c: PatternCase) -> Call
 }
 
 /// Renders the `name = <pythonLiteral>` preamble for every variable in
-/// scope for this generated test: section variables first, then family
+/// scope for this generated test: scope variables first (global + section,
+/// pre-combined by the caller in `renderPatternFamily`), then family
 /// variables.  Python's last-assignment-wins semantics means a family
-/// variable with the same name shadows the section variable — that's
-/// the intended precedence ("family > section").  Empty string when
-/// neither list has entries.
+/// variable with the same name shadows a section variable, which shadows
+/// a global — that's the intended precedence ("family > section > global").
+/// Empty string when no variables.
 private func combinedVariableDecls(
     sectionVariables: [FamilyVariable],
     family: PatternFamily
 ) -> String {
-    let sectionLines = sectionVariables.map { "\($0.name) = \($0.value.pythonLiteral)" }
-    let familyLines  = family.variables.map { "\($0.name) = \($0.value.pythonLiteral)" }
-    return (sectionLines + familyLines).joined(separator: "\n")
+    TestScriptVariablePrepender.emit(sectionVariables + family.variables)
 }
 
 private func renderBoundaryEquality(

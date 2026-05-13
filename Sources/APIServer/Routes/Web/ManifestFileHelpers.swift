@@ -124,7 +124,8 @@ func makeWorkerManifestJSON(
     starterNotebook: String? = "assignment.ipynb",
     patternFamilies: [PatternFamily] = [],
     notebookChecks: [NotebookCheck] = [],
-    sections: [TestSuiteSection] = []
+    sections: [TestSuiteSection] = [],
+    globalVariables: [FamilyVariable] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -196,6 +197,17 @@ func makeWorkerManifestJSON(
         let sectionData = try encoder.encode(sections)
         if let parsed = try JSONSerialization.jsonObject(with: sectionData) as? [Any] {
             manifest["sections"] = parsed
+        }
+    }
+    if !globalVariables.isEmpty {
+        // Slice 1 — assignment-scope variables.  Same encode-then-reparse
+        // trick so the typed `FamilyVariable` values land inside the
+        // dictionary-of-Any manifest.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let globalsData = try encoder.encode(globalVariables)
+        if let parsed = try JSONSerialization.jsonObject(with: globalsData) as? [Any] {
+            manifest["globalVariables"] = parsed
         }
     }
     let data = try JSONSerialization.data(withJSONObject: manifest)

@@ -137,7 +137,20 @@ extension AssignmentRoutes {
             throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
         }
 
-        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
+        // Slice 1: prepend assignment-scope variables (section vars get
+        // applied on the next suite-edit save once the new entry's
+        // sectionID is known).
+        let inlinedContent: String = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            else { return body.content }
+            return TestScriptVariablePrepender.applyForRawScript(
+                filename: cleaned,
+                content: body.content,
+                manifest: manifest
+            )
+        }()
+        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlinedContent)
 
         let tier       = normalizeTier(body.tier, isTest: body.isTest)
         // v0.4.105: allow 0-mark tests for guards (see AssignmentRoutes+Editor).

@@ -388,8 +388,23 @@ extension AssignmentRoutes {
                 reason: "'\(filename)' is generated from pattern family '\(familyID)'. Edit the family rather than the generated script.")
         }
 
+        // Slice 1: inline global + section variables before write so the
+        // saved script content matches what the runner will see.  Falls
+        // back to raw content for non-.py files or when manifest decode
+        // fails (degrades to pre-Slice-1 behaviour).
+        let inlinedContent: String = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            else { return body.content }
+            return TestScriptVariablePrepender.applyForRawScript(
+                filename: filename,
+                content: body.content,
+                manifest: manifest
+            )
+        }()
+
         do {
-            try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: body.content)
+            try updateScriptInZip(zipPath: setup.zipPath, filename: filename, content: inlinedContent)
         } catch ScriptZipError.zipFailed {
             throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
         }
@@ -436,7 +451,21 @@ extension AssignmentRoutes {
             throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
         }
 
-        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: body.content)
+        // Slice 1: prepend assignment-scope variables.  Section variables
+        // aren't applied here (the suite entry — and thus its sectionID —
+        // is created below); the next applyPatternFamilies / suite-edit
+        // save will re-prepend with the correct section scope.
+        let createInlined: String = {
+            guard let data = setup.manifest.data(using: .utf8),
+                  let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            else { return body.content }
+            return TestScriptVariablePrepender.applyForRawScript(
+                filename: cleaned,
+                content: body.content,
+                manifest: manifest
+            )
+        }()
+        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: createInlined)
 
         let tier       = normalizeTier(body.tier, isTest: body.isTest)
         // v0.4.105: allow 0-mark tests (e.g. function-existence guards

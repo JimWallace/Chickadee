@@ -212,6 +212,24 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
 /// — one `.section-block` per named section (from `manifest.sections`)
 /// plus a trailing "Ungrouped" block when any item has no `sectionID`
 /// or no sections are defined at all.  The trailing block renders
+/// Renders `TestProperties.globalVariables` as the same lightweight
+/// `SuiteSectionVariableShellRow` shape the section-vars editor uses —
+/// `name` + pre-serialised `valueJSON` ready to drop into an
+/// `<input value="">`.  Empty array when the manifest is unparseable
+/// or has no globals.
+func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVariableShellRow] {
+    guard let data = manifest.data(using: .utf8),
+          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        return []
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return props.globalVariables.map { v in
+        let json = (try? encoder.encode(v.value)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+        return SuiteSectionVariableShellRow(name: v.name, valueJSON: json)
+    }
+}
+
 /// identically to the pre-sections layout when there are no sections
 /// (single unlabelled table), preserving back-compat with legacy
 /// assignments.

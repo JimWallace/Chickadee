@@ -148,6 +148,22 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// keeping items with the same `sectionID` in a contiguous block).
     public let sections: [TestSuiteSection]
 
+    /// Assignment-scope variables, available to every pattern family,
+    /// every notebook check, every raw test script, and every notebook
+    /// `{{name}}` placeholder in this assignment.  Static values; same
+    /// shape as section variables (`FamilyVariable` = name + JSON-able
+    /// value).
+    ///
+    /// Slice 1 (v0.4.x): values are inlined at save time — prepended
+    /// to Python test scripts, resolved in notebook-check expected
+    /// values, and substituted into the student starter notebook at
+    /// first-open.  The runner sees test scripts and check expecteds
+    /// with values already baked in; runners don't need to know about
+    /// this field, but it's kept in the runner payload (harmless,
+    /// `FamilyVariable` is already a known type) for parity with
+    /// `sections.variables`.
+    public let globalVariables: [FamilyVariable]
+
     public init(schemaVersion: Int = 1,
                 gradingMode: GradingMode = .worker,
                 requiredFiles: [String] = [],
@@ -157,7 +173,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 starterNotebook: String? = nil,
                 patternFamilies: [PatternFamily] = [],
                 notebookChecks: [NotebookCheck] = [],
-                sections: [TestSuiteSection] = []) {
+                sections: [TestSuiteSection] = [],
+                globalVariables: [FamilyVariable] = []) {
         self.schemaVersion    = schemaVersion
         self.gradingMode      = gradingMode
         self.requiredFiles    = requiredFiles
@@ -168,6 +185,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.patternFamilies  = patternFamilies
         self.notebookChecks   = notebookChecks
         self.sections         = sections
+        self.globalVariables  = globalVariables
     }
 
     public init(from decoder: Decoder) throws {
@@ -182,6 +200,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         patternFamilies  = try c.decodeIfPresent([PatternFamily].self,  forKey: .patternFamilies)  ?? []
         notebookChecks   = try c.decodeIfPresent([NotebookCheck].self,  forKey: .notebookChecks)   ?? []
         sections         = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections)       ?? []
+        globalVariables  = try c.decodeIfPresent([FamilyVariable].self, forKey: .globalVariables)  ?? []
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
@@ -203,7 +222,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
             starterNotebook:  starterNotebook,
             patternFamilies:  [],
             notebookChecks:   [],
-            sections:         sections
+            sections:         sections,
+            globalVariables:  globalVariables
         )
     }
 }

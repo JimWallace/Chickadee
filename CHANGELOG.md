@@ -6,6 +6,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.157] - 2026-05-12
+
+### Added
+
+- **Generalized Inputs — Slice 1 of issue #461 personalization (UI track).**
+  Section "+ Add Input" values now flow into *every* part of the
+  assignment they can affect — and a parallel **assignment-scope
+  Global Inputs** panel ships at the top of the edit page.  Both
+  scopes share the existing `FamilyVariable` shape (name + JSON-able
+  value) and the same `+ Add Input` row UX.
+
+  Where the values land at save time:
+
+  - **Pattern-family case args** — `$name` in args JSON resolves to
+    the literal at family expansion (existing behaviour, now
+    extended to global vars too).
+  - **Raw Python test scripts** — `TestScriptVariablePrepender`
+    inlines `name = <literal>` lines at the top of every raw `.py`
+    script in the test setup zip.  Idempotent: a banner comment
+    marks the auto-generated block so re-saves don't accumulate.
+    Section vars get this for the first time; globals work the
+    same way.
+  - **Starter notebook** — `{{name}}` placeholders are replaced
+    with `repr(value)` literals at student first-open.  Rewritten
+    cells are tagged `metadata.chickadee_personalized = "<name>"`
+    so future re-substitutions only touch fenced cells; student
+    edits to non-fenced cells survive resets.
+
+  New persistence:
+
+  - `TestProperties.globalVariables: [FamilyVariable]` (optional
+    decode; default `[]`).
+  - `PUT /instructor/:assignmentID/global-variables` saves the new
+    list and runs `applyPatternFamilies` to re-render generated
+    tests and re-prepend raw scripts.  Validates that names are
+    Python identifiers, `seed` is reserved (Slice 2 personalization
+    claim), no duplicates within global, no duplicates against any
+    section, and every `{{name}}` in the starter notebook matches a
+    declared variable.
+
+  Editor: new "Global Inputs" panel between the file table and the
+  test-suite editor on `assignment-edit.leaf`.  Reuses the existing
+  `+ Add Input` row markup and `tryParseValue` coercion JS so
+  authoring feels identical to section variables.  Debounced
+  auto-save with inline status feedback.
+
+  Shell test scripts (`.sh`) don't receive the prepended block —
+  variable injection is Python-only.  Documented in
+  `docs/inputs.md`.
+
+  Backwards compatibility: zero runner changes.  Existing runners
+  receive a manifest + test setup zip with values already inlined
+  and notebook substitutions applied server-side.  The new
+  `globalVariables` field decodes as empty for older clients; the
+  `TestSetupCache` invalidates naturally via the existing
+  manifest+zip hash when a variable value changes.
+
+  Deferred to a follow-up: `$varname` references inside
+  `NotebookCheck.expected` values (Slice 1 scope; ships static
+  expecteds only for now).
+
+  New tests (`Tests/APITests/GlobalInputsTests.swift`, 22 cases)
+  cover prepender output, idempotent re-save, shebang preservation,
+  notebook substitution with fenced metadata, strict vs lenient
+  unknown-placeholder behaviour, array-source-shape preservation,
+  and `TestProperties.globalVariables` decode round-trip.
+
 ## [0.4.156] - 2026-05-12
 
 ### Added
