@@ -2161,4 +2161,70 @@ final class AssignmentRoutesTests: XCTestCase {
             }
         })
     }
+
+    // MARK: - GET /instructor/students/:studentID/submissions
+
+    /// The dashboard roster lists every enrolled user (students, plus
+    /// instructors/admins enrolled for testing).  Clicking any of them used
+    /// to 404 unless the target had role == "student".  Now any enrolled
+    /// user's course-scoped submissions are viewable.
+    func testCourseStudentSubmissionsPageWorksForEnrolledInstructor() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        // Enroll a second instructor in the same course and give them a submission.
+        let otherInstructor = try await insertUser(
+            username: "other_instructor",
+            role: "instructor",
+            displayName: "Other Instructor"
+        )
+        let courseID = try await makeTestCourseID()
+        try await APICourseEnrollment(
+            userID: try otherInstructor.requireID(),
+            courseID: courseID
+        ).save(on: app.db)
+
+        _ = try await insertSetup(id: "instr_view_setup")
+        _ = try await insertAssignment(
+            testSetupID: "instr_view_setup",
+            title: "Visible Assignment",
+            isOpen: true
+        )
+        _ = try await insertSubmission(
+            id: "instr_view_sub",
+            testSetupID: "instr_view_setup",
+            userID: try otherInstructor.requireID()
+        )
+
+        let url = "/instructor/students/\(try otherInstructor.requireID().uuidString)/submissions"
+        try await app.asyncTest(.GET, url, beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok,
+                           "Course-scoped submissions page must render for an enrolled non-student")
+            XCTAssertTrue(res.body.string.contains("instr_view_sub"),
+                          "Submission row for the instructor user must appear on the page")
+        })
+    }
+
+    /// Non-enrolled users (in any role) still 404 — the page is course-scoped
+    /// and must not leak submissions for users outside the active course.
+    func testCourseStudentSubmissionsPage404sForNonEnrolledUser() async throws {
+        _ = try await makeTestCourseID()
+        let cookie = try await loginAsInstructor()
+
+        let stranger = try await insertUser(
+            username: "stranger_user",
+            role: "student",
+            displayName: "Stranger"
+        )
+
+        let url = "/instructor/students/\(try stranger.requireID().uuidString)/submissions"
+        try await app.asyncTest(.GET, url, beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .notFound,
+                           "Non-enrolled user must 404 — enrollment is the only access gate")
+        })
+    }
 }

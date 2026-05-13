@@ -87,11 +87,21 @@ struct WorkerJobRoutes: RouteCollection {
         let claimed: ClaimedJob? = try await req.application.workerClaimQueue.run {
         try await retrySQLiteBusyClaim {
         try await req.db.transaction { db -> ClaimedJob? in
+            // Fresh student work (retestedAt == nil) is claimed before any
+            // retest (retestedAt != nil), so a manifest-revision sweep can't
+            // starve students who are actively submitting (#427). Within each
+            // group, oldest submittedAt wins.
             let studentSubmissions = try await APISubmission.query(on: db)
                 .filter(\.$status == "pending")
                 .filter(\.$kind == APISubmission.Kind.student)
                 .sort(\.$submittedAt, .ascending)
                 .all()
+                .sorted { lhs, rhs in
+                    let lhsIsRetest = lhs.retestedAt != nil
+                    let rhsIsRetest = rhs.retestedAt != nil
+                    if lhsIsRetest != rhsIsRetest { return !lhsIsRetest }
+                    return (lhs.submittedAt ?? .distantPast) < (rhs.submittedAt ?? .distantPast)
+                }
 
             var candidates: [(APISubmission, APITestSetup, TestProperties)] = []
             for candidate in studentSubmissions {

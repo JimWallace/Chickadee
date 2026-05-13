@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.162] - 2026-05-13
+
+### Changed
+
+- **Worker claim ordering deprioritizes retests (#427).**  Pending
+  student submissions with `retested_at IS NOT NULL` (i.e. queued by
+  the assignment-revise sweep or a manual retest click) are now
+  claimed only after fresh student submissions with `retested_at IS
+  NULL` have drained.  Within each group the existing
+  oldest-`submittedAt`-first FIFO order is preserved.  This stops a
+  manifest-edit retest fan-out from starving students who are
+  actively submitting during a term.  Validation submissions are
+  unaffected (they're queued separately and never carry a retest
+  timestamp).  No schema change — the `retested_at` column added in
+  v0.4.45 already doubles as the priority signal.  Implementation is
+  an in-Swift `sorted` pass on the existing SQL result so null-handling
+  is explicit and portable.
+
+### Fixed
+
+- **Course-scoped submissions page now works for any enrolled user.**
+  The instructor dashboard's roster table lists every enrolled user
+  (students plus instructors/admins enrolled for testing) and links
+  each row to `/instructor/students/:userID/submissions`.  Clicking
+  a non-student row used to 404 because the handler
+  (`courseStudentSubmissionsPage`) required `role == "student"` on top
+  of the enrollment check.  The role filter is gone; enrollment in
+  the active course is the sole gate, so instructors and admins can
+  now view their own course-scoped submission history through the
+  same UI.  Non-enrolled users still 404, preventing cross-course
+  leakage.
+
 ## [0.4.161] - 2026-05-13
 
 ### Added
