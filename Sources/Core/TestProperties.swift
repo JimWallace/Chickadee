@@ -117,6 +117,27 @@ public struct MakefileConfig: Codable, Equatable, Sendable {
     public let target: String?     // nil means bare `make` with no target
 }
 
+/// Slice 2 of #461 — a named, per-student-evaluated Python expression
+/// at assignment scope.  The expression is evaluated server-side at
+/// notebook first-open with `seed` bound to the per-(student, assignment)
+/// random integer.  The result substitutes into starter-notebook
+/// `{{name}}` placeholders alongside literal `globalVariables`.
+///
+/// Distinct from `globalVariables` to keep the schema homogeneous —
+/// each type holds the shape it actually uses (literal value vs Python
+/// source).  Names share the same Python-identifier namespace as
+/// `globalVariables` and `sections[].variables`; validators enforce no
+/// overlap.
+public struct PersonalizationExpression: Codable, Equatable, Sendable {
+    public let name: String
+    public let expression: String
+
+    public init(name: String, expression: String) {
+        self.name = name
+        self.expression = expression
+    }
+}
+
 /// Top-level manifest describing how to build and test a submission.
 public struct TestProperties: Codable, Equatable, Sendable {
     public let schemaVersion: Int
@@ -164,6 +185,19 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `sections.variables`.
     public let globalVariables: [FamilyVariable]
 
+    /// Slice 2 of #461 — assignment-scope Python expressions evaluated
+    /// per-student at notebook first-open with `seed` bound.  Their
+    /// values substitute into starter-notebook `{{name}}` placeholders
+    /// alongside literal `globalVariables`.
+    ///
+    /// Slice 2 scope: notebooks only.  Expression results are NOT
+    /// inlined into raw test scripts (those use the v0.4.156 env-var
+    /// seed contract for any per-student logic) and are NOT used for
+    /// pattern-family `$name` references (case args want save-time
+    /// literals).  Names cannot clash with any `globalVariables`,
+    /// `sections[].variables`, or the reserved name `seed`.
+    public let globalExpressions: [PersonalizationExpression]
+
     public init(schemaVersion: Int = 1,
                 gradingMode: GradingMode = .worker,
                 requiredFiles: [String] = [],
@@ -174,7 +208,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 patternFamilies: [PatternFamily] = [],
                 notebookChecks: [NotebookCheck] = [],
                 sections: [TestSuiteSection] = [],
-                globalVariables: [FamilyVariable] = []) {
+                globalVariables: [FamilyVariable] = [],
+                globalExpressions: [PersonalizationExpression] = []) {
         self.schemaVersion    = schemaVersion
         self.gradingMode      = gradingMode
         self.requiredFiles    = requiredFiles
@@ -186,6 +221,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.notebookChecks   = notebookChecks
         self.sections         = sections
         self.globalVariables  = globalVariables
+        self.globalExpressions = globalExpressions
     }
 
     public init(from decoder: Decoder) throws {
@@ -201,6 +237,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         notebookChecks   = try c.decodeIfPresent([NotebookCheck].self,  forKey: .notebookChecks)   ?? []
         sections         = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections)       ?? []
         globalVariables  = try c.decodeIfPresent([FamilyVariable].self, forKey: .globalVariables)  ?? []
+        globalExpressions = try c.decodeIfPresent([PersonalizationExpression].self,
+                                                  forKey: .globalExpressions) ?? []
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
@@ -223,7 +261,12 @@ public struct TestProperties: Codable, Equatable, Sendable {
             patternFamilies:  [],
             notebookChecks:   [],
             sections:         sections,
-            globalVariables:  globalVariables
+            globalVariables:  globalVariables,
+            // Slice 2: expressions are a server-side authoring concern.
+            // They never reach the runner — values are evaluated at
+            // notebook first-open and substituted into the student
+            // working copy before the runner ever sees the assignment.
+            globalExpressions: []
         )
     }
 }

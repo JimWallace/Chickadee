@@ -1,8 +1,9 @@
 # Inputs — Global and Section variables
 
-Slice 1 of [issue #461](https://github.com/JimWallace/Chickadee/issues/461)
+Slice 1 + Slice 2 of [issue #461](https://github.com/JimWallace/Chickadee/issues/461)
 generalises Chickadee's "+ Add Input" concept so named values flow into
-every place a test or notebook could need them.
+every place a test or notebook could need them, and adds per-student
+values via Python expressions.
 
 Two scopes:
 
@@ -12,7 +13,32 @@ Two scopes:
   section header's "+ Add Input" button (unchanged from earlier
   versions).
 - **Global Inputs** — declared at the top of the edit page (new in
-  Slice 1).  Same shape; visible everywhere on the assignment.
+  Slice 1).  Same shape; visible everywhere on the assignment.  Slice 2
+  added per-student *expressions* (rows starting with `=`).
+
+## Two row kinds on the Global Inputs panel
+
+**Literal value** — the Value cell holds bare-typed JSON
+(`42`, `"hello"`, `[1, 2, 3]`, `{"k": 1}`, `True`, etc.).  The same
+value is used for every student.  Inlined at save time everywhere
+section variables are inlined (pattern-family case args, raw test
+scripts, notebook `{{name}}` substitution).
+
+**Per-student expression** — the Value cell starts with `=`, e.g.
+`= seed % 26` or `= quotes[seed % len(quotes)]`.  Slice 2 (notebooks
+only): the server evaluates the expression at student first-open
+with `seed` (an integer) and every static input in scope; the result
+substitutes into starter-notebook `{{name}}` placeholders.
+
+  - Test scripts continue using the v0.4.156 env-var contract
+    (`CHICKADEE_ASSIGNMENT_SEED`) for any per-student logic — Slice 2
+    is notebook-only.
+  - Pattern-family `$name` references can NOT target an expression row
+    (case args need a save-time literal).
+  - Save-time eval: the server runs every expression once against the
+    instructor's own seed when you save the panel.  Broken expressions
+    (`= 1/0`, `= unknown_var`, ...) return a 400 with the failure
+    message before any student sees them.
 
 ## How values flow
 
@@ -107,7 +133,7 @@ The editor surfaces these errors next to the panel.
   v0.4.153 reset action) or until they open the assignment after a
   manifest hash change triggers the v0.4.154 mtime sync.
 
-## Worked example
+## Worked example — Slice 1 (literals only)
 
 ```text
 Global Inputs:
@@ -124,6 +150,31 @@ Raw test script (instructor writes):
   assert first(quotes) == expected_first
 
 Starter notebook cell (instructor writes):
-  intro = "{{greeting}}, programmer."
-  → "Welcome, programmer." after first-open substitution
+  intro = {{greeting}}, programmer.
+  → intro = "Welcome", programmer.   (after first-open substitution)
 ```
+
+## Worked example — Slice 2 (per-student via Caesar cipher)
+
+```text
+Global Inputs:
+  quotes    = ["the quick brown fox", "lorem ipsum", "fly me to the moon"]
+  shift     = = seed % 26
+  plaintext = = quotes[seed % len(quotes)]
+
+Starter notebook cell (instructor writes):
+  ciphertext = caesar_encode({{plaintext}}, {{shift}})
+  # The student decrypts it back to {{plaintext}} as their answer.
+
+Phase 1 test script (unchanged, instructor authors):
+  import os
+  seed = int(os.environ["CHICKADEE_ASSIGNMENT_SEED"], 16)
+  expected = ["the quick brown fox", "lorem ipsum",
+              "fly me to the moon"][seed % 3]
+  # ... compare student's decrypted_text == expected
+```
+
+Each student sees a different `plaintext` substituted into their
+notebook.  The test script re-derives the expected plaintext from the
+same seed via Phase 1's env-var contract.  Slice 2 doesn't substitute
+into test scripts — test-script substitution remains a future slice.

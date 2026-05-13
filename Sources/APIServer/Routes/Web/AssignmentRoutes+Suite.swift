@@ -212,11 +212,14 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
 /// — one `.section-block` per named section (from `manifest.sections`)
 /// plus a trailing "Ungrouped" block when any item has no `sectionID`
 /// or no sections are defined at all.  The trailing block renders
-/// Renders `TestProperties.globalVariables` as the same lightweight
-/// `SuiteSectionVariableShellRow` shape the section-vars editor uses —
-/// `name` + pre-serialised `valueJSON` ready to drop into an
-/// `<input value="">`.  Empty array when the manifest is unparseable
-/// or has no globals.
+/// Renders the unified Global Inputs editor rows: both literal
+/// `globalVariables` (Slice 1) and `globalExpressions` (Slice 2),
+/// pre-serialised so the Leaf template can stuff each value cell into
+/// an `<input value="">`.  Literals appear first (in declared order),
+/// expressions follow (each pre-fixed with `=` so the editor JS
+/// classifies them on load).
+///
+/// Empty array when the manifest is unparseable or has no inputs.
 func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVariableShellRow] {
     guard let data = manifest.data(using: .utf8),
           let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
@@ -224,10 +227,19 @@ func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVari
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    return props.globalVariables.map { v in
+    var rows: [SuiteSectionVariableShellRow] = props.globalVariables.map { v in
         let json = (try? encoder.encode(v.value)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"
         return SuiteSectionVariableShellRow(name: v.name, valueJSON: json)
     }
+    // Slice 2 expressions — leading `=` marks them as expressions when
+    // the editor's `classifyValue` parses each row on load.
+    for e in props.globalExpressions {
+        rows.append(SuiteSectionVariableShellRow(
+            name: e.name,
+            valueJSON: "= \(e.expression)"
+        ))
+    }
+    return rows
 }
 
 /// identically to the pre-sections layout when there are no sections
