@@ -128,39 +128,128 @@ extension AssignmentRoutes {
 
     @Sendable
     func updateSuiteSectionVariables(req: Request) async throws -> Response {
-        struct Body: Content { var variables: [FamilyVariable] }
+        struct Body: Content {
+            var variables: [FamilyVariable]
+            /// Slice 4 — per-student expressions in section scope.
+            /// Optional so older editor builds (sending only `variables`)
+            /// keep working.
+            var expressions: [PersonalizationExpression]?
+        }
 
         try requireInstructor(req)
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(Body.self)
+        let expressions = body.expressions ?? []
 
-        // Validate: each name must be a valid Python identifier and
-        // unique within the list.  Mirrors the `validatePatternFamilies`
-        // checks so a bad section-variable save can't produce a test
-        // that won't render.
+        // Per-row validation across both literal vars and expressions in
+        // this section.  Names are unique across both kinds (single
+        // Python namespace at evaluation time).  Mirrors the
+        // global-variables endpoint pattern.
         var seenNames: Set<String> = []
         for v in body.variables {
             guard isValidPythonIdentifier(v.name) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Section variable name '\(v.name)' is not a valid Python identifier.")
+                    reason: "Section input name '\(v.name)' is not a valid Python identifier.")
+            }
+            guard v.name != "seed" else {
+                throw WebAssignmentError.unprocessable(
+                    reason: "'seed' is reserved for Chickadee's personalization seed.")
             }
             guard seenNames.insert(v.name).inserted else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Duplicate section variable name '\(v.name)'.")
+                    reason: "Duplicate section input name '\(v.name)'.")
+            }
+        }
+        for e in expressions {
+            guard isValidPythonIdentifier(e.name) else {
+                throw WebAssignmentError.unprocessable(
+                    reason: "Section expression name '\(e.name)' is not a valid Python identifier.")
+            }
+            guard e.name != "seed" else {
+                throw WebAssignmentError.unprocessable(
+                    reason: "'seed' is reserved for Chickadee's personalization seed.")
+            }
+            let trimmed = e.expression.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw WebAssignmentError.unprocessable(
+                    reason: "Section expression '\(e.name)' has an empty body. " +
+                            "Provide a Python expression after the leading `=`.")
+            }
+            guard seenNames.insert(e.name).inserted else {
+                throw WebAssignmentError.unprocessable(
+                    reason: "Duplicate section input name '\(e.name)'. " +
+                            "Names must be unique across literal values and expressions.")
             }
         }
 
-        // Encode the variables list via JSONEncoder so JSONValue fields
-        // (dict / list / scalar) round-trip through `mutateManifest`'s
-        // dictionary-of-Any representation.
+        // Cross-section + global clash: no name in this section's combined
+        // namespace may collide with a name in `globalVariables`,
+        // `globalExpressions`, or any OTHER section's variables/expressions.
+        guard let manifestData = setup.manifest.data(using: .utf8),
+              let manifest = try? ManifestCodec.decoder.decode(TestProperties.self,
+                                                                from: manifestData) else {
+            throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
+        }
+        var otherNames: Set<String> = []
+        for v in manifest.globalVariables { otherNames.insert(v.name) }
+        for e in manifest.globalExpressions { otherNames.insert(e.name) }
+        for section in manifest.sections where section.id != sectionID {
+            for v in section.variables { otherNames.insert(v.name) }
+            for e in section.expressions { otherNames.insert(e.name) }
+        }
+        for n in seenNames where otherNames.contains(n) {
+            throw WebAssignmentError.unprocessable(
+                reason: "Section input '\(n)' is already used by a global input or another section. " +
+                        "Names share one namespace across the assignment; rename to avoid shadowing.")
+        }
+
+        // Save-time eval check: run every expression once against the
+        // instructor's own seed so typos surface as a 400.
+        if !expressions.isEmpty,
+           let userID = (try req.auth.require(APIUser.self)).id,
+           let assignmentID = assignment.id {
+            let seedHex = try await AssignmentSeedStore.ensureSeed(
+                userID: userID, assignmentID: assignmentID, on: req.db)
+            // Combine: globals + section vars from THIS section's new
+            // list + other sections' vars (matches the runtime scope
+            // the evaluator will use at first-open).
+            var staticVars: [FamilyVariable] = manifest.globalVariables
+            staticVars.append(contentsOf: body.variables)
+            for section in manifest.sections where section.id != sectionID {
+                staticVars.append(contentsOf: section.variables)
+            }
+            do {
+                _ = try await PersonalizationEvaluator.evaluate(
+                    seedHex: seedHex,
+                    staticVariables: staticVars,
+                    expressions: expressions
+                )
+            } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
+                let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
+                throw WebAssignmentError.unprocessable(
+                    reason: "One of your section expressions failed to evaluate: \(tail). " +
+                            "Fix the expression(s) and save again.")
+            } catch PersonalizationEvaluatorError.timedOut {
+                throw WebAssignmentError.unprocessable(
+                    reason: "Expression evaluation timed out (>5s). " +
+                            "Simplify the expressions or move heavy lifting into a support module.")
+            } catch {
+                throw WebAssignmentError.internalFailure(
+                    reason: "Expression evaluator failed: \(error)")
+            }
+        }
+
+        // Encode both lists for the manifest write.
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let varData = try encoder.encode(body.variables)
-        guard let parsed = try JSONSerialization.jsonObject(with: varData) as? [Any] else {
-            throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise section variables.")
+        let exprData = try encoder.encode(expressions)
+        guard let parsedVars = try JSONSerialization.jsonObject(with: varData) as? [Any],
+              let parsedExprs = try JSONSerialization.jsonObject(with: exprData) as? [Any] else {
+            throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise section inputs.")
         }
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
@@ -170,10 +259,15 @@ extension AssignmentRoutes {
             guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
                 throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
             }
-            if parsed.isEmpty {
+            if parsedVars.isEmpty {
                 sections[idx].removeValue(forKey: "variables")
             } else {
-                sections[idx]["variables"] = parsed
+                sections[idx]["variables"] = parsedVars
+            }
+            if parsedExprs.isEmpty {
+                sections[idx].removeValue(forKey: "expressions")
+            } else {
+                sections[idx]["expressions"] = parsedExprs
             }
             dict["sections"] = sections
         }

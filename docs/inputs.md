@@ -16,6 +16,12 @@ Two scopes:
   Slice 1).  Same shape; visible everywhere on the assignment.  Slice 2
   added per-student *expressions* (rows starting with `=`).
 
+**Slice 4** added the same `=` expression syntax to the section
+`+ Add Input` panel, so per-student values can live in section scope
+too (notebook substitution only — same constraint as global
+expressions).  The same auto-import / save-time eval / `seed` binding
+rules apply.
+
 ## Two row kinds on the Global Inputs panel
 
 **Literal value** — the Value cell holds bare-typed JSON
