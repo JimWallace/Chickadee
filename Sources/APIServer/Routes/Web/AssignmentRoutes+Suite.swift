@@ -19,17 +19,20 @@ extension AssignmentRoutes {
     /// One row in the unified suite list, in either direction (GET response
     /// or PUT request body).  Array order is authoritative for UI order.
     struct SuiteItemDTO: Content {
-        /// "script" or "family".
+        /// "script", "family", or "check".
         var kind: String
         /// Present when kind == "script".
         var script: ScriptDTO?
         /// Present when kind == "family".
         var family: PatternFamily?
+        /// Present when kind == "check".  Carried so the editor can render
+        /// label/tier/points read-only without a separate `/checks` GET.
+        var check: NotebookCheck?
         /// Present when kind == "family".  Family-level deps live on the
         /// family spec too, but we echo them here at the row level for
         /// editor-UI convenience.
         var dependsOn: [String]?
-        /// Id into `SuitePayload.sections` (both kinds).  Nil = ungrouped.
+        /// Id into `SuitePayload.sections` (all kinds).  Nil = ungrouped.
         var sectionID: String?
     }
 
@@ -128,6 +131,7 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
     }
 
     let familyByID = Dictionary(uniqueKeysWithValues: props.patternFamilies.map { ($0.id, $0) })
+    let checkByID  = Dictionary(uniqueKeysWithValues: props.notebookChecks.map  { ($0.id, $0) })
     var familyFilenames: [String: Set<String>] = [:]
     for f in props.patternFamilies {
         familyFilenames[f.id] = Set(f.cases
@@ -163,6 +167,7 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
     // rebuild its grouped view.
     var items: [AssignmentRoutes.SuiteItemDTO] = []
     var emittedFamilyIDs: Set<String> = []
+    var emittedCheckIDs:  Set<String> = []
     for entry in props.testSuites {
         if let fid = entry.generatedBy {
             guard !emittedFamilyIDs.contains(fid), let family = familyByID[fid] else { continue }
@@ -171,7 +176,19 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
                 kind: "family",
                 script: nil,
                 family: family,
+                check: nil,
                 dependsOn: family.dependsOn,
+                sectionID: entry.sectionID
+            ))
+        } else if let cid = entry.generatedByCheck {
+            guard !emittedCheckIDs.contains(cid), let check = checkByID[cid] else { continue }
+            emittedCheckIDs.insert(cid)
+            items.append(AssignmentRoutes.SuiteItemDTO(
+                kind: "check",
+                script: nil,
+                family: nil,
+                check: check,
+                dependsOn: check.dependsOn,
                 sectionID: entry.sectionID
             ))
         } else {
@@ -185,6 +202,7 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
                     dependsOn:   collapseDeps(entry.dependsOn)
                 ),
                 family: nil,
+                check: nil,
                 dependsOn: nil,
                 sectionID: entry.sectionID
             ))

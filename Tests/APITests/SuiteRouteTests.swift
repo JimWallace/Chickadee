@@ -370,6 +370,78 @@ final class SuiteRouteTests: XCTestCase {
         })
     }
 
+    // Regression for v0.4.157→0.4.158: a notebook-check row dragged
+    // (or otherwise re-PUT) via the suite editor used to fail with the
+    // "would generate '…', but a hand-written file with that name
+    // already exists" collision, because the frontend round-tripped the
+    // check as kind:"script" with the generated filename.  With the fix,
+    // the GET returns kind:"check" and the PUT accepts it back without
+    // confusing the check's own generated entry for a hand-written
+    // script.
+    func testPut_notebookCheckRowRoundTripsAcrossDrag() async throws {
+        let id = try await makeAssignment(withScripts: [])
+        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+        let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+        // Step 1: install a notebook check via PUT /checks.
+        let checksBody = #"""
+        [{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+          "tier":"public","points":1,"variable":"x"}]
+        """#
+        try await app.asyncTest(.PUT, "/instructor/\(id)/checks", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: checksBody)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, res.body.string)
+        })
+
+        // Step 2: GET /suite should now include the check as kind:"check".
+        var initialCheckPayload = ""
+        try await app.asyncTest(.GET, "/instructor/\(id)/suite", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            initialCheckPayload = res.body.string
+            XCTAssertTrue(initialCheckPayload.contains("\"kind\":\"check\""),
+                          "Expected GET /suite to emit a check row; got: \(initialCheckPayload)")
+        })
+
+        // Step 3: PUT /suite with the same check row, simulating a drag
+        // (carries the check spec verbatim, no sectionID).  Without the
+        // fix this fails with the bogus collision error.
+        let suiteBody = #"""
+        {"items":[
+            {"kind":"check","check":{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+              "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+        ]}
+        """#
+        try await app.asyncTest(.PUT, "/instructor/\(id)/suite", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            req.headers.add(name: "x-csrf-token", value: csrf)
+            req.headers.contentType = .json
+            req.body = ByteBuffer(string: suiteBody)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok, res.body.string)
+        })
+
+        // Step 4: the manifest still has exactly one notebook check
+        // entry pointing at the same id; no spurious hand-written script
+        // got created for the generated filename.
+        let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
+        let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+        XCTAssertEqual(props.notebookChecks.map(\.id), ["var_exists_x"])
+        let checkEntries = props.testSuites.filter { $0.generatedByCheck == "var_exists_x" }
+        XCTAssertEqual(checkEntries.count, 1)
+        let handWrittenSameName = props.testSuites.filter {
+            $0.generatedByCheck == nil && $0.script == checkEntries.first?.script
+        }
+        XCTAssertTrue(handWrittenSameName.isEmpty,
+            "No hand-written entry should have been created for the check's generated filename.")
+    }
+
     func testPut_studentCannotEdit() async throws {
         let id = try await makeAssignment()
         let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)

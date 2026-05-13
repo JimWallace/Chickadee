@@ -129,6 +129,18 @@ func applySuiteEdit(
             }
             authored.append(.family(id: f.id, sectionID: item.sectionID))
             nextFamilies.append(f)
+        case "check":
+            // Notebook-check rows carry their full spec for editor display
+            // but the suite-edit path only acts on (id, sectionID).  The
+            // spec itself flows through `PUT /checks`; here we just stamp
+            // the authored position so applyPatternFamilies expands the
+            // check's generated entry at the right slot.
+            guard let c = item.check else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "items",
+                    reason: "Suite item kind=check is missing `check` payload.")
+            }
+            authored.append(.check(id: c.id, sectionID: item.sectionID))
         default:
             throw WebAssignmentError.invalidParameter(
                 name: "items",

@@ -943,6 +943,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             },
             uploadScript: function () {
                 return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
+            },
+            putChecks: function () {
+                return '/instructor/new/draft/checks?draftID=' + encodeURIComponent(draftID);
             }
         }
     });

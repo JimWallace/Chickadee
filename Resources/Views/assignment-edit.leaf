@@ -941,6 +941,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             },
             uploadScript: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
+            },
+            putChecks: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/checks';
             }
         }
     });
