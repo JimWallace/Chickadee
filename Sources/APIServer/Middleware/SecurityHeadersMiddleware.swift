@@ -39,22 +39,30 @@
 import Vapor
 
 struct SecurityHeadersMiddleware: AsyncMiddleware {
-    /// CSP for application pages.  Permissive enough to keep JupyterLite and
-    /// Pyodide functional:
+    /// CSP for application pages.  Permissive enough to keep JupyterLite,
+    /// Pyodide, and the CodeMirror-based assignment editor functional:
     ///   - 'unsafe-eval' is required by Pyodide's WASM bootstrap.
     ///   - 'unsafe-inline' covers inline `<script>` and `onclick=` handlers
     ///     in the Leaf templates.
     ///   - blob: in worker-src is required by JupyterLite's web workers.
+    ///   - https://cdn.jsdelivr.net is whitelisted because the notebook,
+    ///     browser-runner, and instructor-validate flows load Pyodide and
+    ///     jszip from there at runtime, and `pyodide-worker.js` does an
+    ///     `importScripts(...)` from the same origin.  Pyodide also fetches
+    ///     Python wheels via `fetch` from the same indexURL, hence
+    ///     `connect-src`.
+    ///   - https://esm.sh is whitelisted because the new-assignment editor
+    ///     imports CodeMirror modules from there.
     /// Tighten with per-response nonces in a follow-up.
     static let defaultContentSecurityPolicy: String = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:",
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://esm.sh",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self' data:",
-        "worker-src 'self' blob:",
+        "worker-src 'self' blob: https://cdn.jsdelivr.net",
         "child-src 'self' blob:",
-        "connect-src 'self'",
+        "connect-src 'self' https://cdn.jsdelivr.net https://esm.sh",
         "frame-ancestors 'self'",
         "form-action 'self'",
         "base-uri 'self'",
