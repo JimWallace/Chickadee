@@ -37,22 +37,13 @@ final class TestSetupEditTests: XCTestCase {
 
     // MARK: - Setup helpers
 
-    private func makeTestCourseID() async throws -> UUID {
-        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
-            return try existing.requireID()
-        }
-        let course = APICourse(code: "TEST101", name: "Test Course")
-        try await course.save(on: app.db)
-        return try course.requireID()
-    }
-
     /// Creates a test setup record in the DB (no real zip on disk).
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
             {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
             """
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID()
         let setup = APITestSetup(
             id: id,
             manifest: manifest,
@@ -65,7 +56,7 @@ final class TestSetupEditTests: XCTestCase {
 
     @discardableResult
     private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID()
         let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true, courseID: courseID)
         try await a.save(on: app.db)
         return a

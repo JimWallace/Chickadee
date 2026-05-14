@@ -38,23 +38,12 @@ final class AssignmentRoutesTests: XCTestCase {
         return try await loginUser(username: "teststudent", password: "testpassword", role: "student", on: app)
     }
 
-    // MARK: - Setup helper
-
-    private func makeTestCourseID() async throws -> UUID {
-        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
-            return try existing.requireID()
-        }
-        let course = APICourse(code: "TEST101", name: "Test Course", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return try course.requireID()
-    }
-
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
             {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
             """
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let setup = APITestSetup(
             id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
         try await setup.save(on: app.db)
@@ -69,7 +58,7 @@ final class AssignmentRoutesTests: XCTestCase {
         dueAt: Date? = nil,
         deadlineOverrideActive: Bool = false
     ) async throws -> APIAssignment {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let a = APIAssignment(
             testSetupID: testSetupID,
             title: title,
@@ -139,7 +128,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     private func enrollStudentInTestCourse(_ student: APIUser) async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let enrollment = APICourseEnrollment(
             userID: try student.requireID(),
             courseID: courseID
@@ -401,7 +390,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testAssignmentsPageUsesDedicatedEnrollCSVPageLink() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -418,7 +407,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testAssignmentsPageDefaultsEnrolledStudentsToMostRecentLastSeenFirst() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let now = Date()
 
@@ -464,7 +453,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// and asserts the badge for the assignment row reads "2 / 2" (not
     /// "4 / 4", which is what it showed pre-fix).
     func testInstructorDashboardBadgeCountsStudentsOnly() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         // Two real students, both enrolled.
@@ -724,7 +713,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testSaveNewAssignmentAllowsMissingTestSuites() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
         let boundary = "Boundary-New-NoSuites"
@@ -769,7 +758,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testSaveNewAssignmentPreservesMultipleUploadedSuiteFiles() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
@@ -850,7 +839,7 @@ final class AssignmentRoutesTests: XCTestCase {
     // mutated live via `PUT /instructor/:id/suite`, not via the Save &
     // Validate form POST.  The two tests below exercise that flow.
     func testPutSuitePersistsDisplayNameForExistingSuiteFile() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_display"
         let zipPath = app.testSetupsDirectory + "\(setupID).zip"
@@ -895,7 +884,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testPutSuiteDisplayNameVisibleOnSubsequentEditPageLoad() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_display_reload"
         let zipPath = app.testSetupsDirectory + "\(setupID).zip"
@@ -950,7 +939,7 @@ final class AssignmentRoutesTests: XCTestCase {
         // against draft-scoped endpoints (`PUT /draft/suite`,
         // `POST /draft/scripts`, etc.); the multipart submit only
         // carries notebook bytes + assignment metadata.
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -972,7 +961,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testNewAssignmentPageOmitsLegacyTestColumn() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -993,7 +982,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testUpdateNewAssignmentDraftCreatesBlankNotebookAndRendersDraftState() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
         let boundary = "Boundary-New-Draft-Create"
@@ -1043,7 +1032,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testSaveNewAssignmentFinalizesDraftAndPersistsRequirements() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
         let cookie = try await loginAsInstructor()
@@ -1111,7 +1100,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testSaveNewAssignmentFinalizesDraftWithGeneratedSuiteFilesVisibleOnEdit() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
@@ -1224,7 +1213,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testSaveNewAssignmentRequiresCompatibleRunnerForValidation() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
@@ -1619,7 +1608,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// distinct `"no-runner"` status so the assignments view can show a
     /// specific reason.
     func testPutSuiteSetsNoRunnerStatusWhenNoCompatibleRunner() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
@@ -1709,7 +1698,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// into an `AssignmentRequirementSpec` and returns nil when no row
     /// exists.
     func testLoadAssignmentRequirementSpecRoundTripsPersistedRow() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
 
@@ -2006,7 +1995,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// server must ignore. Files must land in the zip, the manifest must list them correctly, and
     /// a validation job must be queued when at least one test suite entry is present.
     func testSaveNewAssignmentWithBrowserFormatSuiteFilesAndFieldName() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())
         app.migrations.add(CreateAssignmentRequirements())
         try await app.autoMigrate()
@@ -2106,7 +2095,7 @@ final class AssignmentRoutesTests: XCTestCase {
     }
 
     func testEditPageShowsUploadedSolutionNotebookFilenameAfterCreate() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())
         try await app.autoMigrate()
         let now = Date()
@@ -2208,7 +2197,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// CodeMirror script editor can stream new scripts straight onto
     /// the suite editor without a multipart bundle.
     func testNewAssignmentPageWiresGeneratedScriptsThroughSuiteTable() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
@@ -2264,7 +2253,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// Bug #1 regression: the edit assignment page must include JavaScript for the edit button
     /// on newly uploaded (not-yet-saved) suite file rows.
     func testEditAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_upload_btn_reg"
         let zipPath = app.testSetupsDirectory + "\(setupID).zip"
@@ -2303,7 +2292,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// with keys for both Python and shell template types. The edit page's fetchTemplates()
     /// now calls this endpoint (was previously broken, returning null).
     func testScriptTemplatesEndpointReturnsTemplatesForAllTypes() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -2335,7 +2324,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// to 404 unless the target had role == "student".  Now any enrolled
     /// user's course-scoped submissions are viewable.
     func testCourseStudentSubmissionsPageWorksForEnrolledInstructor() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         // Enroll a second instructor in the same course and give them a submission.
@@ -2344,7 +2333,7 @@ final class AssignmentRoutesTests: XCTestCase {
             role: "instructor",
             displayName: "Other Instructor"
         )
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         try await APICourseEnrollment(
             userID: try otherInstructor.requireID(),
             courseID: courseID
@@ -2381,7 +2370,7 @@ final class AssignmentRoutesTests: XCTestCase {
     /// Non-enrolled users (in any role) still 404 — the page is course-scoped
     /// and must not leak submissions for users outside the active course.
     func testCourseStudentSubmissionsPage404sForNonEnrolledUser() async throws {
-        _ = try await makeTestCourseID()
+        _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
         let stranger = try await insertUser(

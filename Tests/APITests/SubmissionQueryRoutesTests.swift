@@ -35,21 +35,12 @@ final class SubmissionQueryRoutesTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeTestCourseID() async throws -> UUID {
-        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
-            return try existing.requireID()
-        }
-        let course = APICourse(code: "TEST101", name: "Test Course")
-        try await course.save(on: app.db)
-        return try course.requireID()
-    }
-
     @discardableResult
     private func ensureSetup(id: String) async throws -> APITestSetup {
         if let existing = try await APITestSetup.find(id, on: app.db) {
             return existing
         }
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID()
         let setup = APITestSetup(
             id: id,
             manifest:
@@ -492,7 +483,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         {
             return existing
         }
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID()
         let assignment = APIAssignment(
             testSetupID: setupID,
             title: "Test Assignment",

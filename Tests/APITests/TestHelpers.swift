@@ -3,6 +3,7 @@
 // Shared helpers for integration tests that involve session auth and CSRF.
 
 import CSRF
+import Core
 import Crypto
 import Fluent
 import FluentPostgresDriver
@@ -80,6 +81,41 @@ func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
             username: username,
             password: password
         )
+    }
+}
+
+// MARK: - Course fixture helper
+
+private struct TestCourseIDsKey: StorageKey {
+    typealias Value = [String: UUID]
+}
+
+extension Application {
+    /// Returns the UUID of a test `APICourse` with `code`, creating it on first
+    /// call.  Memoized per `Application` in `storage` so repeat callers don't
+    /// re-query the database.  Six test classes previously each carried a
+    /// private copy of this helper; consolidating here matches the same
+    /// drift-avoidance rationale as `makeTestApp` / `registerMigrations`.
+    func testCourseID(
+        code: String = "TEST101",
+        name: String = "Test Course",
+        enrollmentMode: CourseEnrollmentMode = .open
+    ) async throws -> UUID {
+        if let cached = storage[TestCourseIDsKey.self]?[code] {
+            return cached
+        }
+        let course: APICourse
+        if let existing = try await APICourse.query(on: db).filter(\.$code == code).first() {
+            course = existing
+        } else {
+            course = APICourse(code: code, name: name, enrollmentMode: enrollmentMode)
+            try await course.save(on: db)
+        }
+        let id = try course.requireID()
+        var cache = storage[TestCourseIDsKey.self] ?? [:]
+        cache[code] = id
+        storage[TestCourseIDsKey.self] = cache
+        return id
     }
 }
 

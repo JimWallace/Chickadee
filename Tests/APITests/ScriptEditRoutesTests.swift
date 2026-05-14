@@ -41,15 +41,6 @@ final class ScriptEditRoutesTests: XCTestCase {
 
     // MARK: - DB/fixture helpers
 
-    private func makeTestCourseID() async throws -> UUID {
-        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "SCR101").first() {
-            return try existing.requireID()
-        }
-        let course = APICourse(code: "SCR101", name: "Script Test Course")
-        try await course.save(on: app.db)
-        return try course.requireID()
-    }
-
     @discardableResult
     private func insertSetup(
         id: String, withEntries entries: [(name: String, content: String)] = []
@@ -57,7 +48,7 @@ final class ScriptEditRoutesTests: XCTestCase {
         let manifest = """
             {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
             """
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(code: "SCR101", name: "Script Test Course")
         let zipPath = app.testSetupsDirectory + "\(id).zip"
         try makeZipAt(zipPath: zipPath, entries: entries)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath, courseID: courseID)
@@ -67,7 +58,7 @@ final class ScriptEditRoutesTests: XCTestCase {
 
     @discardableResult
     private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(code: "SCR101", name: "Script Test Course")
         let a = APIAssignment(
             testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true,
             courseID: courseID)
