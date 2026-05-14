@@ -9,6 +9,8 @@ Log in
     <div class="error-box" style="margin-bottom:1rem">
         #if(error == "invalid"):
         <p>Invalid username or password.</p>
+        #elseif(error == "locked"):
+        <p>Too many failed sign-in attempts. Please try again in a few minutes.</p>
         #elseif(error == "sso_denied"):
         <p>UWaterloo sign-in was canceled or denied.</p>
         #elseif(error == "sso_not_configured"):

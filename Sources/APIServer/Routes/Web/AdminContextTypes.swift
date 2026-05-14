@@ -171,3 +171,18 @@ struct AdminAlertsContext: Encodable {
     let flashSuccess: String?
     let flashError: String?
 }
+
+struct AdminAuditRow: Encodable {
+    let timestamp: String
+    let actor: String
+    let action: String
+    let targetType: String?
+    let targetID: String?
+    let metadata: String
+    let remoteAddr: String
+}
+
+struct AdminAuditContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let rows: [AdminAuditRow]
+}

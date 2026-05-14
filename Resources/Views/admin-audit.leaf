@@ -1,0 +1,48 @@
+#extend("base"):
+#export("title"):
+Audit Log
+#endexport
+#export("content"):
+<section class="admin-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">Audit Log</h2>
+        <a href="/admin" class="btn">← Back to admin</a>
+    </div>
+
+    <p style="color:var(--muted);margin-top:0">
+        Records sensitive admin actions and authentication events.  The
+        most recent 200 entries are shown.  Older entries remain in the
+        database.
+    </p>
+
+    #if(!rows.count):
+    <p style="color:var(--muted)">No audit entries recorded yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th style="width:11rem">Time</th>
+                <th style="width:9rem">Actor</th>
+                <th style="width:13rem">Action</th>
+                <th style="width:9rem">Target</th>
+                <th>Metadata</th>
+                <th style="width:9rem">Remote</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(row in rows):
+            <tr>
+                <td style="font-family:var(--font-mono,monospace);font-size:.85rem">#(row.timestamp)</td>
+                <td>#(row.actor)</td>
+                <td><code>#(row.action)</code></td>
+                <td>#if(row.targetType):#(row.targetType)#if(row.targetID): · <code>#(row.targetID)</code>#endif#else:—#endif</td>
+                <td style="font-family:var(--font-mono,monospace);font-size:.8rem;white-space:pre-wrap;word-break:break-word">#(row.metadata)</td>
+                <td style="font-family:var(--font-mono,monospace);font-size:.85rem">#(row.remoteAddr)</td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+#endexport
+#endextend

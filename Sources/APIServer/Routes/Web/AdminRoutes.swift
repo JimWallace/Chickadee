@@ -25,6 +25,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
+        admin.get("audit", use: auditPage)
         admin.get("alerts", use: alertsPage)
         admin.post("alerts", "config", use: updateAlertsConfig)
         admin.post("alerts", "test", use: sendTestAlert)
@@ -320,8 +321,20 @@ struct AdminRoutes: RouteCollection {
             throw Abort(.badRequest, reason: "Invalid role: \(body.role)")
         }
 
+        let previousRole = user.role
         user.role = body.role
         try await user.save(on: req.db)
+        await AuditLogger.record(
+            action: .userRoleChanged,
+            targetType: .user,
+            targetID: idString,
+            metadata: [
+                "subject_username": user.username,
+                "previous_role": previousRole,
+                "new_role": body.role,
+            ],
+            on: req
+        )
         return req.redirect(to: "/admin")
     }
 
@@ -333,6 +346,7 @@ struct AdminRoutes: RouteCollection {
         let body = try req.content.decode(WorkerSecretBody.self)
         let trimmed = body.secret.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let action: String
         if trimmed.isEmpty {
             await req.application.workerSecretStore.setRuntimeOverride(nil)
             if let persisted = readWorkerSecretFromDisk(workerSecretFilePath: req.application.workerSecretFilePath) {
@@ -340,11 +354,19 @@ struct AdminRoutes: RouteCollection {
                 req.logger.info("Admin reset runtime runner secret to persisted value.")
             }
             req.logger.info("Admin cleared runtime runner secret override.")
+            action = "cleared"
         } else {
             await req.application.workerSecretStore.setRuntimeOverride(trimmed)
             writeWorkerSecretToDisk(secret: trimmed, workerSecretFilePath: req.application.workerSecretFilePath)
             req.logger.info("Admin updated runtime runner secret override.")
+            action = "rotated"
         }
+        await AuditLogger.record(
+            action: .runnerSecretRotated,
+            targetType: .runner,
+            metadata: ["change": action],
+            on: req
+        )
         return req.redirect(to: "/admin")
     }
 
@@ -364,7 +386,40 @@ struct AdminRoutes: RouteCollection {
             filePath: req.application.localRunnerAutoStartFilePath
         )
         req.logger.info("Admin updated local runner autostart setting: \(enabled)")
+        await AuditLogger.record(
+            action: .runnerAutostartChanged,
+            targetType: .runner,
+            metadata: ["enabled": enabled ? "true" : "false"],
+            on: req
+        )
         return req.redirect(to: "/admin")
+    }
+
+    // MARK: - GET /admin/audit
+
+    @Sendable
+    func auditPage(req: Request) async throws -> View {
+        let entries = try await APIAuditLogEntry.query(on: req.db)
+            .sort(\.$createdAt, .descending)
+            .limit(200)
+            .all()
+
+        let iso = ISO8601DateFormatter()
+        let rows = entries.map { e -> AdminAuditRow in
+            AdminAuditRow(
+                timestamp: e.createdAt.map { iso.string(from: $0) } ?? "—",
+                actor: e.actorUsername ?? "—",
+                action: e.action,
+                targetType: e.targetType,
+                targetID: e.targetID,
+                metadata: e.metadata ?? "",
+                remoteAddr: e.remoteAddr ?? "—"
+            )
+        }
+        return try await req.view.render(
+            "admin-audit",
+            AdminAuditContext(currentUser: req.currentUserContext, rows: rows)
+        )
     }
 
     // MARK: - GET /admin/alerts
@@ -517,10 +572,22 @@ struct AdminRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
+        let deletedUsername = user.username
+        let deletedRole = user.role
         try await APICourseEnrollment.query(on: req.db)
             .filter(\.$userID == uuid)
             .delete()
         try await user.delete(on: req.db)
+        await AuditLogger.record(
+            action: .userDeleted,
+            targetType: .user,
+            targetID: idString,
+            metadata: [
+                "subject_username": deletedUsername,
+                "subject_role": deletedRole,
+            ],
+            on: req
+        )
         return req.redirect(to: "/admin")
     }
 
