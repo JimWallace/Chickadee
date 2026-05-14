@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.168] - 2026-05-14
+
+### Fixed
+
+- **CSP hotfix: notebook/validate/browser-runner pages would have broken
+  in production.**  The Content-Security-Policy introduced in 0.4.167 was
+  too strict: it blocked the runtime CDN loads that Pyodide and the
+  CodeMirror-based assignment editor depend on.  Specifically, every
+  student notebook submission (Pyodide via
+  `https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js`), every
+  instructor in-browser validation, the browser-mode autograder (Pyodide
+  plus jszip), and the assignment-new CodeMirror editor (modules from
+  `https://esm.sh`) would have failed silently with CSP violations.
+  Whitelisted `https://cdn.jsdelivr.net` and `https://esm.sh` in
+  `script-src`, `worker-src` (jsdelivr only — esm.sh isn't loaded from
+  a worker), and `connect-src` (Pyodide fetches Python wheels at
+  runtime).  No staged 0.4.167 deployments were affected.
+
 ## [0.4.167] - 2026-05-14
 
 ### Added
