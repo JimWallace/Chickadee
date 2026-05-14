@@ -1,8 +1,9 @@
-import Testing
-@testable import chickadee_server
 import Fluent
-import Vapor
 import Foundation
+import Testing
+import Vapor
+
+@testable import chickadee_server
 
 // Environment variable manipulation is global process state, so this suite
 // runs its tests serially (`@Suite(.serialized)`) and also holds the shared
@@ -95,25 +96,26 @@ class APIServerAppTests {
             "--worker-secret",
             " top-secret ",
             "--hostname",
-            "127.0.0.1"
+            "127.0.0.1",
         ])
 
         let secret = extractWorkerSecretArgument(from: &env)
 
         #expect(secret == "top-secret")
-        #expect(env.arguments == [
-            "/usr/bin/chickadee-server",
-            "serve",
-            "--hostname",
-            "127.0.0.1"
-        ])
+        #expect(
+            env.arguments == [
+                "/usr/bin/chickadee-server",
+                "serve",
+                "--hostname",
+                "127.0.0.1",
+            ])
     }
 
     @Test func extractWorkerSecretArgumentSupportsEqualsSyntax() throws {
         var env = try Environment.detect(arguments: [
             "/usr/bin/chickadee-server",
             "--worker-secret=from-equals",
-            "serve"
+            "serve",
         ])
 
         let secret = extractWorkerSecretArgument(from: &env)

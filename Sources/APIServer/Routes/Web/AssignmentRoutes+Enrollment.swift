@@ -3,9 +3,9 @@
 // Enrollment-related handlers for AssignmentRoutes.
 // Extracted from AssignmentRoutes.swift — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
+import Vapor
 
 extension AssignmentRoutes {
     // MARK: - GET /instructor/enroll-csv
@@ -19,9 +19,9 @@ extension AssignmentRoutes {
 
         let courseState = try await req.resolveActiveCourse(for: caller)
         guard let courseContext = courseState.active,
-              let courseID = courseState.activeCourseUUID,
-              let course = try await APICourse.find(courseID, on: req.db),
-              !course.isArchived
+            let courseID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseID, on: req.db),
+            !course.isArchived
         else {
             throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
         }
@@ -34,13 +34,15 @@ extension AssignmentRoutes {
             let error: String?
         }
 
-        return try await req.view.render("instructor-enroll-csv", EnrollCSVFormContext(
-            currentUser: req.currentUserContext,
-            courseID: courseID.uuidString,
-            courseCode: courseContext.code,
-            courseName: courseContext.name,
-            error: req.query[String.self, at: "error"]
-        ))
+        return try await req.view.render(
+            "instructor-enroll-csv",
+            EnrollCSVFormContext(
+                currentUser: req.currentUserContext,
+                courseID: courseID.uuidString,
+                courseCode: courseContext.code,
+                courseName: courseContext.name,
+                error: req.query[String.self, at: "error"]
+            ))
     }
 
     // MARK: - POST /courses/:courseID/enrollment-mode
@@ -51,7 +53,7 @@ extension AssignmentRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
+            let course = try await APICourse.find(courseID, on: req.db)
         else {
             throw WebAssignmentError.notFound(resource: "Course")
         }
@@ -70,7 +72,7 @@ extension AssignmentRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db),
+            let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
             throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid or archived course.")
@@ -85,16 +87,18 @@ extension AssignmentRoutes {
             on: req.db
         )
 
-        return try await req.view.render("admin-enroll-csv-result", EnrollCSVResultContext(
-            currentUser:          req.currentUserContext,
-            courseCode:           course.code,
-            courseName:           course.name,
-            enrolledCount:        result.enrolledCount,
-            preEnrolledCount:     result.preEnrolledCount,
-            alreadyEnrolledCount: result.alreadyEnrolledCount,
-            rejectedUsernames:    result.rejectedUsernames,
-            returnURL:            "/instructor"
-        ))
+        return try await req.view.render(
+            "admin-enroll-csv-result",
+            EnrollCSVResultContext(
+                currentUser: req.currentUserContext,
+                courseCode: course.code,
+                courseName: course.name,
+                enrolledCount: result.enrolledCount,
+                preEnrolledCount: result.preEnrolledCount,
+                alreadyEnrolledCount: result.alreadyEnrolledCount,
+                rejectedUsernames: result.rejectedUsernames,
+                returnURL: "/instructor"
+            ))
     }
 
     // MARK: - POST /courses/:courseID/unenroll/:userID
@@ -108,11 +112,12 @@ extension AssignmentRoutes {
 
         guard
             let courseIDString = req.parameters.get("courseID"),
-            let courseID       = UUID(uuidString: courseIDString),
-            let userIDString   = req.parameters.get("userID"),
-            let userID         = UUID(uuidString: userIDString)
+            let courseID = UUID(uuidString: courseIDString),
+            let userIDString = req.parameters.get("userID"),
+            let userID = UUID(uuidString: userIDString)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID/userID", reason: "Invalid courseID or userID parameter")
+            throw WebAssignmentError.invalidParameter(
+                name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
         try await APICourseEnrollment.query(on: req.db)
@@ -140,11 +145,12 @@ extension AssignmentRoutes {
 
         guard
             let courseIDString = req.parameters.get("courseID"),
-            let courseID       = UUID(uuidString: courseIDString),
-            let preIDString    = req.parameters.get("preEnrollmentID"),
-            let preID          = UUID(uuidString: preIDString)
+            let courseID = UUID(uuidString: courseIDString),
+            let preIDString = req.parameters.get("preEnrollmentID"),
+            let preID = UUID(uuidString: preIDString)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
+            throw WebAssignmentError.invalidParameter(
+                name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
         try await APIPreEnrollment.query(on: req.db)

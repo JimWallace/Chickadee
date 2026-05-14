@@ -20,16 +20,16 @@
 // endpoint serves it directly from the database so the browser runner can
 // read the up-to-date gradingMode and testSuites without re-zipping.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct BrowserRunnerRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let br = routes.grouped("api", "v1", "browser-runner")
-        br.get("testsetups", ":testSetupID", "download",  use: downloadTestSetup)
-        br.get("testsetups", ":testSetupID", "manifest",  use: getTestSetupManifest)
+        br.get("testsetups", ":testSetupID", "download", use: downloadTestSetup)
+        br.get("testsetups", ":testSetupID", "manifest", use: getTestSetupManifest)
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/download
@@ -43,7 +43,7 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -67,7 +67,7 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -76,8 +76,9 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
-        return Response(status: .ok, headers: headers,
-                        body: .init(string: setup.manifest))
+        return Response(
+            status: .ok, headers: headers,
+            body: .init(string: setup.manifest))
     }
 
 }

@@ -9,9 +9,9 @@ struct AddCourseSections: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("course_sections")
             .id()
-            .field("name",                  .string, .required)
-            .field("default_grading_mode",  .string, .required)
-            .field("sort_order",            .int,    .required)
+            .field("name", .string, .required)
+            .field("default_grading_mode", .string, .required)
+            .field("sort_order", .int, .required)
             .field(
                 "course_id",
                 .uuid,

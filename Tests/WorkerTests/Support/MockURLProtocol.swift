@@ -1,4 +1,5 @@
 import Foundation
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -93,7 +94,9 @@ final class MockURLProtocol: URLProtocol {
             let error = NSError(
                 domain: "MockURLProtocol",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "No stub enqueued for \(request.url?.absoluteString ?? "<no url>")"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: "No stub enqueued for \(request.url?.absoluteString ?? "<no url>")"
+                ]
             )
             client?.urlProtocol(self, didFailWithError: error)
             return

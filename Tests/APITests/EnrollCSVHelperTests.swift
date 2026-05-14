@@ -3,10 +3,11 @@
 // Unit tests for parseUsernamesFromCSV — header detection, quote stripping,
 // encoding fallback, and edge cases.
 
-import Testing
-@testable import chickadee_server
 import Fluent
 import Foundation
+import Testing
+
+@testable import chickadee_server
 
 @Suite struct EnrollCSVHelperTests {
 
@@ -93,7 +94,7 @@ import Foundation
         // Build the bytes manually: "José,Eng\nAlice,Sci\n" in ISO-8859-1.
         let bytes: [UInt8] = [
             0x4A, 0x6F, 0x73, 0xE9, 0x2C, 0x45, 0x6E, 0x67, 0x0A,  // José,Eng\n
-            0x41, 0x6C, 0x69, 0x63, 0x65, 0x2C, 0x53, 0x63, 0x69, 0x0A  // Alice,Sci\n
+            0x41, 0x6C, 0x69, 0x63, 0x65, 0x2C, 0x53, 0x63, 0x69, 0x0A,  // Alice,Sci\n
         ]
         let result = parseUsernamesFromCSV(Data(bytes))
         #expect(result.contains("Alice"), "Expected 'Alice' in results: \(result)")
@@ -114,11 +115,11 @@ import Foundation
         // so they don't pollute a real class roster — instructors uploading
         // an export expect only actual class members to enrol.
         let csv = """
-        OrgDefinedId,Username,End-of-Line Indicator
-        #174667.teststudent1,#174667.teststudent1,#
-        #174667.teststudent2,#174667.teststudent2,#
-        #174667.alice,#174667.alice,#
-        """
+            OrgDefinedId,Username,End-of-Line Indicator
+            #174667.teststudent1,#174667.teststudent1,#
+            #174667.teststudent2,#174667.teststudent2,#
+            #174667.alice,#174667.alice,#
+            """
         #expect(parseUsernamesFromCSV(Data(csv.utf8)) == [])
     }
 
@@ -129,10 +130,10 @@ import Foundation
         // skipped as test accounts; the Username column has the real
         // bare username, which parses cleanly.)
         let csv = """
-        OrgDefinedId,Username,End-of-Line Indicator
-        #174667.alice,alice,#
-        #174667.bob,bob,#
-        """
+            OrgDefinedId,Username,End-of-Line Indicator
+            #174667.alice,alice,#
+            #174667.bob,bob,#
+            """
         #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
@@ -163,13 +164,13 @@ import Foundation
         // dotted test accounts were accepted, every real student was
         // rejected for containing `#`.
         let csv = """
-        OrgDefinedId,Username,End-of-Line Indicator
-        #174667.teststudent1,#174667.teststudent1,#
-        #174667.teststudent2,#174667.teststudent2,#
-        #20878497,#mj39lee,#
-        #20940945,#c7quan,#
-        #21204837,#zsmskmak,#
-        """
+            OrgDefinedId,Username,End-of-Line Indicator
+            #174667.teststudent1,#174667.teststudent1,#
+            #174667.teststudent2,#174667.teststudent2,#
+            #20878497,#mj39lee,#
+            #20940945,#c7quan,#
+            #21204837,#zsmskmak,#
+            """
         let parsed = parseUsernamesFromCSV(Data(csv.utf8))
         #expect(parsed == ["mj39lee", "c7quan", "zsmskmak"])
     }

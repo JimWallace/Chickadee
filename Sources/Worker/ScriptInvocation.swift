@@ -6,33 +6,33 @@ struct ScriptInvocation {
 }
 
 private let pythonBootstrap = """
-import builtins
-import runpy
-import sys
+    import builtins
+    import runpy
+    import sys
 
-import test_runtime as _tr
+    import test_runtime as _tr
 
-builtins.passed = _tr.passed
-builtins.failed = _tr.failed
-builtins.errored = _tr.errored
-builtins.require_function = _tr.require_function
+    builtins.passed = _tr.passed
+    builtins.failed = _tr.failed
+    builtins.errored = _tr.errored
+    builtins.require_function = _tr.require_function
 
-_student_module = _tr.load_student_module()
-builtins.student_module = _student_module
-if _student_module is not None:
-    for _name, _value in vars(_student_module).items():
-        if _name.startswith("_"):
-            continue
-        if callable(_value) and not hasattr(builtins, _name):
-            setattr(builtins, _name, _value)
+    _student_module = _tr.load_student_module()
+    builtins.student_module = _student_module
+    if _student_module is not None:
+        for _name, _value in vars(_student_module).items():
+            if _name.startswith("_"):
+                continue
+            if callable(_value) and not hasattr(builtins, _name):
+                setattr(builtins, _name, _value)
 
-# Shift sys.argv so sys.argv[0] is the script path, matching the behaviour of
-# a direct `python3 script.py` invocation.  Test frameworks that inspect
-# sys.argv[0] to locate the test file (e.g. the Marmoset-era chickadee.py
-# helper) break when sys.argv[0] is left as '-c'.
-sys.argv = sys.argv[1:]
-runpy.run_path(sys.argv[0], run_name="__main__")
-"""
+    # Shift sys.argv so sys.argv[0] is the script path, matching the behaviour of
+    # a direct `python3 script.py` invocation.  Test frameworks that inspect
+    # sys.argv[0] to locate the test file (e.g. the Marmoset-era chickadee.py
+    # helper) break when sys.argv[0] is left as '-c'.
+    sys.argv = sys.argv[1:]
+    runpy.run_path(sys.argv[0], run_name="__main__")
+    """
 
 private func pythonInvocation(for script: URL) -> ScriptInvocation {
     ScriptInvocation(
@@ -61,26 +61,32 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
     case "php":
         return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["php", script.path])
     case "r":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["Rscript", script.path])
+        return ScriptInvocation(
+            executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["Rscript", script.path])
     default:
         if let shebang = shebangLine(for: script) {
             if shebang.contains("python") {
                 return pythonInvocation(for: script)
             }
             if shebang.contains("node") || shebang.contains("javascript") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node", script.path])
+                return ScriptInvocation(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node", script.path])
             }
             if shebang.contains("ruby") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["ruby", script.path])
+                return ScriptInvocation(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["ruby", script.path])
             }
             if shebang.contains("perl") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["perl", script.path])
+                return ScriptInvocation(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["perl", script.path])
             }
             if shebang.contains("bash") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["bash", script.path])
+                return ScriptInvocation(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["bash", script.path])
             }
             if shebang.contains("zsh") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["zsh", script.path])
+                return ScriptInvocation(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["zsh", script.path])
             }
             if shebang.contains("sh") {
                 return ScriptInvocation(executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: [script.path])
@@ -101,23 +107,28 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
 
 private func shebangLine(for script: URL) -> String? {
     guard let data = try? Data(contentsOf: script),
-          let text = String(data: data.prefix(512), encoding: .utf8) else {
+        let text = String(data: data.prefix(512), encoding: .utf8)
+    else {
         return nil
     }
-    let normalizedText = text
+    let normalizedText =
+        text
         .trimmingCharacters(in: CharacterSet(charactersIn: "\u{feff}"))
         .trimmingCharacters(in: .whitespacesAndNewlines)
-    let firstLine = normalizedText.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
+    let firstLine = normalizedText.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(
+        String.init)
     guard let firstLine, firstLine.hasPrefix("#!") else { return nil }
     return firstLine.lowercased()
 }
 
 private func looksLikePythonScript(_ script: URL) -> Bool {
     guard let data = try? Data(contentsOf: script),
-          let text = String(data: data.prefix(2048), encoding: .utf8) else {
+        let text = String(data: data.prefix(2048), encoding: .utf8)
+    else {
         return false
     }
-    let lines = text
+    let lines =
+        text
         .split(separator: "\n")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty && !$0.hasPrefix("#") }

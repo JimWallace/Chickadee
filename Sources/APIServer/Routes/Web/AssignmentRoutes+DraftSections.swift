@@ -22,10 +22,10 @@
 //   POST   /instructor/new/draft/suite-sections/:sectionID/delete     — delete
 //   POST   /instructor/new/draft/suite-sections/:sectionID/variables  — variables
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -46,7 +46,7 @@ extension AssignmentRoutes {
         try await mutateManifest(setup: setup, on: req.db) { dict in
             var sections = (dict["sections"] as? [[String: Any]]) ?? []
             sections.append([
-                "id":   UUID().uuidString,
+                "id": UUID().uuidString,
                 "name": name,
             ])
             dict["sections"] = sections
@@ -194,8 +194,10 @@ extension AssignmentRoutes {
                 }
             )
             guard Set(body.sectionIDs) == Set(byID.keys),
-                  body.sectionIDs.count == existing.count else {
-                throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
+                body.sectionIDs.count == existing.count
+            else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
             }
             dict["sections"] = body.sectionIDs.compactMap { byID[$0] }
         }

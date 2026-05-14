@@ -1,7 +1,9 @@
-import XCTest
-@testable import chickadee_runner
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
+
 #if os(Linux)
 import Glibc
 #endif
@@ -36,24 +38,24 @@ final class WorkerDaemonTests: XCTestCase {
                 "python3",
                 "-c",
                 #"""
-import http.server
-import socketserver
-import sys
+                import http.server
+                import socketserver
+                import sys
 
-directory = sys.argv[1]
+                directory = sys.argv[1]
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=directory, **kwargs)
+                class Handler(http.server.SimpleHTTPRequestHandler):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, directory=directory, **kwargs)
 
-    def log_message(self, format, *args):
-        pass
+                    def log_message(self, format, *args):
+                        pass
 
-with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-    print(httpd.server_address[1], flush=True)
-    httpd.serve_forever()
-"""#,
-                directory.path
+                with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+                    print(httpd.server_address[1], flush=True)
+                    httpd.serve_forever()
+                """#,
+                directory.path,
             ]
 
             try process.run()
@@ -80,11 +82,11 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             }
 
             if process.isRunning {
-#if os(Linux)
+                #if os(Linux)
                 _ = Glibc.kill(process.processIdentifier, SIGKILL)
-#else
+                #else
                 _ = Darwin.kill(process.processIdentifier, SIGKILL)
-#endif
+                #endif
             }
 
             process.waitUntilExit()
@@ -235,36 +237,36 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
                 "python3",
                 "-c",
                 #"""
-import http.server
-import socketserver
-import sys
+                import http.server
+                import socketserver
+                import sys
 
-remaining = int(sys.argv[1])
-body = sys.argv[2].encode("utf-8")
+                remaining = int(sys.argv[1])
+                body = sys.argv[2].encode("utf-8")
 
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        global remaining
-        if remaining > 0:
-            remaining -= 1
-            self.send_response(503)
-            self.end_headers()
-            self.wfile.write(b"unavailable")
-            return
-        self.send_response(200)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+                class Handler(http.server.BaseHTTPRequestHandler):
+                    def do_GET(self):
+                        global remaining
+                        if remaining > 0:
+                            remaining -= 1
+                            self.send_response(503)
+                            self.end_headers()
+                            self.wfile.write(b"unavailable")
+                            return
+                        self.send_response(200)
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
 
-    def log_message(self, format, *args):
-        pass
+                    def log_message(self, format, *args):
+                        pass
 
-with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-    print(httpd.server_address[1], flush=True)
-    httpd.serve_forever()
-"""#,
+                with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+                    print(httpd.server_address[1], flush=True)
+                    httpd.serve_forever()
+                """#,
                 String(failuresBeforeSuccess),
-                responseBody
+                responseBody,
             ]
 
             try process.run()
@@ -290,11 +292,11 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
                 Thread.sleep(forTimeInterval: 0.05)
             }
             if process.isRunning {
-#if os(Linux)
+                #if os(Linux)
                 _ = Glibc.kill(process.processIdentifier, SIGKILL)
-#else
+                #else
                 _ = Darwin.kill(process.processIdentifier, SIGKILL)
-#endif
+                #endif
             }
             process.waitUntilExit()
             stdout.fileHandleForReading.closeFile()
@@ -320,16 +322,19 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
     }
 
     private func makeManifest() throws -> TestProperties {
-        try JSONDecoder().decode(TestProperties.self, from: Data(#"""
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": [],
-          "testSuites": [{"tier": "public", "script": "test.sh"}],
-          "timeLimitSeconds": 1,
-          "makefile": null
-        }
-        """#.utf8))
+        try JSONDecoder().decode(
+            TestProperties.self,
+            from: Data(
+                #"""
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [{"tier": "public", "script": "test.sh"}],
+                  "timeLimitSeconds": 1,
+                  "makefile": null
+                }
+                """#.utf8))
     }
 
     private func makeJob(submissionID: String = "sub_worker_fail") throws -> Job {
@@ -379,22 +384,22 @@ with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
             "python3",
             "-c",
             #"""
-import os
-import sys
-import zipfile
+            import os
+            import sys
+            import zipfile
 
-zip_path = sys.argv[1]
-root = sys.argv[2]
+            zip_path = sys.argv[1]
+            root = sys.argv[2]
 
-with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-    for current_root, _, filenames in os.walk(root):
-        for filename in filenames:
-            full_path = os.path.join(current_root, filename)
-            archive_name = os.path.relpath(full_path, root)
-            archive.write(full_path, archive_name)
-"""#,
+            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for current_root, _, filenames in os.walk(root):
+                    for filename in filenames:
+                        full_path = os.path.join(current_root, filename)
+                        archive_name = os.path.relpath(full_path, root)
+                        archive.write(full_path, archive_name)
+            """#,
             zipPath,
-            tempDir.path
+            tempDir.path,
         ]
         try process.run()
         process.waitUntilExit()
@@ -410,9 +415,11 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         try Data(notebookJSON(code: "print(\(submissionID.debugDescription))\n").utf8).write(to: submissionPath)
 
         let setupZipPath = root.appendingPathComponent("\(submissionID)-setup.zip").path
-        try makeZip(at: setupZipPath, files: [
-            ("test.sh", "#!/bin/sh\necho passed\n")
-        ])
+        try makeZip(
+            at: setupZipPath,
+            files: [
+                ("test.sh", "#!/bin/sh\necho passed\n")
+            ])
 
         return Job(
             submissionID: submissionID,
@@ -444,9 +451,10 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         _ values: [String: String],
         perform: () async throws -> Void
     ) async throws {
-        let originals = Dictionary(uniqueKeysWithValues: values.keys.map { key in
-            (key, ProcessInfo.processInfo.environment[key])
-        })
+        let originals = Dictionary(
+            uniqueKeysWithValues: values.keys.map { key in
+                (key, ProcessInfo.processInfo.environment[key])
+            })
 
         for (key, value) in values {
             setEnvironmentValue(value, forKey: key)
@@ -471,7 +479,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
     func testWorkerDaemonCanBeCancelledWhilePollingForNoWork() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -506,7 +515,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
     func testWorkerDaemonReportsSyntheticFailureWhenProcessingThrows() async throws {
         let poller = MockPoller(jobs: [try makeJob(), nil, nil])
         let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -569,13 +579,14 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_report_fail")
         let poller = MockPoller(jobs: [job, nil, nil, nil])
         let reporter = FlakyReporter(failuresRemaining: 1)
-        let runner = MockRunner(output: ScriptOutput(
-            exitCode: 0,
-            stdout: "pass",
-            stderr: "",
-            executionTimeMs: 5,
-            timedOut: false
-        ))
+        let runner = MockRunner(
+            output: ScriptOutput(
+                exitCode: 0,
+                stdout: "pass",
+                stderr: "",
+                executionTimeMs: 5,
+                timedOut: false
+            ))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -635,13 +646,14 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         let badJob = try makeJob(submissionID: "sub_bad_job")
         let poller = MockPoller(jobs: [badJob, goodJob, nil, nil, nil])
         let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(
-            exitCode: 0,
-            stdout: "all good",
-            stderr: "",
-            executionTimeMs: 7,
-            timedOut: false
-        ))
+        let runner = MockRunner(
+            output: ScriptOutput(
+                exitCode: 0,
+                stdout: "all good",
+                stderr: "",
+                executionTimeMs: 7,
+                timedOut: false
+            ))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -701,20 +713,21 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_json_footer")
 
         let stdoutWithFooter = """
-        Hello, World!
-        Some diagnostic output here.
-        {"shortResult": "3/4 cases passed", "score": 0.75}
-        """
+            Hello, World!
+            Some diagnostic output here.
+            {"shortResult": "3/4 cases passed", "score": 0.75}
+            """
 
         let poller = MockPoller(jobs: [job, nil])
         let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(
-            exitCode: 1,            // fail so longResult is populated
-            stdout: stdoutWithFooter,
-            stderr: "",
-            executionTimeMs: 10,
-            timedOut: false
-        ))
+        let runner = MockRunner(
+            output: ScriptOutput(
+                exitCode: 1,  // fail so longResult is populated
+                stdout: stdoutWithFooter,
+                stderr: "",
+                executionTimeMs: 10,
+                timedOut: false
+            ))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -743,22 +756,27 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
 
         // longResult must contain the human-readable lines…
         let longResult = try XCTUnwrap(outcome.longResult)
-        XCTAssertTrue(longResult.contains("Hello, World!"),
-                      "Human-readable stdout must appear in longResult")
-        XCTAssertTrue(longResult.contains("Some diagnostic output here."),
-                      "All human-readable lines must appear in longResult")
+        XCTAssertTrue(
+            longResult.contains("Hello, World!"),
+            "Human-readable stdout must appear in longResult")
+        XCTAssertTrue(
+            longResult.contains("Some diagnostic output here."),
+            "All human-readable lines must appear in longResult")
 
         // …but must NOT contain the raw JSON footer
-        XCTAssertFalse(longResult.contains("shortResult"),
-                       "JSON footer must be stripped from longResult shown to students")
-        XCTAssertFalse(longResult.contains("{"),
-                       "No JSON braces should appear in longResult")
+        XCTAssertFalse(
+            longResult.contains("shortResult"),
+            "JSON footer must be stripped from longResult shown to students")
+        XCTAssertFalse(
+            longResult.contains("{"),
+            "No JSON braces should appear in longResult")
     }
 
     func testWorkerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = FlakyReporter(failuresRemaining: 0, heartbeatFailuresRemaining: 2)
-        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -794,7 +812,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
 
         let poller = MockPoller(jobs: [])
         let reporter = MockReporter()
-        let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
         let daemon = WorkerDaemon(
             poller: poller,
             reporter: reporter,
@@ -826,7 +845,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         ]) {
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http500)
             let reporter = MockReporter()
-            let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+            let runner = MockRunner(
+                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
             let daemon = WorkerDaemon(
                 poller: poller,
                 reporter: reporter,
@@ -859,7 +879,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         ]) {
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .http401)
             let reporter = MockReporter()
-            let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+            let runner = MockRunner(
+                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
             let daemon = WorkerDaemon(
                 poller: poller,
                 reporter: reporter,
@@ -892,7 +913,8 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive
         ]) {
             let poller = FlakyPoller(failuresRemaining: 2, failureMode: .duplicateWorkerID)
             let reporter = MockReporter()
-            let runner = MockRunner(output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+            let runner = MockRunner(
+                output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
             let daemon = WorkerDaemon(
                 poller: poller,
                 reporter: reporter,

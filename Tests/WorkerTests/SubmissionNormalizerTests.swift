@@ -1,7 +1,8 @@
-import XCTest
-@testable import chickadee_runner
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
 
 final class SubmissionNormalizerTests: XCTestCase {
     private var rootDir: URL!
@@ -28,7 +29,7 @@ final class SubmissionNormalizerTests: XCTestCase {
             "requiredFiles": requiredFiles,
             "testSuites": [["tier": "public", "script": "test_public.py"]],
             "timeLimitSeconds": 10,
-            "makefile": NSNull()
+            "makefile": NSNull(),
         ]
         let data = try JSONSerialization.data(withJSONObject: jsonObject)
         return try JSONDecoder().decode(TestProperties.self, from: data)
@@ -65,17 +66,19 @@ final class SubmissionNormalizerTests: XCTestCase {
     }
 
     func testNotebookNormalizesToPyWithCellSeparators() throws {
-        try writeSubmissionFile(name: "assignment.ipynb", contents: """
-        {
-          "nbformat": 4,
-          "metadata": {},
-          "cells": [
-            {"cell_type": "code", "source": ["x = 1\\n"]},
-            {"cell_type": "markdown", "source": ["# ignored"]},
-            {"cell_type": "code", "source": ["print(x)\\n"]}
-          ]
-        }
-        """)
+        try writeSubmissionFile(
+            name: "assignment.ipynb",
+            contents: """
+                {
+                  "nbformat": 4,
+                  "metadata": {},
+                  "cells": [
+                    {"cell_type": "code", "source": ["x = 1\\n"]},
+                    {"cell_type": "markdown", "source": ["# ignored"]},
+                    {"cell_type": "code", "source": ["print(x)\\n"]}
+                  ]
+                }
+                """)
 
         let result = try SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(),
@@ -93,13 +96,15 @@ final class SubmissionNormalizerTests: XCTestCase {
     }
 
     func testNotebookRenamedToPyIsDetectedByContent() throws {
-        try writeSubmissionFile(name: "submission.py", contents: """
-        {
-          "nbformat": 4,
-          "metadata": {},
-          "cells": [{"cell_type": "code", "source": ["value = 42\\n"]}]
-        }
-        """)
+        try writeSubmissionFile(
+            name: "submission.py",
+            contents: """
+                {
+                  "nbformat": 4,
+                  "metadata": {},
+                  "cells": [{"cell_type": "code", "source": ["value = 42\\n"]}]
+                }
+                """)
 
         let result = try SubmissionNormalizer().normalizePythonSubmission(
             manifest: makeManifest(),
@@ -110,7 +115,8 @@ final class SubmissionNormalizerTests: XCTestCase {
 
         XCTAssertEqual(result.preferredStudentModule, "submission.extracted.py")
         XCTAssertTrue(result.warnings.contains { $0.contains("appears to be a Jupyter notebook") })
-        XCTAssertTrue(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("submission.extracted.py").path))
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("submission.extracted.py").path))
     }
 
     func testJSONFileThatIsNotNotebookFailsWithTargetedError() throws {
@@ -147,13 +153,15 @@ final class SubmissionNormalizerTests: XCTestCase {
     }
 
     func testNotebookWithNoCodeCellsFailsEarly() throws {
-        try writeSubmissionFile(name: "notes.ipynb", contents: """
-        {
-          "nbformat": 4,
-          "metadata": {},
-          "cells": [{"cell_type": "markdown", "source": ["Only text"]}]
-        }
-        """)
+        try writeSubmissionFile(
+            name: "notes.ipynb",
+            contents: """
+                {
+                  "nbformat": 4,
+                  "metadata": {},
+                  "cells": [{"cell_type": "markdown", "source": ["Only text"]}]
+                }
+                """)
 
         XCTAssertThrowsError(
             try SubmissionNormalizer().normalizePythonSubmission(

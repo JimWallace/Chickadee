@@ -3,10 +3,10 @@
 // Phase 2: persists TestOutcomeCollection to both the DB (results table) and
 // to a JSON file on disk, then marks the originating submission as complete.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct ResultRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -35,7 +35,7 @@ struct ResultRoutes: RouteCollection {
         }
         let collection = report.collection
 
-        async let dbPersist: Void   = persistToDB(collection, on: req)
+        async let dbPersist: Void = persistToDB(collection, on: req)
         async let diskPersist: Void = persistToDisk(collection, on: req)
         try await dbPersist
         try await diskPersist
@@ -56,7 +56,8 @@ struct ResultRoutes: RouteCollection {
             // If this is a validation submission, update the assignment's validationStatus
             // so the instructor sees pass/fail without needing to poll.
             if submission.kind == APISubmission.Kind.validation {
-                let passed = collection.buildStatus == .passed
+                let passed =
+                    collection.buildStatus == .passed
                     && collection.totalTests > 0
                     && collection.failCount == 0
                     && collection.errorCount == 0
@@ -65,27 +66,29 @@ struct ResultRoutes: RouteCollection {
 
                 if let assignment = try await APIAssignment.query(on: req.db)
                     .filter(\.$validationSubmissionID == submission.id!)
-                    .first() {
+                    .first()
+                {
                     assignment.validationStatus = status
                     try await assignment.save(on: req.db)
-                    req.logger.info("Validation \(status) for assignment '\(assignment.title)' (submission \(submission.id!))")
+                    req.logger.info(
+                        "Validation \(status) for assignment '\(assignment.title)' (submission \(submission.id!))")
                 }
             }
 
             // Award class-wide badges when a student submission earns 100%.
             if submission.kind == APISubmission.Kind.student,
-               collection.buildStatus == .passed,
-               let userID = submission.userID,
-               let subID  = submission.id
+                collection.buildStatus == .passed,
+                let userID = submission.userID,
+                let subID = submission.id
             {
                 let grade = gradePercent(from: collection) ?? 0
                 if grade == 100 {
                     try await awardClassBadgesFor100Percent(
-                        testSetupID:     submission.testSetupID,
-                        userID:          userID,
-                        submissionID:    subID,
+                        testSetupID: submission.testSetupID,
+                        userID: userID,
+                        submissionID: subID,
                         executionTimeMs: collection.executionTimeMs,
-                        attemptNumber:   submission.attemptNumber ?? 1,
+                        attemptNumber: submission.attemptNumber ?? 1,
                         on: req.db
                     )
                 }
@@ -103,8 +106,8 @@ struct ResultRoutes: RouteCollection {
         let json = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
 
         let result = APIResult(
-            id:             "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID:   collection.submissionID,
+            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
+            submissionID: collection.submissionID,
             collectionJSON: json
         )
 
@@ -113,11 +116,11 @@ struct ResultRoutes: RouteCollection {
             if let assignment = try await APIAssignment.query(on: req.db)
                 .filter(\.$testSetupID == collection.testSetupID)
                 .first(),
-               let gradeObjectID = assignment.brightspaceGradeObjectID,
-               !gradeObjectID.isEmpty,
-               let course = try await APICourse.find(assignment.courseID, on: req.db),
-               let orgUnitID = course.brightspaceOrgUnitID,
-               !orgUnitID.isEmpty
+                let gradeObjectID = assignment.brightspaceGradeObjectID,
+                !gradeObjectID.isEmpty,
+                let course = try await APICourse.find(assignment.courseID, on: req.db),
+                let orgUnitID = course.brightspaceOrgUnitID,
+                !orgUnitID.isEmpty
             {
                 let now = Date()
                 result.brightspaceSyncPending = true
@@ -132,14 +135,14 @@ struct ResultRoutes: RouteCollection {
 
     private func persistToDisk(_ collection: TestOutcomeCollection, on req: Request) async throws {
         let encoder = JSONEncoder()
-        encoder.outputFormatting    = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
 
-        let data      = try encoder.encode(collection)
+        let data = try encoder.encode(collection)
         let timestamp = ISO8601DateFormatter().string(from: collection.timestamp)
             .replacingOccurrences(of: ":", with: "-")
-        let filename  = "\(collection.submissionID)_\(timestamp).json"
-        let filePath  = req.application.resultsDirectory + filename
+        let filename = "\(collection.submissionID)_\(timestamp).json"
+        let filePath = req.application.resultsDirectory + filename
 
         try await req.fileio.writeFile(.init(data: data), at: filePath)
         req.logger.info("Stored result for submission \(collection.submissionID) at \(filePath)")
@@ -150,8 +153,7 @@ private func decodeWorkerReport(
     from data: Data,
     using decoder: JSONDecoder
 ) throws -> WorkerExecutionReport {
-    if
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
         let collectionObject = json["collection"]
     {
         let collectionData = try JSONSerialization.data(withJSONObject: collectionObject)

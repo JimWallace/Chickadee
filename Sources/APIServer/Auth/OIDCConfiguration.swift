@@ -13,9 +13,9 @@
 //   OIDC_EMAIL_CLAIM      — JWT claim used as the email address
 //                           (default: "email")
 
-import Vapor
-import JWT
 import Foundation
+import JWT
+import Vapor
 
 // MARK: - OIDC Discovery Response
 
@@ -33,10 +33,10 @@ struct OIDCDiscovery: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
-        case tokenEndpoint         = "token_endpoint"
-        case jwksURI               = "jwks_uri"
-        case revocationEndpoint    = "revocation_endpoint"
-        case endSessionEndpoint    = "end_session_endpoint"
+        case tokenEndpoint = "token_endpoint"
+        case jwksURI = "jwks_uri"
+        case revocationEndpoint = "revocation_endpoint"
+        case endSessionEndpoint = "end_session_endpoint"
     }
 }
 
@@ -51,10 +51,10 @@ struct OIDCTokenResponse: Codable, Sendable {
     let refreshToken: String?
 
     enum CodingKeys: String, CodingKey {
-        case accessToken  = "access_token"
-        case idToken      = "id_token"
-        case tokenType    = "token_type"
-        case expiresIn    = "expires_in"
+        case accessToken = "access_token"
+        case idToken = "id_token"
+        case tokenType = "token_type"
+        case expiresIn = "expires_in"
         case refreshToken = "refresh_token"
     }
 }
@@ -78,7 +78,7 @@ struct OIDCClaimConfig: Sendable {
         emailClaim: String = "email"
     ) {
         self.usernameClaim = usernameClaim
-        self.emailClaim    = emailClaim
+        self.emailClaim = emailClaim
     }
 
     static func load() -> OIDCClaimConfig {
@@ -88,7 +88,7 @@ struct OIDCClaimConfig: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return OIDCClaimConfig(
             usernameClaim: username?.isEmpty == false ? username! : "preferred_username",
-            emailClaim:    email?.isEmpty    == false ? email!    : "email"
+            emailClaim: email?.isEmpty == false ? email! : "email"
         )
     }
 }
@@ -135,7 +135,8 @@ struct OIDCConfiguration: Sendable {
             )
         }
 
-        let baseURL = app.securityConfiguration.publicBaseURL?.absoluteString
+        let baseURL =
+            app.securityConfiguration.publicBaseURL?.absoluteString
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             ?? "http://localhost:8080"
         let callbackPath = normalizedCallbackPath(Environment.get("OIDC_CALLBACK"))
@@ -145,7 +146,7 @@ struct OIDCConfiguration: Sendable {
         let discoveryURL: String = {
             if let configured = Environment.get("OIDC_AUTH_SERVER")?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-               !configured.isEmpty
+                !configured.isEmpty
             {
                 let trimmed = configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if trimmed.hasSuffix(".well-known/openid-configuration") {

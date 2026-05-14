@@ -15,9 +15,9 @@
 // "Students With Browser Errors" card.  Rate-limited per (user, setup, kind)
 // so a stuck student reloading 50 times doesn't fill the table.
 
-import Vapor
 import Fluent
 import Foundation
+import Vapor
 
 struct ClientDiagnosticsRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -51,7 +51,7 @@ struct ClientDiagnosticsRoutes: RouteCollection {
 
         // Trim defensive bounds — these are short strings in practice but we
         // do not want a hostile client filling rows with megabyte payloads.
-        let trimmedAgent  = req.headers.first(name: .userAgent).map { String($0.prefix(512)) }
+        let trimmedAgent = req.headers.first(name: .userAgent).map { String($0.prefix(512)) }
         let trimmedChecks = body.failedChecks.map { checks -> String in
             String(checks.joined(separator: ",").prefix(256))
         }
@@ -62,16 +62,17 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         // setup link — instead of returning 500 from a FK violation.
         var verifiedSetupID: String? = body.testSetupID
         if let candidate = verifiedSetupID,
-           try await APITestSetup.find(candidate, on: req.db) == nil {
+            try await APITestSetup.find(candidate, on: req.db) == nil
+        {
             verifiedSetupID = nil
         }
 
         let record = APIClientDiagnostic(
-            userID:       userID,
-            testSetupID:  verifiedSetupID,
-            kind:         body.kind,
+            userID: userID,
+            testSetupID: verifiedSetupID,
+            kind: body.kind,
             failedChecks: trimmedChecks,
-            userAgent:    trimmedAgent
+            userAgent: trimmedAgent
         )
         try await record.save(on: req.db)
         return .accepted

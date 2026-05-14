@@ -31,15 +31,15 @@ struct RunnerDaemonConfig: Sendable, Equatable {
     /// `runnerEnvironmentBool` / `runnerEnvironmentInt` used when no
     /// env var was set.  Used by tests that don't care about env vars.
     static let defaults = RunnerDaemonConfig(
-        capabilityDiscoveryEnabled:    true,
-        testSetupCacheDir:             nil,
-        networkRetryEnabled:           true,
-        retryBaseDelayMs:              1000,
-        retryMaxDelayMs:               30_000,
-        heartbeatRetryMaxAttempts:     4,
-        resultUploadRetryMaxAttempts:  8,
-        downloadRetryMaxAttempts:      6,
-        minFreeDiskMB:                 128
+        capabilityDiscoveryEnabled: true,
+        testSetupCacheDir: nil,
+        networkRetryEnabled: true,
+        retryBaseDelayMs: 1000,
+        retryMaxDelayMs: 30_000,
+        heartbeatRetryMaxAttempts: 4,
+        resultUploadRetryMaxAttempts: 8,
+        downloadRetryMaxAttempts: 6,
+        minFreeDiskMB: 128
     )
 
     /// Reads every runner-config env var once.  Falls back to the
@@ -48,15 +48,20 @@ struct RunnerDaemonConfig: Sendable, Equatable {
         _ env: [String: String] = ProcessInfo.processInfo.environment
     ) -> RunnerDaemonConfig {
         RunnerDaemonConfig(
-            capabilityDiscoveryEnabled:   parseBool(env["RUNNER_CAPABILITY_DISCOVERY_ENABLED"], default: defaults.capabilityDiscoveryEnabled),
-            testSetupCacheDir:            env["RUNNER_TEST_SETUP_CACHE_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            networkRetryEnabled:          parseBool(env["RUNNER_NETWORK_RETRY_ENABLED"], default: defaults.networkRetryEnabled),
-            retryBaseDelayMs:             parseInt(env["RUNNER_RETRY_BASE_DELAY_MS"], default: defaults.retryBaseDelayMs),
-            retryMaxDelayMs:              parseInt(env["RUNNER_RETRY_MAX_DELAY_MS"], default: defaults.retryMaxDelayMs),
-            heartbeatRetryMaxAttempts:    parseInt(env["RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS"], default: defaults.heartbeatRetryMaxAttempts),
-            resultUploadRetryMaxAttempts: parseInt(env["RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.resultUploadRetryMaxAttempts),
-            downloadRetryMaxAttempts:     parseInt(env["RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.downloadRetryMaxAttempts),
-            minFreeDiskMB:                parseInt(env["RUNNER_MIN_FREE_DISK_MB"], default: defaults.minFreeDiskMB)
+            capabilityDiscoveryEnabled: parseBool(
+                env["RUNNER_CAPABILITY_DISCOVERY_ENABLED"], default: defaults.capabilityDiscoveryEnabled),
+            testSetupCacheDir: env["RUNNER_TEST_SETUP_CACHE_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty,
+            networkRetryEnabled: parseBool(env["RUNNER_NETWORK_RETRY_ENABLED"], default: defaults.networkRetryEnabled),
+            retryBaseDelayMs: parseInt(env["RUNNER_RETRY_BASE_DELAY_MS"], default: defaults.retryBaseDelayMs),
+            retryMaxDelayMs: parseInt(env["RUNNER_RETRY_MAX_DELAY_MS"], default: defaults.retryMaxDelayMs),
+            heartbeatRetryMaxAttempts: parseInt(
+                env["RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS"], default: defaults.heartbeatRetryMaxAttempts),
+            resultUploadRetryMaxAttempts: parseInt(
+                env["RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.resultUploadRetryMaxAttempts),
+            downloadRetryMaxAttempts: parseInt(
+                env["RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.downloadRetryMaxAttempts),
+            minFreeDiskMB: parseInt(env["RUNNER_MIN_FREE_DISK_MB"], default: defaults.minFreeDiskMB)
         )
     }
 }
@@ -64,21 +69,24 @@ struct RunnerDaemonConfig: Sendable, Equatable {
 // MARK: - Parsing helpers (file-private)
 
 private func parseBool(_ raw: String?, default defaultValue: Bool) -> Bool {
-    guard let trimmed = raw?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .lowercased(),
-        !trimmed.isEmpty else { return defaultValue }
+    guard
+        let trimmed = raw?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+        !trimmed.isEmpty
+    else { return defaultValue }
 
     switch trimmed {
-    case "1", "true", "yes", "on":  return true
+    case "1", "true", "yes", "on": return true
     case "0", "false", "no", "off": return false
-    default:                        return defaultValue
+    default: return defaultValue
     }
 }
 
 private func parseInt(_ raw: String?, default defaultValue: Int) -> Int {
     guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
-          let value = Int(trimmed) else { return defaultValue }
+        let value = Int(trimmed)
+    else { return defaultValue }
     return value
 }
 

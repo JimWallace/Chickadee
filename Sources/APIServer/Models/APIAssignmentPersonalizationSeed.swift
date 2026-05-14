@@ -31,9 +31,9 @@ final class APIAssignmentPersonalizationSeed: Model, Content, @unchecked Sendabl
     init() {}
 
     init(id: UUID? = nil, userID: UUID, assignmentID: UUID, seedValue: String) {
-        self.id           = id
-        self.userID       = userID
+        self.id = id
+        self.userID = userID
         self.assignmentID = assignmentID
-        self.seedValue    = seedValue
+        self.seedValue = seedValue
     }
 }

@@ -6,10 +6,10 @@
 //   GET /api/v1/submissions/:id               — submission status
 //   GET /api/v1/submissions/:id/results       — grading results (with optional tier filter)
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct SubmissionQueryRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -73,10 +73,11 @@ struct SubmissionQueryRoutes: RouteCollection {
             throw Abort(.forbidden)
         }
 
-        guard let result = try await APIResult.query(on: req.db)
-            .filter(\.$submissionID == subID)
-            .sort(\.$receivedAt, .descending)
-            .first()
+        guard
+            let result = try await APIResult.query(on: req.db)
+                .filter(\.$submissionID == subID)
+                .sort(\.$receivedAt, .descending)
+                .first()
         else {
             throw Abort(.notFound, reason: "No results available yet for submission \(subID)")
         }
@@ -134,11 +135,11 @@ struct SubmissionSummary: Content {
     let submittedAt: Date?
 
     init(_ submission: APISubmission) {
-        self.submissionID  = submission.id ?? ""
-        self.testSetupID   = submission.testSetupID
-        self.status        = submission.status
+        self.submissionID = submission.id ?? ""
+        self.testSetupID = submission.testSetupID
+        self.status = submission.status
         self.attemptNumber = submission.attemptNumber ?? 1
-        self.submittedAt   = submission.submittedAt
+        self.submittedAt = submission.submittedAt
     }
 }
 
@@ -151,11 +152,11 @@ struct SubmissionStatusResponse: Content {
     let assignedAt: Date?
 
     init(submission: APISubmission) {
-        self.submissionID  = submission.id ?? ""
-        self.testSetupID   = submission.testSetupID
-        self.status        = submission.status
+        self.submissionID = submission.id ?? ""
+        self.testSetupID = submission.testSetupID
+        self.status = submission.status
         self.attemptNumber = submission.attemptNumber ?? 1
-        self.submittedAt   = submission.submittedAt
-        self.assignedAt    = submission.assignedAt
+        self.submittedAt = submission.submittedAt
+        self.assignedAt = submission.assignedAt
     }
 }

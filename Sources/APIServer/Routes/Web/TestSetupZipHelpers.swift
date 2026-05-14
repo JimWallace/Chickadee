@@ -7,8 +7,8 @@
 // directory.  Extracted from AssignmentHelpers.swift (issue #442) — no
 // behaviour changes.
 
-import Vapor
 import Foundation
+import Vapor
 
 enum ScriptZipError: Error {
     case fileNotFound(String)
@@ -39,7 +39,8 @@ func listZipEntries(zipPath: String) -> [String] {
     process.waitUntilExit()
     guard process.terminationStatus == 0 else { return [] }
     guard let text = String(data: data, encoding: .utf8) else { return [] }
-    return text
+    return
+        text
         .split(separator: "\n")
         .map(String.init)
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -90,7 +91,7 @@ func updateScriptInZip(zipPath: String, filename: String, content: String) throw
     zip.currentDirectoryURL = tempDir
     zip.arguments = ["-q", "-r", zipPath, "."]
     zip.standardOutput = Pipe()
-    zip.standardError  = Pipe()
+    zip.standardError = Pipe()
     try zip.run()
     zip.waitUntilExit()
     guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
@@ -140,7 +141,7 @@ func applyScriptChangesToZip(
     zip.currentDirectoryURL = tempDir
     zip.arguments = ["-q", "-r", zipPath, "."]
     zip.standardOutput = Pipe()
-    zip.standardError  = Pipe()
+    zip.standardError = Pipe()
     try zip.run()
     zip.waitUntilExit()
     guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
@@ -174,7 +175,7 @@ func removeScriptFromZip(zipPath: String, filename: String) throws {
     zip.currentDirectoryURL = tempDir
     zip.arguments = ["-q", "-r", zipPath, "."]
     zip.standardOutput = Pipe()
-    zip.standardError  = Pipe()
+    zip.standardError = Pipe()
     try zip.run()
     zip.waitUntilExit()
     guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
@@ -301,7 +302,7 @@ private func writeEmptyZip(to path: String) throws {
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00
+        0x00, 0x00,
     ])
     try emptyZip.write(to: URL(fileURLWithPath: path))
 }

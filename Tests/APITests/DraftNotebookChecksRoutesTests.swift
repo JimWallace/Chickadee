@@ -10,12 +10,13 @@
 // focus on behaviour we own here: the persisted manifest's `notebookChecks`
 // matches the body, malformed bodies 400, and missing draftID 400s.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class DraftNotebookChecksRoutesTests: XCTestCase {
 
@@ -42,12 +43,12 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
         try updateScriptInZip(zipPath: zipPath, filename: "placeholder.txt", content: "")
 
         let manifestDict: [String: Any] = [
-            "schemaVersion":   1,
-            "gradingMode":     "worker",
-            "requiredFiles":   [],
+            "schemaVersion": 1,
+            "gradingMode": "worker",
+            "requiredFiles": [],
             "timeLimitSeconds": 10,
-            "makefile":        NSNull(),
-            "testSuites":      [],
+            "makefile": NSNull(),
+            "testSuites": [],
         ]
         let manifestData = try JSONSerialization.data(withJSONObject: manifestDict, options: [.sortedKeys])
         let manifest = String(data: manifestData, encoding: .utf8)!
@@ -59,8 +60,8 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
 
     private func loadManifestProps(setupID: String) async throws -> TestProperties {
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
-              let data = setup.manifest.data(using: .utf8),
-              let props = try? JSONDecoder().decode(TestProperties.self, from: data)
+            let data = setup.manifest.data(using: .utf8),
+            let props = try? JSONDecoder().decode(TestProperties.self, from: data)
         else { throw XCTSkip("manifest load failed") }
         return props
     }
@@ -83,13 +84,16 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
             ),
         ]
 
-        try await app.asyncTest(.PUT, "/instructor/new/draft/checks?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(body, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(body, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let props = try await loadManifestProps(setupID: draftID)
         XCTAssertEqual(props.notebookChecks.count, 2)
@@ -109,25 +113,31 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
             NotebookCheck(id: "a", kind: .figureCount, minFigures: 1),
             NotebookCheck(id: "b", kind: .figureCount, minFigures: 2),
         ]
-        try await app.asyncTest(.PUT, "/instructor/new/draft/checks?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(firstBody, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(firstBody, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         // Second save: replace with one different check.
         let secondBody = [
-            NotebookCheck(id: "c", kind: .figureCount, minFigures: 3),
+            NotebookCheck(id: "c", kind: .figureCount, minFigures: 3)
         ]
-        try await app.asyncTest(.PUT, "/instructor/new/draft/checks?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(secondBody, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(secondBody, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let props = try await loadManifestProps(setupID: draftID)
         XCTAssertEqual(props.notebookChecks.map(\.id), ["c"], "PUT must atomically replace the full list")
@@ -138,26 +148,32 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dnct_inst3", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.PUT, "/instructor/new/draft/checks", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode([NotebookCheck](), as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/new/draft/checks",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode([NotebookCheck](), as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     func testPutDraftChecks_unknownDraftIDReturns404() async throws {
         let cookie = try await loginUser(username: "dnct_inst4", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.PUT, "/instructor/new/draft/checks?draftID=does-not-exist", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode([NotebookCheck](), as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/new/draft/checks?draftID=does-not-exist",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode([NotebookCheck](), as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     func testPutDraftChecks_emptyListClearsManifest() async throws {
@@ -165,13 +181,16 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dnct_inst5", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.PUT, "/instructor/new/draft/checks?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode([NotebookCheck](), as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode([NotebookCheck](), as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let props = try await loadManifestProps(setupID: draftID)
         XCTAssertEqual(props.notebookChecks.count, 0)

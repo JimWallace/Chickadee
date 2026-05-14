@@ -51,17 +51,17 @@ public struct CourseBundleManifest: Codable, Sendable {
         submissions: [BundledSubmission],
         results: [BundledResult]
     ) {
-        self.schemaVersion        = schemaVersion
-        self.exportedAt           = exportedAt
-        self.exportedBy           = exportedBy
-        self.chickadeeVersion     = chickadeeVersion
-        self.course               = course
-        self.users                = users
+        self.schemaVersion = schemaVersion
+        self.exportedAt = exportedAt
+        self.exportedBy = exportedBy
+        self.chickadeeVersion = chickadeeVersion
+        self.course = course
+        self.users = users
         self.enrolledUserBundleIDs = enrolledUserBundleIDs
-        self.assignments          = assignments
-        self.testSetups           = testSetups
-        self.submissions          = submissions
-        self.results              = results
+        self.assignments = assignments
+        self.testSetups = testSetups
+        self.submissions = submissions
+        self.results = results
     }
 }
 
@@ -77,11 +77,13 @@ public struct BundledCourse: Codable, Sendable {
     /// Ignored when `enrollmentMode` is non-nil.
     public let openEnrollment: Bool?
 
-    public init(code: String, name: String,
-                enrollmentMode: CourseEnrollmentMode? = nil,
-                openEnrollment: Bool? = nil) {
-        self.code           = code
-        self.name           = name
+    public init(
+        code: String, name: String,
+        enrollmentMode: CourseEnrollmentMode? = nil,
+        openEnrollment: Bool? = nil
+    ) {
+        self.code = code
+        self.name = name
         self.enrollmentMode = enrollmentMode
         self.openEnrollment = openEnrollment
     }
@@ -96,13 +98,15 @@ public struct BundledUser: Codable, Sendable {
     /// "student" | "instructor" | "admin"
     public let role: String
 
-    public init(bundleID: String, username: String, displayName: String?,
-                email: String?, role: String) {
-        self.bundleID    = bundleID
-        self.username    = username
+    public init(
+        bundleID: String, username: String, displayName: String?,
+        email: String?, role: String
+    ) {
+        self.bundleID = bundleID
+        self.username = username
         self.displayName = displayName
-        self.email       = email
-        self.role        = role
+        self.email = email
+        self.role = role
     }
 }
 
@@ -115,14 +119,16 @@ public struct BundledAssignment: Codable, Sendable {
     /// References BundledTestSetup.bundleID.
     public let testSetupBundleID: String
 
-    public init(bundleID: String, title: String, dueAt: Date?, isOpen: Bool,
-                sortOrder: Int?, testSetupBundleID: String) {
-        self.bundleID           = bundleID
-        self.title              = title
-        self.dueAt              = dueAt
-        self.isOpen             = isOpen
-        self.sortOrder          = sortOrder
-        self.testSetupBundleID  = testSetupBundleID
+    public init(
+        bundleID: String, title: String, dueAt: Date?, isOpen: Bool,
+        sortOrder: Int?, testSetupBundleID: String
+    ) {
+        self.bundleID = bundleID
+        self.title = title
+        self.dueAt = dueAt
+        self.isOpen = isOpen
+        self.sortOrder = sortOrder
+        self.testSetupBundleID = testSetupBundleID
     }
 }
 
@@ -135,11 +141,13 @@ public struct BundledTestSetup: Codable, Sendable {
     /// Relative path within the bundle ZIP: "testsetups/<originalID>.zip"
     public let zipFilename: String
 
-    public init(bundleID: String, originalID: String, manifest: String,
-                zipFilename: String) {
-        self.bundleID    = bundleID
-        self.originalID  = originalID
-        self.manifest    = manifest
+    public init(
+        bundleID: String, originalID: String, manifest: String,
+        zipFilename: String
+    ) {
+        self.bundleID = bundleID
+        self.originalID = originalID
+        self.manifest = manifest
         self.zipFilename = zipFilename
     }
 }
@@ -157,15 +165,17 @@ public struct BundledSubmission: Codable, Sendable {
     /// Relative path within the bundle ZIP: "submissions/<originalSubID>.<ext>"
     public let submissionFilename: String
 
-    public init(bundleID: String, userBundleID: String, testSetupBundleID: String,
-                attemptNumber: Int, submittedAt: Date?, filename: String?,
-                submissionFilename: String) {
-        self.bundleID           = bundleID
-        self.userBundleID       = userBundleID
-        self.testSetupBundleID  = testSetupBundleID
-        self.attemptNumber      = attemptNumber
-        self.submittedAt        = submittedAt
-        self.filename           = filename
+    public init(
+        bundleID: String, userBundleID: String, testSetupBundleID: String,
+        attemptNumber: Int, submittedAt: Date?, filename: String?,
+        submissionFilename: String
+    ) {
+        self.bundleID = bundleID
+        self.userBundleID = userBundleID
+        self.testSetupBundleID = testSetupBundleID
+        self.attemptNumber = attemptNumber
+        self.submittedAt = submittedAt
+        self.filename = filename
         self.submissionFilename = submissionFilename
     }
 }
@@ -179,11 +189,13 @@ public struct BundledResult: Codable, Sendable {
     public let source: String
     public let receivedAt: Date?
 
-    public init(submissionBundleID: String, collectionJSON: String,
-                source: String, receivedAt: Date?) {
+    public init(
+        submissionBundleID: String, collectionJSON: String,
+        source: String, receivedAt: Date?
+    ) {
         self.submissionBundleID = submissionBundleID
-        self.collectionJSON     = collectionJSON
-        self.source             = source
-        self.receivedAt         = receivedAt
+        self.collectionJSON = collectionJSON
+        self.source = source
+        self.receivedAt = receivedAt
     }
 }

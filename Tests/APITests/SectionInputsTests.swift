@@ -6,10 +6,11 @@
 // classification logic mirrors `Public/global-inputs-editor.js` and
 // is covered by the global-inputs unit tests in spirit.
 
-import XCTest
-@testable import chickadee_server
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_server
 
 final class SectionInputsTests: XCTestCase {
 
@@ -22,7 +23,7 @@ final class SectionInputsTests: XCTestCase {
             variables: [FamilyVariable(name: "lit", value: .int(42))],
             expressions: [
                 PersonalizationExpression(name: "shift", expression: "seed % 26"),
-                PersonalizationExpression(name: "msg",   expression: "f'shift is {shift}'")
+                PersonalizationExpression(name: "msg", expression: "f'shift is {shift}'"),
             ]
         )
         let data = try JSONEncoder().encode(section)
@@ -35,8 +36,8 @@ final class SectionInputsTests: XCTestCase {
 
     func testSection_missingExpressionsDecodesAsEmpty() throws {
         let json = #"""
-        {"id":"abc","name":"Sec","variables":[]}
-        """#.data(using: .utf8)!
+            {"id":"abc","name":"Sec","variables":[]}
+            """#.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(TestSuiteSection.self, from: json)
         XCTAssertEqual(decoded.expressions.count, 0)
     }
@@ -82,8 +83,9 @@ final class SectionInputsTests: XCTestCase {
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "0010",
             staticVariables: [
-                FamilyVariable(name: "quotes",
-                               value: .array([.string("alpha"), .string("beta"), .string("gamma")]))
+                FamilyVariable(
+                    name: "quotes",
+                    value: .array([.string("alpha"), .string("beta"), .string("gamma")]))
             ],
             expressions: [
                 // Imagine this came from a section's expressions list.

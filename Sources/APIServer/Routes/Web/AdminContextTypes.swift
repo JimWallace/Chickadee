@@ -3,8 +3,8 @@
 // Leaf template context types for the admin dashboard and its sub-pages.
 // Separated from AdminRoutes.swift to keep route handlers readable.
 
-import Vapor
 import Core
+import Vapor
 
 struct AdminUserRow: Encodable {
     let id: String
@@ -142,7 +142,7 @@ struct AdminCourseEnrolledUserRow: Encodable {
 }
 
 struct AdminCourseAssignmentRow: Encodable {
-    let id: String      // publicID — used in /instructor/:id/... URLs
+    let id: String  // publicID — used in /instructor/:id/... URLs
     let title: String
     let dueAt: String?
     let isOpen: Bool

@@ -1,10 +1,12 @@
-import XCTest
 import Crypto
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-@testable import chickadee_runner
 
 final class WorkerRequestSignerTests: XCTestCase {
 

@@ -1,8 +1,9 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class NotebookWebRoutesTests: XCTestCase {
 
@@ -16,7 +17,8 @@ final class NotebookWebRoutesTests: XCTestCase {
         app = try await Application.make(.testing)
 
         repoRoot = FileManager.default.currentDirectoryPath
-        tmpRoot = FileManager.default.temporaryDirectory
+        tmpRoot =
+            FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-notebook-web-\(UUID().uuidString)")
             .path + "/"
         tmpDir = tmpRoot
@@ -97,9 +99,10 @@ final class NotebookWebRoutesTests: XCTestCase {
         manifest: String? = nil,
         zipEntries: [(name: String, content: String)] = []
     ) async throws -> APITestSetup {
-        let storedManifest = manifest ?? """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-        """
+        let storedManifest =
+            manifest ?? """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+                """
         let zipPath = tmpDir + "testsetups/\(id).zip"
         let notebookPath = tmpDir + "testsetups/\(id).ipynb"
         let entries = zipEntries.isEmpty ? [("assignment.ipynb", notebookJSON)] : zipEntries
@@ -178,10 +181,10 @@ final class NotebookWebRoutesTests: XCTestCase {
             "z.writestr(\(entry.name.debugDescription), \(entry.content.debugDescription))"
         }.joined(separator: "\n    ")
         let script = """
-import zipfile
-with zipfile.ZipFile('\(zipPath)', 'w') as z:
-    \(entriesCode)
-"""
+            import zipfile
+            with zipfile.ZipFile('\(zipPath)', 'w') as z:
+                \(entriesCode)
+            """
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -205,29 +208,32 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         _ = try await insertSetup(id: setupID, notebookJSON: seedNotebook)
         _ = try await insertAssignment(testSetupID: setupID, title: "Notebook Lab")
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("data-setup-id=\"\(setupID)\""))
-            XCTAssertTrue(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
-            XCTAssertTrue(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
-            XCTAssertTrue(html.contains("&amp;path=users/"))
-            // v0.4.153 cache-bust: the iframe is stamped with the
-            // working-copy mtime so notebook.js can force-reseed when the
-            // server overwrites the file (instructor "Reset" action).
-            // Extract the value and assert it's a positive integer.
-            let mtimeRegex = try NSRegularExpression(pattern: #"data-working-copy-mtime="(\d+)""#)
-            let nsr = NSRange(html.startIndex..., in: html)
-            guard let match = mtimeRegex.firstMatch(in: html, range: nsr),
-                  let valueRange = Range(match.range(at: 1), in: html),
-                  let mtime = Int(html[valueRange])
-            else {
-                XCTFail("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
-            }
-            XCTAssertGreaterThan(mtime, 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("data-setup-id=\"\(setupID)\""))
+                XCTAssertTrue(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
+                XCTAssertTrue(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
+                XCTAssertTrue(html.contains("&amp;path=users/"))
+                // v0.4.153 cache-bust: the iframe is stamped with the
+                // working-copy mtime so notebook.js can force-reseed when the
+                // server overwrites the file (instructor "Reset" action).
+                // Extract the value and assert it's a positive integer.
+                let mtimeRegex = try NSRegularExpression(pattern: #"data-working-copy-mtime="(\d+)""#)
+                let nsr = NSRange(html.startIndex..., in: html)
+                guard let match = mtimeRegex.firstMatch(in: html, range: nsr),
+                    let valueRange = Range(match.range(at: 1), in: html),
+                    let mtime = Int(html[valueRange])
+                else {
+                    XCTFail("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
+                }
+                XCTAssertGreaterThan(mtime, 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
+            })
 
         let workingCopy = try String(
             contentsOfFile: workingCopyPath(setupID: setupID, userID: try user.requireID()),
@@ -248,18 +254,24 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Open"))
         _ = try await insertAssignment(testSetupID: setupID, title: "Open Lab", dueAt: nil, isOpen: true)
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains(#"data-read-only="false""#),
-                "Open assignment iframe must carry data-read-only=\"false\"")
-            XCTAssertTrue(html.contains(#"id="nb-submit""#),
-                "Open assignment must render the Submit button")
-            XCTAssertFalse(html.contains("This assignment is closed"),
-                "Open assignment must not render the closed-view notice")
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(
+                    html.contains(#"data-read-only="false""#),
+                    "Open assignment iframe must carry data-read-only=\"false\"")
+                XCTAssertTrue(
+                    html.contains(#"id="nb-submit""#),
+                    "Open assignment must render the Submit button")
+                XCTAssertFalse(
+                    html.contains("This assignment is closed"),
+                    "Open assignment must not render the closed-view notice")
+            })
     }
 
     func testNotebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
@@ -276,22 +288,28 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         _ = try await insertAssignment(
             testSetupID: setupID,
             title: "Closed Lab",
-            dueAt: Date(timeIntervalSinceNow: -3600),     // due 1h ago
-            isOpen: true                                   // not explicitly closed; deadline carries it
+            dueAt: Date(timeIntervalSinceNow: -3600),  // due 1h ago
+            isOpen: true  // not explicitly closed; deadline carries it
         )
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains(#"data-read-only="true""#),
-                "Closed assignment iframe must carry data-read-only=\"true\"")
-            XCTAssertFalse(html.contains(#"id="nb-submit""#),
-                "Closed assignment must NOT render the Submit button")
-            XCTAssertTrue(html.contains("This assignment is closed"),
-                "Closed assignment must render the view-only notice")
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(
+                    html.contains(#"data-read-only="true""#),
+                    "Closed assignment iframe must carry data-read-only=\"true\"")
+                XCTAssertFalse(
+                    html.contains(#"id="nb-submit""#),
+                    "Closed assignment must NOT render the Submit button")
+                XCTAssertTrue(
+                    html.contains("This assignment is closed"),
+                    "Closed assignment must render the view-only notice")
+            })
     }
 
     func testNotebookSourceReturnsExistingWorkingCopy() async throws {
@@ -311,14 +329,17 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             .data(using: .utf8)!
             .write(to: URL(fileURLWithPath: workingCopy))
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.headers.contentType?.description, "application/json; charset=utf-8")
-            XCTAssertTrue(res.body.string.contains("Saved working copy"))
-            XCTAssertFalse(res.body.string.contains("Original notebook"))
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook/source",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.headers.contentType?.description, "application/json; charset=utf-8")
+                XCTAssertTrue(res.body.string.contains("Saved working copy"))
+                XCTAssertFalse(res.body.string.contains("Original notebook"))
+            })
     }
 
     func testNotebookPageSubmissionIDRestoresSelectedSubmission() async throws {
@@ -350,11 +371,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             .data(using: .utf8)!
             .write(to: URL(fileURLWithPath: staleCopyPath))
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=\(submissionID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook?submissionID=\(submissionID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         // The submission-specific view file should contain the student's content.
         let userSlug = userID.uuidString.lowercased()
@@ -375,8 +399,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
         let setupID = "setup_nb_support"
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
+            """
         _ = try await insertSetup(
             id: setupID,
             notebookJSON: notebookJSON(markdown: "Support seed"),
@@ -384,7 +408,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             zipEntries: [
                 ("assignment.ipynb", notebookJSON(markdown: "Support seed")),
                 ("test.sh", "#!/bin/sh\nexit 0\n"),
-                ("bmi.py", "def bmi():\n    return 22\n")
+                ("bmi.py", "def bmi():\n    return 22\n"),
             ]
         )
 
@@ -398,7 +422,7 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             publicDir + "files/",
             publicDir + "jupyterlite/files/",
             publicDir + "jupyterlite/lab/files/",
-            publicDir + "jupyterlite/notebooks/files/"
+            publicDir + "jupyterlite/notebooks/files/",
         ]
         for (index, root) in legacyRoots.enumerated() {
             let userDir = root + "users/\(userID.uuidString.lowercased())/"
@@ -407,11 +431,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             try Data("legacy".utf8).write(to: URL(fileURLWithPath: userDir + filename))
         }
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let studentDir = (workingCopyPath(setupID: setupID, userID: userID) as NSString).deletingLastPathComponent
         let supportPath = studentDir + "/bmi.py"
@@ -425,7 +452,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         for root in legacyRoots {
             let userDir = root + "users/\(userID.uuidString.lowercased())/"
             let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
-            XCTAssertFalse(contents.contains { $0.hasSuffix(".ipynb") }, "Legacy notebooks should be removed from \(userDir)")
+            XCTAssertFalse(
+                contents.contains { $0.hasSuffix(".ipynb") }, "Legacy notebooks should be removed from \(userDir)")
         }
     }
 
@@ -452,13 +480,16 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         )
         try Data("not json".utf8).write(to: URL(fileURLWithPath: workingCopy))
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue(res.body.string.contains("Recovered notebook"))
-            XCTAssertFalse(res.body.string.contains("Instructor baseline"))
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook/source",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertTrue(res.body.string.contains("Recovered notebook"))
+                XCTAssertFalse(res.body.string.contains("Instructor baseline"))
+            })
 
         let replaced = try String(contentsOfFile: workingCopy, encoding: .utf8)
         XCTAssertTrue(replaced.contains("Recovered notebook"))
@@ -483,11 +514,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             attemptNumber: 1
         )
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     func testNotebookPageRejectsNonNotebookHistorySelection() async throws {
@@ -513,11 +547,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         )
         try await submission.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     func testNotebookPageRejectsHistorySelectionOwnedByAnotherStudent() async throws {
@@ -543,11 +580,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             attemptNumber: 1
         )
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     func testNotebookPageReturns404WhenSetupHasNoStarterNotebook() async throws {
@@ -565,18 +605,22 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
         let setup = APITestSetup(
             id: setupID,
-            manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+            manifest:
+                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
             zipPath: zipPath,
             notebookPath: nil,
             courseID: try await makeCourse().requireID()
         )
         try await setup.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook/source",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     func testNotebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
@@ -591,26 +635,30 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             zipPath: zipPath,
             entries: [
                 ("materials/starter.ipynb", nestedNotebook),
-                ("readme.txt", "nested zip")
+                ("readme.txt", "nested zip"),
             ]
         )
 
         let setup = APITestSetup(
             id: setupID,
-            manifest: #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"starterNotebook":"starter.ipynb"}"#,
+            manifest:
+                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"starterNotebook":"starter.ipynb"}"#,
             zipPath: zipPath,
             notebookPath: nil,
             courseID: try await makeCourse().requireID()
         )
         try await setup.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue(res.body.string.contains("Nested manifest starter"))
-            XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook/source",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertTrue(res.body.string.contains("Nested manifest starter"))
+                XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+            })
     }
 
     func testNotebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
@@ -625,25 +673,29 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
             zipPath: zipPath,
             entries: [
                 ("nested/assignment.ipynb", nestedNotebook),
-                ("nested/support.py", "value = 1")
+                ("nested/support.py", "value = 1"),
             ]
         )
 
         let setup = APITestSetup(
             id: setupID,
-            manifest: #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+            manifest:
+                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
             zipPath: zipPath,
             notebookPath: nil,
             courseID: try await makeCourse().requireID()
         )
         try await setup.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook/source", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue(res.body.string.contains("First nested notebook"))
-            XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/\(setupID)/notebook/source",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertTrue(res.body.string.contains("First nested notebook"))
+                XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+            })
     }
 }

@@ -12,9 +12,9 @@ import Vapor
 struct RoleMiddleware: AsyncMiddleware {
 
     enum Required {
-        case authenticated      // any logged-in user
-        case instructor         // instructor or admin
-        case admin              // admin only
+        case authenticated  // any logged-in user
+        case instructor  // instructor or admin
+        case admin  // admin only
     }
 
     let required: Required

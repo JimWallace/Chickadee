@@ -8,39 +8,39 @@ import Foundation
 // MARK: - View context types
 
 struct AssignmentRow: Encodable {
-    let setupID:      String
-    let assignmentID: String?   // nil if unpublished
-    let title:        String?   // nil if unpublished
-    let isOpen:       Bool?     // nil if unpublished
-    let dueAt:        String?
-    let status:       String    // "unpublished" | "open" | "closed"
-    let sortOrder:    Int?
+    let setupID: String
+    let assignmentID: String?  // nil if unpublished
+    let title: String?  // nil if unpublished
+    let isOpen: Bool?  // nil if unpublished
+    let dueAt: String?
+    let status: String  // "unpublished" | "open" | "closed"
+    let sortOrder: Int?
     let validationStatus: String
     let validationSubmissionID: String?
-    let suiteCount:   Int
-    let createdAt:    String
+    let suiteCount: Int
+    let createdAt: String
     let submittedStudentCount: Int?  // nil if unpublished; unique enrolled students who submitted at least once
-    let vanityURL:    String?   // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
+    let vanityURL: String?  // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
 }
 
 /// A course section with its grouped assignment rows, used in instructor and student views.
 struct CourseSectionRow: Encodable {
-    let sectionID: String           // UUID as string
+    let sectionID: String  // UUID as string
     let name: String
     let defaultGradingMode: String  // "browser" | "worker"
     let sortOrder: Int
-    let rows: [AssignmentRow]       // assignments in this section, sorted
+    let rows: [AssignmentRow]  // assignments in this section, sorted
 }
 
 struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
     let metrics: [InstructorDashboardMetric]
-    let sections: [CourseSectionRow]    // sections with their assignments
+    let sections: [CourseSectionRow]  // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
     let hasUngrouped: Bool
     let enrolledStudents: [EnrolledStudentRow]
-    let hasEnrolledStudents: Bool       // explicit flag — Leaf's array.isEmpty is unreliable
+    let hasEnrolledStudents: Bool  // explicit flag — Leaf's array.isEmpty is unreliable
     let enrolledStudentCount: Int
     let courseEnrollmentMode: String
     let courseIsArchived: Bool
@@ -55,7 +55,7 @@ struct EnrolledStudentRow: Encodable {
     let id: String
     let username: String
     let displayName: String
-    let role: String        // "student" | "instructor" | "admin" | "(pending)"
+    let role: String  // "student" | "instructor" | "admin" | "(pending)"
     let lastSeenAtText: String
     let lastSeenAtISO: String?
     let submissionsURL: String
@@ -91,27 +91,27 @@ struct AssignmentStudentRow: Encodable {
     let hasLatestSubmission: Bool
     let latestSubmissionID: String
     let latestSubmittedAtText: String
-    let latestSubmittedAtEpoch: Int   // Unix timestamp (0 if no submission) for chronological sort
+    let latestSubmittedAtEpoch: Int  // Unix timestamp (0 if no submission) for chronological sort
     let additionalSubmissionCount: Int
     let fullHistoryURL: String
     let bestGradePercent: Int?
 }
 
 struct ValidateContext: Encodable {
-    let currentUser:  CurrentUserContext?
+    let currentUser: CurrentUserContext?
     let assignmentID: String
-    let setupID:      String
-    let title:        String
-    let suiteCount:   Int
-    let dueAt:        String?
+    let setupID: String
+    let title: String
+    let suiteCount: Int
+    let dueAt: String?
 }
 
 struct NewAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentName: String
     let dueAt: String
-    let sections: [CourseSectionRow]    // available sections for the section picker
-    let preselectedSectionID: String    // from ?sectionID= query param
+    let sections: [CourseSectionRow]  // available sections for the section picker
+    let preselectedSectionID: String  // from ?sectionID= query param
     let draftID: String?
     /// JSON-encoded `draftID` (quoted string or `null`) for embedding in an
     /// inline script via `#rawJSON(...)`.  The pattern-family editor uses
@@ -259,9 +259,9 @@ struct EditableSuiteRow: Encodable {
     let isTest: Bool
     let tier: String
     let order: Int
-    let dependsOn: [String]    // script names of prerequisites; empty == none
-    let points: Int            // grade weight; 1 = default (unweighted)
-    let displayName: String?   // optional human-readable name shown to students
+    let dependsOn: [String]  // script names of prerequisites; empty == none
+    let points: Int  // grade weight; 1 = default (unweighted)
+    let displayName: String?  // optional human-readable name shown to students
 
     /// Empty string when displayName is nil — Leaf doesn't support `??` in templates.
     var displayNameOrEmpty: String { displayName ?? "" }
@@ -318,9 +318,9 @@ struct FamilySuiteRow: Encodable {
     let id: String
     let name: String
     let functionName: String
-    let tier: String           // family default tier
+    let tier: String  // family default tier
     let caseCount: Int
-    let totalPoints: Int       // sum of per-case resolved points
+    let totalPoints: Int  // sum of per-case resolved points
 
     /// Leaf-friendly formatted case count suffix: "1 case" or "N cases".
     var caseCountText: String { caseCount == 1 ? "1 case" : "\(caseCount) cases" }

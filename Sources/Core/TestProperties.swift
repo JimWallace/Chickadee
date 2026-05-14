@@ -38,39 +38,41 @@ public enum GradingMode: String, Codable, Sendable, Equatable {
 /// hand-written script.
 public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let tier: TestTier
-    public let script: String       // e.g. "01_public.py"
-    public let name: String?        // optional display name shown to students
+    public let script: String  // e.g. "01_public.py"
+    public let name: String?  // optional display name shown to students
     public let dependsOn: [String]  // script names of prerequisites; empty == no deps
-    public let points: Int          // grade weight; 1 = default (unweighted)
-    public let generatedBy: String? // pattern family id, nil for hand-written scripts
-    public let generatedByCheck: String? // notebook check id, nil otherwise
-    public let sectionID: String?   // id into TestProperties.sections, or nil = ungrouped
+    public let points: Int  // grade weight; 1 = default (unweighted)
+    public let generatedBy: String?  // pattern family id, nil for hand-written scripts
+    public let generatedByCheck: String?  // notebook check id, nil otherwise
+    public let sectionID: String?  // id into TestProperties.sections, or nil = ungrouped
 
-    public init(tier: TestTier, script: String, name: String? = nil,
-                dependsOn: [String] = [], points: Int = 1,
-                generatedBy: String? = nil,
-                generatedByCheck: String? = nil,
-                sectionID: String? = nil) {
-        self.tier             = tier
-        self.script           = script
-        self.name             = name
-        self.dependsOn        = dependsOn
-        self.points           = points
-        self.generatedBy      = generatedBy
+    public init(
+        tier: TestTier, script: String, name: String? = nil,
+        dependsOn: [String] = [], points: Int = 1,
+        generatedBy: String? = nil,
+        generatedByCheck: String? = nil,
+        sectionID: String? = nil
+    ) {
+        self.tier = tier
+        self.script = script
+        self.name = name
+        self.dependsOn = dependsOn
+        self.points = points
+        self.generatedBy = generatedBy
         self.generatedByCheck = generatedByCheck
-        self.sectionID        = sectionID
+        self.sectionID = sectionID
     }
 
     public init(from decoder: Decoder) throws {
-        let c            = try decoder.container(keyedBy: CodingKeys.self)
-        tier             = try c.decode(TestTier.self,    forKey: .tier)
-        script           = try c.decode(String.self,      forKey: .script)
-        name             = try c.decodeIfPresent(String.self,   forKey: .name)
-        dependsOn        = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
-        points           = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
-        generatedBy      = try c.decodeIfPresent(String.self, forKey: .generatedBy)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tier = try c.decode(TestTier.self, forKey: .tier)
+        script = try c.decode(String.self, forKey: .script)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+        points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        generatedBy = try c.decodeIfPresent(String.self, forKey: .generatedBy)
         generatedByCheck = try c.decodeIfPresent(String.self, forKey: .generatedByCheck)
-        sectionID        = try c.decodeIfPresent(String.self, forKey: .sectionID)
+        sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
     }
 
     /// True if this entry was produced by a pattern family or a notebook
@@ -106,27 +108,29 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
     /// for personalization expressions).
     public let expressions: [PersonalizationExpression]
 
-    public init(id: String, name: String,
-                variables: [FamilyVariable] = [],
-                expressions: [PersonalizationExpression] = []) {
-        self.id          = id
-        self.name        = name
-        self.variables   = variables
+    public init(
+        id: String, name: String,
+        variables: [FamilyVariable] = [],
+        expressions: [PersonalizationExpression] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.variables = variables
         self.expressions = expressions
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id          = try c.decode(String.self, forKey: .id)
-        name        = try c.decode(String.self, forKey: .name)
-        variables   = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        variables = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
         expressions = try c.decodeIfPresent([PersonalizationExpression].self, forKey: .expressions) ?? []
     }
 }
 
 /// Optional Makefile step to run before tests.
 public struct MakefileConfig: Codable, Equatable, Sendable {
-    public let target: String?     // nil means bare `make` with no target
+    public let target: String?  // nil means bare `make` with no target
 }
 
 /// Slice 2 of #461 — a named, per-student-evaluated Python expression
@@ -210,47 +214,51 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `sections[].variables`, or the reserved name `seed`.
     public let globalExpressions: [PersonalizationExpression]
 
-    public init(schemaVersion: Int = 1,
-                gradingMode: GradingMode = .worker,
-                requiredFiles: [String] = [],
-                testSuites: [TestSuiteEntry] = [],
-                timeLimitSeconds: Int = 10,
-                makefile: MakefileConfig? = nil,
-                starterNotebook: String? = nil,
-                patternFamilies: [PatternFamily] = [],
-                notebookChecks: [NotebookCheck] = [],
-                sections: [TestSuiteSection] = [],
-                globalVariables: [FamilyVariable] = [],
-                globalExpressions: [PersonalizationExpression] = []) {
-        self.schemaVersion    = schemaVersion
-        self.gradingMode      = gradingMode
-        self.requiredFiles    = requiredFiles
-        self.testSuites       = testSuites
+    public init(
+        schemaVersion: Int = 1,
+        gradingMode: GradingMode = .worker,
+        requiredFiles: [String] = [],
+        testSuites: [TestSuiteEntry] = [],
+        timeLimitSeconds: Int = 10,
+        makefile: MakefileConfig? = nil,
+        starterNotebook: String? = nil,
+        patternFamilies: [PatternFamily] = [],
+        notebookChecks: [NotebookCheck] = [],
+        sections: [TestSuiteSection] = [],
+        globalVariables: [FamilyVariable] = [],
+        globalExpressions: [PersonalizationExpression] = []
+    ) {
+        self.schemaVersion = schemaVersion
+        self.gradingMode = gradingMode
+        self.requiredFiles = requiredFiles
+        self.testSuites = testSuites
         self.timeLimitSeconds = timeLimitSeconds
-        self.makefile         = makefile
-        self.starterNotebook  = starterNotebook
-        self.patternFamilies  = patternFamilies
-        self.notebookChecks   = notebookChecks
-        self.sections         = sections
-        self.globalVariables  = globalVariables
+        self.makefile = makefile
+        self.starterNotebook = starterNotebook
+        self.patternFamilies = patternFamilies
+        self.notebookChecks = notebookChecks
+        self.sections = sections
+        self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion    = try c.decode(Int.self,                       forKey: .schemaVersion)
-        gradingMode      = try c.decodeIfPresent(GradingMode.self,      forKey: .gradingMode)      ?? .worker
-        requiredFiles    = try c.decodeIfPresent([String].self,         forKey: .requiredFiles)    ?? []
-        testSuites       = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites)       ?? []
-        timeLimitSeconds = try c.decodeIfPresent(Int.self,              forKey: .timeLimitSeconds) ?? 10
-        makefile         = try c.decodeIfPresent(MakefileConfig.self,   forKey: .makefile)
-        starterNotebook  = try c.decodeIfPresent(String.self,           forKey: .starterNotebook)
-        patternFamilies  = try c.decodeIfPresent([PatternFamily].self,  forKey: .patternFamilies)  ?? []
-        notebookChecks   = try c.decodeIfPresent([NotebookCheck].self,  forKey: .notebookChecks)   ?? []
-        sections         = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections)       ?? []
-        globalVariables  = try c.decodeIfPresent([FamilyVariable].self, forKey: .globalVariables)  ?? []
-        globalExpressions = try c.decodeIfPresent([PersonalizationExpression].self,
-                                                  forKey: .globalExpressions) ?? []
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        gradingMode = try c.decodeIfPresent(GradingMode.self, forKey: .gradingMode) ?? .worker
+        requiredFiles = try c.decodeIfPresent([String].self, forKey: .requiredFiles) ?? []
+        testSuites = try c.decodeIfPresent([TestSuiteEntry].self, forKey: .testSuites) ?? []
+        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
+        makefile = try c.decodeIfPresent(MakefileConfig.self, forKey: .makefile)
+        starterNotebook = try c.decodeIfPresent(String.self, forKey: .starterNotebook)
+        patternFamilies = try c.decodeIfPresent([PatternFamily].self, forKey: .patternFamilies) ?? []
+        notebookChecks = try c.decodeIfPresent([NotebookCheck].self, forKey: .notebookChecks) ?? []
+        sections = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections) ?? []
+        globalVariables = try c.decodeIfPresent([FamilyVariable].self, forKey: .globalVariables) ?? []
+        globalExpressions =
+            try c.decodeIfPresent(
+                [PersonalizationExpression].self,
+                forKey: .globalExpressions) ?? []
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
@@ -263,17 +271,17 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// deployments.
     public func runnerSanitized() -> TestProperties {
         TestProperties(
-            schemaVersion:    schemaVersion,
-            gradingMode:      gradingMode,
-            requiredFiles:    requiredFiles,
-            testSuites:       testSuites,
+            schemaVersion: schemaVersion,
+            gradingMode: gradingMode,
+            requiredFiles: requiredFiles,
+            testSuites: testSuites,
             timeLimitSeconds: timeLimitSeconds,
-            makefile:         makefile,
-            starterNotebook:  starterNotebook,
-            patternFamilies:  [],
-            notebookChecks:   [],
-            sections:         sections,
-            globalVariables:  globalVariables,
+            makefile: makefile,
+            starterNotebook: starterNotebook,
+            patternFamilies: [],
+            notebookChecks: [],
+            sections: sections,
+            globalVariables: globalVariables,
             // Slice 2: expressions are a server-side authoring concern.
             // They never reach the runner — values are evaluated at
             // notebook first-open and substituted into the student

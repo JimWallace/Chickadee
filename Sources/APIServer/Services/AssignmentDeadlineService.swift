@@ -1,6 +1,6 @@
 import Fluent
-import Vapor
 import Foundation
+import Vapor
 
 enum AssignmentSubmissionGateError: AbortError {
     case closed
@@ -81,9 +81,11 @@ func requireOpenStudentAssignment(
     on req: Request,
     now: Date = Date()
 ) async throws -> APIAssignment? {
-    guard let assignment = try await APIAssignment.query(on: req.db)
-        .filter(\.$testSetupID == testSetupID)
-        .first() else {
+    guard
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == testSetupID)
+            .first()
+    else {
         return nil
     }
 

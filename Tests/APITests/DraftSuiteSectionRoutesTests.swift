@@ -12,12 +12,13 @@
 // `APIAssignment` parent — that row IS the draft.  Each request
 // includes `?draftID=<setupID>`.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class DraftSuiteSectionRoutesTests: XCTestCase {
 
@@ -39,7 +40,8 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         seedEntries: [(script: String, sectionID: String?)] = []
     ) async throws -> String {
         let courseID = UUID()
-        let course = APICourse(id: courseID, code: "DSSRT", name: "Draft Suite Section Route Test", enrollmentMode: .auto)
+        let course = APICourse(
+            id: courseID, code: "DSSRT", name: "Draft Suite Section Route Test", enrollmentMode: .auto)
         try await course.save(on: app.db)
 
         let setupID = "dssrt_\(UUID().uuidString.prefix(8))"
@@ -73,8 +75,8 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
 
     private func loadManifestDict(setupID: String) async throws -> [String: Any] {
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
-              let data = setup.manifest.data(using: .utf8),
-              let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let data = setup.manifest.data(using: .utf8),
+            let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { throw XCTSkip("manifest load failed") }
         return dict
     }
@@ -87,16 +89,19 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         // CSRF token cooks against any GET — the create page itself works fine here.
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["name": "Question 1", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor/new?draftID=\(draftID)")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["name": "Question 1", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor/new?draftID=\(draftID)")
+            })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
@@ -110,15 +115,18 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst2", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["name": "   ", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["name": "   ", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     func testCreateDraftSuiteSection_missingDraftIDReturns400() async throws {
@@ -126,15 +134,18 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst3", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["name": "Whatever", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["name": "Whatever", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/:sid/rename
@@ -145,15 +156,18 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst4", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/\(sid)/rename?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["name": "Renamed", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/\(sid)/rename?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["name": "Renamed", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
@@ -167,15 +181,18 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst5", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/does-not-exist/rename?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["name": "Anything", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/does-not-exist/rename?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["name": "Anything", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/:sid/delete
@@ -194,12 +211,15 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst6", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/\(sidA)/delete?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/\(sidA)/delete?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
@@ -229,16 +249,19 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
             var variables: [FamilyVariable]
         }
         let validBody = VariablesBody(variables: [
-            FamilyVariable(name: "vals",  value: .array([.int(1), .int(2), .int(3)])),
+            FamilyVariable(name: "vals", value: .array([.int(1), .int(2), .int(3)])),
             FamilyVariable(name: "scale", value: .double(1.5)),
         ])
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(validBody, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(validBody, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
@@ -252,25 +275,31 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
             FamilyVariable(name: "x", value: .int(1)),
             FamilyVariable(name: "x", value: .int(2)),
         ])
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(dupeBody, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unprocessableEntity)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(dupeBody, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .unprocessableEntity)
+            })
 
         // Reject non-identifier names.
         let badIdentBody = VariablesBody(variables: [
-            FamilyVariable(name: "1bad", value: .int(1)),
+            FamilyVariable(name: "1bad", value: .int(1))
         ])
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(badIdentBody, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unprocessableEntity)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/\(sid)/variables?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(badIdentBody, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .unprocessableEntity)
+            })
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/reorder
@@ -285,16 +314,19 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst8", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/reorder?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(
-                ["sectionIDs": [sidC, sidA, sidB]],
-                as: .json
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/reorder?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(
+                    ["sectionIDs": [sidC, sidA, sidB]],
+                    as: .json
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
@@ -308,15 +340,18 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         let cookie = try await loginUser(username: "dssrt_inst9", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/new/draft/suite-sections/reorder?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(
-                ["sectionIDs": [sidA, "unknown-id"]],
-                as: .json
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/suite-sections/reorder?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(
+                    ["sectionIDs": [sidA, "unknown-id"]],
+                    as: .json
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 }

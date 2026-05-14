@@ -40,7 +40,8 @@ private let zipProcessLock = NSLock()
 private func runProcessWithEFAULTRetry(_ proc: Process) throws {
     do {
         try proc.run()
-    } catch let error as NSError where
+    } catch let error as NSError
+        where
         error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)
     {
         Thread.sleep(forTimeInterval: 0.01)
@@ -94,7 +95,8 @@ func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
     let entries = try listZipContents(zipPath: zipPath)
     let destStandardized = destinationDir.standardized
     // Canonical prefix with trailing slash so "/tmp/destfoo" ≠ "/tmp/dest".
-    let destPrefix = destStandardized.path.hasSuffix("/")
+    let destPrefix =
+        destStandardized.path.hasSuffix("/")
         ? destStandardized.path
         : destStandardized.path + "/"
     for entry in entries {
@@ -111,8 +113,9 @@ func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
         }
     }
     // --- Extraction ---
-    try FileManager.default.createDirectory(at: destinationDir,
-                                            withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+        at: destinationDir,
+        withIntermediateDirectories: true)
     try await runZipProcess(
         executablePath: "/usr/bin/unzip",
         arguments: ["-q", zipPath, "-d", destinationDir.path]
@@ -132,17 +135,17 @@ func listZipContents(zipPath: String) throws -> [String] {
     defer { zipProcessLock.unlock() }
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments     = ["-Z1", zipPath]
+    proc.arguments = ["-Z1", zipPath]
     let outPipe = Pipe()
     proc.standardOutput = outPipe
-    proc.standardError  = Pipe() // discard
+    proc.standardError = Pipe()  // discard
     try runProcessWithEFAULTRetry(proc)
     let data = outPipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()
     // unzip -Z1 exits 0 (OK) or 11 (no matching files) — both are fine here.
     let output = String(data: data, encoding: .utf8) ?? ""
     return output.split(separator: "\n", omittingEmptySubsequences: true)
-                 .map(String.init)
+        .map(String.init)
 }
 
 // MARK: - Private helper
@@ -153,9 +156,11 @@ func listZipContents(zipPath: String) throws -> [String] {
 /// The continuation is resumed by Foundation's `terminationHandler`, which is
 /// called from Foundation's internal process-monitoring queue — no
 /// DispatchQueue offloading is required.
-private func runZipProcess(executablePath: String,
-                           arguments: [String],
-                           workingDirectory: URL? = nil) async throws {
+private func runZipProcess(
+    executablePath: String,
+    arguments: [String],
+    workingDirectory: URL? = nil
+) async throws {
     guard FileManager.default.fileExists(atPath: executablePath) else {
         throw ZipArchiverError.executableNotFound(executablePath)
     }
@@ -167,18 +172,19 @@ private func runZipProcess(executablePath: String,
         zipProcessLock.lock()
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executablePath)
-        proc.arguments     = arguments
+        proc.arguments = arguments
         if let dir = workingDirectory {
             proc.currentDirectoryURL = dir
         }
-        proc.standardOutput = Pipe() // discard stdout
-        proc.standardError  = Pipe() // discard stderr
+        proc.standardOutput = Pipe()  // discard stdout
+        proc.standardError = Pipe()  // discard stderr
         proc.terminationHandler = { process in
             if process.terminationStatus == 0 {
                 continuation.resume()
             } else {
-                continuation.resume(throwing: ZipArchiverError.processFailed(
-                    executablePath, process.terminationStatus))
+                continuation.resume(
+                    throwing: ZipArchiverError.processFailed(
+                        executablePath, process.terminationStatus))
             }
         }
         do {

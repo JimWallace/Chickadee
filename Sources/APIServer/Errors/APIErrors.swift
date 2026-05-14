@@ -55,10 +55,10 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 
     var status: HTTPResponseStatus {
         switch self {
-        case .testSetupNotFound:        return .notFound
-        case .invalidBody:              return .badRequest
-        case .unprocessableBody:        return .unprocessableEntity
-        case .internalInconsistency:    return .internalServerError
+        case .testSetupNotFound: return .notFound
+        case .invalidBody: return .badRequest
+        case .unprocessableBody: return .unprocessableEntity
+        case .internalInconsistency: return .internalServerError
         }
     }
 
@@ -111,14 +111,14 @@ enum WebAssignmentError: AbortError, CustomStringConvertible {
 
     var status: HTTPResponseStatus {
         switch self {
-        case .notFound:             return .notFound
-        case .invalidParameter:     return .badRequest
-        case .noActiveCourse:       return .badRequest
-        case .forbidden:            return .forbidden
-        case .conflict:             return .conflict
-        case .unprocessable:        return .unprocessableEntity
-        case .validationRequired:   return .badRequest
-        case .internalFailure:      return .internalServerError
+        case .notFound: return .notFound
+        case .invalidParameter: return .badRequest
+        case .noActiveCourse: return .badRequest
+        case .forbidden: return .forbidden
+        case .conflict: return .conflict
+        case .unprocessable: return .unprocessableEntity
+        case .validationRequired: return .badRequest
+        case .internalFailure: return .internalServerError
         }
     }
 

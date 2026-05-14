@@ -13,11 +13,11 @@
 //   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
 //   GET  /submissions/:id           → submission.leaf (live results)
 
-import Vapor
-import Fluent
-import Leaf
 import Core
+import Fluent
 import Foundation
+import Leaf
+import Vapor
 
 struct WebRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -93,8 +93,12 @@ struct WebRoutes: RouteCollection {
             // Students see only test setups that have an open published assignment.
             let publishedIDs = Set(openAssignments.map(\.testSetupID))
             guard !publishedIDs.isEmpty else {
-                return try await req.view.render("index",
-                    IndexContext(sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false, currentUser: userContext)).encodeResponse(for: req)
+                return try await req.view.render(
+                    "index",
+                    IndexContext(
+                        sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false,
+                        currentUser: userContext)
+                ).encodeResponse(for: req)
             }
             setups = try await APITestSetup.query(on: req.db)
                 .filter(\.$id ~~ publishedIDs)
@@ -158,8 +162,9 @@ struct WebRoutes: RouteCollection {
 
                     for submission in submissions {
                         guard let subID = submission.id,
-                              let result = preferredResultBySubmissionID[subID],
-                              let gradePercent = gradePercentFromCollectionJSON(result.collectionJSON) else {
+                            let result = preferredResultBySubmissionID[subID],
+                            let gradePercent = gradePercentFromCollectionJSON(result.collectionJSON)
+                        else {
                             continue
                         }
                         let setupID = submission.testSetupID
@@ -171,29 +176,32 @@ struct WebRoutes: RouteCollection {
 
                     for (setupID, latest) in latestSubmissionBySetupID {
                         guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
-                              let result = preferredResultBySubmissionID[latest.submissionID],
-                              let assignment = assignmentBySetup[setupID],
-                              let collection = visibleCollection(
-                                  from: result.collectionJSON,
-                                  for: user,
-                                  assignment: assignment
-                              ),
-                              let gradePercent = gradePercent(from: collection) else {
+                            let result = preferredResultBySubmissionID[latest.submissionID],
+                            let assignment = assignmentBySetup[setupID],
+                            let collection = visibleCollection(
+                                from: result.collectionJSON,
+                                for: user,
+                                assignment: assignment
+                            ),
+                            let gradePercent = gradePercent(from: collection)
+                        else {
                             continue
                         }
                         let latestAttempt = latestSubmission.attemptNumber ?? 1
                         let priorSub = grouped[setupID]?.first(where: { $0.attemptNumber == latestAttempt - 1 })
                         let priorGradePercent: Int? = priorSub.flatMap { ps in
                             guard let psID = ps.id,
-                                  let pr = preferredResultBySubmissionID[psID] else { return nil }
+                                let pr = preferredResultBySubmissionID[psID]
+                            else { return nil }
                             return gradePercentFromCollectionJSON(pr.collectionJSON)
                         }
-                        latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(BadgeContext(
-                            attemptNumber:     latestAttempt,
-                            gradePercent:      gradePercent,
-                            executionTimeMs:   collection.executionTimeMs,
-                            priorGradePercent: priorGradePercent
-                        ))
+                        latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(
+                            BadgeContext(
+                                attemptNumber: latestAttempt,
+                                gradePercent: gradePercent,
+                                executionTimeMs: collection.executionTimeMs,
+                                priorGradePercent: priorGradePercent
+                            ))
                     }
 
                     // Batch-query class-wide badges this user currently holds across all setups.
@@ -217,7 +225,7 @@ struct WebRoutes: RouteCollection {
             let rhsOrder = assignmentBySetup[rhsID]?.sortOrder
 
             switch (lhsOrder, rhsOrder) {
-            case let (l?, r?) where l != r:
+            case (let l?, let r?) where l != r:
                 return l < r
             default:
                 let lhsCreated = lhs.createdAt ?? .distantPast
@@ -228,9 +236,9 @@ struct WebRoutes: RouteCollection {
         }
 
         let rows = sortedSetups.map { setup -> TestSetupRow in
-            let setupID    = setup.id ?? ""
-            let data       = Data(setup.manifest.utf8)
-            let props      = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            let setupID = setup.id ?? ""
+            let data = Data(setup.manifest.utf8)
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             let assignment = assignmentBySetup[setupID]
             let latestSubmission = latestSubmissionBySetupID[setupID]
             let submissionCount = submissionCountBySetupID[setupID] ?? 0
@@ -244,28 +252,32 @@ struct WebRoutes: RouteCollection {
                 // True when the setup has a flat notebook file on disk, or the zip
                 // contains at least one .ipynb entry.
                 if let path = setup.notebookPath, !path.isEmpty,
-                   FileManager.default.fileExists(atPath: path) { return true }
+                    FileManager.default.fileExists(atPath: path)
+                {
+                    return true
+                }
                 return listZipEntries(zipPath: setup.zipPath)
                     .contains { $0.hasSuffix(".ipynb") }
             }()
             let vanityBaseURL: String? = {
                 guard let assignment,
-                      let courseCode = courseState.active?.code,
-                      !courseCode.isEmpty,
-                      !assignment.slug.isEmpty else { return nil }
+                    let courseCode = courseState.active?.code,
+                    !courseCode.isEmpty,
+                    !assignment.slug.isEmpty
+                else { return nil }
                 return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment.slug)
             }()
             return TestSetupRow(
-                id:         setupID,
-                title:      assignment?.title,
+                id: setupID,
+                title: assignment?.title,
                 notebookURL: vanityBaseURL ?? "/testsetups/\(setupID)/notebook",
-                submitURL:   vanityBaseURL.map { "\($0)/submit" } ?? "/testsetups/\(setupID)/submit",
-                historyURL:  vanityBaseURL.map { "\($0)/history" } ?? "/testsetups/\(setupID)/history",
+                submitURL: vanityBaseURL.map { "\($0)/submit" } ?? "/testsetups/\(setupID)/submit",
+                historyURL: vanityBaseURL.map { "\($0)/history" } ?? "/testsetups/\(setupID)/history",
                 suiteCount: props?.testSuites.count ?? 0,
-                createdAt:  setup.createdAt.map { fmt.string(from: $0) } ?? "—",
-                dueAt:      assignment?.dueAt.map { fmt.string(from: $0) },
-                status:     status,
-                isOpen:     assignment?.isOpen ?? false,
+                createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
+                dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
+                status: status,
+                isOpen: assignment?.isOpen ?? false,
                 gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,
                 hasNotebook: hasNotebook,
                 submissionCount: submissionCount,
@@ -317,14 +329,16 @@ struct WebRoutes: RouteCollection {
             return IndexSectionContext(sectionID: sID.uuidString, name: section.name, setups: sectionRows)
         }
 
-        return try await req.view.render("index",
+        return try await req.view.render(
+            "index",
             IndexContext(
                 sections: sectionContexts,
                 ungroupedSetups: ungroupedSetups,
                 hasSections: !allSections.isEmpty,
                 hasUngrouped: !ungroupedSetups.isEmpty,
                 currentUser: userContext
-            )).encodeResponse(for: req)
+            )
+        ).encodeResponse(for: req)
     }
 
     // MARK: - GET /testsetups/new
@@ -333,7 +347,8 @@ struct WebRoutes: RouteCollection {
     func newSetupForm(req: Request) async throws -> View {
         let user = try req.auth.require(APIUser.self)
         guard user.isInstructor else { throw Abort(.forbidden) }
-        return try await req.view.render("setup-new",
+        return try await req.view.render(
+            "setup-new",
             BaseContext(currentUser: req.currentUserContext))
     }
 
@@ -357,19 +372,21 @@ struct WebRoutes: RouteCollection {
         }
 
         let setupsDir = req.application.testSetupsDirectory
-        let setupID   = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath   = setupsDir + "\(setupID).zip"
+        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let zipPath = setupsDir + "\(setupID).zip"
         try upload.files.write(to: URL(fileURLWithPath: zipPath))
 
-        let stored  = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
+        let stored = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
 
         // Associate the setup with the instructor's active course.
         let courseState = try await req.resolveActiveCourse(for: setupUser)
         guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(.badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
+            throw Abort(
+                .badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
         }
-        let setup = APITestSetup(id: setupID, manifest: stored, zipPath: zipPath,
-                                  courseID: courseID)
+        let setup = APITestSetup(
+            id: setupID, manifest: stored, zipPath: zipPath,
+            courseID: courseID)
         try await setup.save(on: req.db)
 
         return req.redirect(to: "/")

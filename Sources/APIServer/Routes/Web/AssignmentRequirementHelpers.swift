@@ -5,10 +5,10 @@
 // notebooks plus zip contents.  Extracted from AssignmentHelpers.swift
 // (issue #442) — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 func parsedRequirementCSV(_ raw: String) -> [String] {
     raw
@@ -35,10 +35,12 @@ func assignmentRequirementSpec(
         requiredLanguages: languages,
         requiredCapabilities: capabilities
     )
-    guard spec.requiredPlatform != nil
+    guard
+        spec.requiredPlatform != nil
             || spec.requiredArchitecture != nil
             || !spec.requiredLanguages.isEmpty
-            || !spec.requiredCapabilities.isEmpty else {
+            || !spec.requiredCapabilities.isEmpty
+    else {
         return nil
     }
     return spec
@@ -80,7 +82,8 @@ func detectRequirementSuggestions(
                 if ["ir", "r", "webr"].contains(name) || language == "r" { addLanguage("r") }
             }
             if let languageInfo = metadata["language_info"] as? [String: Any],
-               let language = languageInfo["name"] as? String {
+                let language = languageInfo["name"] as? String
+            {
                 addLanguage(language)
             }
         }
@@ -138,11 +141,11 @@ private func pythonCapabilitySuggestions(in source: String) -> [String] {
         "numpy": "numpy",
         "pandas": "pandas",
         "scipy": "scipy",
-        "matplotlib": "matplotlib"
+        "matplotlib": "matplotlib",
     ]
     let patterns = [
         #"(?m)^\s*import\s+([A-Za-z_][A-Za-z0-9_\.]*)"#,
-        #"(?m)^\s*from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+"#
+        #"(?m)^\s*from\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+import\s+"#,
     ]
     var matches = Set<String>()
     for pattern in patterns {

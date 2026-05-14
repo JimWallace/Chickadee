@@ -1,11 +1,12 @@
 // Worker/RunnerDaemon.swift
 
+import ArgumentParser
+import Core
 import Foundation
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
-import ArgumentParser
-import Core
 
 private enum RunnerJobStatus: String {
     case passed
@@ -69,8 +70,10 @@ func writeStructuredRunnerLog(event: String, fields: [String: Any]) {
     payload["timestamp"] = ISO8601DateFormatter().string(from: Date())
     payload["event"] = event
     guard JSONSerialization.isValidJSONObject(payload),
-          let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
-        writeToStandardError("{\"event\":\"\(event)\",\"timestamp\":\"\(ISO8601DateFormatter().string(from: Date()))\"}\n")
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    else {
+        writeToStandardError(
+            "{\"event\":\"\(event)\",\"timestamp\":\"\(ISO8601DateFormatter().string(from: Date()))\"}\n")
         return
     }
     FileHandle.standardError.write(data)
@@ -102,7 +105,11 @@ struct WorkerCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Runner shared secret for API auth (or RUNNER_SHARED_SECRET env var)")
     var workerSecret: String?
 
-    @Option(name: .long, help: "Directory used for the runner test-setup cache (default: /tmp/chickadee-runner-cache; env: RUNNER_TEST_SETUP_CACHE_DIR)")
+    @Option(
+        name: .long,
+        help:
+            "Directory used for the runner test-setup cache (default: /tmp/chickadee-runner-cache; env: RUNNER_TEST_SETUP_CACHE_DIR)"
+    )
     var testSetupCacheDir: String?
 
     mutating func run() async throws {
@@ -114,15 +121,17 @@ struct WorkerCommand: AsyncParsableCommand {
         let env = ProcessInfo.processInfo.environment
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
         let runnerProfile = await RunnerProfileDetector(discoveryEnabled: config.capabilityDiscoveryEnabled).detect()
-        guard let effectiveWorkerSecret = resolveWorkerSharedSecret(
-            cliWorkerSecret: workerSecret,
-            environment: env
-        ) else {
+        guard
+            let effectiveWorkerSecret = resolveWorkerSharedSecret(
+                cliWorkerSecret: workerSecret,
+                environment: env
+            )
+        else {
             writeToStandardError("Error: missing runner secret. Use --worker-secret or set RUNNER_SHARED_SECRET.\n")
             throw ExitCode.failure
         }
 
-        let poller   = JobPoller(
+        let poller = JobPoller(
             apiBaseURL: baseURL,
             workerID: workerID,
             workerSecret: effectiveWorkerSecret,
@@ -138,45 +147,52 @@ struct WorkerCommand: AsyncParsableCommand {
         )
         let runner: any ScriptRunner = sandbox ? SandboxedScriptRunner() : UnsandboxedScriptRunner()
 
-        let cacheDirPath = testSetupCacheDir
+        let cacheDirPath =
+            testSetupCacheDir
             ?? config.testSetupCacheDir
             ?? TestSetupCache.defaultCacheRoot.path
         let testSetupCache = TestSetupCache(cacheRoot: URL(fileURLWithPath: cacheDirPath))
 
         let daemon = WorkerDaemon(
-            poller:            poller,
-            reporter:          reporter,
-            runner:            runner,
-            apiBaseURL:        baseURL,
-            workerID:          workerID,
-            workerSecret:      effectiveWorkerSecret,
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: baseURL,
+            workerID: workerID,
+            workerSecret: effectiveWorkerSecret,
             maxConcurrentJobs: maxJobs,
-            runnerProfile:     runnerProfile,
+            runnerProfile: runnerProfile,
             downloadRetryPolicy: .download(config: config),
-            testSetupCache:    testSetupCache,
-            config:            config
+            testSetupCache: testSetupCache,
+            config: config
         )
 
         let sandboxLabel = sandbox ? "sandboxed" : "unsandboxed"
-        writeStructuredRunnerLog(event: "runner_startup", fields: [
-            "runner_id": workerID,
-            "status": "starting",
-        ])
-        writeStructuredRunnerLog(event: "runner_configuration", fields: [
-            "runner_id": workerID,
-            "api_base_url": apiBaseURL,
-            "max_jobs": maxJobs,
-            "sandbox_mode": sandboxLabel,
-            "test_setup_cache_dir": cacheDirPath,
-        ])
-        if let runnerProfile {
-            writeStructuredRunnerLog(event: "runner_profile_detected", fields: [
+        writeStructuredRunnerLog(
+            event: "runner_startup",
+            fields: [
                 "runner_id": workerID,
-                "platform": runnerProfile.platform,
-                "architecture": runnerProfile.architecture,
-                "languages": runnerProfile.languageVersions.map { "\($0.language)=\($0.version)" },
-                "capabilities": runnerProfile.capabilities.map(\.name),
+                "status": "starting",
             ])
+        writeStructuredRunnerLog(
+            event: "runner_configuration",
+            fields: [
+                "runner_id": workerID,
+                "api_base_url": apiBaseURL,
+                "max_jobs": maxJobs,
+                "sandbox_mode": sandboxLabel,
+                "test_setup_cache_dir": cacheDirPath,
+            ])
+        if let runnerProfile {
+            writeStructuredRunnerLog(
+                event: "runner_profile_detected",
+                fields: [
+                    "runner_id": workerID,
+                    "platform": runnerProfile.platform,
+                    "architecture": runnerProfile.architecture,
+                    "languages": runnerProfile.languageVersions.map { "\($0.language)=\($0.version)" },
+                    "capabilities": runnerProfile.capabilities.map(\.name),
+                ])
         }
         try await daemon.run()
     }
@@ -220,7 +236,8 @@ func defaultWorkerSecretFilePaths() -> [String] {
 
 func readWorkerSecretFromFile(path: String) -> String? {
     guard !path.isEmpty,
-          let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+        let raw = try? String(contentsOfFile: path, encoding: .utf8)
+    else {
         return nil
     }
 
@@ -238,9 +255,9 @@ actor WorkerDaemon {
         return URLSession(configuration: cfg)
     }()
 
-    private let poller:   any JobPolling
+    private let poller: any JobPolling
     private let reporter: any Reporting
-    private let runner:   any ScriptRunner
+    private let runner: any ScriptRunner
     private let apiBaseURL: URL
     private let workerID: String
     private let signer: WorkerRequestSigner
@@ -253,9 +270,9 @@ actor WorkerDaemon {
     private var activeJobs = 0
 
     init(
-        poller:   any JobPolling,
+        poller: any JobPolling,
         reporter: any Reporting,
-        runner:   any ScriptRunner,
+        runner: any ScriptRunner,
         apiBaseURL: URL,
         workerID: String,
         workerSecret: String,
@@ -265,25 +282,27 @@ actor WorkerDaemon {
         testSetupCache: TestSetupCache = TestSetupCache(),
         config: RunnerDaemonConfig = .loadFromEnvironment()
     ) {
-        self.poller            = poller
-        self.reporter          = reporter
-        self.runner            = runner
-        self.apiBaseURL        = apiBaseURL
-        self.workerID          = workerID
-        self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+        self.poller = poller
+        self.reporter = reporter
+        self.runner = runner
+        self.apiBaseURL = apiBaseURL
+        self.workerID = workerID
+        self.signer = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.maxConcurrentJobs = maxConcurrentJobs
-        self.runnerProfile     = runnerProfile
+        self.runnerProfile = runnerProfile
         self.downloadRetryPolicy = downloadRetryPolicy
-        self.testSetupCache    = testSetupCache
-        self.config            = config
+        self.testSetupCache = testSetupCache
+        self.config = config
     }
 
     func run() async throws {
         defer {
-            writeStructuredRunnerLog(event: "runner_shutdown", fields: [
-                "runner_id": workerID,
-                "status": "stopped",
-            ])
+            writeStructuredRunnerLog(
+                event: "runner_shutdown",
+                fields: [
+                    "runner_id": workerID,
+                    "status": "stopped",
+                ])
         }
         try await withThrowingDiscardingTaskGroup { group in
             for slot in 0..<maxConcurrentJobs {
@@ -302,39 +321,47 @@ actor WorkerDaemon {
         while !Task.isCancelled {
             do {
                 let currentActiveJobs = activeJobs
-                writeStructuredRunnerLog(event: "poll_cycle_start", fields: [
-                    "runner_id": workerID,
-                    "slot": slot,
-                    "runner_active_jobs": currentActiveJobs,
-                    "max_jobs": maxConcurrentJobs,
-                    "api_base_url": apiBaseURL.absoluteString,
-                ])
+                writeStructuredRunnerLog(
+                    event: "poll_cycle_start",
+                    fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "runner_active_jobs": currentActiveJobs,
+                        "max_jobs": maxConcurrentJobs,
+                        "api_base_url": apiBaseURL.absoluteString,
+                    ])
                 if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {
                     recordConnectionRestoredIfNeeded(stage: .poll)
                     backoff.reset()
-                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "job_assigned",
-                        "submission_id": job.submissionID,
-                    ])
+                    writeStructuredRunnerLog(
+                        event: "poll_cycle_end",
+                        fields: [
+                            "runner_id": workerID,
+                            "slot": slot,
+                            "status": "job_assigned",
+                            "submission_id": job.submissionID,
+                        ])
                     do {
                         try await process(job)
                     } catch {
-                        writeStructuredRunnerLog(event: "local_execution_error", fields: [
-                            "runner_id": workerID,
-                            "submission_id": job.submissionID,
-                            "error_type": String(describing: type(of: error)),
-                            "error_message_summary": String(describing: error),
-                        ])
+                        writeStructuredRunnerLog(
+                            event: "local_execution_error",
+                            fields: [
+                                "runner_id": workerID,
+                                "submission_id": job.submissionID,
+                                "error_type": String(describing: type(of: error)),
+                                "error_message_summary": String(describing: error),
+                            ])
                         try? await reportProcessingFailure(job: job, error: error)
                     }
                 } else {
-                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "no_job",
-                    ])
+                    writeStructuredRunnerLog(
+                        event: "poll_cycle_end",
+                        fields: [
+                            "runner_id": workerID,
+                            "slot": slot,
+                            "status": "no_job",
+                        ])
                     let delay = backoff.next()
                     try await Task.sleep(for: delay)
                 }
@@ -346,15 +373,17 @@ actor WorkerDaemon {
                     message: message,
                     retryInSeconds: Int(seconds)
                 )
-                writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                    "runner_id": workerID,
-                    "slot": slot,
-                    "status": "duplicate_worker_id",
-                    "failure_stage": RunnerRetryStage.poll.rawValue,
-                    "retryable": true,
-                    "error_message_summary": message,
-                    "retry_in_seconds": seconds,
-                ])
+                writeStructuredRunnerLog(
+                    event: "poll_cycle_end",
+                    fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "duplicate_worker_id",
+                        "failure_stage": RunnerRetryStage.poll.rawValue,
+                        "retryable": true,
+                        "error_message_summary": message,
+                        "retry_in_seconds": seconds,
+                    ])
                 try await Task.sleep(for: delay)
             } catch JobPollerError.transportError(let underlying) {
                 // Server is unreachable (connection refused, DNS failure, etc.).
@@ -367,15 +396,17 @@ actor WorkerDaemon {
                     message: underlying.localizedDescription,
                     retryInSeconds: Int(seconds)
                 )
-                writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                    "runner_id": workerID,
-                    "slot": slot,
-                    "status": "transport_error",
-                    "failure_stage": RunnerRetryStage.poll.rawValue,
-                    "retryable": true,
-                    "error_message_summary": underlying.localizedDescription,
-                    "retry_in_seconds": seconds,
-                ])
+                writeStructuredRunnerLog(
+                    event: "poll_cycle_end",
+                    fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "transport_error",
+                        "failure_stage": RunnerRetryStage.poll.rawValue,
+                        "retryable": true,
+                        "error_message_summary": underlying.localizedDescription,
+                        "retry_in_seconds": seconds,
+                    ])
                 try await Task.sleep(for: delay)
             } catch JobPollerError.httpError(let statusCode, let body) {
                 let disposition = classifyPollHTTPRetry(statusCode: statusCode, body: body)
@@ -388,27 +419,31 @@ actor WorkerDaemon {
                         message: message,
                         retryInSeconds: Int(seconds)
                     )
-                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "http_error",
-                        "failure_stage": RunnerRetryStage.poll.rawValue,
-                        "retryable": true,
-                        "http_status": statusCode,
-                        "error_message_summary": message,
-                        "retry_in_seconds": seconds,
-                    ])
+                    writeStructuredRunnerLog(
+                        event: "poll_cycle_end",
+                        fields: [
+                            "runner_id": workerID,
+                            "slot": slot,
+                            "status": "http_error",
+                            "failure_stage": RunnerRetryStage.poll.rawValue,
+                            "retryable": true,
+                            "http_status": statusCode,
+                            "error_message_summary": message,
+                            "retry_in_seconds": seconds,
+                        ])
                     try await Task.sleep(for: delay)
                 case .terminal(let message):
-                    writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "http_error",
-                        "failure_stage": RunnerRetryStage.poll.rawValue,
-                        "retryable": false,
-                        "http_status": statusCode,
-                        "error_message_summary": message,
-                    ])
+                    writeStructuredRunnerLog(
+                        event: "poll_cycle_end",
+                        fields: [
+                            "runner_id": workerID,
+                            "slot": slot,
+                            "status": "http_error",
+                            "failure_stage": RunnerRetryStage.poll.rawValue,
+                            "retryable": false,
+                            "http_status": statusCode,
+                            "error_message_summary": message,
+                        ])
                     throw JobPollerError.httpError(statusCode, body)
                 }
             } catch JobPollerError.unexpectedResponse {
@@ -419,15 +454,17 @@ actor WorkerDaemon {
                     message: "unexpected response from API server",
                     retryInSeconds: Int(seconds)
                 )
-                writeStructuredRunnerLog(event: "poll_cycle_end", fields: [
-                    "runner_id": workerID,
-                    "slot": slot,
-                    "status": "unexpected_response",
-                    "failure_stage": RunnerRetryStage.poll.rawValue,
-                    "retryable": true,
-                    "error_message_summary": "unexpected response from API server",
-                    "retry_in_seconds": seconds,
-                ])
+                writeStructuredRunnerLog(
+                    event: "poll_cycle_end",
+                    fields: [
+                        "runner_id": workerID,
+                        "slot": slot,
+                        "status": "unexpected_response",
+                        "failure_stage": RunnerRetryStage.poll.rawValue,
+                        "retryable": true,
+                        "error_message_summary": "unexpected response from API server",
+                        "retry_in_seconds": seconds,
+                    ])
                 try await Task.sleep(for: delay)
             }
         }
@@ -441,15 +478,17 @@ actor WorkerDaemon {
         defer { activeJobs = max(0, activeJobs - 1) }
         var stageTimings = JobStageTimings()
 
-        writeStructuredRunnerLog(event: "job_accepted", fields: [
-            "runner_id": workerID,
-            "submission_id": job.submissionID,
-            "job_id": job.submissionID,
-            "test_setup_id": job.testSetupID,
-            "attempt_number": job.attemptNumber,
-            "runner_active_jobs": activeJobs,
-            "max_jobs": maxConcurrentJobs,
-        ])
+        writeStructuredRunnerLog(
+            event: "job_accepted",
+            fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "job_id": job.submissionID,
+                "test_setup_id": job.testSetupID,
+                "attempt_number": job.attemptNumber,
+                "runner_active_jobs": activeJobs,
+                "max_jobs": maxConcurrentJobs,
+            ])
         try? await sendHeartbeat()
 
         // Heartbeat loop scoped to the lifetime of this job. We use a manual
@@ -482,15 +521,18 @@ actor WorkerDaemon {
         let tempRoot = FileManager.default.temporaryDirectory
         let freeDiskMBAtStart = freeSpaceMB(at: tempRoot)
         if config.minFreeDiskMB > 0,
-           let freeMB = freeDiskMBAtStart,
-           freeMB < config.minFreeDiskMB {
-            writeStructuredRunnerLog(event: "insufficient_disk_space", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "path": tempRoot.path,
-                "free_mb": freeMB,
-                "required_mb": config.minFreeDiskMB,
-            ])
+            let freeMB = freeDiskMBAtStart,
+            freeMB < config.minFreeDiskMB
+        {
+            writeStructuredRunnerLog(
+                event: "insufficient_disk_space",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "path": tempRoot.path,
+                    "free_mb": freeMB,
+                    "required_mb": config.minFreeDiskMB,
+                ])
             throw WorkerDaemonError.insufficientDiskSpace(
                 path: tempRoot.path,
                 freeMB: freeMB,
@@ -498,7 +540,8 @@ actor WorkerDaemon {
             )
         }
 
-        let workDir = tempRoot
+        let workDir =
+            tempRoot
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
         let workDirSetupStartedAt = Date()
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
@@ -547,10 +590,10 @@ actor WorkerDaemon {
                 "path": tempRoot.path,
                 "min_free_disk_mb": config.minFreeDiskMB,
             ]
-            if let v = freeDiskMBAtStart      { diskFields["free_disk_mb_at_start"] = v }
-            if let v = freeDiskMBAtEnd        { diskFields["free_disk_mb_at_end"] = v }
-            if let v = freeDiskMBPostCleanup  { diskFields["free_disk_mb_post_cleanup"] = v }
-            if let v = workdirPeakBytes       { diskFields["workdir_peak_bytes"] = v }
+            if let v = freeDiskMBAtStart { diskFields["free_disk_mb_at_start"] = v }
+            if let v = freeDiskMBAtEnd { diskFields["free_disk_mb_at_end"] = v }
+            if let v = freeDiskMBPostCleanup { diskFields["free_disk_mb_post_cleanup"] = v }
+            if let v = workdirPeakBytes { diskFields["workdir_peak_bytes"] = v }
             writeStructuredRunnerLog(event: "job_disk_usage", fields: diskFields)
         }
 
@@ -577,11 +620,13 @@ actor WorkerDaemon {
             try self.unzip(stagingZip, to: stagingDir)
             return stagingDir
         }
-        stageTimings.record("test_setup_acquire", milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000))
+        stageTimings.record(
+            "test_setup_acquire", milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000))
         defer { try? FileManager.default.removeItem(at: testSetupDir) }
 
         try await submissionDownload
-        stageTimings.record("submission_download", milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000))
+        stageTimings.record(
+            "submission_download", milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000))
 
         let manifest = job.manifest
 
@@ -614,7 +659,8 @@ actor WorkerDaemon {
             do {
                 let starterPath = testSetupDir.appendingPathComponent(starterName)
                 if FileManager.default.fileExists(atPath: starterPath.path),
-                   job.submissionFilename != starterName {
+                    job.submissionFilename != starterName
+                {
                     try FileManager.default.removeItem(at: starterPath)
                 }
             }
@@ -663,7 +709,8 @@ actor WorkerDaemon {
             testSetupDir: testSetupDir,
             job: job
         )
-        stageTimings.record("test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
+        stageTimings.record(
+            "test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
 
         // Sample disk usage at end-of-execution, before the report is sent,
         // so the persisted diagnostics reflect this job's actual footprint.
@@ -698,19 +745,24 @@ actor WorkerDaemon {
         do {
             let resultReportStartedAt = Date()
             try await reporter.report(WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
-            stageTimings.record("result_report", milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000))
-            writeStructuredRunnerLog(event: "result_submission_succeeded", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "status": inferredCollectionStatus(collection).rawValue,
-            ])
+            stageTimings.record(
+                "result_report", milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000))
+            writeStructuredRunnerLog(
+                event: "result_submission_succeeded",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "status": inferredCollectionStatus(collection).rawValue,
+                ])
         } catch {
-            writeStructuredRunnerLog(event: "result_submission_failed", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "error_type": String(describing: type(of: error)),
-                "error_message_summary": String(describing: error),
-            ])
+            writeStructuredRunnerLog(
+                event: "result_submission_failed",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "error_type": String(describing: type(of: error)),
+                    "error_message_summary": String(describing: error),
+                ])
             throw error
         }
     }
@@ -732,41 +784,47 @@ actor WorkerDaemon {
 
         for entry in manifest.testSuites {
             if let blockedBy = entry.dependsOn.first(where: { !passedScripts.contains($0) }),
-               !entry.dependsOn.isEmpty {
+                !entry.dependsOn.isEmpty
+            {
                 let baseName = (entry.script as NSString).deletingPathExtension
                 let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-                outcomes.append(TestOutcome(
-                    testName:           displayName ?? (baseName.isEmpty ? entry.script : baseName),
-                    testClass:          nil,
-                    tier:               entry.tier,
-                    status:             .fail,
-                    shortResult:        "Skipped: prerequisite '\(blockedBy)' did not pass",
-                    longResult:         nil,
-                    executionTimeMs:    0,
-                    memoryUsageBytes:   nil,
-                    attemptNumber:      job.attemptNumber,
-                    isFirstPassSuccess: false
-                ))
+                outcomes.append(
+                    TestOutcome(
+                        testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
+                        testClass: nil,
+                        tier: entry.tier,
+                        status: .fail,
+                        shortResult: "Skipped: prerequisite '\(blockedBy)' did not pass",
+                        longResult: nil,
+                        executionTimeMs: 0,
+                        memoryUsageBytes: nil,
+                        attemptNumber: job.attemptNumber,
+                        isFirstPassSuccess: false
+                    ))
                 continue
             }
 
             let scriptURL = testSetupDir.appendingPathComponent(entry.script)
             guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-                writeStructuredRunnerLog(event: "local_execution_error", fields: [
-                    "runner_id": workerID,
-                    "submission_id": job.submissionID,
-                    "test_id": entry.script,
-                    "error_type": "missing_script",
-                    "error_message_summary": entry.script,
-                ])
+                writeStructuredRunnerLog(
+                    event: "local_execution_error",
+                    fields: [
+                        "runner_id": workerID,
+                        "submission_id": job.submissionID,
+                        "test_id": entry.script,
+                        "error_type": "missing_script",
+                        "error_message_summary": entry.script,
+                    ])
                 continue
             }
 
-            writeStructuredRunnerLog(event: "test_execution_start", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "test_id": entry.script,
-            ])
+            writeStructuredRunnerLog(
+                event: "test_execution_start",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "test_id": entry.script,
+                ])
 
             // Phase 1 of issue #461 — surface the per-(student, assignment)
             // seed to the grading subprocess. Nil seed means non-personalized
@@ -776,22 +834,25 @@ actor WorkerDaemon {
                 scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
             }
             let output = await runner.run(
-                script:           scriptURL,
-                workDir:          testSetupDir,
+                script: scriptURL,
+                workDir: testSetupDir,
                 timeLimitSeconds: manifest.timeLimitSeconds,
-                env:              scriptEnv
+                env: scriptEnv
             )
 
             let isFirstAttempt = job.attemptNumber == 1
-            let outcome = interpretOutput(output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
+            let outcome = interpretOutput(
+                output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
             outcomes.append(outcome)
-            writeStructuredRunnerLog(event: output.timedOut ? "timeout" : "test_execution_end", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "test_id": normalizedTestID(for: outcome),
-                "status": outcome.status.rawValue,
-                "execution_ms": outcome.executionTimeMs,
-            ])
+            writeStructuredRunnerLog(
+                event: output.timedOut ? "timeout" : "test_execution_end",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "test_id": normalizedTestID(for: outcome),
+                    "status": outcome.status.rawValue,
+                    "execution_ms": outcome.executionTimeMs,
+                ])
             if outcome.status == .pass {
                 passedScripts.insert(entry.script)
             }
@@ -813,9 +874,9 @@ actor WorkerDaemon {
             status = .timeout
         } else {
             switch output.exitCode {
-            case 0:  status = .pass
-            case 1:  status = .fail
-            case 3:  status = .fail  // chickadee.py (Marmoset) uses exit 3 for "failed"
+            case 0: status = .pass
+            case 1: status = .fail
+            case 3: status = .fail  // chickadee.py (Marmoset) uses exit 3 for "failed"
             default: status = .error
             }
         }
@@ -829,8 +890,9 @@ actor WorkerDaemon {
         var shortResult: String
 
         if let line = lastLine,
-           let data = line.data(using: .utf8),
-           let json = try? JSONDecoder().decode(ScriptResultJSON.self, from: data) {
+            let data = line.data(using: .utf8),
+            let json = try? JSONDecoder().decode(ScriptResultJSON.self, from: data)
+        {
             shortResult = json.shortResult ?? status.defaultShortResult
             // json.score reserved for Phase 5 gamification
         } else if let line = lastLine {
@@ -845,8 +907,8 @@ actor WorkerDaemon {
         // remove it so only human-readable output appears in longResult.
         let strippedStdout: String = {
             guard let line = lastLine,
-                  let data = line.data(using: .utf8),
-                  (try? JSONDecoder().decode(ScriptResultJSON.self, from: data)) != nil
+                let data = line.data(using: .utf8),
+                (try? JSONDecoder().decode(ScriptResultJSON.self, from: data)) != nil
             else { return output.stdout }
             var lines = output.stdout.components(separatedBy: "\n")
             if let lastIdx = lines.indices.last(where: { !lines[$0].trimmingCharacters(in: .whitespaces).isEmpty }) {
@@ -865,16 +927,16 @@ actor WorkerDaemon {
         let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
 
         return TestOutcome(
-            testName:           displayName ?? (baseName.isEmpty ? entry.script : baseName),
-            testClass:          nil,
-            tier:               entry.tier,
-            status:             status,
-            shortResult:        shortResult,
-            longResult:         longResult,
-            points:             entry.points,
-            executionTimeMs:    output.executionTimeMs,
-            memoryUsageBytes:   nil,
-            attemptNumber:      attemptNumber,
+            testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
+            testClass: nil,
+            tier: entry.tier,
+            status: status,
+            shortResult: shortResult,
+            longResult: longResult,
+            points: entry.points,
+            executionTimeMs: output.executionTimeMs,
+            memoryUsageBytes: nil,
+            attemptNumber: attemptNumber,
             isFirstPassSuccess: isFirstAttempt && status == .pass
         )
     }
@@ -887,35 +949,35 @@ actor WorkerDaemon {
         job: Job,
         startedAt: Date
     ) -> TestOutcomeCollection {
-        let passCount    = outcomes.filter { $0.status == .pass    }.count
-        let failCount    = outcomes.filter { $0.status == .fail    }.count
-        let errorCount   = outcomes.filter { $0.status == .error   }.count
+        let passCount = outcomes.filter { $0.status == .pass }.count
+        let failCount = outcomes.filter { $0.status == .fail }.count
+        let errorCount = outcomes.filter { $0.status == .error }.count
         let timeoutCount = outcomes.filter { $0.status == .timeout }.count
-        let totalMs      = outcomes.reduce(0) { $0 + $1.executionTimeMs }
-        let totalPoints  = outcomes.reduce(0) { $0 + $1.points }
+        let totalMs = outcomes.reduce(0) { $0 + $1.executionTimeMs }
+        let totalPoints = outcomes.reduce(0) { $0 + $1.points }
         let earnedPoints = outcomes.filter { $0.status == .pass }.reduce(0) { $0 + $1.points }
 
         let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
 
         return TestOutcomeCollection(
-            submissionID:    job.submissionID,
-            testSetupID:     job.testSetupID,
-            attemptNumber:   job.attemptNumber,
-            buildStatus:     buildStatus,
-            compilerOutput:  nil,
-            outcomes:        outcomes,
-            totalTests:      outcomes.count,
-            passCount:       passCount,
-            failCount:       failCount,
-            errorCount:      errorCount,
-            timeoutCount:    timeoutCount,
+            submissionID: job.submissionID,
+            testSetupID: job.testSetupID,
+            attemptNumber: job.attemptNumber,
+            buildStatus: buildStatus,
+            compilerOutput: nil,
+            outcomes: outcomes,
+            totalTests: outcomes.count,
+            passCount: passCount,
+            failCount: failCount,
+            errorCount: errorCount,
+            timeoutCount: timeoutCount,
             executionTimeMs: totalMs,
-            totalPoints:     totalPoints,
-            earnedPoints:    earnedPoints,
-            warnings:        warnings,
-            jobStartedAt:    startedAt,
-            runnerVersion:   ChickadeeVersion.current,
-            timestamp:       Date()
+            totalPoints: totalPoints,
+            earnedPoints: earnedPoints,
+            warnings: warnings,
+            jobStartedAt: startedAt,
+            runnerVersion: ChickadeeVersion.current,
+            timestamp: Date()
         )
     }
 
@@ -950,15 +1012,17 @@ actor WorkerDaemon {
                     message: context.message,
                     retryInSeconds: context.retryInSeconds
                 )
-                writeStructuredRunnerLog(event: "network_retry_scheduled", fields: [
-                    "runner_id": self.workerID,
-                    "failure_stage": context.stage.rawValue,
-                    "attempt": context.attempt,
-                    "max_attempts": context.maxAttempts,
-                    "retry_in_seconds": context.retryInSeconds ?? 0,
-                    "retryable": context.retryable,
-                    "error_message_summary": context.message,
-                ])
+                writeStructuredRunnerLog(
+                    event: "network_retry_scheduled",
+                    fields: [
+                        "runner_id": self.workerID,
+                        "failure_stage": context.stage.rawValue,
+                        "attempt": context.attempt,
+                        "max_attempts": context.maxAttempts,
+                        "retry_in_seconds": context.retryInSeconds ?? 0,
+                        "retryable": context.retryable,
+                        "error_message_summary": context.message,
+                    ])
             }
         ) {
             var request = URLRequest(url: url)
@@ -984,7 +1048,7 @@ actor WorkerDaemon {
     nonisolated func unzip(_ zipFile: URL, to directory: URL) throws {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        proc.arguments     = ["-q", "-o", zipFile.path, "-d", directory.path]
+        proc.arguments = ["-q", "-o", zipFile.path, "-d", directory.path]
         try proc.run()
         proc.waitUntilExit()
         guard proc.terminationStatus == 0 else {
@@ -994,8 +1058,8 @@ actor WorkerDaemon {
 
     private func runMake(in directory: URL, target: String?) throws {
         let proc = Process()
-        proc.executableURL   = URL(fileURLWithPath: "/usr/bin/make")
-        proc.arguments       = target.map { [$0] } ?? []
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/make")
+        proc.arguments = target.map { [$0] } ?? []
         proc.currentDirectoryURL = directory
         try proc.run()
         proc.waitUntilExit()
@@ -1009,22 +1073,22 @@ actor WorkerDaemon {
     private func reportProcessingFailure(job: Job, error: Error) async throws {
         let message = String(describing: error)
         let collection = TestOutcomeCollection(
-            submissionID:    job.submissionID,
-            testSetupID:     job.testSetupID,
-            attemptNumber:   job.attemptNumber,
-            buildStatus:     .failed,
-            compilerOutput:  message,
-            outcomes:        [],
-            totalTests:      0,
-            passCount:       0,
-            failCount:       0,
-            errorCount:      1,
-            timeoutCount:    0,
+            submissionID: job.submissionID,
+            testSetupID: job.testSetupID,
+            attemptNumber: job.attemptNumber,
+            buildStatus: .failed,
+            compilerOutput: message,
+            outcomes: [],
+            totalTests: 0,
+            passCount: 0,
+            failCount: 0,
+            errorCount: 1,
+            timeoutCount: 0,
             executionTimeMs: 0,
-            warnings:        [],
-            jobStartedAt:    Date(),
-            runnerVersion:   ChickadeeVersion.current,
-            timestamp:       Date()
+            warnings: [],
+            jobStartedAt: Date(),
+            runnerVersion: ChickadeeVersion.current,
+            timestamp: Date()
         )
         try await reporter.report(collection)
     }
@@ -1058,32 +1122,38 @@ actor WorkerDaemon {
     ) {
         if !serverConnectionLost {
             serverConnectionLost = true
-            writeStructuredRunnerLog(event: "server_connection_lost", fields: [
-                "runner_id": workerID,
-                "failure_stage": stage.rawValue,
-                "retryable": true,
-                "retry_in_seconds": retryInSeconds ?? 0,
-                "error_message_summary": message,
-            ])
+            writeStructuredRunnerLog(
+                event: "server_connection_lost",
+                fields: [
+                    "runner_id": workerID,
+                    "failure_stage": stage.rawValue,
+                    "retryable": true,
+                    "retry_in_seconds": retryInSeconds ?? 0,
+                    "error_message_summary": message,
+                ])
         } else if stage == .heartbeat, let retryInSeconds {
-            writeStructuredRunnerLog(event: "heartbeat_retry_scheduled", fields: [
-                "runner_id": workerID,
-                "failure_stage": stage.rawValue,
-                "retryable": true,
-                "retry_in_seconds": retryInSeconds,
-                "error_message_summary": message,
-            ])
+            writeStructuredRunnerLog(
+                event: "heartbeat_retry_scheduled",
+                fields: [
+                    "runner_id": workerID,
+                    "failure_stage": stage.rawValue,
+                    "retryable": true,
+                    "retry_in_seconds": retryInSeconds,
+                    "error_message_summary": message,
+                ])
         }
     }
 
     private func recordConnectionRestoredIfNeeded(stage: RunnerRetryStage) {
         guard serverConnectionLost else { return }
         serverConnectionLost = false
-        writeStructuredRunnerLog(event: "server_connection_restored", fields: [
-            "runner_id": workerID,
-            "failure_stage": stage.rawValue,
-            "status": "ok",
-        ])
+        writeStructuredRunnerLog(
+            event: "server_connection_restored",
+            fields: [
+                "runner_id": workerID,
+                "failure_stage": stage.rawValue,
+                "status": "ok",
+            ])
     }
 
     private func normalizedTestID(for outcome: TestOutcome) -> String {
@@ -1127,7 +1197,8 @@ actor WorkerDaemon {
 /// treat that as "skip the precheck and let downstream errors surface".
 func freeSpaceMB(at path: URL) -> Int? {
     guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path.path),
-          let free = attrs[.systemFreeSize] as? NSNumber else {
+        let free = attrs[.systemFreeSize] as? NSNumber
+    else {
         return nil
     }
     return Int(truncating: free) / (1024 * 1024)
@@ -1142,21 +1213,25 @@ func freeSpaceMB(at path: URL) -> Int? {
 func directorySizeBytes(at directory: URL) -> Int? {
     var isDirectory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-          isDirectory.boolValue else {
+        isDirectory.boolValue
+    else {
         return nil
     }
-    guard let enumerator = FileManager.default.enumerator(
-        at: directory,
-        includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-        options: [.skipsHiddenFiles]
-    ) else {
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+    else {
         return nil
     }
     var total: Int = 0
     for case let url as URL in enumerator {
         guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-              values.isRegularFile == true,
-              let size = values.fileSize else { continue }
+            values.isRegularFile == true,
+            let size = values.fileSize
+        else { continue }
         total += size
     }
     return total
@@ -1169,11 +1244,13 @@ private func mergeDirectoryContents(from sourceDirectory: URL, into destinationD
     let sourceRoot = sourceDirectory.resolvingSymlinksInPath().standardizedFileURL
     let sourceRootComponents = sourceRoot.pathComponents
 
-    guard let enumerator = FileManager.default.enumerator(
-        at: sourceRoot,
-        includingPropertiesForKeys: [.isRegularFileKey],
-        options: [.skipsHiddenFiles]
-    ) else {
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: sourceRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+    else {
         return
     }
 
@@ -1184,7 +1261,8 @@ private func mergeDirectoryContents(from sourceDirectory: URL, into destinationD
         let resolved = sourceURL.resolvingSymlinksInPath().standardizedFileURL
         let entryComponents = resolved.pathComponents
         guard entryComponents.count > sourceRootComponents.count,
-              Array(entryComponents.prefix(sourceRootComponents.count)) == sourceRootComponents else {
+            Array(entryComponents.prefix(sourceRootComponents.count)) == sourceRootComponents
+        else {
             // Enumerator handed us something outside the source root — skip
             // rather than write to an unintended destination.
             continue
@@ -1249,11 +1327,13 @@ private func shouldNormalizePythonSubmission(
         return true
     }
 
-    guard let enumerator = FileManager.default.enumerator(
-        at: submissionDirectory,
-        includingPropertiesForKeys: [.isRegularFileKey],
-        options: [.skipsHiddenFiles]
-    ) else {
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: submissionDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+    else {
         return false
     }
     for case let fileURL as URL in enumerator {
@@ -1292,9 +1372,9 @@ private struct ScriptResultJSON: Decodable {
 private extension TestStatus {
     var defaultShortResult: String {
         switch self {
-        case .pass:    return "passed"
-        case .fail:    return "failed"
-        case .error:   return "error"
+        case .pass: return "passed"
+        case .fail: return "failed"
+        case .error: return "error"
         case .timeout: return "timed out"
         }
     }
@@ -1311,13 +1391,14 @@ enum WorkerDaemonError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .downloadFailed(let url):  return "Failed to download \(url)"
+        case .downloadFailed(let url): return "Failed to download \(url)"
         case .httpDownloadFailure(let statusCode, let body):
             return "HTTP \(statusCode) while downloading artifacts: \(body)"
-        case .unzipFailed(let url):     return "Failed to unzip \(url.lastPathComponent)"
-        case .makeFailed(let target):   return "make \(target ?? "") failed"
+        case .unzipFailed(let url): return "Failed to unzip \(url.lastPathComponent)"
+        case .makeFailed(let target): return "make \(target ?? "") failed"
         case .insufficientDiskSpace(let path, let freeMB, let requiredMB):
-            return "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
+            return
+                "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
         }
     }
 }

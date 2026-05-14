@@ -18,7 +18,8 @@ struct AddCourseEnrollmentMode: AsyncMigration {
 
         // Data migration: courses that were closed get the 'closed' mode.
         let sql = database as! SQLDatabase
-        let closedPredicate = sql.dialect.name == "postgresql"
+        let closedPredicate =
+            sql.dialect.name == "postgresql"
             ? "open_enrollment = FALSE"
             : "open_enrollment = 0"
         try await sql

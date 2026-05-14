@@ -1,5 +1,5 @@
-import Foundation
 import Core
+import Foundation
 
 enum DetectedSubmissionKind {
     case pythonScript
@@ -52,20 +52,24 @@ struct SubmissionNormalizer {
         var preferredStudentModule: String? = nil
         var unsupportedOnlyFilename: String? = nil
 
-        writeStructuredRunnerLog(event: "submission_normalization_start", fields: [
-            "submission_directory": submissionDirectory.path,
-            "workspace_directory": workspaceDirectory.path,
-            "submission_filename": submissionFilename ?? "",
-            "file_count": submissionFiles.count,
-        ])
+        writeStructuredRunnerLog(
+            event: "submission_normalization_start",
+            fields: [
+                "submission_directory": submissionDirectory.path,
+                "workspace_directory": workspaceDirectory.path,
+                "submission_filename": submissionFilename ?? "",
+                "file_count": submissionFiles.count,
+            ])
 
         for fileURL in submissionFiles {
             let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
             let mimeType = try mimeTypeDetector.detectMimeType(for: fileURL)
-            writeStructuredRunnerLog(event: "submission_file_mime_detected", fields: [
-                "file": fileRelativePath,
-                "mime_type": mimeType,
-            ])
+            writeStructuredRunnerLog(
+                event: "submission_file_mime_detected",
+                fields: [
+                    "file": fileRelativePath,
+                    "mime_type": mimeType,
+                ])
 
             let classification = try classify(fileURL: fileURL, mimeType: mimeType)
             switch classification {
@@ -79,11 +83,13 @@ struct SubmissionNormalizer {
                 try FileManager.default.copyItem(at: fileURL, to: destinationURL)
                 producedPythonFiles.append(destinationURL)
                 preferredStudentModule = preferredStudentModule ?? preferredModuleIfRootLevel(fileRelativePath)
-                writeStructuredRunnerLog(event: "submission_file_classified", fields: [
-                    "file": fileRelativePath,
-                    "classification": "python_script",
-                    "generated_file": fileRelativePath,
-                ])
+                writeStructuredRunnerLog(
+                    event: "submission_file_classified",
+                    fields: [
+                        "file": fileRelativePath,
+                        "classification": "python_script",
+                        "generated_file": fileRelativePath,
+                    ])
 
             case .jupyterNotebook:
                 let data = try Data(contentsOf: fileURL)
@@ -102,9 +108,11 @@ struct SubmissionNormalizer {
                 )
                 try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)
                 producedPythonFiles.append(destinationURL)
-                preferredStudentModule = preferredStudentModule ?? preferredModuleIfRootLevel(
-                    relativePath(of: destinationURL, under: workspaceDirectory)
-                )
+                preferredStudentModule =
+                    preferredStudentModule
+                    ?? preferredModuleIfRootLevel(
+                        relativePath(of: destinationURL, under: workspaceDirectory)
+                    )
 
                 // v0.4.114: also preserve the original notebook bytes
                 // alongside the flattened .py so source-level checks
@@ -127,23 +135,27 @@ struct SubmissionNormalizer {
                         "File \(fileURL.lastPathComponent) appears to be a Jupyter notebook even though its extension is .\(ext.isEmpty ? "unknown" : ext). Code cells were extracted before grading."
                     )
                 }
-                writeStructuredRunnerLog(event: "submission_file_classified", fields: [
-                    "file": fileRelativePath,
-                    "classification": "jupyter_notebook",
-                    "generated_file": relativePath(of: destinationURL, under: workspaceDirectory),
-                    "code_cell_count": extracted.codeCellCount,
-                ])
+                writeStructuredRunnerLog(
+                    event: "submission_file_classified",
+                    fields: [
+                        "file": fileRelativePath,
+                        "classification": "jupyter_notebook",
+                        "generated_file": relativePath(of: destinationURL, under: workspaceDirectory),
+                        "code_cell_count": extracted.codeCellCount,
+                    ])
 
             case .unsupported(let reason):
                 if unsupportedOnlyFilename == nil {
                     unsupportedOnlyFilename = fileURL.lastPathComponent
                 }
                 warnings.append("Ignoring unsupported file \(fileURL.lastPathComponent): \(reason)")
-                writeStructuredRunnerLog(event: "submission_file_classified", fields: [
-                    "file": fileRelativePath,
-                    "classification": "unsupported",
-                    "reason": reason,
-                ])
+                writeStructuredRunnerLog(
+                    event: "submission_file_classified",
+                    fields: [
+                        "file": fileRelativePath,
+                        "classification": "unsupported",
+                        "reason": reason,
+                    ])
             }
         }
 
@@ -151,17 +163,20 @@ struct SubmissionNormalizer {
             if submissionFiles.count == 1, let unsupportedOnlyFilename {
                 throw SubmissionNormalizationError.invalidPythonSubmission(unsupportedOnlyFilename)
             }
-            writeStructuredRunnerLog(event: "submission_normalization_failed", fields: [
-                "workspace_directory": workspaceDirectory.path,
-                "error": SubmissionNormalizationError.noPythonSourcesFound.localizedDescription,
-            ])
+            writeStructuredRunnerLog(
+                event: "submission_normalization_failed",
+                fields: [
+                    "workspace_directory": workspaceDirectory.path,
+                    "error": SubmissionNormalizationError.noPythonSourcesFound.localizedDescription,
+                ])
             throw SubmissionNormalizationError.noPythonSourcesFound
         }
 
         if let expectedFilename = singleExpectedPythonFilename(from: manifest),
-           !workspaceContains(relativePath: expectedFilename, in: workspaceDirectory),
-           producedPythonFiles.count == 1,
-           let sourceURL = producedPythonFiles.first {
+            !workspaceContains(relativePath: expectedFilename, in: workspaceDirectory),
+            producedPythonFiles.count == 1,
+            let sourceURL = producedPythonFiles.first
+        {
             let compatibilityURL = workspaceDirectory.appendingPathComponent(expectedFilename)
             try FileManager.default.createDirectory(
                 at: compatibilityURL.deletingLastPathComponent(),
@@ -176,17 +191,21 @@ struct SubmissionNormalizer {
             warnings.append(
                 "Expected file \(expectedFilename) was not present. Chickadee created a compatibility copy from the single detected Python source file."
             )
-            writeStructuredRunnerLog(event: "submission_compatibility_copy_created", fields: [
-                "expected_file": expectedFilename,
-                "source_file": relativePath(of: sourceURL, under: workspaceDirectory),
-            ])
+            writeStructuredRunnerLog(
+                event: "submission_compatibility_copy_created",
+                fields: [
+                    "expected_file": expectedFilename,
+                    "source_file": relativePath(of: sourceURL, under: workspaceDirectory),
+                ])
         }
 
-        writeStructuredRunnerLog(event: "submission_normalization_completed", fields: [
-            "workspace_directory": workspaceDirectory.path,
-            "produced_python_files": producedPythonFiles.map { relativePath(of: $0, under: workspaceDirectory) },
-            "warning_count": warnings.count,
-        ])
+        writeStructuredRunnerLog(
+            event: "submission_normalization_completed",
+            fields: [
+                "workspace_directory": workspaceDirectory.path,
+                "produced_python_files": producedPythonFiles.map { relativePath(of: $0, under: workspaceDirectory) },
+                "warning_count": warnings.count,
+            ])
 
         return NormalizationResult(
             warnings: warnings,
@@ -208,7 +227,8 @@ struct SubmissionNormalizer {
         if mimeType == "application/json" {
             let data = try Data(contentsOf: fileURL)
             let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
-            return notebookExtractor.isNotebookJSONObject(notebook) ? .jupyterNotebook : .unsupported("content is JSON but not a Jupyter notebook")
+            return notebookExtractor.isNotebookJSONObject(notebook)
+                ? .jupyterNotebook : .unsupported("content is JSON but not a Jupyter notebook")
         }
 
         if mimeType.hasPrefix("text/") || mimeType == "application/x-empty" {
@@ -219,11 +239,13 @@ struct SubmissionNormalizer {
     }
 
     private func regularFiles(in directory: URL) -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: directory,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+        else {
             return []
         }
 
@@ -243,7 +265,9 @@ struct SubmissionNormalizer {
         if ext == "ipynb" {
             return relativeNSString.deletingPathExtension + ".py"
         }
-        let stem = relativeNSString.deletingPathExtension.split(separator: "/").last.map(String.init) ?? relativeNSString.deletingPathExtension
+        let stem =
+            relativeNSString.deletingPathExtension.split(separator: "/").last.map(String.init)
+            ?? relativeNSString.deletingPathExtension
         let parent = relativeNSString.deletingLastPathComponent
         let generatedName = stem + ".extracted.py"
         if parent.isEmpty || parent == "." {

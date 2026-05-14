@@ -1,8 +1,9 @@
-import Testing
-@testable import chickadee_server
 import Fluent
-import Vapor
 import Foundation
+import Testing
+import Vapor
+
+@testable import chickadee_server
 
 @Suite(.serialized)
 struct DatabaseConfigurationTests {

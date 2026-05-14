@@ -4,8 +4,8 @@
 // Results are cached for 24 hours to avoid hammering the UW server on every
 // instructor due-date change.
 
-import Vapor
 import Foundation
+import Vapor
 
 // MARK: - Model
 
@@ -21,7 +21,7 @@ struct UWImportantDate: Codable, Sendable {
 
 actor UWImportantDatesCache {
     private let feedURL = "https://uwaterloo.ca/important-dates/important-dates/important_dates_ical.ics"
-    private let cacheDuration: TimeInterval = 60 * 60 * 24 // 24 hours
+    private let cacheDuration: TimeInterval = 60 * 60 * 24  // 24 hours
 
     private var cached: [UWImportantDate] = []
     private var cachedAt: Date?
@@ -48,7 +48,6 @@ actor UWImportantDatesCache {
         }
     }
 
-
 }
 
 // MARK: - iCalendar Parsing (free functions, testable)
@@ -59,7 +58,8 @@ func parseICSEvents(_ text: String) -> [UWImportantDate] {
     let blocks = text.components(separatedBy: "BEGIN:VEVENT")
     for block in blocks.dropFirst() {
         guard let startDate = extractICSDate(key: "DTSTART", from: block),
-              let title = extractICSSummary(from: block) else {
+            let title = extractICSSummary(from: block)
+        else {
             continue
         }
         let endDate = extractICSDate(key: "DTEND", from: block) ?? nextDayISO(startDate)
@@ -107,7 +107,8 @@ func extractICSSummary(from block: String) -> String? {
         }
     }
     let trimmed = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-    let unescaped = trimmed
+    let unescaped =
+        trimmed
         .replacingOccurrences(of: "\\,", with: ",")
         .replacingOccurrences(of: "\\;", with: ";")
         .replacingOccurrences(of: "\\n", with: " ")

@@ -3,10 +3,10 @@
 // Submission-related handlers and helpers for WebRoutes.
 // Extracted from WebRoutes.swift — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 /// Groups a flat outcome list into per-section buckets for the student
 /// submission view.  Sections are emitted in `sections` order; an
@@ -71,20 +71,22 @@ extension WebRoutes {
     func submitForm(req: Request) async throws -> Response {
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
         // Browser-graded assignments are submitted from the notebook page, not this form.
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
-           manifest.gradingMode == .browser {
+            manifest.gradingMode == .browser
+        {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
-        return try await req.view.render("submit",
+        return try await req.view.render(
+            "submit",
             SubmitContext(
                 testSetupID: setupID,
                 assignmentTitle: assignment?.title ?? setupID,
@@ -101,7 +103,7 @@ extension WebRoutes {
 
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -109,15 +111,16 @@ extension WebRoutes {
         // Browser-graded assignments must be submitted from the notebook page.
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
-           manifest.gradingMode == .browser {
+            manifest.gradingMode == .browser
+        {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
 
         _ = try await requireOpenStudentAssignment(for: setupID, on: req)
 
-        let body    = try req.content.decode(SubmitFormBody.self)
+        let body = try req.content.decode(SubmitFormBody.self)
         let subsDir = req.application.submissionsDirectory
-        let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
 
         // Decode the uploaded bytes. Vapor's File type captures the original
         // filename from the multipart Content-Disposition header automatically.
@@ -125,13 +128,13 @@ extension WebRoutes {
         let uploadFilename = body.files.filename.isEmpty ? nil : body.files.filename
 
         // Detect whether the upload is a zip by checking PK magic bytes.
-        let isZip     = fileData.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
+        let isZip = fileData.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04])
         let ext: String = {
             if isZip { return "zip" }
             return inferredRawSubmissionExtension(data: fileData, uploadFilename: uploadFilename)
         }()
         let storedExt = isZip ? "zip" : ext
-        let filePath  = subsDir + "\(subID).\(storedExt)"
+        let filePath = subsDir + "\(subID).\(storedExt)"
         try fileData.write(to: URL(fileURLWithPath: filePath))
         let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
@@ -143,13 +146,13 @@ extension WebRoutes {
             .count()
 
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setupID,
-            zipPath:       filePath,
+            id: subID,
+            testSetupID: setupID,
+            zipPath: filePath,
             attemptNumber: priorCount + 1,
-            filename:      fallbackFilename,
-            userID:        user.id,
-            kind:          APISubmission.Kind.student
+            filename: fallbackFilename,
+            userID: user.id,
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
@@ -165,7 +168,8 @@ extension WebRoutes {
         // pathfinder row directly (the unique constraint on
         // (test_setup_id, achievement_id) makes this the natural query).
         if user.role == "student", let uid = user.id {
-            let pathfinderExists = try await APIClassAchievement.query(on: req.db)
+            let pathfinderExists =
+                try await APIClassAchievement.query(on: req.db)
                 .filter(\.$testSetupID == setupID)
                 .filter(\.$achievementID == "pathfinder")
                 .first() != nil
@@ -235,7 +239,8 @@ extension WebRoutes {
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-               let pct = gradePercentFromCollectionJSON(result.collectionJSON) {
+                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+            {
                 gradeText = "\(pct)%"
             } else {
                 gradeText = "—"
@@ -243,7 +248,8 @@ extension WebRoutes {
             let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
             let nameExt = (submission.filename ?? "").lowercased()
             let canOpenInNotebook = pathExt == "ipynb" || nameExt.hasSuffix(".ipynb")
-            let openInNotebookURL = canOpenInNotebook
+            let openInNotebookURL =
+                canOpenInNotebook
                 ? "/testsetups/\(setupID)/notebook?submissionID=\(subID)"
                 : nil
             return SubmissionHistoryRow(
@@ -258,7 +264,8 @@ extension WebRoutes {
             )
         }
 
-        return try await req.view.render("submission-history",
+        return try await req.view.render(
+            "submission-history",
             SubmissionHistoryContext(
                 testSetupID: setupID,
                 assignmentTitle: title,
@@ -293,25 +300,26 @@ extension WebRoutes {
             .first()
         let allowedTiers = visibleTiers(for: user, assignment: submissionAssignment)
 
-        let isPending         = submission.status == "pending" || submission.status == "assigned"
-        let isBrowserComplete = false   // browser submissions now go straight to "complete"
+        let isPending = submission.status == "pending" || submission.status == "assigned"
+        let isBrowserComplete = false  // browser submissions now go straight to "complete"
         let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
         let nameExt = (submission.filename ?? "").lowercased()
-        let openInNotebookURL: String? = (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))
+        let openInNotebookURL: String? =
+            (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))
             ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(subID)"
             : nil
 
-        var buildFailed     = false
+        var buildFailed = false
         var compilerOutput: String? = nil
-        var warnings:       [String] = []
-        var outcomes:       [OutcomeRow] = []
-        var passCount       = 0
-        var totalTests      = 0
-        var totalPoints     = 0
-        var earnedPoints    = 0
+        var warnings: [String] = []
+        var outcomes: [OutcomeRow] = []
+        var passCount = 0
+        var totalTests = 0
+        var totalPoints = 0
+        var earnedPoints = 0
         var executionTimeMs = 0
-        var gradePercent    = 0
-        var resultSource    = ""   // "browser" | "worker" | ""
+        var gradePercent = 0
+        var resultSource = ""  // "browser" | "worker" | ""
         var badges: [AchievementBadge] = []
 
         let decoder = JSONDecoder()
@@ -323,7 +331,7 @@ extension WebRoutes {
             .sort(\.$receivedAt, .descending)
             .all()
 
-        let workerResult  = allResults.first { ($0.source ?? "worker") == "worker" }
+        let workerResult = allResults.first { ($0.source ?? "worker") == "worker" }
         let browserResult = allResults.first { $0.source == "browser" }
         let displayResult = workerResult ?? browserResult
 
@@ -337,7 +345,7 @@ extension WebRoutes {
                 .filter(\.$userID == userID)
                 .filter(\.$attemptNumber == currentAttempt - 1)
                 .first(),
-               let priorSubID = priorSub.id
+                let priorSubID = priorSub.id
             {
                 let priorResults = try await APIResult.query(on: req.db)
                     .filter(\.$submissionID == priorSubID)
@@ -345,14 +353,17 @@ extension WebRoutes {
                     .all()
                 let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
                 if let priorResult,
-                   let data = priorResult.collectionJSON.data(using: .utf8),
-                   let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+                    let data = priorResult.collectionJSON.data(using: .utf8),
+                    let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
                 {
                     for o in priorCollection.outcomes {
                         priorOutcomeMap[o.testName] = o.status
                     }
-                    priorGradePercent = priorCollection.totalPoints > 0
-                        ? Int((Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded())
+                    priorGradePercent =
+                        priorCollection.totalPoints > 0
+                        ? Int(
+                            (Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded()
+                        )
                         : nil
                 }
             }
@@ -372,35 +383,37 @@ extension WebRoutes {
         var manifestSections: [TestSuiteSection] = []
         var manifestEntries: [TestSuiteEntry] = []
         if let setup = try? await APITestSetup.find(submission.testSetupID, on: req.db),
-           let manifestData = setup.manifest.data(using: .utf8),
-           let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData) {
+            let manifestData = setup.manifest.data(using: .utf8),
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+        {
             manifestSections = props.sections
-            manifestEntries  = props.testSuites
+            manifestEntries = props.testSuites
             for entry in props.testSuites {
                 let stem = (entry.script as NSString).deletingPathExtension
                 let stemKey = stem.isEmpty ? entry.script : stem
                 if let displayName = entry.name,
-                   !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
                     displayNameMap[entry.script] = displayName
-                    displayNameMap[stemKey]      = displayName
+                    displayNameMap[stemKey] = displayName
                 }
             }
         }
 
         // Summaries for hidden tiers (students only; instructors see everything directly).
         var releaseSummary: TierSummary? = nil
-        var secretSummary:  TierSummary? = nil
+        var secretSummary: TierSummary? = nil
 
         if let result = displayResult {
             resultSource = result.source ?? "worker"
-            if let data       = result.collectionJSON.data(using: .utf8),
-               let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            if let data = result.collectionJSON.data(using: .utf8),
+                let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
             {
                 // Compute per-tier summaries from the full (unfiltered) collection.
                 if !user.isInstructor {
                     let releaseOutcomes = collection.outcomes.filter { $0.tier == .release }
-                    let secretOutcomes  = collection.outcomes.filter { $0.tier == .secret }
-                    let releaseVisible  = allowedTiers.contains("release")
+                    let secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
+                    let releaseVisible = allowedTiers.contains("release")
                     if !releaseVisible, !releaseOutcomes.isEmpty {
                         releaseSummary = TierSummary(outcomes: releaseOutcomes, isRelease: true)
                     }
@@ -409,29 +422,32 @@ extension WebRoutes {
                     }
                 }
 
-                let visible     = collection.filtering(tiers: allowedTiers)
-                buildFailed     = collection.buildStatus == .failed
-                compilerOutput  = collection.compilerOutput
-                warnings        = collection.warnings
-                passCount       = visible.passCount
-                totalTests      = visible.totalTests
+                let visible = collection.filtering(tiers: allowedTiers)
+                buildFailed = collection.buildStatus == .failed
+                compilerOutput = collection.compilerOutput
+                warnings = collection.warnings
+                passCount = visible.passCount
+                totalTests = visible.totalTests
                 executionTimeMs = collection.executionTimeMs
-                totalPoints  = visible.totalPoints
+                totalPoints = visible.totalPoints
                 earnedPoints = visible.earnedPoints
-                gradePercent = totalPoints > 0
+                gradePercent =
+                    totalPoints > 0
                     ? Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
                     : 0
-                badges = AchievementBadge.forSubmission(BadgeContext(
-                    attemptNumber:    submission.attemptNumber ?? 1,
-                    gradePercent:     gradePercent,
-                    executionTimeMs:  collection.executionTimeMs,
-                    priorGradePercent: priorGradePercent
-                ))
+                badges = AchievementBadge.forSubmission(
+                    BadgeContext(
+                        attemptNumber: submission.attemptNumber ?? 1,
+                        gradePercent: gradePercent,
+                        executionTimeMs: collection.executionTimeMs,
+                        priorGradePercent: priorGradePercent
+                    ))
                 let weighted = totalPoints != visible.totalTests
                 outcomes = visible.outcomes.map { o in
                     let skip = parseSkip(shortResult: o.shortResult)
                     let shortOutput = formattedShortResult(from: o.shortResult, status: o.status)
-                    let longOutput = o.status == .pass
+                    let longOutput =
+                        o.status == .pass
                         ? formattedPassingDetailedOutput(primary: o.longResult)
                         : formattedDetailedOutput(
                             primary: o.longResult,
@@ -441,32 +457,32 @@ extension WebRoutes {
                     let (markLabel, markClass): (String, String) = {
                         if skip.isSkipped { return ("—", "skipped") }
                         switch o.status {
-                        case .pass:    return ("Pass",    "pass")
-                        case .fail:    return ("Fail",    "fail")
-                        case .error:   return ("Error",   "error")
+                        case .pass: return ("Pass", "pass")
+                        case .fail: return ("Fail", "fail")
+                        case .error: return ("Error", "error")
                         case .timeout: return ("Timeout", "timeout")
                         }
                     }()
                     let (deltaImproved, deltaRegressed): (Bool, Bool) = {
                         guard let prior = priorOutcomeMap[o.testName] else { return (false, false) }
                         let wasPass = (prior == .pass)
-                        let isPass  = (o.status == .pass)
+                        let isPass = (o.status == .pass)
                         return (!wasPass && isPass, wasPass && !isPass)
                     }()
                     let pointsLabel: String? = weighted && o.points > 1 ? "\(o.points) pts" : nil
                     return OutcomeRow(
-                        testName:       displayNameMap[o.testName] ?? o.testName,
-                        tier:           o.tier.rawValue,
-                        status:         o.status.rawValue,
-                        shortResult:    shortOutput,
-                        longResult:     longOutput,
-                        markLabel:      markLabel,
-                        markClass:      markClass,
-                        isSkipped:      skip.isSkipped,
-                        blockerName:    skip.blockerName,
-                        deltaImproved:  deltaImproved,
+                        testName: displayNameMap[o.testName] ?? o.testName,
+                        tier: o.tier.rawValue,
+                        status: o.status.rawValue,
+                        shortResult: shortOutput,
+                        longResult: longOutput,
+                        markLabel: markLabel,
+                        markClass: markClass,
+                        isSkipped: skip.isSkipped,
+                        blockerName: skip.blockerName,
+                        deltaImproved: deltaImproved,
                         deltaRegressed: deltaRegressed,
-                        pointsLabel:    pointsLabel
+                        pointsLabel: pointsLabel
                     )
                 }
             }
@@ -490,8 +506,9 @@ extension WebRoutes {
         // mid-flight), pad with nils so the bucketing falls into
         // Ungrouped instead of misattributing outcomes.
         if sectionIDPerOutcome.count < outcomes.count {
-            sectionIDPerOutcome.append(contentsOf:
-                Array(repeating: String?.none, count: outcomes.count - sectionIDPerOutcome.count))
+            sectionIDPerOutcome.append(
+                contentsOf:
+                    Array(repeating: String?.none, count: outcomes.count - sectionIDPerOutcome.count))
         } else if sectionIDPerOutcome.count > outcomes.count {
             sectionIDPerOutcome = Array(sectionIDPerOutcome.prefix(outcomes.count))
         }
@@ -504,44 +521,44 @@ extension WebRoutes {
         let hasDelta = !priorOutcomeMap.isEmpty
         let deltaHeaderText: String? = {
             guard hasDelta else { return nil }
-            let improved  = outcomes.filter { $0.deltaImproved  }.count
+            let improved = outcomes.filter { $0.deltaImproved }.count
             let regressed = outcomes.filter { $0.deltaRegressed }.count
             var parts: [String] = []
-            if improved  > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
+            if improved > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
             if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }
             if parts.isEmpty { return "No change since attempt \(currentAttempt - 1)" }
             return parts.joined(separator: " · ") + " since attempt \(currentAttempt - 1)"
         }()
 
         let ctx = SubmissionContext(
-            submissionID:      subID,
-            testSetupID:       submission.testSetupID,
-            status:            submission.status,
-            attemptNumber:     submission.attemptNumber ?? 1,
+            submissionID: subID,
+            testSetupID: submission.testSetupID,
+            status: submission.status,
+            attemptNumber: submission.attemptNumber ?? 1,
             submissionFilename: submission.filename,
             openInNotebookURL: openInNotebookURL,
-            isPending:         isPending,
+            isPending: isPending,
             isBrowserComplete: isBrowserComplete,
-            resultSource:      resultSource,
-            buildFailed:       buildFailed,
-            compilerOutput:    compilerOutput,
-            hasWarnings:       !warnings.isEmpty,
-            warnings:          warnings,
-            outcomes:          outcomes,
+            resultSource: resultSource,
+            buildFailed: buildFailed,
+            compilerOutput: compilerOutput,
+            hasWarnings: !warnings.isEmpty,
+            warnings: warnings,
+            outcomes: outcomes,
             sectionedOutcomes: sectionedOutcomes,
-            passCount:         passCount,
-            totalTests:        totalTests,
-            gradePercent:      gradePercent,
-            executionTimeMs:   executionTimeMs,
-            isWeighted:        totalPoints != totalTests,
-            totalPoints:       totalPoints,
-            earnedPoints:      earnedPoints,
-            hasDelta:          hasDelta,
-            deltaHeaderText:   deltaHeaderText,
-            releaseSummary:    releaseSummary,
-            secretSummary:     secretSummary,
-            badges:            badges,
-            currentUser:       req.currentUserContext
+            passCount: passCount,
+            totalTests: totalTests,
+            gradePercent: gradePercent,
+            executionTimeMs: executionTimeMs,
+            isWeighted: totalPoints != totalTests,
+            totalPoints: totalPoints,
+            earnedPoints: earnedPoints,
+            hasDelta: hasDelta,
+            deltaHeaderText: deltaHeaderText,
+            releaseSummary: releaseSummary,
+            secretSummary: secretSummary,
+            badges: badges,
+            currentUser: req.currentUserContext
         )
         return try await req.view.render("submission", ctx)
     }
@@ -563,7 +580,7 @@ func parseSkip(shortResult: String) -> (isSkipped: Bool, blockerName: String?) {
     let suffix = "' did not pass"
     guard shortResult.hasPrefix(prefix), shortResult.hasSuffix(suffix) else { return (false, nil) }
     let start = shortResult.index(shortResult.startIndex, offsetBy: prefix.count)
-    let end   = shortResult.index(shortResult.endIndex,   offsetBy: -suffix.count)
+    let end = shortResult.index(shortResult.endIndex, offsetBy: -suffix.count)
     guard start <= end else { return (false, nil) }
     let raw = String(shortResult[start..<end])
     // Strip file extension so "test_build.py" becomes "test_build"
@@ -600,7 +617,8 @@ func formattedShortResult(from raw: String, status: TestStatus) -> String {
         return summary
     }
     if let summary = detailedScriptOutput(from: trimmed, status: status)
-        .flatMap(extractStructuredSummaryText(from:)) {
+        .flatMap(extractStructuredSummaryText(from:))
+    {
         return summary
     }
 
@@ -609,7 +627,8 @@ func formattedShortResult(from raw: String, status: TestStatus) -> String {
 
 func formattedDetailedOutput(primary raw: String?, fallback: String?, status: TestStatus) -> String? {
     guard status != .pass else { return nil }
-    let base = detailedScriptOutput(from: raw, status: status)
+    let base =
+        detailedScriptOutput(from: raw, status: status)
         ?? detailedScriptOutput(from: fallback, status: status)
     guard let base else { return nil }
 
@@ -638,7 +657,8 @@ func formattedPassingDetailedOutput(primary raw: String?) -> String? {
 
 func extractStructuredSummaryText(from text: String) -> String? {
     guard let data = text.data(using: .utf8),
-          let object = try? JSONSerialization.jsonObject(with: data) else {
+        let object = try? JSONSerialization.jsonObject(with: data)
+    else {
         return nil
     }
     return structuredSummaryText(from: object)
@@ -654,7 +674,8 @@ private func structuredSummaryText(from value: Any) -> String? {
         let preferredKeys = ["shortResult", "error", "message", "detail", "reason", "status"]
         for key in preferredKeys {
             if let nested = dict[key],
-               let text = structuredSummaryText(from: nested) {
+                let text = structuredSummaryText(from: nested)
+            {
                 return text
             }
         }
@@ -673,9 +694,9 @@ private func structuredSummaryText(from value: Any) -> String? {
 
 private func defaultShortResult(for status: TestStatus) -> String {
     switch status {
-    case .pass:    return "passed"
-    case .fail:    return "failed"
-    case .error:   return "error"
+    case .pass: return "passed"
+    case .fail: return "failed"
+    case .error: return "error"
     case .timeout: return "timed out"
     }
 }
@@ -688,7 +709,7 @@ func extractTraceback(in text: String) -> String? {
         "Traceback (most recent call last):",
         "Traceback (most recent call last)",
         "RRuntimeError:",
-        "PythonError:"
+        "PythonError:",
     ]
 
     for marker in markers {
@@ -723,7 +744,8 @@ private func bestDetailedSection(stderr: String?, stdout: String?) -> String? {
 
 func extractStructuredErrorText(from text: String) -> String? {
     guard let data = text.data(using: .utf8),
-          let object = try? JSONSerialization.jsonObject(with: data) else {
+        let object = try? JSONSerialization.jsonObject(with: data)
+    else {
         return nil
     }
 
@@ -744,11 +766,12 @@ private func extractTracebackFromJSONObject(_ value: Any) -> String? {
     if let dict = value as? [String: Any] {
         let preferredKeys = [
             "traceback", "stackTrace", "stack", "stderr", "error",
-            "message", "detail", "reason", "longResult"
+            "message", "detail", "reason", "longResult",
         ]
         for key in preferredKeys {
             if let nested = dict[key],
-               let traceback = extractTracebackFromJSONObject(nested) {
+                let traceback = extractTracebackFromJSONObject(nested)
+            {
                 return traceback
             }
         }
@@ -781,7 +804,8 @@ private func extractStructuredMessages(from value: Any) -> [String]? {
         var messages: [String] = []
         for key in preferredKeys {
             guard let nested = dict[key],
-                  let nestedMessages = extractStructuredMessages(from: nested) else { continue }
+                let nestedMessages = extractStructuredMessages(from: nested)
+            else { continue }
             messages.append(contentsOf: nestedMessages)
         }
         if !messages.isEmpty {
@@ -821,7 +845,8 @@ func inferredRawSubmissionExtension(data: Data, uploadFilename: String?) -> Stri
 
     // Heuristic: notebook uploads are JSON with "nbformat" key.
     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-       json["nbformat"] != nil {
+        json["nbformat"] != nil
+    {
         return "ipynb"
     }
 

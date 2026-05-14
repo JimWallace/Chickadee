@@ -7,12 +7,13 @@
 //   GET  /testsetups/:id/history     → submission history
 //   GET  /submissions/:id            → live results
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class WebRoutesTests: XCTestCase {
 
@@ -57,7 +58,8 @@ final class WebRoutesTests: XCTestCase {
         if try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == userID)
             .filter(\.$course.$id == courseID)
-            .first() == nil {
+            .first() == nil
+        {
             let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
             try await enrollment.save(on: app.db)
         }
@@ -66,11 +68,12 @@ final class WebRoutesTests: XCTestCase {
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
-        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
-        """
+            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+            """
         let course = try await makeCourse()
         let courseID = try course.requireID()
-        let setup = APITestSetup(id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
+        let setup = APITestSetup(
+            id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
         try await setup.save(on: app.db)
         return setup
     }
@@ -211,14 +214,17 @@ final class WebRoutesTests: XCTestCase {
             warnings: ["Notebook submission.py was normalized before grading."]
         )
 
-        try await app.asyncTest(.GET, "/submissions/sub_warn_html", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = String(buffer: res.body)
-            XCTAssertTrue(html.contains("Warnings"))
-            XCTAssertTrue(html.contains("normalized before grading"))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_warn_html",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = String(buffer: res.body)
+                XCTAssertTrue(html.contains("Warnings"))
+                XCTAssertTrue(html.contains("normalized before grading"))
+            })
     }
 
     // MARK: - GET / (index page)
@@ -230,22 +236,28 @@ final class WebRoutesTests: XCTestCase {
         let c2 = APICourse(code: "CS102", name: "Algorithms")
         try await c2.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertTrue(res.headers.first(name: .location)?.contains("/enroll") ?? false)
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertTrue(res.headers.first(name: .location)?.contains("/enroll") ?? false)
+            })
     }
 
     func testIndexRendersWhenNoCourses() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
     }
 
     func testIndexShowsOpenAssignmentForStudent() async throws {
@@ -255,13 +267,16 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_vis")
         try await insertAssignment(testSetupID: "setup_vis", title: "Visible Assignment", isOpen: true)
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Visible Assignment"), "Should show open assignment title")
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Visible Assignment"), "Should show open assignment title")
+            })
     }
 
     func testIndexShowsBrowserEditActionBeforeStudentHasAnyNotebookWork() async throws {
@@ -274,13 +289,13 @@ final class WebRoutesTests: XCTestCase {
         let courseID = try course.requireID()
         let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
         let notebookJSON = """
-        {"cells":[{"cell_type":"markdown","metadata":{},"source":["Browser starter"]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
-        """
+            {"cells":[{"cell_type":"markdown","metadata":{},"source":["Browser starter"]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
+            """
         try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
 
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_browser.py"}],"timeLimitSeconds":10}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_browser.py"}],"timeLimitSeconds":10}
+            """
         let setup = APITestSetup(
             id: setupID,
             manifest: manifest,
@@ -291,17 +306,20 @@ final class WebRoutesTests: XCTestCase {
         try await setup.save(on: app.db)
         try await insertAssignment(testSetupID: setupID, title: "Browser Lab", isOpen: true)
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Browser Lab"))
-            XCTAssertTrue(
-                html.contains("/CS101/browser-lab"),
-                "Browser-graded assignments should expose the notebook action even before any student edits"
-            )
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Browser Lab"))
+                XCTAssertTrue(
+                    html.contains("/CS101/browser-lab"),
+                    "Browser-graded assignments should expose the notebook action even before any student edits"
+                )
+            })
     }
 
     func testIndexHidesUnpublishedSetupsFromStudent() async throws {
@@ -311,13 +329,16 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_hidden")
         // No assignment created → unpublished
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertFalse(html.contains("setup_hidden"), "Unpublished setup should be hidden from students")
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertFalse(html.contains("setup_hidden"), "Unpublished setup should be hidden from students")
+            })
     }
 
     func testIndexShowsAllSetupsForInstructor() async throws {
@@ -326,15 +347,18 @@ final class WebRoutesTests: XCTestCase {
         try await enrollUser(instructor)
         try await insertSetup(id: "setup_unpub")
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            // Unpublished setups appear in links (e.g. /testsetups/setup_unpub/submit)
-            // and show "unpublished" status badge.
-            XCTAssertTrue(html.contains("unpublished"), "Instructor should see unpublished status")
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                // Unpublished setups appear in links (e.g. /testsetups/setup_unpub/submit)
+                // and show "unpublished" status badge.
+                XCTAssertTrue(html.contains("unpublished"), "Instructor should see unpublished status")
+            })
     }
 
     func testIndexShowsBestGrade() async throws {
@@ -346,21 +370,26 @@ final class WebRoutesTests: XCTestCase {
         try await insertAssignment(testSetupID: "setup_grade", title: "Graded", isOpen: true)
         try await insertSubmission(id: "sub_g1", testSetupID: "setup_grade", userID: userID)
         // 4 out of 5 pass = 80%
-        try await insertResult(submissionID: "sub_g1", outcomes: [
-            makeOutcome(name: "t1", status: .pass),
-            makeOutcome(name: "t2", status: .pass),
-            makeOutcome(name: "t3", status: .pass),
-            makeOutcome(name: "t4", status: .pass),
-            makeOutcome(name: "t5", status: .fail),
-        ])
+        try await insertResult(
+            submissionID: "sub_g1",
+            outcomes: [
+                makeOutcome(name: "t1", status: .pass),
+                makeOutcome(name: "t2", status: .pass),
+                makeOutcome(name: "t3", status: .pass),
+                makeOutcome(name: "t4", status: .pass),
+                makeOutcome(name: "t5", status: .fail),
+            ])
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("80%"), "Should show best grade of 80%")
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("80%"), "Should show best grade of 80%")
+            })
     }
 
     func testIndexShowsFirstTryPerfectBadgeForLatestPerfectFirstSubmission() async throws {
@@ -370,18 +399,24 @@ final class WebRoutesTests: XCTestCase {
         try await enrollUser(user)
         try await insertSetup(id: "setup_badge_latest")
         try await insertAssignment(testSetupID: "setup_badge_latest", title: "Badge Lab", isOpen: true)
-        try await insertSubmission(id: "sub_badge_latest", testSetupID: "setup_badge_latest", userID: userID, attemptNumber: 1)
-        try await insertResult(submissionID: "sub_badge_latest", outcomes: [
-            makeOutcome(name: "t1", status: .pass),
-            makeOutcome(name: "t2", status: .pass),
-        ])
+        try await insertSubmission(
+            id: "sub_badge_latest", testSetupID: "setup_badge_latest", userID: userID, attemptNumber: 1)
+        try await insertResult(
+            submissionID: "sub_badge_latest",
+            outcomes: [
+                makeOutcome(name: "t1", status: .pass),
+                makeOutcome(name: "t2", status: .pass),
+            ])
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue(res.body.string.contains("Ace"))
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertTrue(res.body.string.contains("Ace"))
+            })
     }
 
     func testIndexDoesNotShowFirstTryPerfectBadgeForSecondAttemptPerfectSubmission() async throws {
@@ -391,18 +426,24 @@ final class WebRoutesTests: XCTestCase {
         try await enrollUser(user)
         try await insertSetup(id: "setup_badge_attempt2")
         try await insertAssignment(testSetupID: "setup_badge_attempt2", title: "Retry Lab", isOpen: true)
-        try await insertSubmission(id: "sub_badge_attempt2", testSetupID: "setup_badge_attempt2", userID: userID, attemptNumber: 2)
-        try await insertResult(submissionID: "sub_badge_attempt2", outcomes: [
-            makeOutcome(name: "t1", status: .pass),
-            makeOutcome(name: "t2", status: .pass),
-        ])
+        try await insertSubmission(
+            id: "sub_badge_attempt2", testSetupID: "setup_badge_attempt2", userID: userID, attemptNumber: 2)
+        try await insertResult(
+            submissionID: "sub_badge_attempt2",
+            outcomes: [
+                makeOutcome(name: "t1", status: .pass),
+                makeOutcome(name: "t2", status: .pass),
+            ])
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertFalse(res.body.string.contains("First-Try Perfect"))
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertFalse(res.body.string.contains("First-Try Perfect"))
+            })
     }
 
     func testIndexDoesNotShowFirstTryPerfectBadgeForImperfectFirstSubmission() async throws {
@@ -412,18 +453,24 @@ final class WebRoutesTests: XCTestCase {
         try await enrollUser(user)
         try await insertSetup(id: "setup_badge_notperfect")
         try await insertAssignment(testSetupID: "setup_badge_notperfect", title: "Almost Lab", isOpen: true)
-        try await insertSubmission(id: "sub_badge_notperfect", testSetupID: "setup_badge_notperfect", userID: userID, attemptNumber: 1)
-        try await insertResult(submissionID: "sub_badge_notperfect", outcomes: [
-            makeOutcome(name: "t1", status: .pass),
-            makeOutcome(name: "t2", status: .fail),
-        ])
+        try await insertSubmission(
+            id: "sub_badge_notperfect", testSetupID: "setup_badge_notperfect", userID: userID, attemptNumber: 1)
+        try await insertResult(
+            submissionID: "sub_badge_notperfect",
+            outcomes: [
+                makeOutcome(name: "t1", status: .pass),
+                makeOutcome(name: "t2", status: .fail),
+            ])
 
-        try await app.asyncTest(.GET, "/", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertFalse(res.body.string.contains("First-Try Perfect"))
-        })
+        try await app.asyncTest(
+            .GET, "/",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertFalse(res.body.string.contains("First-Try Perfect"))
+            })
     }
 
     // MARK: - GET /testsetups/:id/submit
@@ -432,21 +479,27 @@ final class WebRoutesTests: XCTestCase {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "setup_sub")
 
-        try await app.asyncTest(.GET, "/testsetups/setup_sub/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/setup_sub/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
     }
 
     func testSubmitForm404ForMissingSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/testsetups/nonexistent/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/nonexistent/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     func testSubmitPostRejectsOverdueAssignmentsAndPersistsClosure() async throws {
@@ -468,18 +521,21 @@ final class WebRoutesTests: XCTestCase {
         )
         let boundary = "late-submit-boundary"
 
-        try await app.asyncTest(.POST, "/testsetups/setup_submit_overdue/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: submitMultipartBody(boundary: boundary, csrfToken: csrf))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-            XCTAssertTrue(res.body.string.contains("closed"))
-        })
+        try await app.asyncTest(
+            .POST, "/testsetups/setup_submit_overdue/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(buffer: submitMultipartBody(boundary: boundary, csrfToken: csrf))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+                XCTAssertTrue(res.body.string.contains("closed"))
+            })
 
         let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
         XCTAssertNotNil(refreshedOptional)
@@ -498,23 +554,29 @@ final class WebRoutesTests: XCTestCase {
         try await insertSubmission(id: "sub_h1", testSetupID: "setup_hist", userID: userID, attemptNumber: 1)
         try await insertSubmission(id: "sub_h2", testSetupID: "setup_hist", userID: userID, attemptNumber: 2)
 
-        try await app.asyncTest(.GET, "/testsetups/setup_hist/history", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("History Test"), "Should show assignment title")
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/setup_hist/history",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("History Test"), "Should show assignment title")
+            })
     }
 
     func testHistory404ForMissingSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/testsetups/nonexistent/history", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/testsetups/nonexistent/history",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - GET /submissions/:id (result page)
@@ -526,14 +588,18 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_pend")
         try await insertSubmission(id: "sub_pend", testSetupID: "setup_pend", userID: userID, status: "pending")
 
-        try await app.asyncTest(.GET, "/submissions/sub_pend", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("pending") || html.contains("Pending"),
-                          "Should indicate pending status")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_pend",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(
+                    html.contains("pending") || html.contains("Pending"),
+                    "Should indicate pending status")
+            })
     }
 
     func testSubmissionPageShowsResults() async throws {
@@ -542,20 +608,25 @@ final class WebRoutesTests: XCTestCase {
         let userID = try user.requireID()
         try await insertSetup(id: "setup_res")
         try await insertSubmission(id: "sub_res", testSetupID: "setup_res", userID: userID)
-        try await insertResult(submissionID: "sub_res", outcomes: [
-            makeOutcome(name: "test_add", status: .pass),
-            makeOutcome(name: "test_sub", status: .fail),
-        ])
+        try await insertResult(
+            submissionID: "sub_res",
+            outcomes: [
+                makeOutcome(name: "test_add", status: .pass),
+                makeOutcome(name: "test_sub", status: .fail),
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_res", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("test_add"), "Should show test name")
-            XCTAssertTrue(html.contains("Pass") || html.contains("pass"), "Should show pass status")
-            XCTAssertTrue(html.contains("Fail") || html.contains("fail"), "Should show fail status")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_res",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("test_add"), "Should show test name")
+                XCTAssertTrue(html.contains("Pass") || html.contains("pass"), "Should show pass status")
+                XCTAssertTrue(html.contains("Fail") || html.contains("fail"), "Should show fail status")
+            })
     }
 
     func testSubmissionPageShowsExpandedOutputPanelForFailingTests() async throws {
@@ -564,21 +635,28 @@ final class WebRoutesTests: XCTestCase {
         let userID = try user.requireID()
         try await insertSetup(id: "setup_fail_output")
         try await insertSubmission(id: "sub_fail_output", testSetupID: "setup_fail_output", userID: userID)
-        try await insertResult(submissionID: "sub_fail_output", outcomes: [
-            makeOutcome(name: "test_failure", status: .fail, shortResult: "Expected 42, got 0", longResult: "Traceback line 1\nTraceback line 2")
-        ])
+        try await insertResult(
+            submissionID: "sub_fail_output",
+            outcomes: [
+                makeOutcome(
+                    name: "test_failure", status: .fail, shortResult: "Expected 42, got 0",
+                    longResult: "Traceback line 1\nTraceback line 2")
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_fail_output", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertFalse(html.contains("<th>Output</th>"))
-            XCTAssertTrue(html.contains("test-short-result"))
-            XCTAssertTrue(html.contains("Expected 42, got 0"))
-            XCTAssertTrue(html.contains("test-output-panel"))
-            XCTAssertTrue(html.contains("Traceback line 1"))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_fail_output",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertFalse(html.contains("<th>Output</th>"))
+                XCTAssertTrue(html.contains("test-short-result"))
+                XCTAssertTrue(html.contains("Expected 42, got 0"))
+                XCTAssertTrue(html.contains("test-output-panel"))
+                XCTAssertTrue(html.contains("Traceback line 1"))
+            })
     }
 
     func testSubmissionPageKeepsPassingOutputCollapsedWhenPresent() async throws {
@@ -587,19 +665,24 @@ final class WebRoutesTests: XCTestCase {
         let userID = try user.requireID()
         try await insertSetup(id: "setup_pass_output")
         try await insertSubmission(id: "sub_pass_output", testSetupID: "setup_pass_output", userID: userID)
-        try await insertResult(submissionID: "sub_pass_output", outcomes: [
-            makeOutcome(name: "test_pass_with_output", status: .pass, longResult: "stdout:\nAll checks passed")
-        ])
+        try await insertResult(
+            submissionID: "sub_pass_output",
+            outcomes: [
+                makeOutcome(name: "test_pass_with_output", status: .pass, longResult: "stdout:\nAll checks passed")
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_pass_output", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Show output"))
-            XCTAssertTrue(html.contains("All checks passed"))
-            XCTAssertFalse(html.contains("<tr class=\"test-output-row"))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_pass_output",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Show output"))
+                XCTAssertTrue(html.contains("All checks passed"))
+                XCTAssertFalse(html.contains("<tr class=\"test-output-row"))
+            })
     }
 
     func testSubmissionPageShowsConfiguredDisplayNameForBrowserResultScriptFilename() async throws {
@@ -607,8 +690,8 @@ final class WebRoutesTests: XCTestCase {
         let user = try await studentUser()
         let userID = try user.requireID()
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1_bmi.py","name":"BMI check"}],"timeLimitSeconds":10}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1_bmi.py","name":"BMI check"}],"timeLimitSeconds":10}
+            """
         let course = try await makeCourse()
         let courseID = try course.requireID()
         let setup = APITestSetup(
@@ -626,20 +709,23 @@ final class WebRoutesTests: XCTestCase {
             source: "browser"
         )
 
-        try await app.asyncTest(.GET, "/submissions/sub_browser_names", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("BMI check"), "Should show saved display name")
-            XCTAssertFalse(html.contains(">test_q1_bmi.py<"), "Should not fall back to raw script filename")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_browser_names",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("BMI check"), "Should show saved display name")
+                XCTAssertFalse(html.contains(">test_q1_bmi.py<"), "Should not fall back to raw script filename")
+            })
     }
 
     func testSubmissionPageShowsTracebackInsteadOfStructuredJSONBlob() async throws {
         let rawJSON = #"""
-        {"error":"PythonError","stderr":"Traceback (most recent call last):\n  File \"test_q1.py\", line 7, in <module>\n    assert answer == 42\nAssertionError","headers":{"content-type":"application/json"}}
-        """#
+            {"error":"PythonError","stderr":"Traceback (most recent call last):\n  File \"test_q1.py\", line 7, in <module>\n    assert answer == 42\nAssertionError","headers":{"content-type":"application/json"}}
+            """#
         let formatted = formattedDetailedOutput(primary: rawJSON, fallback: nil, status: .fail)
         XCTAssertEqual(
             formatted,
@@ -661,16 +747,19 @@ final class WebRoutesTests: XCTestCase {
             outcomes: [makeOutcome(name: "test_q1", status: .fail, longResult: rawJSON)]
         )
 
-        try await app.asyncTest(.GET, "/submissions/sub_traceback", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("test-output-panel"))
-            XCTAssertTrue(html.contains("Traceback (most recent call last):"))
-            XCTAssertTrue(html.contains("AssertionError"))
-            XCTAssertFalse(html.contains("test output here"))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_traceback",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("test-output-panel"))
+                XCTAssertTrue(html.contains("Traceback (most recent call last):"))
+                XCTAssertTrue(html.contains("AssertionError"))
+                XCTAssertFalse(html.contains("test output here"))
+            })
     }
 
     func testSubmissionPageShowsFirstTryPerfectBadge() async throws {
@@ -678,27 +767,33 @@ final class WebRoutesTests: XCTestCase {
         let user = try await studentUser()
         let userID = try user.requireID()
         try await insertSetup(id: "setup_submission_badge")
-        try await insertSubmission(id: "sub_submission_badge", testSetupID: "setup_submission_badge", userID: userID, attemptNumber: 1)
-        try await insertResult(submissionID: "sub_submission_badge", outcomes: [
-            makeOutcome(name: "t1", status: .pass),
-            makeOutcome(name: "t2", status: .pass),
-        ])
+        try await insertSubmission(
+            id: "sub_submission_badge", testSetupID: "setup_submission_badge", userID: userID, attemptNumber: 1)
+        try await insertResult(
+            submissionID: "sub_submission_badge",
+            outcomes: [
+                makeOutcome(name: "t1", status: .pass),
+                makeOutcome(name: "t2", status: .pass),
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_submission_badge", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Ace"))
-            XCTAssertTrue(html.contains("achievement-badge"))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_submission_badge",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Ace"))
+                XCTAssertTrue(html.contains("achievement-badge"))
+            })
     }
 
     func testSubmissionPageShowsTracebackWhenStructuredJSONIsWrappedInStdout() async throws {
         let wrapped = #"""
-        stdout:
-        {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "test": "Q1: BMI Calculation", "error": "Could not test calculate_bmi", "exception": "NotImplementedError('Implement calculate_bmi')", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\n  File \"/chickadee_work_1774744743040/submission.py\", line 27, in calculate_bmi\n    raise NotImplementedError(\"Implement calculate_bmi\")\nNotImplementedError: Implement calculate_bmi\n"}
-        """#
+            stdout:
+            {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "test": "Q1: BMI Calculation", "error": "Could not test calculate_bmi", "exception": "NotImplementedError('Implement calculate_bmi')", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\n  File \"/chickadee_work_1774744743040/submission.py\", line 27, in calculate_bmi\n    raise NotImplementedError(\"Implement calculate_bmi\")\nNotImplementedError: Implement calculate_bmi\n"}
+            """#
         let formatted = formattedDetailedOutput(primary: wrapped, fallback: nil, status: .error)
         XCTAssertEqual(
             formatted,
@@ -724,26 +819,29 @@ final class WebRoutesTests: XCTestCase {
             source: "browser"
         )
 
-        try await app.asyncTest(.GET, "/submissions/sub_stdout_traceback", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Traceback (most recent call last):"))
-            XCTAssertTrue(html.contains("NotImplementedError: Implement calculate_bmi"))
-            XCTAssertFalse(html.contains("\"shortResult\""))
-            XCTAssertFalse(html.contains("\"exception\""))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_stdout_traceback",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Traceback (most recent call last):"))
+                XCTAssertTrue(html.contains("NotImplementedError: Implement calculate_bmi"))
+                XCTAssertFalse(html.contains("\"shortResult\""))
+                XCTAssertFalse(html.contains("\"exception\""))
+            })
     }
 
     func testSubmissionPagePrefersStdoutTracebackOverUnhelpfulStderrSection() async throws {
         let wrapped = #"""
-        stdout:
-        {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\nNotImplementedError: Implement calculate_bmi\n"}
+            stdout:
+            {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\nNotImplementedError: Implement calculate_bmi\n"}
 
-        stderr:
-        Browser runner reported a structured failure payload
-        """#
+            stderr:
+            Browser runner reported a structured failure payload
+            """#
         let formatted = formattedDetailedOutput(primary: wrapped, fallback: nil, status: .error)
         XCTAssertEqual(
             formatted,
@@ -759,8 +857,8 @@ final class WebRoutesTests: XCTestCase {
 
     func testSubmissionPageFormatsStructuredShortResultInsteadOfShowingJSONBlob() async throws {
         let shortJSON = #"""
-        {"shortResult":"Q1: BMI Calculation: Could not test calculate_bmi","status":"error","error":"Could not test calculate_bmi","traceback":"Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n"}
-        """#
+            {"shortResult":"Q1: BMI Calculation: Could not test calculate_bmi","status":"error","error":"Could not test calculate_bmi","traceback":"Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n"}
+            """#
 
         XCTAssertEqual(
             formattedShortResult(from: shortJSON, status: .error),
@@ -800,16 +898,19 @@ final class WebRoutesTests: XCTestCase {
             source: "browser"
         )
 
-        try await app.asyncTest(.GET, "/submissions/sub_short_json", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Q1: BMI Calculation: Could not test calculate_bmi"))
-            XCTAssertTrue(html.contains("Traceback (most recent call last):"))
-            XCTAssertFalse(html.contains("\"shortResult\""))
-            XCTAssertFalse(html.contains("\"traceback\""))
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_short_json",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Q1: BMI Calculation: Could not test calculate_bmi"))
+                XCTAssertTrue(html.contains("Traceback (most recent call last):"))
+                XCTAssertFalse(html.contains("\"shortResult\""))
+                XCTAssertFalse(html.contains("\"traceback\""))
+            })
     }
 
     func testStudentCannotViewOtherStudentsSubmission() async throws {
@@ -821,11 +922,14 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_priv")
         try await insertSubmission(id: "sub_priv", testSetupID: "setup_priv", userID: otherID)
 
-        try await app.asyncTest(.GET, "/submissions/sub_priv", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_priv",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     func testInstructorCanViewAnySubmission() async throws {
@@ -836,21 +940,27 @@ final class WebRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_any")
         try await insertSubmission(id: "sub_any", testSetupID: "setup_any", userID: studentID)
 
-        try await app.asyncTest(.GET, "/submissions/sub_any", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_any",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
     }
 
     func testSubmissionPage404ForMissing() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/submissions/nonexistent", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/nonexistent",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - Tier visibility
@@ -866,21 +976,26 @@ final class WebRoutesTests: XCTestCase {
             dueAt: Date().addingTimeInterval(86400 * 30)
         )
         try await insertSubmission(id: "sub_tier", testSetupID: "setup_tier", userID: userID)
-        try await insertResult(submissionID: "sub_tier", outcomes: [
-            makeOutcome(name: "pub_test", tier: .pub, status: .pass),
-            makeOutcome(name: "rel_test", tier: .release, status: .fail),
-            makeOutcome(name: "sec_test", tier: .secret, status: .pass),
-        ])
+        try await insertResult(
+            submissionID: "sub_tier",
+            outcomes: [
+                makeOutcome(name: "pub_test", tier: .pub, status: .pass),
+                makeOutcome(name: "rel_test", tier: .release, status: .fail),
+                makeOutcome(name: "sec_test", tier: .secret, status: .pass),
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_tier", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("pub_test"), "Public test should be visible")
-            XCTAssertFalse(html.contains("rel_test"), "Release test name should be hidden before deadline")
-            XCTAssertFalse(html.contains("sec_test"), "Secret test name should never be shown")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_tier",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("pub_test"), "Public test should be visible")
+                XCTAssertFalse(html.contains("rel_test"), "Release test name should be hidden before deadline")
+                XCTAssertFalse(html.contains("sec_test"), "Secret test name should never be shown")
+            })
     }
 
     func testStudentSeesReleaseTiersAfterDeadline() async throws {
@@ -894,19 +1009,24 @@ final class WebRoutesTests: XCTestCase {
             dueAt: Date().addingTimeInterval(-86400)
         )
         try await insertSubmission(id: "sub_post", testSetupID: "setup_post", userID: userID)
-        try await insertResult(submissionID: "sub_post", outcomes: [
-            makeOutcome(name: "pub_test2", tier: .pub, status: .pass),
-            makeOutcome(name: "rel_test2", tier: .release, status: .fail),
-        ])
+        try await insertResult(
+            submissionID: "sub_post",
+            outcomes: [
+                makeOutcome(name: "pub_test2", tier: .pub, status: .pass),
+                makeOutcome(name: "rel_test2", tier: .release, status: .fail),
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_post", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("pub_test2"), "Public test should be visible")
-            XCTAssertTrue(html.contains("rel_test2"), "Release test should be visible after deadline")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_post",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("pub_test2"), "Public test should be visible")
+                XCTAssertTrue(html.contains("rel_test2"), "Release test should be visible after deadline")
+            })
     }
 
     func testStudentCannotViewPeerSubmissionPage() async throws {
@@ -923,11 +1043,14 @@ final class WebRoutesTests: XCTestCase {
         // Log in as a different student and attempt to access Student A's submission.
         let cookieB = try await loginUser(username: "peer_student_b", password: "pass", role: "student", on: app)
 
-        try await app.asyncTest(.GET, "/submissions/sub_peer_a", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookieB)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden, "Student B must not view Student A's submission")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_peer_a",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookieB)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden, "Student B must not view Student A's submission")
+            })
     }
 
     func testInstructorSeesAllTiers() async throws {
@@ -941,21 +1064,26 @@ final class WebRoutesTests: XCTestCase {
             dueAt: Date().addingTimeInterval(86400 * 30)
         )
         try await insertSubmission(id: "sub_all", testSetupID: "setup_all", userID: studentID)
-        try await insertResult(submissionID: "sub_all", outcomes: [
-            makeOutcome(name: "pub_t", tier: .pub, status: .pass),
-            makeOutcome(name: "rel_t", tier: .release, status: .fail),
-            makeOutcome(name: "sec_t", tier: .secret, status: .pass),
-        ])
+        try await insertResult(
+            submissionID: "sub_all",
+            outcomes: [
+                makeOutcome(name: "pub_t", tier: .pub, status: .pass),
+                makeOutcome(name: "rel_t", tier: .release, status: .fail),
+                makeOutcome(name: "sec_t", tier: .secret, status: .pass),
+            ])
 
-        try await app.asyncTest(.GET, "/submissions/sub_all", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("pub_t"), "Instructor sees public tests")
-            XCTAssertTrue(html.contains("rel_t"), "Instructor sees release tests")
-            XCTAssertTrue(html.contains("sec_t"), "Instructor sees secret tests")
-        })
+        try await app.asyncTest(
+            .GET, "/submissions/sub_all",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("pub_t"), "Instructor sees public tests")
+                XCTAssertTrue(html.contains("rel_t"), "Instructor sees release tests")
+                XCTAssertTrue(html.contains("sec_t"), "Instructor sees secret tests")
+            })
     }
 
     // MARK: - Class-wide badge award gating (v0.4.127)
@@ -981,9 +1109,10 @@ final class WebRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: username, password: "pass", role: role, on: app
         )
-        guard let user = try await APIUser.query(on: app.db)
-            .filter(\.$username == username)
-            .first()
+        guard
+            let user = try await APIUser.query(on: app.db)
+                .filter(\.$username == username)
+                .first()
         else {
             XCTFail("Could not find user \(username) after loginUser")
             return
@@ -993,17 +1122,21 @@ final class WebRoutesTests: XCTestCase {
             for: "/testsetups/\(setupID)/submit", cookie: cookie, on: app
         )
         let boundary = "badge-test-boundary-\(username)"
-        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart", subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: submitMultipartBody(boundary: boundary, csrfToken: csrf))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther,
-                "Submit should redirect on success (got \(res.status))")
-        })
+        try await app.asyncTest(
+            .POST, "/testsetups/\(setupID)/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(buffer: submitMultipartBody(boundary: boundary, csrfToken: csrf))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .seeOther,
+                    "Submit should redirect on success (got \(res.status))")
+            })
     }
 
     func testPathfinderNotAwardedToAdminSubmission() async throws {
@@ -1017,7 +1150,8 @@ final class WebRoutesTests: XCTestCase {
         let badges = try await APIClassAchievement.query(on: app.db)
             .filter(\.$testSetupID == "setup_pf_admin")
             .all()
-        XCTAssertTrue(badges.isEmpty,
+        XCTAssertTrue(
+            badges.isEmpty,
             "Admin submission must not earn Pathfinder. Found: \(badges.map { $0.achievementID })")
     }
 
@@ -1041,13 +1175,15 @@ final class WebRoutesTests: XCTestCase {
             .filter(\.$testSetupID == "setup_pf_mixed")
             .filter(\.$achievementID == "pathfinder")
             .first()
-        XCTAssertNotNil(afterStudent,
+        XCTAssertNotNil(
+            afterStudent,
             "First STUDENT submission should earn Pathfinder, even when an admin submitted earlier")
         guard let badge = afterStudent else { return }
         let student = try await APIUser.query(on: app.db)
             .filter(\.$username == "student_pf2")
             .first()
-        XCTAssertEqual(badge.userID, try student?.requireID(),
+        XCTAssertEqual(
+            badge.userID, try student?.requireID(),
             "Pathfinder must be held by the first-student submitter, not the admin")
     }
 
@@ -1080,7 +1216,8 @@ final class WebRoutesTests: XCTestCase {
         let afterAdmin = try await APIClassAchievement.query(on: app.db)
             .filter(\.$testSetupID == "setup_100_gate")
             .all()
-        XCTAssertTrue(afterAdmin.isEmpty,
+        XCTAssertTrue(
+            afterAdmin.isEmpty,
             "Admin's 100% submission must not earn class-wide badges. Found: \(afterAdmin.map { $0.achievementID })")
 
         // Instructor call — also must persist no badges.
@@ -1095,8 +1232,10 @@ final class WebRoutesTests: XCTestCase {
         let afterInstructor = try await APIClassAchievement.query(on: app.db)
             .filter(\.$testSetupID == "setup_100_gate")
             .all()
-        XCTAssertTrue(afterInstructor.isEmpty,
-            "Instructor's 100% submission must not earn class-wide badges. Found: \(afterInstructor.map { $0.achievementID })")
+        XCTAssertTrue(
+            afterInstructor.isEmpty,
+            "Instructor's 100% submission must not earn class-wide badges. Found: \(afterInstructor.map { $0.achievementID })"
+        )
 
         // Student call — should award all three (Trailblazer + Speed Champion + Minimalist).
         try await awardClassBadgesFor100Percent(
@@ -1111,10 +1250,12 @@ final class WebRoutesTests: XCTestCase {
             .filter(\.$testSetupID == "setup_100_gate")
             .all()
         let earned = Set(afterStudent.map(\.achievementID))
-        XCTAssertEqual(earned, ["trailblazer", "speed_champion", "minimalist"],
+        XCTAssertEqual(
+            earned, ["trailblazer", "speed_champion", "minimalist"],
             "Student's 100% submission should earn all three class-wide badges. Got: \(earned)")
         for badge in afterStudent {
-            XCTAssertEqual(badge.userID, try student.requireID(),
+            XCTAssertEqual(
+                badge.userID, try student.requireID(),
                 "Badge \(badge.achievementID) should belong to the student, not admin/instructor")
         }
     }

@@ -1,7 +1,8 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class COEPMiddlewareTests: XCTestCase {
 

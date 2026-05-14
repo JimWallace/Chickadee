@@ -1,6 +1,7 @@
 import XCTest
-@testable import chickadee_server
+
 @testable import Core
+@testable import chickadee_server
 
 final class StageTimingAggregatorTests: XCTestCase {
 

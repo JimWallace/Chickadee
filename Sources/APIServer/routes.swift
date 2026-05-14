@@ -1,7 +1,7 @@
 // APIServer/routes.swift
 
-import Vapor
 import CSRF
+import Vapor
 
 func routes(_ app: Application) throws {
     let sessionAuth = UserSessionAuthenticator()

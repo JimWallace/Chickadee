@@ -115,7 +115,8 @@ enum MetricBucketAccumulators {
         var buckets = Array(repeating: JobBucketAccumulator(), count: window.bucketCount)
         for metric in metrics {
             guard let completedAt = metric.completedAt,
-                  let index = window.bucketIndex(for: completedAt) else { continue }
+                let index = window.bucketIndex(for: completedAt)
+            else { continue }
 
             buckets[index].completedJobs += 1
             if let queueWaitMs = metric.queueWaitMs {
@@ -151,7 +152,8 @@ enum MetricBucketAccumulators {
             let runner = runners[index]
             let request = requests[index]
             let job = jobs[index]
-            let avgActiveRunners = runner.sampleCount > 0
+            let avgActiveRunners =
+                runner.sampleCount > 0
                 ? Int((Double(runner.activeRunnerTotal) / Double(runner.sampleCount)).rounded())
                 : 0
             return InternalMetricsBucketResponse(

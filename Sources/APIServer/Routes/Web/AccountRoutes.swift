@@ -6,14 +6,14 @@
 //   POST /account/enroll               → join a course → redirect to /account
 //   POST /account/unenroll/:courseID   → leave a course → redirect to /account
 
-import Vapor
-import Fluent
 import Core
+import Fluent
+import Vapor
 
 struct AccountRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        routes.get("account",                          use: accountPage)
-        routes.post("account", "enroll",               use: joinCourse)
+        routes.get("account", use: accountPage)
+        routes.post("account", "enroll", use: joinCourse)
         routes.post("account", "unenroll", ":courseID", use: leaveCourse)
     }
 
@@ -37,7 +37,8 @@ struct AccountRoutes: RouteCollection {
             .all()
         let enrolledIDs = Set(enrollments.compactMap { $0.$course.id })
 
-        let enrolledRows = enrollments
+        let enrolledRows =
+            enrollments
             .compactMap { e -> AccountCourseRow? in
                 guard let id = e.course.id else { return nil }
                 return AccountCourseRow(
@@ -49,24 +50,29 @@ struct AccountRoutes: RouteCollection {
             }
             .sorted { $0.code < $1.code }
 
-        let availableRows = allCourses
+        let availableRows =
+            allCourses
             .compactMap { c -> AccountCourseRow? in
                 guard let id = c.id, !enrolledIDs.contains(id),
-                      c.enrollmentMode == .open else { return nil }
-                return AccountCourseRow(id: id.uuidString, code: c.code, name: c.name,
-                                        enrollmentMode: c.enrollmentMode.rawValue)
+                    c.enrollmentMode == .open
+                else { return nil }
+                return AccountCourseRow(
+                    id: id.uuidString, code: c.code, name: c.name,
+                    enrollmentMode: c.enrollmentMode.rawValue)
             }
 
-        return try await req.view.render("account", AccountContext(
-            currentUser: req.currentUserContext,
-            username: user.username,
-            preferredName: user.preferredName,
-            studentID: user.studentID,
-            email: user.email,
-            enrolledCourses: enrolledRows,
-            availableCourses: availableRows,
-            error: req.query[String.self, at: "error"]
-        ))
+        return try await req.view.render(
+            "account",
+            AccountContext(
+                currentUser: req.currentUserContext,
+                username: user.username,
+                preferredName: user.preferredName,
+                studentID: user.studentID,
+                email: user.email,
+                enrolledCourses: enrolledRows,
+                availableCourses: availableRows,
+                error: req.query[String.self, at: "error"]
+            ))
     }
 
     // MARK: - POST /account/enroll
@@ -80,8 +86,8 @@ struct AccountRoutes: RouteCollection {
         let body = try req.content.decode(JoinBody.self)
 
         guard let courseID = UUID(uuidString: body.courseID),
-              let course = try await APICourse.find(courseID, on: req.db),
-              !course.isArchived
+            let course = try await APICourse.find(courseID, on: req.db),
+            !course.isArchived
         else {
             return req.redirect(to: "/account?error=invalid")
         }

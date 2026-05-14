@@ -150,7 +150,7 @@ struct ExponentialBackoff {
 
     init(initial: Duration, max: Duration) {
         self.initial = initial
-        self.max     = max
+        self.max = max
         self.current = initial
     }
 

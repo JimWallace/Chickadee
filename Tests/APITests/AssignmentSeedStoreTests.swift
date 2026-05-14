@@ -2,11 +2,12 @@
 //
 // Phase 1 of issue #461 — exercises the per-(user, assignment) seed store.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class AssignmentSeedStoreTests: XCTestCase {
 
@@ -99,7 +100,7 @@ final class AssignmentSeedStoreTests: XCTestCase {
 
     func testEnsureSeed_differentUsersGetDifferentSeeds() async throws {
         let alice = try await makeUser(username: "alice2")
-        let bob   = try await makeUser(username: "bob2")
+        let bob = try await makeUser(username: "bob2")
         let course = try await makeCourse()
         let assignment = try await makeAssignment(courseID: course.id!)
 
@@ -162,8 +163,9 @@ final class AssignmentSeedStoreTests: XCTestCase {
         for _ in 0..<32 {
             let seed = AssignmentSeedStore.generateSeedHex()
             XCTAssertEqual(seed.count, 2 * AssignmentSeedStore.seedByteCount)
-            XCTAssertTrue(seed.allSatisfy { "0123456789abcdef".contains($0) },
-                          "seed must be lowercase hex; got \(seed)")
+            XCTAssertTrue(
+                seed.allSatisfy { "0123456789abcdef".contains($0) },
+                "seed must be lowercase hex; got \(seed)")
         }
     }
 }

@@ -344,6 +344,9 @@ updating kernel versions or config.
 - Optionals are preferred over sentinel values (no `-1` for "missing").
 - File names match the primary type they contain.
 - One type per file unless the types are trivially small and closely related.
+- Formatting is enforced by `swift-format` in CI (`.swift-format` at repo root).
+  Run `scripts/format.sh` before committing, or `scripts/lint.sh` to check
+  without modifying.
 
 ---
 

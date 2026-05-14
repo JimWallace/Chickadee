@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import Core
 
 // Tests for Core types with non-trivial Codable behaviour.
@@ -21,17 +22,18 @@ struct CoreCodableTests {
 
     // MARK: - BuildStatus
 
-    @Test(arguments: zip(
-        [BuildStatus.passed, .failed, .skipped],
-        ["passed",           "failed", "skipped"]
-    ))
+    @Test(
+        arguments: zip(
+            [BuildStatus.passed, .failed, .skipped],
+            ["passed", "failed", "skipped"]
+        ))
     func buildStatusRawValue(status: BuildStatus, raw: String) {
         #expect(status.rawValue == raw)
     }
 
     @Test(arguments: [BuildStatus.passed, .failed, .skipped])
     func buildStatusRoundTrip(status: BuildStatus) throws {
-        let data    = try encoder.encode(status)
+        let data = try encoder.encode(status)
         let decoded = try decoder.decode(BuildStatus.self, from: data)
         #expect(decoded == status)
     }
@@ -40,16 +42,16 @@ struct CoreCodableTests {
 
     @Test func testOutcomePointsDefaultsToOne() throws {
         let json = """
-        {
-          "testName": "testFoo",
-          "tier": "public",
-          "status": "pass",
-          "shortResult": "passed",
-          "executionTimeMs": 42,
-          "attemptNumber": 1,
-          "isFirstPassSuccess": true
-        }
-        """.data(using: .utf8)!
+            {
+              "testName": "testFoo",
+              "tier": "public",
+              "status": "pass",
+              "shortResult": "passed",
+              "executionTimeMs": 42,
+              "attemptNumber": 1,
+              "isFirstPassSuccess": true
+            }
+            """.data(using: .utf8)!
 
         let outcome = try decoder.decode(TestOutcome.self, from: json)
         #expect(outcome.points == 1)
@@ -60,18 +62,18 @@ struct CoreCodableTests {
 
     @Test func testOutcomeExplicitPoints() throws {
         let json = """
-        {
-          "testName": "testBar",
-          "tier": "release",
-          "status": "fail",
-          "shortResult": "wrong answer",
-          "longResult": "expected 42, got 0",
-          "points": 3,
-          "executionTimeMs": 10,
-          "attemptNumber": 2,
-          "isFirstPassSuccess": false
-        }
-        """.data(using: .utf8)!
+            {
+              "testName": "testBar",
+              "tier": "release",
+              "status": "fail",
+              "shortResult": "wrong answer",
+              "longResult": "expected 42, got 0",
+              "points": 3,
+              "executionTimeMs": 10,
+              "attemptNumber": 2,
+              "isFirstPassSuccess": false
+            }
+            """.data(using: .utf8)!
 
         let outcome = try decoder.decode(TestOutcome.self, from: json)
         #expect(outcome.points == 3)
@@ -93,7 +95,7 @@ struct CoreCodableTests {
             attemptNumber: 3,
             isFirstPassSuccess: false
         )
-        let data    = try encoder.encode(outcome)
+        let data = try encoder.encode(outcome)
         let decoded = try decoder.decode(TestOutcome.self, from: data)
         #expect(decoded == outcome)
     }
@@ -103,28 +105,28 @@ struct CoreCodableTests {
     @Test func collectionTotalPointsFallsBackToTotalTests() throws {
         // Old JSON without totalPoints/earnedPoints/warnings/jobStartedAt
         let json = """
-        {
-          "submissionID": "sub_001",
-          "testSetupID": "setup_001",
-          "attemptNumber": 1,
-          "buildStatus": "passed",
-          "outcomes": [],
-          "totalTests": 5,
-          "passCount": 3,
-          "failCount": 2,
-          "errorCount": 0,
-          "timeoutCount": 0,
-          "executionTimeMs": 500,
-          "runnerVersion": "shell-runner/1.0",
-          "timestamp": "1970-01-01T00:00:00Z"
-        }
-        """.data(using: .utf8)!
+            {
+              "submissionID": "sub_001",
+              "testSetupID": "setup_001",
+              "attemptNumber": 1,
+              "buildStatus": "passed",
+              "outcomes": [],
+              "totalTests": 5,
+              "passCount": 3,
+              "failCount": 2,
+              "errorCount": 0,
+              "timeoutCount": 0,
+              "executionTimeMs": 500,
+              "runnerVersion": "shell-runner/1.0",
+              "timestamp": "1970-01-01T00:00:00Z"
+            }
+            """.data(using: .utf8)!
 
         let col = try decoder.decode(TestOutcomeCollection.self, from: json)
-        #expect(col.totalPoints  == 5)   // falls back to totalTests
-        #expect(col.earnedPoints == 3)   // falls back to passCount
-        #expect(col.warnings     == [])  // defaults to empty
-        #expect(col.jobStartedAt == nil) // optional, absent
+        #expect(col.totalPoints == 5)  // falls back to totalTests
+        #expect(col.earnedPoints == 3)  // falls back to passCount
+        #expect(col.warnings == [])  // defaults to empty
+        #expect(col.jobStartedAt == nil)  // optional, absent
     }
 
     @Test func collectionExplicitPointsPreserved() throws {
@@ -146,11 +148,11 @@ struct CoreCodableTests {
             timestamp: Date(timeIntervalSince1970: 0)
         )
 
-        let data    = try encoder.encode(col)
+        let data = try encoder.encode(col)
         let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
-        #expect(decoded.totalPoints  == 4)
+        #expect(decoded.totalPoints == 4)
         #expect(decoded.earnedPoints == 4)
-        #expect(decoded.warnings     == ["file renamed"])
+        #expect(decoded.warnings == ["file renamed"])
     }
 
     @Test func collectionRoundTrip() throws {
@@ -164,10 +166,10 @@ struct CoreCodableTests {
             runnerVersion: "shell-runner/1.0",
             timestamp: Date(timeIntervalSince1970: 1_000_000)
         )
-        let data    = try encoder.encode(col)
+        let data = try encoder.encode(col)
         let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
-        #expect(decoded.submissionID   == "sub_rt")
-        #expect(decoded.buildStatus    == .failed)
+        #expect(decoded.submissionID == "sub_rt")
+        #expect(decoded.buildStatus == .failed)
         #expect(decoded.compilerOutput == "make: no rule for target")
         #expect(decoded.outcomes.isEmpty)
     }
@@ -175,44 +177,48 @@ struct CoreCodableTests {
     // MARK: - Job
 
     @Test func jobRoundTrip() throws {
-        let manifest = try decoder.decode(TestProperties.self, from: """
-        { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 }
-        """.data(using: .utf8)!)
+        let manifest = try decoder.decode(
+            TestProperties.self,
+            from: """
+                { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 }
+                """.data(using: .utf8)!)
 
         let job = Job(
             submissionID: "sub_job",
             testSetupID: "setup_job",
             attemptNumber: 1,
             submissionURL: URL(string: "http://localhost:8080/worker/artifacts/sub_job")!,
-            testSetupURL:  URL(string: "http://localhost:8080/api/v1/testsetups/setup_job/download")!,
+            testSetupURL: URL(string: "http://localhost:8080/api/v1/testsetups/setup_job/download")!,
             manifest: manifest,
             submissionFilename: "warmup.py"
         )
 
-        let data    = try encoder.encode(job)
+        let data = try encoder.encode(job)
         let decoded = try decoder.decode(Job.self, from: data)
-        #expect(decoded.submissionID       == "sub_job")
-        #expect(decoded.testSetupID        == "setup_job")
-        #expect(decoded.attemptNumber      == 1)
+        #expect(decoded.submissionID == "sub_job")
+        #expect(decoded.testSetupID == "setup_job")
+        #expect(decoded.attemptNumber == 1)
         #expect(decoded.submissionFilename == "warmup.py")
         #expect(decoded.manifest.timeLimitSeconds == 5)
     }
 
     @Test func jobSubmissionFilenameNilRoundTrip() throws {
-        let manifest = try decoder.decode(TestProperties.self, from: """
-        { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
-        """.data(using: .utf8)!)
+        let manifest = try decoder.decode(
+            TestProperties.self,
+            from: """
+                { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
+                """.data(using: .utf8)!)
 
         let job = Job(
             submissionID: "sub_zip",
             testSetupID: "setup_zip",
             attemptNumber: 3,
             submissionURL: URL(string: "http://localhost/a")!,
-            testSetupURL:  URL(string: "http://localhost/b")!,
+            testSetupURL: URL(string: "http://localhost/b")!,
             manifest: manifest,
             submissionFilename: nil
         )
-        let data    = try encoder.encode(job)
+        let data = try encoder.encode(job)
         let decoded = try decoder.decode(Job.self, from: data)
         #expect(decoded.submissionFilename == nil)
     }
@@ -255,11 +261,13 @@ struct CoreCodableTests {
         )
         let manifest = TestProperties(
             schemaVersion: 1,
-            testSuites: [TestSuiteEntry(
-                tier: .pub,
-                script: "publiccheck_df_shape.py",
-                generatedByCheck: "df_shape"
-            )],
+            testSuites: [
+                TestSuiteEntry(
+                    tier: .pub,
+                    script: "publiccheck_df_shape.py",
+                    generatedByCheck: "df_shape"
+                )
+            ],
             timeLimitSeconds: 7,
             notebookChecks: [check]
         )
@@ -325,15 +333,15 @@ struct CoreCodableTests {
         // decode time, so callers can distinguish "instructor didn't
         // pick" from "instructor picked exact".
         let json = """
-        {
-          "id": "x",
-          "kind": "data_frame_columns",
-          "tier": "public",
-          "points": 1,
-          "variable": "df",
-          "expectedColumns": ["a", "b"]
-        }
-        """
+            {
+              "id": "x",
+              "kind": "data_frame_columns",
+              "tier": "public",
+              "points": 1,
+              "variable": "df",
+              "expectedColumns": ["a", "b"]
+            }
+            """
         let decoded = try decoder.decode(NotebookCheck.self, from: json.data(using: .utf8)!)
         #expect(decoded.columnMatch == nil)
     }
@@ -562,15 +570,15 @@ struct CoreCodableTests {
         // Pre-equality manifests don't carry the new fields; decode must
         // leave them nil rather than throwing.
         let json = """
-        {
-          "id": "x",
-          "kind": "data_frame_equality",
-          "tier": "public",
-          "points": 1,
-          "variable": "df",
-          "expectedCSV": "a,b\\n1,2\\n"
-        }
-        """
+            {
+              "id": "x",
+              "kind": "data_frame_equality",
+              "tier": "public",
+              "points": 1,
+              "variable": "df",
+              "expectedCSV": "a,b\\n1,2\\n"
+            }
+            """
         let decoded = try decoder.decode(NotebookCheck.self, from: json.data(using: .utf8)!)
         #expect(decoded.checkDtype == nil)
         #expect(decoded.checkLike == nil)
@@ -597,9 +605,11 @@ struct CoreCodableTests {
     @Test func legacyManifestWithoutNotebookChecksDecodesAsEmpty() throws {
         // Pre-NotebookCheck manifests don't carry the notebookChecks field;
         // decoder must default to [].
-        let manifest = try decoder.decode(TestProperties.self, from: """
-        { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
-        """.data(using: .utf8)!)
+        let manifest = try decoder.decode(
+            TestProperties.self,
+            from: """
+                { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
+                """.data(using: .utf8)!)
         #expect(manifest.notebookChecks.isEmpty)
     }
 
@@ -621,12 +631,12 @@ struct CoreCodableTests {
             profile: profile
         )
 
-        let data    = try encoder.encode(payload)
+        let data = try encoder.encode(payload)
         let decoded = try decoder.decode(WorkerActivityPayload.self, from: data)
-        #expect(decoded.workerID           == "runner-01")
-        #expect(decoded.maxConcurrentJobs  == 4)
-        #expect(decoded.activeJobs         == 2)
-        #expect(decoded.profile?.platform  == "linux")
+        #expect(decoded.workerID == "runner-01")
+        #expect(decoded.maxConcurrentJobs == 4)
+        #expect(decoded.activeJobs == 2)
+        #expect(decoded.profile?.platform == "linux")
         #expect(decoded.profile?.languageVersions.first?.language == "python")
     }
 
@@ -635,7 +645,7 @@ struct CoreCodableTests {
             workerID: "runner-02", hostname: "h", runnerVersion: "0.4.0",
             maxConcurrentJobs: 1, activeJobs: 0, profile: nil
         )
-        let data    = try encoder.encode(payload)
+        let data = try encoder.encode(payload)
         let decoded = try decoder.decode(WorkerActivityPayload.self, from: data)
         #expect(decoded.profile == nil)
     }
@@ -676,13 +686,13 @@ struct CoreCodableTests {
         )
         let report = WorkerExecutionReport(collection: col, diagnostics: diag)
 
-        let data    = try encoder.encode(report)
+        let data = try encoder.encode(report)
         let decoded = try decoder.decode(WorkerExecutionReport.self, from: data)
-        #expect(decoded.collection.submissionID          == "sub_r")
-        #expect(decoded.diagnostics?.runnerID            == "runner-01")
-        #expect(decoded.diagnostics?.timedOut            == false)
-        #expect(decoded.diagnostics?.peakRSSBytes        == 4096)
-        #expect(decoded.diagnostics?.terminationReason   == nil)
+        #expect(decoded.collection.submissionID == "sub_r")
+        #expect(decoded.diagnostics?.runnerID == "runner-01")
+        #expect(decoded.diagnostics?.timedOut == false)
+        #expect(decoded.diagnostics?.peakRSSBytes == 4096)
+        #expect(decoded.diagnostics?.terminationReason == nil)
         #expect(decoded.diagnostics?.stageTimings?.submissionDownloadMs == 120)
         #expect(decoded.diagnostics?.stageTimings?.testExecutionMs == 10_000)
         #expect(decoded.diagnostics?.freeDiskMBAtStart == 1024)
@@ -695,22 +705,22 @@ struct CoreCodableTests {
         // Codable decoder still accepts those payloads with the new optional
         // fields landing as nil.
         let legacyJSON = """
-        {
-            "runnerID": "runner-legacy",
-            "startedAt": "2024-01-01T00:00:00Z",
-            "finishedAt": "2024-01-01T00:00:10Z",
-            "finalStatus": "passed",
-            "timedOut": false,
-            "exitCode": 0,
-            "terminationReason": null,
-            "peakRSSBytes": null,
-            "wallClockMs": 10000,
-            "childProcessCount": null,
-            "stdoutBytes": null,
-            "stderrBytes": null,
-            "stageTimings": null
-        }
-        """.data(using: .utf8)!
+            {
+                "runnerID": "runner-legacy",
+                "startedAt": "2024-01-01T00:00:00Z",
+                "finishedAt": "2024-01-01T00:00:10Z",
+                "finalStatus": "passed",
+                "timedOut": false,
+                "exitCode": 0,
+                "terminationReason": null,
+                "peakRSSBytes": null,
+                "wallClockMs": 10000,
+                "childProcessCount": null,
+                "stdoutBytes": null,
+                "stderrBytes": null,
+                "stageTimings": null
+            }
+            """.data(using: .utf8)!
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -730,7 +740,7 @@ struct CoreCodableTests {
             timestamp: Date(timeIntervalSince1970: 0)
         )
         let report = WorkerExecutionReport(collection: col, diagnostics: nil)
-        let data    = try encoder.encode(report)
+        let data = try encoder.encode(report)
         let decoded = try decoder.decode(WorkerExecutionReport.self, from: data)
         #expect(decoded.diagnostics == nil)
     }
@@ -743,11 +753,11 @@ struct CoreCodableTests {
             architecture: "arm64",
             languageVersions: [
                 LanguageVersion(language: "python", version: "3.12"),
-                LanguageVersion(language: "r",      version: "4.3.1")
+                LanguageVersion(language: "r", version: "4.3.1"),
             ],
             capabilities: [RunnerCapability(name: "jupyter")]
         )
-        let data    = try encoder.encode(profile)
+        let data = try encoder.encode(profile)
         let decoded = try decoder.decode(RunnerCapabilityProfile.self, from: data)
         #expect(decoded == profile)
         #expect(decoded.languageVersions.count == 2)
@@ -755,7 +765,7 @@ struct CoreCodableTests {
 
     @Test func emptyRunnerCapabilityProfileRoundTrip() throws {
         let profile = RunnerCapabilityProfile(platform: "linux", architecture: "x86_64")
-        let data    = try encoder.encode(profile)
+        let data = try encoder.encode(profile)
         let decoded = try decoder.decode(RunnerCapabilityProfile.self, from: data)
         #expect(decoded == profile)
         #expect(decoded.capabilities.isEmpty)
@@ -771,7 +781,7 @@ struct CoreCodableTests {
             shortResult: "passed", longResult: nil,
             executionTimeMs: 30, memoryUsageBytes: nil
         )
-        let data    = try encoder.encode(outcome)
+        let data = try encoder.encode(outcome)
         let decoded = try decoder.decode(RunnerOutcome.self, from: data)
         #expect(decoded == outcome)
     }
@@ -783,18 +793,20 @@ struct CoreCodableTests {
             compilerOutput: nil,
             executionTimeMs: 250,
             outcomes: [
-                RunnerOutcome(testName: "t1", testClass: nil, tier: .pub, status: .pass,
-                              shortResult: "passed", longResult: nil,
-                              executionTimeMs: 100, memoryUsageBytes: nil),
-                RunnerOutcome(testName: "t2", testClass: nil, tier: .release, status: .fail,
-                              shortResult: "wrong", longResult: "expected 1, got 0",
-                              executionTimeMs: 150, memoryUsageBytes: 512)
+                RunnerOutcome(
+                    testName: "t1", testClass: nil, tier: .pub, status: .pass,
+                    shortResult: "passed", longResult: nil,
+                    executionTimeMs: 100, memoryUsageBytes: nil),
+                RunnerOutcome(
+                    testName: "t2", testClass: nil, tier: .release, status: .fail,
+                    shortResult: "wrong", longResult: "expected 1, got 0",
+                    executionTimeMs: 150, memoryUsageBytes: 512),
             ]
         )
-        let data    = try encoder.encode(result)
+        let data = try encoder.encode(result)
         let decoded = try decoder.decode(RunnerResult.self, from: data)
         #expect(decoded == result)
-        #expect(decoded.outcomes.count         == 2)
+        #expect(decoded.outcomes.count == 2)
         #expect(decoded.outcomes[1].longResult == "expected 1, got 0")
     }
 
@@ -806,9 +818,9 @@ struct CoreCodableTests {
             executionTimeMs: 0,
             outcomes: []
         )
-        let data    = try encoder.encode(result)
+        let data = try encoder.encode(result)
         let decoded = try decoder.decode(RunnerResult.self, from: data)
-        #expect(decoded.buildStatus    == .failed)
+        #expect(decoded.buildStatus == .failed)
         #expect(decoded.compilerOutput == "make: no rule for target 'all'")
         #expect(decoded.outcomes.isEmpty)
     }

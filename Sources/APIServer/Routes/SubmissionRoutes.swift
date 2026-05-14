@@ -1,9 +1,9 @@
 // APIServer/Routes/SubmissionRoutes.swift
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct SubmissionRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -27,11 +27,11 @@ struct SubmissionRoutes: RouteCollection {
         }
 
         let submissionsDir = req.application.submissionsDirectory
-        let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath        = submissionsDir + "\(subID).zip"
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let zipPath = submissionsDir + "\(subID).zip"
 
         guard let zipData = body.zipBase64.data(using: .utf8),
-              let decoded = Data(base64Encoded: zipData)
+            let decoded = Data(base64Encoded: zipData)
         else {
             throw Abort(.badRequest, reason: "zipBase64 is not valid base-64")
         }
@@ -44,11 +44,11 @@ struct SubmissionRoutes: RouteCollection {
             .count()
 
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setup.id!,
-            zipPath:       zipPath,
+            id: subID,
+            testSetupID: setup.id!,
+            zipPath: zipPath,
             attemptNumber: priorCount + 1,
-            kind:          APISubmission.Kind.student
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
@@ -76,21 +76,22 @@ struct SubmissionRoutes: RouteCollection {
         }
 
         let submissionsDir = req.application.submissionsDirectory
-        let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
 
         // Derive extension from the provided filename, default to original ext.
-        let ext      = URL(fileURLWithPath: submittedFilename).pathExtension
+        let ext = URL(fileURLWithPath: submittedFilename).pathExtension
         let filePath = submissionsDir + "\(subID).\(ext.isEmpty ? "bin" : ext)"
 
         // For .ipynb submissions, merge the instructor's hidden test cells back in
         // before saving, so the worker grades with the full authoritative test suite.
         let fileData: Data
         if submittedFilename.hasSuffix(".ipynb"),
-           let setup2 = try await APITestSetup.find(body.testSetupID, on: req.db),
-           let instructorData = try? notebookData(for: setup2) {
+            let setup2 = try await APITestSetup.find(body.testSetupID, on: req.db),
+            let instructorData = try? notebookData(for: setup2)
+        {
             fileData = mergeNotebook(student: body.file, instructor: instructorData)
         } else {
-            fileData = body.file   // .py or other files — no merge needed
+            fileData = body.file  // .py or other files — no merge needed
         }
         try fileData.write(to: URL(fileURLWithPath: filePath))
 
@@ -100,12 +101,12 @@ struct SubmissionRoutes: RouteCollection {
             .count()
 
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setup.id!,
-            zipPath:       filePath,
+            id: subID,
+            testSetupID: setup.id!,
+            zipPath: filePath,
             attemptNumber: priorCount + 1,
-            filename:      submittedFilename,
-            kind:          APISubmission.Kind.student
+            filename: submittedFilename,
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
@@ -131,14 +132,15 @@ struct SubmissionDownloadRoute: RouteCollection {
     func download(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         guard let subID = req.parameters.get("submissionID"),
-              let submission = try await APISubmission.find(subID, on: req.db)
+            let submission = try await APISubmission.find(subID, on: req.db)
         else {
             throw Abort(.notFound)
         }
         if !caller.isInstructor && submission.userID != caller.id {
             throw Abort(.forbidden)
         }
-        let downloadName = submission.filename
+        let downloadName =
+            submission.filename
             ?? URL(fileURLWithPath: submission.zipPath).lastPathComponent
         let data = try Data(contentsOf: URL(fileURLWithPath: submission.zipPath))
         return buildFileResponse(data: data, filename: downloadName)

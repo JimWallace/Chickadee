@@ -19,10 +19,10 @@ struct RunnerProfileDetector {
         // Run independent probes concurrently — capability detection used to
         // serialize ~5 subprocesses at every cold start.
         async let pythonVersionOpt = detectVersion(command: "python3", arguments: ["--version"])
-        async let rVersionOpt      = detectVersion(command: "R", arguments: ["--version"])
-        async let swiftVersionOpt  = detectVersion(command: "swift", arguments: ["--version"])
-        async let bashExists       = commandExists("bash")
-        async let zshExists        = commandExists("zsh")
+        async let rVersionOpt = detectVersion(command: "R", arguments: ["--version"])
+        async let swiftVersionOpt = detectVersion(command: "swift", arguments: ["--version"])
+        async let bashExists = commandExists("bash")
+        async let zshExists = commandExists("zsh")
 
         var languageVersions: [LanguageVersion] = []
         var capabilities: Set<RunnerCapability> = []
@@ -111,10 +111,12 @@ struct RunnerProfileDetector {
         do {
             try process.run()
         } catch {
-            writeStructuredRunnerLog(event: "local_execution_error", fields: [
-                "error_type": "capability_detection_failed",
-                "error_message_summary": "\(command): \(error.localizedDescription)",
-            ])
+            writeStructuredRunnerLog(
+                event: "local_execution_error",
+                fields: [
+                    "error_type": "capability_detection_failed",
+                    "error_message_summary": "\(command): \(error.localizedDescription)",
+                ])
             return nil
         }
 
@@ -156,11 +158,13 @@ struct RunnerProfileDetector {
                     kill(process.processIdentifier, SIGKILL)
                 }
                 _ = try? await Task.sleep(nanoseconds: 100_000_000)
-                writeStructuredRunnerLog(event: "local_execution_error", fields: [
-                    "error_type": "capability_detection_timeout",
-                    "error_message_summary": "\(command) \(arguments.joined(separator: " "))",
-                    "timeout_seconds": Self.probeTimeoutSeconds,
-                ])
+                writeStructuredRunnerLog(
+                    event: "local_execution_error",
+                    fields: [
+                        "error_type": "capability_detection_timeout",
+                        "error_message_summary": "\(command) \(arguments.joined(separator: " "))",
+                        "timeout_seconds": Self.probeTimeoutSeconds,
+                    ])
                 return false
             }
             try? await Task.sleep(nanoseconds: 25_000_000)  // 25 ms

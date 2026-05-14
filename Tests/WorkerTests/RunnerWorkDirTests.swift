@@ -1,7 +1,8 @@
-import XCTest
-@testable import chickadee_runner
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
 
 // MARK: - Runner Working-Directory Setup Tests
 //
@@ -38,12 +39,12 @@ final class RunnerWorkDirTests: XCTestCase {
 
     /// Minimal valid notebook JSON.
     private let minimalNotebook = """
-    {
-      "nbformat": 4,
-      "metadata": {"kernelspec": {"name": "python3"}},
-      "cells": [{"cell_type": "code", "source": ["x = 1"]}]
-    }
-    """
+        {
+          "nbformat": 4,
+          "metadata": {"kernelspec": {"name": "python3"}},
+          "cells": [{"cell_type": "code", "source": ["x = 1"]}]
+        }
+        """
 
     /// Notebook with a specific function definition for duplicate-detection tests.
     private func notebook(defining functionName: String) -> String {
@@ -118,7 +119,8 @@ final class RunnerWorkDirTests: XCTestCase {
         do {
             let starterPath = workDir.appendingPathComponent(starterName)
             if fm.fileExists(atPath: starterPath.path),
-               submissionFilename != starterName {
+                submissionFilename != starterName
+            {
                 try fm.removeItem(at: starterPath)
             }
         }
@@ -154,20 +156,21 @@ final class RunnerWorkDirTests: XCTestCase {
     /// Initial validation: solution.ipynb submitted against setup containing assignment.ipynb.
     /// After setup, only solution.py should exist — no assignment.ipynb or assignment.py.
     func testNormalAssignment_validationWithSolutionNotebook() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
                 ("test_public.py", "import test_runtime"),
-                ("chickadee.py", "# helper")
+                ("chickadee.py", "# helper"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "solve"),
@@ -175,19 +178,24 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Starter must be removed
-        XCTAssertFalse(fileExists("assignment.ipynb"),
-                        "Starter notebook must be removed before test execution")
-        XCTAssertFalse(fileExists("assignment.py"),
-                        "Starter should not be extracted to .py")
+        XCTAssertFalse(
+            fileExists("assignment.ipynb"),
+            "Starter notebook must be removed before test execution")
+        XCTAssertFalse(
+            fileExists("assignment.py"),
+            "Starter should not be extracted to .py")
 
         // Solution notebook should be converted to .py
-        XCTAssertTrue(fileExists("solution.ipynb"),
-                       "Solution notebook file should still be present")
-        XCTAssertTrue(fileExists("solution.py"),
-                       "Solution notebook must be extracted to solution.py")
+        XCTAssertTrue(
+            fileExists("solution.ipynb"),
+            "Solution notebook file should still be present")
+        XCTAssertTrue(
+            fileExists("solution.py"),
+            "Solution notebook must be extracted to solution.py")
         let pyContent = try readFile("solution.py")
-        XCTAssertTrue(pyContent.contains("def solve()"),
-                       "Extracted .py must contain the solution code")
+        XCTAssertTrue(
+            pyContent.contains("def solve()"),
+            "Extracted .py must contain the solution code")
 
         // Module hint should point to solution.py
         XCTAssertTrue(fileExists(".chickadee_student_module"))
@@ -202,19 +210,20 @@ final class RunnerWorkDirTests: XCTestCase {
     /// Edit/save re-validation is the same runner flow — verify it still works.
     func testNormalAssignment_editSaveRevalidation() throws {
         // Identical to initial validation — the runner doesn't know the difference.
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
-                ("test_public.py", "import test_runtime")
+                ("test_public.py", "import test_runtime"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "my_func"),
@@ -228,31 +237,35 @@ final class RunnerWorkDirTests: XCTestCase {
     }
 
     func testValidationSubmissionFilenameIsSanitizedToBasename() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
-                ("test_public.py", "import test_runtime")
+                ("test_public.py", "import test_runtime"),
             ],
             submissionFilename: "nested/folder/solution.ipynb",
             submissionContent: notebook(defining: "hello"),
             manifest: manifest
         )
 
-        XCTAssertTrue(fileExists("solution.ipynb"),
-                      "Single-file submissions should be staged by basename")
-        XCTAssertTrue(fileExists("solution.py"),
-                      "Sanitized notebook submissions must still extract to Python")
-        XCTAssertFalse(fileExists("nested"),
-                       "The runner should not recreate client-provided path segments")
+        XCTAssertTrue(
+            fileExists("solution.ipynb"),
+            "Single-file submissions should be staged by basename")
+        XCTAssertTrue(
+            fileExists("solution.py"),
+            "Sanitized notebook submissions must still extract to Python")
+        XCTAssertFalse(
+            fileExists("nested"),
+            "The runner should not recreate client-provided path segments")
     }
 
     // =========================================================================
@@ -262,35 +275,39 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testStudentSubmission_namedSameAsStarter() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
-                ("assignment.ipynb", minimalNotebook),   // template (will be overwritten)
-                ("test_public.py", "import test_runtime")
+                ("assignment.ipynb", minimalNotebook),  // template (will be overwritten)
+                ("test_public.py", "import test_runtime"),
             ],
-            submissionFilename: "assignment.ipynb",        // student overwrites template
+            submissionFilename: "assignment.ipynb",  // student overwrites template
             submissionContent: notebook(defining: "student_func"),
             manifest: manifest
         )
 
         // Starter was overwritten by submission, NOT removed
-        XCTAssertTrue(fileExists("assignment.ipynb"),
-                       "Student's submission should be present as assignment.ipynb")
+        XCTAssertTrue(
+            fileExists("assignment.ipynb"),
+            "Student's submission should be present as assignment.ipynb")
 
         // Should be extracted to .py
-        XCTAssertTrue(fileExists("assignment.py"),
-                       "Student's notebook must be extracted to assignment.py")
+        XCTAssertTrue(
+            fileExists("assignment.py"),
+            "Student's notebook must be extracted to assignment.py")
         let py = try readFile("assignment.py")
-        XCTAssertTrue(py.contains("def student_func()"),
-                       "Extracted .py must contain the student's code, not the template")
+        XCTAssertTrue(
+            py.contains("def student_func()"),
+            "Extracted .py must contain the student's code, not the template")
 
         // Module hint should point to assignment.py
         let hint = try readFile(".chickadee_student_module")
@@ -305,18 +322,19 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testMarmosetImport_ipynbCanonicalSolution_initialValidation() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "gradingMode": "worker",
-            "testSuites": [
-                {"tier": "public", "script": "publictest_load.py"},
-                {"tier": "public", "script": "publictest_analysis.py"}
-            ],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "gradingMode": "worker",
+                "testSuites": [
+                    {"tier": "public", "script": "publictest_load.py"},
+                    {"tier": "public", "script": "publictest_analysis.py"}
+                ],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
@@ -324,7 +342,7 @@ final class RunnerWorkDirTests: XCTestCase {
                 ("publictest_load.py", "import notebook_grade"),
                 ("publictest_analysis.py", "import notebook_grade"),
                 ("notebook_grade.py", "# grading helper"),
-                ("chickadee.py", "# test framework")
+                ("chickadee.py", "# test framework"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "load_and_describe"),
@@ -332,13 +350,15 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Starter removed
-        XCTAssertFalse(fileExists("assignment.ipynb"),
-                        "Starter must be removed so notebook_grade.py sees only one .ipynb")
+        XCTAssertFalse(
+            fileExists("assignment.ipynb"),
+            "Starter must be removed so notebook_grade.py sees only one .ipynb")
 
         // Only one .ipynb should remain: the solution
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertEqual(ipynbFiles.count, 1,
-                        "Exactly one .ipynb should remain (the solution), got: \(ipynbFiles)")
+        XCTAssertEqual(
+            ipynbFiles.count, 1,
+            "Exactly one .ipynb should remain (the solution), got: \(ipynbFiles)")
         XCTAssertTrue(ipynbFiles.contains("solution.ipynb"))
 
         // solution.py extracted
@@ -349,20 +369,21 @@ final class RunnerWorkDirTests: XCTestCase {
 
     func testMarmosetImport_ipynbCanonicalSolution_editSaveRevalidation() throws {
         // Same scenario but represents an edit/save cycle — runner behavior is identical
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
                 ("publictest_load.py", "import notebook_grade"),
-                ("notebook_grade.py", "# grading helper")
+                ("notebook_grade.py", "# grading helper"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "analyze"),
@@ -381,20 +402,21 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testMarmosetImport_pyCanonicalSolution() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
                 ("publictest_load.py", "import test_runtime"),
-                ("chickadee.py", "# helper")
+                ("chickadee.py", "# helper"),
             ],
             submissionFilename: "solution.py",
             submissionContent: "def solve():\n    return 42\n",
@@ -406,8 +428,9 @@ final class RunnerWorkDirTests: XCTestCase {
 
         // No .ipynb files at all
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertTrue(ipynbFiles.isEmpty,
-                       "No .ipynb should remain when solution is .py, got: \(ipynbFiles)")
+        XCTAssertTrue(
+            ipynbFiles.isEmpty,
+            "No .ipynb should remain when solution is .py, got: \(ipynbFiles)")
 
         // solution.py is a raw Python file — should NOT be overwritten by extraction
         XCTAssertTrue(fileExists("solution.py"))
@@ -426,21 +449,22 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testMarmosetImport_noStarterNotebook() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 // No assignment.ipynb — e.g. Marmoset project had no starter files
                 ("publictest_load.py", "import notebook_grade"),
                 ("notebook_grade.py", "# grading helper"),
-                ("chickadee.py", "# helper")
+                ("chickadee.py", "# helper"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "process_data"),
@@ -467,21 +491,23 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testLegacyManifest_noStarterNotebookField() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.sh"}],
-            "timeLimitSeconds": 10
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.sh"}],
+                "timeLimitSeconds": 10
+            }
+            """)
 
-        XCTAssertNil(manifest.starterNotebook,
-                      "Legacy manifests should have nil starterNotebook")
+        XCTAssertNil(
+            manifest.starterNotebook,
+            "Legacy manifests should have nil starterNotebook")
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("test_public.sh", "#!/bin/sh\nexit 0"),
-                ("helper.py", "# support file")
+                ("helper.py", "# support file"),
             ],
             submissionFilename: "submission.py",
             submissionContent: "def main(): pass\n",
@@ -504,20 +530,21 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testLegacyManifest_notebookAssignment_starterStillRemoved() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.py"}],
-            "timeLimitSeconds": 10
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.py"}],
+                "timeLimitSeconds": 10
+            }
+            """)
 
         XCTAssertNil(manifest.starterNotebook)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
-                ("test_public.py", "import test_runtime")
+                ("test_public.py", "import test_runtime"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "solve"),
@@ -525,10 +552,12 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Even without starterNotebook in manifest, assignment.ipynb is removed
-        XCTAssertFalse(fileExists("assignment.ipynb"),
-                        "Legacy manifests must still remove assignment.ipynb by default")
-        XCTAssertFalse(fileExists("assignment.py"),
-                        "Starter should not be extracted to .py")
+        XCTAssertFalse(
+            fileExists("assignment.ipynb"),
+            "Legacy manifests must still remove assignment.ipynb by default")
+        XCTAssertFalse(
+            fileExists("assignment.py"),
+            "Starter should not be extracted to .py")
 
         // Solution extracted correctly
         XCTAssertTrue(fileExists("solution.py"))
@@ -538,18 +567,19 @@ final class RunnerWorkDirTests: XCTestCase {
 
     /// Legacy manifest, student submits assignment.ipynb — should NOT be removed.
     func testLegacyManifest_studentSubmitsAssignment_notRemoved() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test_public.py"}],
-            "timeLimitSeconds": 10
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test_public.py"}],
+                "timeLimitSeconds": 10
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", minimalNotebook),
-                ("test_public.py", "import test_runtime")
+                ("test_public.py", "import test_runtime"),
             ],
             submissionFilename: "assignment.ipynb",
             submissionContent: notebook(defining: "student_work"),
@@ -568,21 +598,22 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testShellScriptAssignment_noNotebooks() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [
-                {"tier": "public", "script": "test_01.sh"},
-                {"tier": "release", "script": "test_02.sh"}
-            ],
-            "timeLimitSeconds": 10
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [
+                    {"tier": "public", "script": "test_01.sh"},
+                    {"tier": "release", "script": "test_02.sh"}
+                ],
+                "timeLimitSeconds": 10
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("test_01.sh", "#!/bin/sh\nexit 0"),
-                ("test_02.sh", "#!/bin/sh\nexit 0")
+                ("test_02.sh", "#!/bin/sh\nexit 0"),
             ],
             submissionFilename: nil,
             submissionContent: "",  // zip submission; files already in workDir
@@ -603,14 +634,15 @@ final class RunnerWorkDirTests: XCTestCase {
 
     /// If the starter were NOT removed, notebook_grade.py would find two .ipynb files.
     func testNoDuplicateNotebooks_afterSetup() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         // Both the starter and the solution define the same function
         let starterNB = notebook(defining: "compute")
@@ -619,7 +651,7 @@ final class RunnerWorkDirTests: XCTestCase {
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", starterNB),
-                ("test.py", "# test script")
+                ("test.py", "# test script"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: solutionNB,
@@ -634,25 +666,27 @@ final class RunnerWorkDirTests: XCTestCase {
             $0.hasSuffix(".py") && !$0.hasPrefix("test") && $0 != "chickadee.py"
                 && $0 != "notebook_grade.py"
         }
-        XCTAssertEqual(pyFiles.count, 1,
-                        "Only one extracted .py file (solution.py) should exist, got: \(pyFiles)")
+        XCTAssertEqual(
+            pyFiles.count, 1,
+            "Only one extracted .py file (solution.py) should exist, got: \(pyFiles)")
     }
 
     /// Verify no .py collision when solution is .py and setup has .ipynb starter.
     func testNoDuplicatePy_whenSolutionIsPyAndStarterIsNotebook() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("assignment.ipynb", notebook(defining: "solve")),
-                ("test.py", "# test")
+                ("test.py", "# test"),
             ],
             submissionFilename: "solution.py",
             submissionContent: "def solve():\n    return 1\n",
@@ -683,8 +717,9 @@ final class RunnerWorkDirTests: XCTestCase {
 
         try extractNotebooksToCode(in: workDir)
 
-        XCTAssertTrue(fileExists("solution.py"),
-                       "solution.ipynb must be extracted to solution.py")
+        XCTAssertTrue(
+            fileExists("solution.py"),
+            "solution.ipynb must be extracted to solution.py")
         let py = try readFile("solution.py")
         XCTAssertTrue(py.contains("def my_solution()"))
     }
@@ -696,8 +731,9 @@ final class RunnerWorkDirTests: XCTestCase {
 
         try extractNotebooksToCode(in: workDir)
 
-        XCTAssertTrue(fileExists("assignment.py"),
-                       "assignment.ipynb must be extracted to assignment.py")
+        XCTAssertTrue(
+            fileExists("assignment.py"),
+            "assignment.ipynb must be extracted to assignment.py")
         let py = try readFile("assignment.py")
         XCTAssertTrue(py.contains("def student_work()"))
     }
@@ -707,8 +743,9 @@ final class RunnerWorkDirTests: XCTestCase {
 
         try extractNotebooksToCode(in: workDir)
 
-        XCTAssertTrue(fileExists("Lab3_Analysis.py"),
-                       "Arbitrarily-named notebook must be extracted")
+        XCTAssertTrue(
+            fileExists("Lab3_Analysis.py"),
+            "Arbitrarily-named notebook must be extracted")
         let py = try readFile("Lab3_Analysis.py")
         XCTAssertTrue(py.contains("def lab_work()"))
     }
@@ -718,25 +755,27 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testManifestWithStarterNotebook_decodesCorrectly() throws {
-        let m = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "my_starter.ipynb"
-        }
-        """)
+        let m = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "my_starter.ipynb"
+            }
+            """)
         XCTAssertEqual(m.starterNotebook, "my_starter.ipynb")
     }
 
     func testManifestWithoutStarterNotebook_defaultsToNil() throws {
-        let m = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [],
-            "timeLimitSeconds": 10
-        }
-        """)
+        let m = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [],
+                "timeLimitSeconds": 10
+            }
+            """)
         XCTAssertNil(m.starterNotebook)
     }
 
@@ -746,47 +785,51 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testCustomStarterName_removedBeforeTests() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "Lab3_Starter.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "Lab3_Starter.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("Lab3_Starter.ipynb", minimalNotebook),
-                ("test.py", "# test")
+                ("test.py", "# test"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "analyze"),
             manifest: manifest
         )
 
-        XCTAssertFalse(fileExists("Lab3_Starter.ipynb"),
-                        "Custom starter must be removed")
-        XCTAssertFalse(fileExists("Lab3_Starter.py"),
-                        "Custom starter must not be extracted to .py")
+        XCTAssertFalse(
+            fileExists("Lab3_Starter.ipynb"),
+            "Custom starter must be removed")
+        XCTAssertFalse(
+            fileExists("Lab3_Starter.py"),
+            "Custom starter must not be extracted to .py")
         XCTAssertTrue(fileExists("solution.py"))
     }
 
     /// Student submission named same as custom starter — should NOT be removed.
     func testCustomStarterName_studentSubmitsSameName() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "test.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "Lab3_Starter.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "test.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "Lab3_Starter.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
                 ("Lab3_Starter.ipynb", minimalNotebook),
-                ("test.py", "# test")
+                ("test.py", "# test"),
             ],
             submissionFilename: "Lab3_Starter.ipynb",
             submissionContent: notebook(defining: "student_analysis"),
@@ -797,8 +840,9 @@ final class RunnerWorkDirTests: XCTestCase {
         XCTAssertTrue(fileExists("Lab3_Starter.ipynb"))
         XCTAssertTrue(fileExists("Lab3_Starter.py"))
         let py = try readFile("Lab3_Starter.py")
-        XCTAssertTrue(py.contains("def student_analysis()"),
-                       "Extracted .py must have the student's code, not the template")
+        XCTAssertTrue(
+            py.contains("def student_analysis()"),
+            "Extracted .py must have the student's code, not the template")
     }
 
     // =========================================================================
@@ -807,14 +851,15 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     func testSupportFilesPreserved() throws {
-        let manifest = try makeManifest("""
-        {
-            "schemaVersion": 1,
-            "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
-            "timeLimitSeconds": 10,
-            "starterNotebook": "assignment.ipynb"
-        }
-        """)
+        let manifest = try makeManifest(
+            """
+            {
+                "schemaVersion": 1,
+                "testSuites": [{"tier": "public", "script": "publictest_load.py"}],
+                "timeLimitSeconds": 10,
+                "starterNotebook": "assignment.ipynb"
+            }
+            """)
 
         try simulateRunnerSetup(
             setupFiles: [
@@ -823,7 +868,7 @@ final class RunnerWorkDirTests: XCTestCase {
                 ("notebook_grade.py", "# grading helper"),
                 ("chickadee.py", "# framework"),
                 ("mini_data_lib.py", "# data library"),
-                ("test_data.csv", "a,b,c\n1,2,3")
+                ("test_data.csv", "a,b,c\n1,2,3"),
             ],
             submissionFilename: "solution.ipynb",
             submissionContent: notebook(defining: "solve"),
@@ -839,7 +884,8 @@ final class RunnerWorkDirTests: XCTestCase {
 
         // Support .py files must NOT be overwritten by extraction
         let chickadee = try readFile("chickadee.py")
-        XCTAssertEqual(chickadee, "# framework",
-                        "Support .py files must not be modified by notebook extraction")
+        XCTAssertEqual(
+            chickadee, "# framework",
+            "Support .py files must not be modified by notebook extraction")
     }
 }

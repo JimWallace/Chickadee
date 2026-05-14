@@ -1,5 +1,5 @@
-import Vapor
 import Foundation
+import Vapor
 
 struct ServerHealthAlertConfiguration: Sendable {
     let enabled: Bool

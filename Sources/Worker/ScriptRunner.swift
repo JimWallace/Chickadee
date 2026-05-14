@@ -6,6 +6,7 @@
 
 import Foundation
 import Synchronization
+
 #if os(Linux)
 import Glibc
 #endif
@@ -161,7 +162,7 @@ private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: B
 struct UnsandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
-#if os(Linux)
+        #if os(Linux)
         let launch = configureLinuxUnsandboxedProcess(
             script: script,
             workDir: workDir,
@@ -174,7 +175,7 @@ struct UnsandboxedScriptRunner: ScriptRunner {
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch script"
         )
-#else
+        #else
         let proc = Process()
         let launch = configureUnsandboxedProcess(
             proc,
@@ -191,7 +192,7 @@ struct UnsandboxedScriptRunner: ScriptRunner {
             usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
             usesExternalTimeout: launch.usesExternalTimeout
         )
-#endif
+        #endif
     }
 }
 

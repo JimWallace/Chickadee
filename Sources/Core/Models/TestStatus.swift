@@ -6,8 +6,8 @@
 /// (buildStatus == .failed), not at the individual test level.
 /// Individual tests are only recorded if the build succeeded.
 public enum TestStatus: String, Codable, Sendable {
-    case pass       // Test ran and all assertions passed
-    case fail       // Test ran and an assertion failed
-    case error      // Test ran but threw an unexpected exception/crash
-    case timeout    // Test exceeded the time limit
+    case pass  // Test ran and all assertions passed
+    case fail  // Test ran and an assertion failed
+    case error  // Test ran but threw an unexpected exception/crash
+    case timeout  // Test exceeded the time limit
 }

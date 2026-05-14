@@ -11,23 +11,23 @@
 // Extracted from AssignmentHelpers.swift (issue #442) — no behaviour
 // changes.
 
-import Vapor
 import Core
 import Foundation
+import Vapor
 
 // MARK: - Suite config decode/encode types
 
 struct EditSuiteConfigRow: Decodable {
     let source: String?
     let name: String?
-    let displayName: String?   // optional human-readable name shown to students
+    let displayName: String?  // optional human-readable name shown to students
     let index: Int?
     let isIncluded: Bool?
     let isTest: Bool?
     let tier: String?
     let order: Int?
-    let dependsOn: [String]?   // script names of prerequisites
-    let points: Int?           // grade weight; nil decoded as 1
+    let dependsOn: [String]?  // script names of prerequisites
+    let points: Int?  // grade weight; nil decoded as 1
 }
 
 struct ReindexedSuiteConfigRow: Encodable {
@@ -35,9 +35,9 @@ struct ReindexedSuiteConfigRow: Encodable {
     let isTest: Bool
     let tier: String
     let order: Int?
-    let dependsOn: [String]?   // script names of prerequisites
-    let points: Int            // grade weight; 1 = default (unweighted)
-    let displayName: String?   // optional human-readable name shown to students
+    let dependsOn: [String]?  // script names of prerequisites
+    let points: Int  // grade weight; 1 = default (unweighted)
+    let displayName: String?  // optional human-readable name shown to students
 }
 
 struct ResolvedEditSuiteFiles {
@@ -50,26 +50,28 @@ struct SuiteConfigRow: Decodable {
     let isTest: Bool?
     let tier: String?
     let order: Int?
-    let dependsOn: [String]?   // script names of prerequisites
-    let points: Int?           // grade weight; nil decoded as 1
-    let displayName: String?   // optional human-readable name shown to students
+    let dependsOn: [String]?  // script names of prerequisites
+    let points: Int?  // grade weight; nil decoded as 1
+    let displayName: String?  // optional human-readable name shown to students
 }
 
 struct ConfiguredSuiteEntry {
     let script: String
     let tier: String
     let order: Int
-    let dependsOn: [String]    // script names of prerequisites; empty == none
-    let points: Int            // grade weight; 1 = default (unweighted)
-    let displayName: String?   // optional human-readable name shown to students
-    let generatedBy: String?   // pattern family id; nil for hand-written scripts
-    let generatedByCheck: String? // notebook check id; nil otherwise
-    let sectionID: String?     // id into TestProperties.sections; nil = ungrouped
+    let dependsOn: [String]  // script names of prerequisites; empty == none
+    let points: Int  // grade weight; 1 = default (unweighted)
+    let displayName: String?  // optional human-readable name shown to students
+    let generatedBy: String?  // pattern family id; nil for hand-written scripts
+    let generatedByCheck: String?  // notebook check id; nil otherwise
+    let sectionID: String?  // id into TestProperties.sections; nil = ungrouped
 
-    init(script: String, tier: String, order: Int,
-         dependsOn: [String], points: Int, displayName: String?,
-         generatedBy: String? = nil, generatedByCheck: String? = nil,
-         sectionID: String? = nil) {
+    init(
+        script: String, tier: String, order: Int,
+        dependsOn: [String], points: Int, displayName: String?,
+        generatedBy: String? = nil, generatedByCheck: String? = nil,
+        sectionID: String? = nil
+    ) {
         self.script = script
         self.tier = tier
         self.order = order
@@ -84,7 +86,9 @@ struct ConfiguredSuiteEntry {
 
 // MARK: - Editor view row builders
 
-func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFilename: String?) -> (
+func currentSetupFiles(
+    for setup: APITestSetup, assignmentID: String, solutionFilename: String?
+) -> (
     assignmentFile: CurrentFileLink,
     solutionFile: CurrentFileLink?,
     existingSuiteRows: [EditableSuiteRow]
@@ -102,17 +106,22 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
         )
     }()
 
-    let manifestSuites: [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, isGenerated: Bool)] = {
-        guard let data = setup.manifest.data(using: .utf8),
-              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
-            return []
-        }
-        return props.testSuites.enumerated().map { (idx, item) in
-            (script: item.script, tier: item.tier.rawValue, order: idx + 1,
-             dependsOn: item.dependsOn, points: item.points, name: item.name,
-             isGenerated: item.isGenerated)
-        }
-    }()
+    let manifestSuites:
+        [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, isGenerated: Bool)] =
+            {
+                guard let data = setup.manifest.data(using: .utf8),
+                    let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                else {
+                    return []
+                }
+                return props.testSuites.enumerated().map { (idx, item) in
+                    (
+                        script: item.script, tier: item.tier.rawValue, order: idx + 1,
+                        dependsOn: item.dependsOn, points: item.points, name: item.name,
+                        isGenerated: item.isGenerated
+                    )
+                }
+            }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
 
     let archiveFiles = listZipEntries(zipPath: setup.zipPath)
@@ -129,7 +138,8 @@ func currentSetupFiles(for setup: APITestSetup, assignmentID: String, solutionFi
         return nil
     }()
 
-    let nonNotebookFiles = archiveFiles
+    let nonNotebookFiles =
+        archiveFiles
         .filter { $0 != "assignment.ipynb" && !$0.hasPrefix("solution.") }
         .sorted { lhs, rhs in
             let l = testMap[lhs]?.order ?? Int.max
@@ -167,9 +177,10 @@ func resolveEditSuiteFiles(
 ) throws -> ResolvedEditSuiteFiles {
     let parsedRows: [EditSuiteConfigRow] = {
         guard let raw = suiteConfigJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty,
-              let data = raw.data(using: .utf8),
-              let rows = try? JSONDecoder().decode([EditSuiteConfigRow].self, from: data) else {
+            !raw.isEmpty,
+            let data = raw.data(using: .utf8),
+            let rows = try? JSONDecoder().decode([EditSuiteConfigRow].self, from: data)
+        else {
             return []
         }
         return rows
@@ -188,7 +199,8 @@ func resolveEditSuiteFiles(
 
         let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
             guard let data = setupManifestJSON.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            else {
                 return [:]
             }
             var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = [:]
@@ -206,15 +218,16 @@ func resolveEditSuiteFiles(
 
             let testInfo = manifestTests[name]
             let tier = testInfo?.tier ?? "support"
-            configRows.append(ReindexedSuiteConfigRow(
-                index: resolvedFiles.count - 1,
-                isTest: testInfo != nil && tier != "support",
-                tier: tier,
-                order: testInfo?.order ?? nextOrder,
-                dependsOn: testInfo?.dependsOn,
-                points: testInfo?.points ?? 1,
-                displayName: testInfo?.name
-            ))
+            configRows.append(
+                ReindexedSuiteConfigRow(
+                    index: resolvedFiles.count - 1,
+                    isTest: testInfo != nil && tier != "support",
+                    tier: tier,
+                    order: testInfo?.order ?? nextOrder,
+                    dependsOn: testInfo?.dependsOn,
+                    points: testInfo?.points ?? 1,
+                    displayName: testInfo?.name
+                ))
             nextOrder += 1
         }
 
@@ -229,16 +242,17 @@ func resolveEditSuiteFiles(
             resolvedFiles.append(File(data: buffer, filename: cleanName))
 
             let ext = URL(fileURLWithPath: cleanName).pathExtension.lowercased()
-            let likelyTest = ["sh","bash","zsh","py","rb","pl","js","php"].contains(ext)
-            configRows.append(ReindexedSuiteConfigRow(
-                index: resolvedFiles.count - 1,
-                isTest: likelyTest,
-                tier: likelyTest ? "public" : "support",
-                order: nextOrder,
-                dependsOn: nil,
-                points: 1,
-                displayName: nil
-            ))
+            let likelyTest = ["sh", "bash", "zsh", "py", "rb", "pl", "js", "php"].contains(ext)
+            configRows.append(
+                ReindexedSuiteConfigRow(
+                    index: resolvedFiles.count - 1,
+                    isTest: likelyTest,
+                    tier: likelyTest ? "public" : "support",
+                    order: nextOrder,
+                    dependsOn: nil,
+                    points: 1,
+                    displayName: nil
+                ))
             nextOrder += 1
         }
 
@@ -287,15 +301,16 @@ func resolveEditSuiteFiles(
 
         let tier = normalizeTier(row.tier, isTest: row.isTest)
         let isTest = tier != "support"
-        configRows.append(ReindexedSuiteConfigRow(
-            index: resolvedFiles.count - 1,
-            isTest: isTest,
-            tier: tier,
-            order: row.order ?? nextOrder,
-            dependsOn: row.dependsOn,
-            points: row.points ?? 1,
-            displayName: row.displayName
-        ))
+        configRows.append(
+            ReindexedSuiteConfigRow(
+                index: resolvedFiles.count - 1,
+                isTest: isTest,
+                tier: tier,
+                order: row.order ?? nextOrder,
+                dependsOn: row.dependsOn,
+                points: row.points ?? 1,
+                displayName: row.displayName
+            ))
         nextOrder += 1
     }
 
@@ -321,7 +336,8 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
     }
     let manifestTests: [String: ManifestRow] = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        else {
             return [:]
         }
         var map: [String: ManifestRow] = [:]
@@ -379,22 +395,25 @@ func authoredSuiteItemsFromDraftManifest(
     newRawEntries: [ConfiguredSuiteEntry]
 ) -> [AuthoredSuiteItem] {
     guard let draftProps else {
-        return newRawEntries.map { .script(AuthoredRawScript(
-            script: $0.script,
-            tier: TestTier(rawValue: $0.tier) ?? .pub,
-            points: $0.points,
-            displayName: $0.displayName,
-            dependsOn: $0.dependsOn,
-            sectionID: $0.sectionID
-        )) }
+        return newRawEntries.map {
+            .script(
+                AuthoredRawScript(
+                    script: $0.script,
+                    tier: TestTier(rawValue: $0.tier) ?? .pub,
+                    points: $0.points,
+                    displayName: $0.displayName,
+                    dependsOn: $0.dependsOn,
+                    sectionID: $0.sectionID
+                ))
+        }
     }
     let newByScript: [String: ConfiguredSuiteEntry] = Dictionary(
         uniqueKeysWithValues: newRawEntries.map { ($0.script, $0) }
     )
     var items: [AuthoredSuiteItem] = []
     var seenFamilies: Set<String> = []
-    var seenChecks:   Set<String> = []
-    var seenScripts:  Set<String> = []
+    var seenChecks: Set<String> = []
+    var seenScripts: Set<String> = []
     for entry in draftProps.testSuites {
         if let fid = entry.generatedBy {
             guard !seenFamilies.contains(fid) else { continue }
@@ -414,28 +433,32 @@ func authoredSuiteItemsFromDraftManifest(
         } else {
             guard let newEntry = newByScript[entry.script] else { continue }
             seenScripts.insert(entry.script)
-            items.append(.script(AuthoredRawScript(
-                script: newEntry.script,
-                tier: TestTier(rawValue: newEntry.tier) ?? .pub,
-                points: newEntry.points,
-                displayName: newEntry.displayName,
-                dependsOn: newEntry.dependsOn,
-                // v0.4.134: prefer the draft's sectionID over the rebuilt
-                // raw entry's (which loses sectionID through the JSON
-                // round-trip via ReindexedSuiteConfigRow).
-                sectionID: entry.sectionID ?? newEntry.sectionID
-            )))
+            items.append(
+                .script(
+                    AuthoredRawScript(
+                        script: newEntry.script,
+                        tier: TestTier(rawValue: newEntry.tier) ?? .pub,
+                        points: newEntry.points,
+                        displayName: newEntry.displayName,
+                        dependsOn: newEntry.dependsOn,
+                        // v0.4.134: prefer the draft's sectionID over the rebuilt
+                        // raw entry's (which loses sectionID through the JSON
+                        // round-trip via ReindexedSuiteConfigRow).
+                        sectionID: entry.sectionID ?? newEntry.sectionID
+                    )))
         }
     }
     for newEntry in newRawEntries where !seenScripts.contains(newEntry.script) {
-        items.append(.script(AuthoredRawScript(
-            script: newEntry.script,
-            tier: TestTier(rawValue: newEntry.tier) ?? .pub,
-            points: newEntry.points,
-            displayName: newEntry.displayName,
-            dependsOn: newEntry.dependsOn,
-            sectionID: newEntry.sectionID
-        )))
+        items.append(
+            .script(
+                AuthoredRawScript(
+                    script: newEntry.script,
+                    tier: TestTier(rawValue: newEntry.tier) ?? .pub,
+                    points: newEntry.points,
+                    displayName: newEntry.displayName,
+                    dependsOn: newEntry.dependsOn,
+                    sectionID: newEntry.sectionID
+                )))
     }
     return items
 }
@@ -444,7 +467,7 @@ func authoredSuiteItemsFromDraftManifest(
 /// Used to populate the family rows in the assignment editor's suite table.
 func familySuiteRowsForSetup(_ setup: APITestSetup) -> [FamilySuiteRow] {
     guard let data = setup.manifest.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
     else { return [] }
     return props.patternFamilies.map { family in
         let totalPoints = family.cases
@@ -475,8 +498,9 @@ func mergeExistingFilesIntoSuiteFiles(
     draftZipPath: String?
 ) -> ([File], String?) {
     guard let configJSON = suiteConfigJSON,
-          let configData = configJSON.data(using: .utf8),
-          var rows = (try? JSONSerialization.jsonObject(with: configData)) as? [[String: Any]] else {
+        let configData = configJSON.data(using: .utf8),
+        var rows = (try? JSONSerialization.jsonObject(with: configData)) as? [[String: Any]]
+    else {
         return (suiteFiles, suiteConfigJSON)
     }
 
@@ -491,8 +515,9 @@ func mergeExistingFilesIntoSuiteFiles(
         if let existing = mergedFiles.firstIndex(where: { $0.filename == name }) {
             fileIndex = existing
         } else if let zipPath = draftZipPath,
-                  !uploadedNames.contains(name),
-                  let data = extractZipEntry(zipPath: zipPath, entryName: name) {
+            !uploadedNames.contains(name),
+            let data = extractZipEntry(zipPath: zipPath, entryName: name)
+        {
             var buf = ByteBufferAllocator().buffer(capacity: data.count)
             buf.writeBytes(data)
             mergedFiles.append(File(data: buf, filename: name))
@@ -507,7 +532,8 @@ func mergeExistingFilesIntoSuiteFiles(
     }
 
     guard let updatedData = try? JSONSerialization.data(withJSONObject: rows),
-          let updatedJSON = String(data: updatedData, encoding: .utf8) else {
+        let updatedJSON = String(data: updatedData, encoding: .utf8)
+    else {
         return (mergedFiles, suiteConfigJSON)
     }
     return (mergedFiles, updatedJSON)
@@ -528,9 +554,10 @@ func buildSuiteEntries(
 ) throws -> [ConfiguredSuiteEntry] {
     let parsedRows: [SuiteConfigRow] = {
         guard let raw = suiteConfigJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty,
-              let data = raw.data(using: .utf8),
-              let rows = try? JSONDecoder().decode([SuiteConfigRow].self, from: data) else {
+            !raw.isEmpty,
+            let data = raw.data(using: .utf8),
+            let rows = try? JSONDecoder().decode([SuiteConfigRow].self, from: data)
+        else {
             return []
         }
         return rows
@@ -547,16 +574,18 @@ func buildSuiteEntries(
             guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
             let tier = normalizeTier(row.tier, isTest: row.isTest)
             guard tier != "support" else { continue }
-            selected.append(ConfiguredSuiteEntry(
-                script: script,
-                tier: tier,
-                order: row.order ?? (index + 1),
-                dependsOn: row.dependsOn ?? [],
-                points: row.points ?? 1,
-                displayName: row.displayName
-            ))
+            selected.append(
+                ConfiguredSuiteEntry(
+                    script: script,
+                    tier: tier,
+                    order: row.order ?? (index + 1),
+                    dependsOn: row.dependsOn ?? [],
+                    points: row.points ?? 1,
+                    displayName: row.displayName
+                ))
         }
-        return selected
+        return
+            selected
             .sorted { lhs, rhs in
                 if lhs.order != rhs.order { return lhs.order < rhs.order }
                 return lhs.script < rhs.script
@@ -568,16 +597,18 @@ func buildSuiteEntries(
     for index in suiteFiles.indices {
         guard let script = storedNameByIndex[index], !script.isEmpty else { continue }
         guard isLikelyTestSuiteFile(suiteFiles[index], storedName: script) else { continue }
-        defaults.append(ConfiguredSuiteEntry(
-            script: script,
-            tier: "public",
-            order: inferredOrder(from: script) ?? (index + 1),
-            dependsOn: [],
-            points: 1,
-            displayName: nil
-        ))
+        defaults.append(
+            ConfiguredSuiteEntry(
+                script: script,
+                tier: "public",
+                order: inferredOrder(from: script) ?? (index + 1),
+                dependsOn: [],
+                points: 1,
+                displayName: nil
+            ))
     }
-    return defaults
+    return
+        defaults
         .sorted { lhs, rhs in
             if lhs.order != rhs.order { return lhs.order < rhs.order }
             return lhs.script < rhs.script
@@ -590,8 +621,9 @@ func inferredOrder(from filename: String) -> Int? {
     let range = NSRange(location: 0, length: ns.length)
     let regex = try? NSRegularExpression(pattern: #"^([0-9]+)[_-].+$"#)
     guard let match = regex?.firstMatch(in: base, options: [], range: range),
-          match.numberOfRanges >= 2,
-          let orderRange = Range(match.range(at: 1), in: base) else {
+        match.numberOfRanges >= 2,
+        let orderRange = Range(match.range(at: 1), in: base)
+    else {
         return nil
     }
     return Int(base[orderRange])

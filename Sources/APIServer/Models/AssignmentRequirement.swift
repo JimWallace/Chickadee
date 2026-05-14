@@ -65,7 +65,8 @@ private extension AssignmentRequirement {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         guard let data = try? encoder.encode(value),
-              let string = String(data: data, encoding: .utf8) else {
+            let string = String(data: data, encoding: .utf8)
+        else {
             return "[]"
         }
         return string
@@ -73,7 +74,8 @@ private extension AssignmentRequirement {
 
     static func decodeJSON<T: Decodable>(_ raw: String, defaultValue: T) -> T {
         guard let data = raw.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(T.self, from: data) else {
+            let decoded = try? JSONDecoder().decode(T.self, from: data)
+        else {
             return defaultValue
         }
         return decoded

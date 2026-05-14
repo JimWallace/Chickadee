@@ -1,5 +1,6 @@
-import XCTest
 import Foundation
+import XCTest
+
 @testable import chickadee_runner
 
 final class DirectorySizeBytesTests: XCTestCase {

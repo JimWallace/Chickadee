@@ -19,24 +19,24 @@ extension TestOutcomeCollection {
     func filtering(tiers: Set<String>) -> TestOutcomeCollection {
         let filtered = outcomes.filter { tiers.contains($0.tier.rawValue) }
         return TestOutcomeCollection(
-            submissionID:    submissionID,
-            testSetupID:     testSetupID,
-            attemptNumber:   attemptNumber,
-            buildStatus:     buildStatus,
-            compilerOutput:  compilerOutput,
-            outcomes:        filtered,
-            totalTests:      filtered.count,
-            passCount:       filtered.filter { $0.status == .pass    }.count,
-            failCount:       filtered.filter { $0.status == .fail    }.count,
-            errorCount:      filtered.filter { $0.status == .error   }.count,
-            timeoutCount:    filtered.filter { $0.status == .timeout }.count,
+            submissionID: submissionID,
+            testSetupID: testSetupID,
+            attemptNumber: attemptNumber,
+            buildStatus: buildStatus,
+            compilerOutput: compilerOutput,
+            outcomes: filtered,
+            totalTests: filtered.count,
+            passCount: filtered.filter { $0.status == .pass }.count,
+            failCount: filtered.filter { $0.status == .fail }.count,
+            errorCount: filtered.filter { $0.status == .error }.count,
+            timeoutCount: filtered.filter { $0.status == .timeout }.count,
             executionTimeMs: executionTimeMs,
-            totalPoints:     filtered.reduce(0) { $0 + $1.points },
-            earnedPoints:    filtered.filter { $0.status == .pass }.reduce(0) { $0 + $1.points },
-            warnings:        warnings,
-            jobStartedAt:    jobStartedAt,
-            runnerVersion:   runnerVersion,
-            timestamp:       timestamp
+            totalPoints: filtered.reduce(0) { $0 + $1.points },
+            earnedPoints: filtered.filter { $0.status == .pass }.reduce(0) { $0 + $1.points },
+            warnings: warnings,
+            jobStartedAt: jobStartedAt,
+            runnerVersion: runnerVersion,
+            timestamp: timestamp
         )
     }
 }

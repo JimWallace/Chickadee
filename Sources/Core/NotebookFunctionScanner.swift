@@ -43,22 +43,26 @@ public struct NotebookFunctionInfo: Codable, Sendable {
 
     public var paramCount: Int { paramNames.count }
 
-    public init(name: String,
-                paramNames: [String],
-                paramTypes: [String?] = [],
-                paramHasDefault: [Bool] = [],
-                returnType: String? = nil,
-                hasTypeHints: Bool,
-                hasDocstring: Bool,
-                isShadowed: Bool = false) {
+    public init(
+        name: String,
+        paramNames: [String],
+        paramTypes: [String?] = [],
+        paramHasDefault: [Bool] = [],
+        returnType: String? = nil,
+        hasTypeHints: Bool,
+        hasDocstring: Bool,
+        isShadowed: Bool = false
+    ) {
         self.name = name
         self.paramNames = paramNames
         // Keep paramTypes aligned with paramNames even when the caller omitted it
         // (back-compat: older callers constructed this struct without types).
-        self.paramTypes = paramTypes.count == paramNames.count
+        self.paramTypes =
+            paramTypes.count == paramNames.count
             ? paramTypes
             : Array(repeating: nil, count: paramNames.count)
-        self.paramHasDefault = paramHasDefault.count == paramNames.count
+        self.paramHasDefault =
+            paramHasDefault.count == paramNames.count
             ? paramHasDefault
             : Array(repeating: false, count: paramNames.count)
         self.returnType = returnType
@@ -69,20 +73,22 @@ public struct NotebookFunctionInfo: Codable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        name         = try c.decode(String.self,     forKey: .name)
-        paramNames   = try c.decode([String].self,   forKey: .paramNames)
-        hasTypeHints = try c.decode(Bool.self,       forKey: .hasTypeHints)
-        hasDocstring = try c.decode(Bool.self,       forKey: .hasDocstring)
-        isShadowed   = try c.decodeIfPresent(Bool.self,       forKey: .isShadowed)   ?? false
+        name = try c.decode(String.self, forKey: .name)
+        paramNames = try c.decode([String].self, forKey: .paramNames)
+        hasTypeHints = try c.decode(Bool.self, forKey: .hasTypeHints)
+        hasDocstring = try c.decode(Bool.self, forKey: .hasDocstring)
+        isShadowed = try c.decodeIfPresent(Bool.self, forKey: .isShadowed) ?? false
         let decodedParamTypes = try c.decodeIfPresent([String?].self, forKey: .paramTypes) ?? []
-        paramTypes   = decodedParamTypes.count == paramNames.count
+        paramTypes =
+            decodedParamTypes.count == paramNames.count
             ? decodedParamTypes
             : Array(repeating: nil, count: paramNames.count)
         let decodedParamHasDefault = try c.decodeIfPresent([Bool].self, forKey: .paramHasDefault) ?? []
-        paramHasDefault = decodedParamHasDefault.count == paramNames.count
+        paramHasDefault =
+            decodedParamHasDefault.count == paramNames.count
             ? decodedParamHasDefault
             : Array(repeating: false, count: paramNames.count)
-        returnType   = try c.decodeIfPresent(String.self,     forKey: .returnType)
+        returnType = try c.decodeIfPresent(String.self, forKey: .returnType)
     }
 }
 
@@ -243,9 +249,10 @@ private func extractTopLevelFunctions(from source: String) -> [NotebookFunctionI
         let line = lines[i]
         // Top-level means no leading whitespace.
         guard !line.isEmpty,
-              !line.hasPrefix(" "),
-              !line.hasPrefix("\t"),
-              line.hasPrefix("def ") else {
+            !line.hasPrefix(" "),
+            !line.hasPrefix("\t"),
+            line.hasPrefix("def ")
+        else {
             i += 1
             continue
         }
@@ -266,20 +273,20 @@ private func parseFunctionDef(_ line: String, bodyLines: [String]) -> NotebookFu
     // We capture everything up to the first unmatched `)` for simplicity.
     let pattern = #"^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)"#
     guard let regex = try? NSRegularExpression(pattern: pattern),
-          let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-          let nameRange   = Range(match.range(at: 1), in: line),
-          let paramsRange = Range(match.range(at: 2), in: line)
+        let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+        let nameRange = Range(match.range(at: 1), in: line),
+        let paramsRange = Range(match.range(at: 2), in: line)
     else { return nil }
 
-    let name      = String(line[nameRange])
+    let name = String(line[nameRange])
     let paramsRaw = String(line[paramsRange])
 
     let hasTypeHints = paramsRaw.contains(":") || line.contains("->")
-    let parsedParams    = parseParams(from: paramsRaw)
-    let paramNames      = parsedParams.map(\.name)
-    let paramTypes      = parsedParams.map(\.type)
+    let parsedParams = parseParams(from: paramsRaw)
+    let paramNames = parsedParams.map(\.name)
+    let paramTypes = parsedParams.map(\.type)
     let paramHasDefault = parsedParams.map(\.hasDefault)
-    let returnType      = parseReturnType(from: line)
+    let returnType = parseReturnType(from: line)
     let hasDocstring = bodyLines.prefix(5).contains {
         let t = $0.trimmingCharacters(in: .whitespaces)
         return t.hasPrefix("\"\"\"") || t.hasPrefix("'''")
@@ -314,7 +321,8 @@ private func parseParams(from raw: String) -> [ParsedParam] {
     let trimmed = raw.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
 
-    return trimmed
+    return
+        trimmed
         .split(separator: ",")
         .compactMap { part -> ParsedParam? in
             var chunk = part.trimmingCharacters(in: .whitespaces)
@@ -356,8 +364,8 @@ private func parseReturnType(from line: String) -> String? {
     // spaces (`dict[str, int]`) are preserved verbatim.
     let pattern = #"\)\s*->\s*(.+?)\s*:\s*$"#
     guard let regex = try? NSRegularExpression(pattern: pattern),
-          let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-          let range = Range(match.range(at: 1), in: line)
+        let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+        let range = Range(match.range(at: 1), in: line)
     else { return nil }
     let t = String(line[range]).trimmingCharacters(in: .whitespaces)
     return t.isEmpty ? nil : t

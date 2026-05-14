@@ -7,10 +7,10 @@
 // focused free helper on `AssignmentRoutes`; the handler just sequences
 // them and renders.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -24,7 +24,8 @@ extension AssignmentRoutes {
         storedState: NewAssignmentDraftFormState
     ) -> NewAssignmentNotebookContext? {
         guard let setup, let notebookPath = setup.notebookPath else { return nil }
-        let name = storedState.assignmentNotebookName
+        let name =
+            storedState.assignmentNotebookName
             ?? URL(fileURLWithPath: notebookPath).lastPathComponent
         let titleParam = storedState.assignmentName.isEmpty ? "Assignment Notebook" : storedState.assignmentName
         return NewAssignmentNotebookContext(
@@ -55,7 +56,8 @@ extension AssignmentRoutes {
             fallbackPath: draftPath
         )
         guard fallbackData != nil else { return nil }
-        let name = storedState.solutionNotebookName
+        let name =
+            storedState.solutionNotebookName
             ?? URL(fileURLWithPath: draftPath).lastPathComponent
         return NewAssignmentNotebookContext(
             name: name,
@@ -74,7 +76,8 @@ extension AssignmentRoutes {
         suiteRows: [EditableSuiteRow]
     ) -> [EditableSuiteRow] {
         guard let setup, let draftID = setup.id else { return [] }
-        return suiteRows
+        return
+            suiteRows
             .filter { $0.tier == "support" }
             .map { row in
                 EditableSuiteRow(
@@ -155,8 +158,8 @@ extension AssignmentRoutes {
         _ extract: (TestProperties) -> [T]
     ) -> String {
         guard let setup,
-              let manifestData = setup.manifest.data(using: .utf8),
-              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+            let manifestData = setup.manifest.data(using: .utf8),
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         else { return "[]" }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -175,13 +178,15 @@ extension AssignmentRoutes {
     /// renders before the instructor uploads a notebook.
     func newAssignmentSuiteSectionShellRows(setup: APITestSetup?) -> [SuiteSectionShellRow] {
         setup.map { suiteSectionShellRows(fromManifest: $0.manifest) }
-            ?? [SuiteSectionShellRow(
-                sectionID: "",
-                name: "",
-                isUngrouped: true,
-                variables: [],
-                hasVariables: false
-            )]
+            ?? [
+                SuiteSectionShellRow(
+                    sectionID: "",
+                    name: "",
+                    isUngrouped: true,
+                    variables: [],
+                    hasVariables: false
+                )
+            ]
     }
 
     // MARK: - Section picker

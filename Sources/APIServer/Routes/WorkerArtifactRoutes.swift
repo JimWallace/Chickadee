@@ -1,5 +1,5 @@
-import Vapor
 import Fluent
+import Vapor
 
 /// Worker-only artifact download routes authenticated by X-Worker-Secret.
 struct WorkerArtifactRoutes: RouteCollection {
@@ -12,7 +12,7 @@ struct WorkerArtifactRoutes: RouteCollection {
     @Sendable
     func downloadSubmission(req: Request) async throws -> Response {
         guard let subID = req.parameters.get("submissionID"),
-              let submission = try await APISubmission.find(subID, on: req.db)
+            let submission = try await APISubmission.find(subID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -22,7 +22,7 @@ struct WorkerArtifactRoutes: RouteCollection {
     @Sendable
     func downloadTestSetup(req: Request) async throws -> Response {
         guard let setupID = req.parameters.get("testSetupID"),
-              let setup = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }

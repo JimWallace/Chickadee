@@ -13,18 +13,18 @@
 //   POST /register   → create account (first user becomes admin), redirect to / (local/dual only)
 //   POST /logout     → clear session, redirect to /login
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct AuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        routes.get("login",     use: loginForm)
-        routes.post("login",    use: login)
-        routes.get("register",  use: registerForm)
+        routes.get("login", use: loginForm)
+        routes.post("login", use: login)
+        routes.get("register", use: registerForm)
         routes.post("register", use: register)
-        routes.post("logout",   use: logout)
+        routes.post("logout", use: logout)
     }
 
     // MARK: - GET /login
@@ -66,11 +66,13 @@ struct AuthRoutes: RouteCollection {
 
         let body = try req.content.decode(LoginBody.self)
 
-        guard let user = try await req.application.authProvider.authenticate(
-            username: body.username,
-            password: body.password,
-            on: req
-        ) else {
+        guard
+            let user = try await req.application.authProvider.authenticate(
+                username: body.username,
+                password: body.password,
+                on: req
+            )
+        else {
             return req.redirect(to: "/login?error=invalid")
         }
 
@@ -100,8 +102,10 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/")
         }
         let error = req.query[String.self, at: "error"]
-        return try await req.view.render("register",
-            RegisterContext(error: error)).encodeResponse(for: req)
+        return try await req.view.render(
+            "register",
+            RegisterContext(error: error)
+        ).encodeResponse(for: req)
     }
 
     // MARK: - POST /register
@@ -151,7 +155,7 @@ struct AuthRoutes: RouteCollection {
         // Extract any SSO tokens stored at login time before clearing the session.
         let accessToken = req.session.data["oidc_access_token"]
         let refreshToken = req.session.data["oidc_refresh_token"]
-        let idToken     = req.session.data["oidc_id_token"]
+        let idToken = req.session.data["oidc_id_token"]
 
         req.session.data["oidc_access_token"] = nil
         req.session.data["oidc_refresh_token"] = nil
@@ -166,7 +170,7 @@ struct AuthRoutes: RouteCollection {
         // bounded by a deadline so a slow/hung IdP can't keep the task alive
         // indefinitely; the user-facing redirect still happens immediately.
         if let endpoint = oidcConfig?.discovery.revocationEndpoint,
-           let config = oidcConfig
+            let config = oidcConfig
         {
             let app = req.application
             let logger = req.logger
@@ -199,7 +203,8 @@ struct AuthRoutes: RouteCollection {
             }
             // post_logout_redirect_uri must be an absolute URL; only set it when we know the base.
             if let base = req.application.securityConfiguration.publicBaseURL?.absoluteString
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            {
                 items.append(URLQueryItem(name: "post_logout_redirect_uri", value: base + "/login"))
             }
             if !items.isEmpty {

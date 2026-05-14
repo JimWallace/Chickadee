@@ -1,9 +1,9 @@
-import Vapor
 import Fluent
-import FluentSQLiteDriver
 import FluentPostgresDriver
-import SQLKit
+import FluentSQLiteDriver
 import Foundation
+import SQLKit
+import Vapor
 
 enum DatabaseBackend: String, Sendable {
     case sqlite
@@ -25,7 +25,8 @@ struct DatabaseSettings: Sendable {
         if let configuredBackend = Environment.get("DATABASE_BACKEND")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased(),
-           !configuredBackend.isEmpty {
+            !configuredBackend.isEmpty
+        {
             guard let parsed = DatabaseBackend(rawValue: configuredBackend) else {
                 throw DatabaseConfigurationError.invalidSettings(
                     "DATABASE_BACKEND must be one of: sqlite, postgres"
@@ -38,7 +39,8 @@ struct DatabaseSettings: Sendable {
 
         switch backend {
         case .sqlite:
-            let sqlitePath = Environment.get("SQLITE_PATH")
+            let sqlitePath =
+                Environment.get("SQLITE_PATH")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .flatMap { $0.isEmpty ? nil : $0 }
                 ?? defaultSQLitePath

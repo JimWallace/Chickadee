@@ -6,11 +6,12 @@
 //   GET  /api/v1/testsetups/:id/assignment  — serves flat file when present
 //   GET  /instructor/:id/edit              — instructor-only editor page
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class TestSetupEditTests: XCTestCase {
 
@@ -26,7 +27,8 @@ final class TestSetupEditTests: XCTestCase {
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        return try await loginUser(username: "testinstructor_edit", password: "testpassword", role: "instructor", on: app)
+        return try await loginUser(
+            username: "testinstructor_edit", password: "testpassword", role: "instructor", on: app)
     }
 
     private func loginAsStudent() async throws -> String {
@@ -48,8 +50,8 @@ final class TestSetupEditTests: XCTestCase {
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+            """
         let courseID = try await makeTestCourseID()
         let setup = APITestSetup(
             id: id,
@@ -71,70 +73,70 @@ final class TestSetupEditTests: XCTestCase {
 
     // A minimal valid notebook JSON to use as test data.
     private let sampleNotebookJSON = """
-    {
-        "nbformat": 4,
-        "nbformat_minor": 5,
-        "metadata": {},
-        "cells": [
-            {
-                "cell_type": "code",
-                "source": ["# TEST: sample tier=public\\nassert 1 == 1"],
-                "metadata": {},
-                "outputs": []
-            }
-        ]
-    }
-    """
+        {
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {},
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "source": ["# TEST: sample tier=public\\nassert 1 == 1"],
+                    "metadata": {},
+                    "outputs": []
+                }
+            ]
+        }
+        """
 
     private let python3NotebookJSON = """
-    {
-        "nbformat": 4,
-        "nbformat_minor": 5,
-        "metadata": {
-            "kernelspec": {
-                "display_name": "Python 3 (ipykernel)",
-                "name": "python3"
+        {
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {
+                "kernelspec": {
+                    "display_name": "Python 3 (ipykernel)",
+                    "name": "python3"
+                },
+                "language_info": {
+                    "name": "python"
+                }
             },
-            "language_info": {
-                "name": "python"
-            }
-        },
-        "cells": [
-            {
-                "cell_type": "code",
-                "source": ["x = 1"],
-                "metadata": {},
-                "outputs": []
-            }
-        ]
-    }
-    """
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "source": ["x = 1"],
+                    "metadata": {},
+                    "outputs": []
+                }
+            ]
+        }
+        """
 
     /// An R notebook exported from IRkernel (kernelspec.name = "ir").
     private let irNotebookJSON = """
-    {
-        "nbformat": 4,
-        "nbformat_minor": 5,
-        "metadata": {
-            "kernelspec": {
-                "display_name": "R",
-                "language": "R",
-                "name": "ir"
+        {
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {
+                "kernelspec": {
+                    "display_name": "R",
+                    "language": "R",
+                    "name": "ir"
+                },
+                "language_info": {
+                    "name": "R"
+                }
             },
-            "language_info": {
-                "name": "R"
-            }
-        },
-        "cells": [
-            {
-                "cell_type": "code",
-                "source": ["x <- 1"],
-                "metadata": {},
-                "outputs": []
-            }
-        ]
-    }
-    """
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "source": ["x <- 1"],
+                    "metadata": {},
+                    "outputs": []
+                }
+            ]
+        }
+        """
 
     // MARK: - PUT /api/v1/testsetups/:id/assignment
 
@@ -143,21 +145,24 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put1")
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put1/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_put1/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
 
         // File should be on disk.
         let expectedPath = app.testSetupsDirectory + "setup_put1.ipynb"
-        XCTAssertTrue(FileManager.default.fileExists(atPath: expectedPath),
-                      "Expected flat .ipynb file at \(expectedPath)")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: expectedPath),
+            "Expected flat .ipynb file at \(expectedPath)")
     }
 
     func testPutAssignmentUpdatesNotebookPathInDB() async throws {
@@ -165,13 +170,15 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put2")
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put2/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_put2/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
@@ -186,13 +193,15 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_kernel")
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put_kernel/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_put_kernel/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: python3NotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
@@ -213,8 +222,8 @@ final class TestSetupEditTests: XCTestCase {
         // Write a flat notebook file directly.
         let flatPath = app.testSetupsDirectory + "setup_flat.ipynb"
         let editedJSON = """
-        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","source":["# edited"],"metadata":{},"outputs":[]}]}
-        """
+            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","source":["# edited"],"metadata":{},"outputs":[]}]}
+            """
         try editedJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
 
         // Update DB record to point at the flat file.
@@ -223,14 +232,17 @@ final class TestSetupEditTests: XCTestCase {
         try await setup.save(on: app.db)
 
         // GET should return the flat file's content.
-        try await app.asyncTest(.GET, "/api/v1/testsetups/setup_flat/assignment",
+        try await app.asyncTest(
+            .GET, "/api/v1/testsetups/setup_flat/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("# edited"),
-                              "Expected flat file content, got: \(body.prefix(200))")
+                XCTAssertTrue(
+                    body.contains("# edited"),
+                    "Expected flat file content, got: \(body.prefix(200))")
             }
         )
     }
@@ -246,10 +258,12 @@ final class TestSetupEditTests: XCTestCase {
         setup.notebookPath = flatPath
         try await setup.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/api/v1/testsetups/setup_flat_kernel/assignment",
+        try await app.asyncTest(
+            .GET, "/api/v1/testsetups/setup_flat_kernel/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let data = Data(res.body.readableBytesView)
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -266,13 +280,15 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_bad")
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_bad/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_bad/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "this is not JSON!!!")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .unprocessableEntity)
             }
         )
@@ -282,13 +298,15 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/does_not_exist/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/does_not_exist/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             }
         )
@@ -301,12 +319,14 @@ final class TestSetupEditTests: XCTestCase {
         try await insertSetup(id: "setup_student_put")
 
         // Students are not on the instructor route group — middleware rejects them.
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_student_put/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_student_put/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: sampleNotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )
@@ -320,10 +340,12 @@ final class TestSetupEditTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_ep1", title: "Lab")
         let id = a.publicID
 
-        try await app.asyncTest(.GET, "/instructor/\(id)/edit",
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )
@@ -333,10 +355,12 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let fakeID = "zzzzzz"
 
-        try await app.asyncTest(.GET, "/instructor/\(fakeID)/edit",
+        try await app.asyncTest(
+            .GET, "/instructor/\(fakeID)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             }
         )
@@ -348,10 +372,12 @@ final class TestSetupEditTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_ep2", title: "My Lab")
         let id = a.publicID
 
-        try await app.asyncTest(.GET, "/instructor/\(id)/edit",
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/edit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 // 500 is expected — Leaf not configured in tests — but middleware passed.
                 XCTAssertNotEqual(res.status, .unauthorized)
                 XCTAssertNotEqual(res.status, .forbidden)
@@ -367,23 +393,25 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_ir")
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put_ir/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_put_ir/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: irNotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
 
         let expectedPath = app.testSetupsDirectory + "setup_put_ir.ipynb"
-        let savedData    = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
-        let savedJSON    = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
-        let metadata     = savedJSON?["metadata"]  as? [String: Any]
-        let kernelspec   = metadata?["kernelspec"] as? [String: Any]
-        XCTAssertEqual(kernelspec?["name"]         as? String, "webr",     "ir kernel should be normalized to webr")
+        let savedData = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
+        let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
+        let metadata = savedJSON?["metadata"] as? [String: Any]
+        let kernelspec = metadata?["kernelspec"] as? [String: Any]
+        XCTAssertEqual(kernelspec?["name"] as? String, "webr", "ir kernel should be normalized to webr")
         XCTAssertEqual(kernelspec?["display_name"] as? String, "R (WebR)", "display_name should be R (WebR)")
     }
 
@@ -398,17 +426,20 @@ final class TestSetupEditTests: XCTestCase {
         setup.notebookPath = flatPath
         try await setup.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/api/v1/testsetups/setup_flat_ir/assignment",
+        try await app.asyncTest(
+            .GET, "/api/v1/testsetups/setup_flat_ir/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
-                let data       = Data(res.body.readableBytesView)
-                let json       = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                let metadata   = json?["metadata"]  as? [String: Any]
+                let data = Data(res.body.readableBytesView)
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let metadata = json?["metadata"] as? [String: Any]
                 let kernelspec = metadata?["kernelspec"] as? [String: Any]
-                XCTAssertEqual(kernelspec?["name"]         as? String, "webr",     "ir kernel should be normalized to webr on GET")
-                XCTAssertEqual(kernelspec?["display_name"] as? String, "R (WebR)", "display_name should be R (WebR) on GET")
+                XCTAssertEqual(kernelspec?["name"] as? String, "webr", "ir kernel should be normalized to webr on GET")
+                XCTAssertEqual(
+                    kernelspec?["display_name"] as? String, "R (WebR)", "display_name should be R (WebR) on GET")
             }
         )
     }
@@ -419,23 +450,26 @@ final class TestSetupEditTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         try await insertSetup(id: "setup_put_py_check")
 
-        try await app.asyncTest(.PUT, "/api/v1/testsetups/setup_put_py_check/assignment",
+        try await app.asyncTest(
+            .PUT, "/api/v1/testsetups/setup_put_py_check/assignment",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: python3NotebookJSON)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
 
         let expectedPath = app.testSetupsDirectory + "setup_put_py_check.ipynb"
-        let savedData    = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
-        let savedJSON    = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
-        let metadata     = savedJSON?["metadata"]  as? [String: Any]
-        let kernelspec   = metadata?["kernelspec"] as? [String: Any]
-        XCTAssertEqual(kernelspec?["name"]         as? String, "python",          "python3 kernel should still normalize to python")
-        XCTAssertEqual(kernelspec?["display_name"] as? String, "Python (Pyodide)","display_name should still be Python (Pyodide)")
+        let savedData = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
+        let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
+        let metadata = savedJSON?["metadata"] as? [String: Any]
+        let kernelspec = metadata?["kernelspec"] as? [String: Any]
+        XCTAssertEqual(kernelspec?["name"] as? String, "python", "python3 kernel should still normalize to python")
+        XCTAssertEqual(
+            kernelspec?["display_name"] as? String, "Python (Pyodide)", "display_name should still be Python (Pyodide)")
     }
 }

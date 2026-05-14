@@ -13,9 +13,9 @@
 //                    BRIGHTSPACE_USER_ID, BRIGHTSPACE_USER_KEY
 // Optional:          BRIGHTSPACE_SYNC_DEBOUNCE_SECS (default 90)
 
-import Vapor
-import Foundation
 import Crypto
+import Foundation
+import Vapor
 
 // MARK: - Config
 
@@ -32,27 +32,28 @@ struct BrightSpaceSyncConfig: Sendable {
 
     static func fromEnvironment() -> Self? {
         guard
-            let base    = Environment.get("BRIGHTSPACE_URL")?
-                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            let base = Environment.get("BRIGHTSPACE_URL")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !base.isEmpty,
-            let appID   = Environment.get("BRIGHTSPACE_APP_ID")?
-                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            let appID = Environment.get("BRIGHTSPACE_APP_ID")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !appID.isEmpty,
-            let appKey  = Environment.get("BRIGHTSPACE_APP_KEY")?
-                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            let appKey = Environment.get("BRIGHTSPACE_APP_KEY")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !appKey.isEmpty,
-            let userID  = Environment.get("BRIGHTSPACE_USER_ID")?
-                              .trimmingCharacters(in: .whitespacesAndNewlines),
+            let userID = Environment.get("BRIGHTSPACE_USER_ID")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !userID.isEmpty,
             let userKey = Environment.get("BRIGHTSPACE_USER_KEY")?
-                              .trimmingCharacters(in: .whitespacesAndNewlines),
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !userKey.isEmpty
         else { return nil }
 
         let debounce: TimeInterval
         if let raw = Environment.get("BRIGHTSPACE_SYNC_DEBOUNCE_SECS"),
-           let secs = TimeInterval(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
-           secs > 0 {
+            let secs = TimeInterval(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+            secs > 0
+        {
             debounce = secs
         } else {
             debounce = 90
@@ -116,10 +117,11 @@ actor BrightSpaceAPIClient {
         let timestamp = Int(Date().timeIntervalSince1970)
         guard let path = URL(string: urlString)?.path else { return urlString }
         let baseString = "\(timestamp)\n\(method.uppercased())\n\(path.lowercased())"
-        let appSig  = hmacSHA256Base64URL(key: config.appKey,  message: baseString)
+        let appSig = hmacSHA256Base64URL(key: config.appKey, message: baseString)
         let userSig = hmacSHA256Base64URL(key: config.userKey, message: baseString)
         let sep = urlString.contains("?") ? "&" : "?"
-        return "\(urlString)\(sep)x_a=\(config.appID)&x_b=\(config.userID)&x_c=\(appSig)&x_d=\(userSig)&x_t=\(timestamp)"
+        return
+            "\(urlString)\(sep)x_a=\(config.appID)&x_b=\(config.userID)&x_c=\(appSig)&x_d=\(userSig)&x_t=\(timestamp)"
     }
 
     private func hmacSHA256Base64URL(key: String, message: String) -> String {
@@ -142,7 +144,8 @@ actor BrightSpaceAPIClient {
         earnedPoints: Double,
         on application: Application
     ) async throws {
-        let rawURL = "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
+        let rawURL =
+            "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
         let url = signed(url: rawURL, method: "PUT")
 
         struct NumericGradeValue: Content {

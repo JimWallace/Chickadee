@@ -30,8 +30,9 @@ struct HTTPSRedirectMiddleware: AsyncMiddleware {
 private extension Request {
     func isHTTPSRequest(trustForwardedProto: Bool) -> Bool {
         if trustForwardedProto,
-           let forwarded = firstForwardedValue(for: .init("X-Forwarded-Proto"))?.lowercased(),
-           !forwarded.isEmpty {
+            let forwarded = firstForwardedValue(for: .init("X-Forwarded-Proto"))?.lowercased(),
+            !forwarded.isEmpty
+        {
             return forwarded == "https"
         }
 
@@ -73,12 +74,14 @@ private func fallbackHost(for request: Request) -> String {
         .split(separator: ",")
         .first?
         .trimmingCharacters(in: .whitespacesAndNewlines),
-       !forwardedHost.isEmpty {
+        !forwardedHost.isEmpty
+    {
         return forwardedHost
     }
     if let host = request.headers.first(name: .host)?
         .trimmingCharacters(in: .whitespacesAndNewlines),
-       !host.isEmpty {
+        !host.isEmpty
+    {
         return host
     }
     return "localhost"

@@ -24,7 +24,7 @@ struct CreatePreEnrollments: AsyncMigration {
                 .required,
                 .references("courses", "id", onDelete: .cascade)
             )
-            .field("username",   .string,   .required)
+            .field("username", .string, .required)
             .field("created_at", .datetime, .required)
             // One pending pre-enrollment per (course, username).  Re-uploading
             // a CSV with the same row is idempotent.

@@ -232,80 +232,82 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// predicates must hold for the test to pass.
     public let requiredConstructs: [String]?
 
-    public init(id: String, name: String? = nil, kind: NotebookCheckKind,
-                tier: TestTier = .pub, points: Int = 1,
-                dependsOn: [String] = [], sectionID: String? = nil,
-                variable: String? = nil,
-                expectedRows: Int? = nil, expectedCols: Int? = nil,
-                expectedColumns: [String]? = nil,
-                columnMatch: ColumnMatchMode? = nil,
-                expectedCSV: String? = nil,
-                checkDtype: Bool? = nil, checkLike: Bool? = nil,
-                rtol: Double? = nil, atol: Double? = nil,
-                ignoreIndex: Bool? = nil,
-                expectedArray: [Double]? = nil,
-                minFigures: Int? = nil,
-                containsText: String? = nil,
-                regex: Bool? = nil,
-                mustDifferFrom: String? = nil,
-                expectedArity: Int? = nil,
-                expectedType: String? = nil,
-                requiredConstructs: [String]? = nil) {
-        self.id              = id
-        self.name            = name
-        self.kind            = kind
-        self.tier            = tier
-        self.points          = points
-        self.dependsOn       = dependsOn
-        self.sectionID       = sectionID
-        self.variable        = variable
-        self.expectedRows    = expectedRows
-        self.expectedCols    = expectedCols
+    public init(
+        id: String, name: String? = nil, kind: NotebookCheckKind,
+        tier: TestTier = .pub, points: Int = 1,
+        dependsOn: [String] = [], sectionID: String? = nil,
+        variable: String? = nil,
+        expectedRows: Int? = nil, expectedCols: Int? = nil,
+        expectedColumns: [String]? = nil,
+        columnMatch: ColumnMatchMode? = nil,
+        expectedCSV: String? = nil,
+        checkDtype: Bool? = nil, checkLike: Bool? = nil,
+        rtol: Double? = nil, atol: Double? = nil,
+        ignoreIndex: Bool? = nil,
+        expectedArray: [Double]? = nil,
+        minFigures: Int? = nil,
+        containsText: String? = nil,
+        regex: Bool? = nil,
+        mustDifferFrom: String? = nil,
+        expectedArity: Int? = nil,
+        expectedType: String? = nil,
+        requiredConstructs: [String]? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.tier = tier
+        self.points = points
+        self.dependsOn = dependsOn
+        self.sectionID = sectionID
+        self.variable = variable
+        self.expectedRows = expectedRows
+        self.expectedCols = expectedCols
         self.expectedColumns = expectedColumns
-        self.columnMatch     = columnMatch
-        self.expectedCSV     = expectedCSV
-        self.checkDtype      = checkDtype
-        self.checkLike       = checkLike
-        self.rtol            = rtol
-        self.atol            = atol
-        self.ignoreIndex     = ignoreIndex
-        self.expectedArray   = expectedArray
-        self.minFigures      = minFigures
-        self.containsText    = containsText
-        self.regex           = regex
-        self.mustDifferFrom  = mustDifferFrom
-        self.expectedArity   = expectedArity
-        self.expectedType    = expectedType
+        self.columnMatch = columnMatch
+        self.expectedCSV = expectedCSV
+        self.checkDtype = checkDtype
+        self.checkLike = checkLike
+        self.rtol = rtol
+        self.atol = atol
+        self.ignoreIndex = ignoreIndex
+        self.expectedArray = expectedArray
+        self.minFigures = minFigures
+        self.containsText = containsText
+        self.regex = regex
+        self.mustDifferFrom = mustDifferFrom
+        self.expectedArity = expectedArity
+        self.expectedType = expectedType
         self.requiredConstructs = requiredConstructs
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id              = try c.decode(String.self,             forKey: .id)
-        name            = try c.decodeIfPresent(String.self,    forKey: .name)
-        kind            = try c.decode(NotebookCheckKind.self,  forKey: .kind)
-        tier            = try c.decodeIfPresent(TestTier.self,  forKey: .tier)            ?? .pub
-        points          = try c.decodeIfPresent(Int.self,       forKey: .points)          ?? 1
-        dependsOn       = try c.decodeIfPresent([String].self,  forKey: .dependsOn)       ?? []
-        sectionID       = try c.decodeIfPresent(String.self,    forKey: .sectionID)
-        variable        = try c.decodeIfPresent(String.self,    forKey: .variable)
-        expectedRows    = try c.decodeIfPresent(Int.self,       forKey: .expectedRows)
-        expectedCols    = try c.decodeIfPresent(Int.self,       forKey: .expectedCols)
-        expectedColumns = try c.decodeIfPresent([String].self,  forKey: .expectedColumns)
-        columnMatch     = try c.decodeIfPresent(ColumnMatchMode.self, forKey: .columnMatch)
-        expectedCSV     = try c.decodeIfPresent(String.self,    forKey: .expectedCSV)
-        checkDtype      = try c.decodeIfPresent(Bool.self,      forKey: .checkDtype)
-        checkLike       = try c.decodeIfPresent(Bool.self,      forKey: .checkLike)
-        rtol            = try c.decodeIfPresent(Double.self,    forKey: .rtol)
-        atol            = try c.decodeIfPresent(Double.self,    forKey: .atol)
-        ignoreIndex     = try c.decodeIfPresent(Bool.self,      forKey: .ignoreIndex)
-        expectedArray   = try c.decodeIfPresent([Double].self,  forKey: .expectedArray)
-        minFigures      = try c.decodeIfPresent(Int.self,       forKey: .minFigures)
-        containsText    = try c.decodeIfPresent(String.self,    forKey: .containsText)
-        regex           = try c.decodeIfPresent(Bool.self,      forKey: .regex)
-        mustDifferFrom  = try c.decodeIfPresent(String.self,    forKey: .mustDifferFrom)
-        expectedArity   = try c.decodeIfPresent(Int.self,       forKey: .expectedArity)
-        expectedType    = try c.decodeIfPresent(String.self,    forKey: .expectedType)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        kind = try c.decode(NotebookCheckKind.self, forKey: .kind)
+        tier = try c.decodeIfPresent(TestTier.self, forKey: .tier) ?? .pub
+        points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
+        sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
+        variable = try c.decodeIfPresent(String.self, forKey: .variable)
+        expectedRows = try c.decodeIfPresent(Int.self, forKey: .expectedRows)
+        expectedCols = try c.decodeIfPresent(Int.self, forKey: .expectedCols)
+        expectedColumns = try c.decodeIfPresent([String].self, forKey: .expectedColumns)
+        columnMatch = try c.decodeIfPresent(ColumnMatchMode.self, forKey: .columnMatch)
+        expectedCSV = try c.decodeIfPresent(String.self, forKey: .expectedCSV)
+        checkDtype = try c.decodeIfPresent(Bool.self, forKey: .checkDtype)
+        checkLike = try c.decodeIfPresent(Bool.self, forKey: .checkLike)
+        rtol = try c.decodeIfPresent(Double.self, forKey: .rtol)
+        atol = try c.decodeIfPresent(Double.self, forKey: .atol)
+        ignoreIndex = try c.decodeIfPresent(Bool.self, forKey: .ignoreIndex)
+        expectedArray = try c.decodeIfPresent([Double].self, forKey: .expectedArray)
+        minFigures = try c.decodeIfPresent(Int.self, forKey: .minFigures)
+        containsText = try c.decodeIfPresent(String.self, forKey: .containsText)
+        regex = try c.decodeIfPresent(Bool.self, forKey: .regex)
+        mustDifferFrom = try c.decodeIfPresent(String.self, forKey: .mustDifferFrom)
+        expectedArity = try c.decodeIfPresent(Int.self, forKey: .expectedArity)
+        expectedType = try c.decodeIfPresent(String.self, forKey: .expectedType)
         requiredConstructs = try c.decodeIfPresent([String].self, forKey: .requiredConstructs)
     }
 }

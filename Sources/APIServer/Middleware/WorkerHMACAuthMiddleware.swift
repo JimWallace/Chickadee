@@ -35,10 +35,10 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
         }
 
         let timestampHeader = try request.requireWorkerHeader("X-Worker-Timestamp")
-        let nonce           = try request.requireWorkerHeader("X-Worker-Nonce")
-        let bodyHashHeader  = try request.requireWorkerHeader("X-Worker-Body-SHA256")
-        let signature       = try request.requireWorkerHeader("X-Worker-Signature")
-        let workerID        = request.headers.first(name: "X-Worker-Id")
+        let nonce = try request.requireWorkerHeader("X-Worker-Nonce")
+        let bodyHashHeader = try request.requireWorkerHeader("X-Worker-Body-SHA256")
+        let signature = try request.requireWorkerHeader("X-Worker-Signature")
+        let workerID = request.headers.first(name: "X-Worker-Id")
 
         guard let timestamp = Int64(timestampHeader) else {
             throw Abort(.unauthorized, reason: "Invalid worker timestamp.")
@@ -61,7 +61,7 @@ struct WorkerHMACAuthMiddleware: AsyncMiddleware {
             request.url.path,
             bodyHashHeader.lowercased(),
             timestampHeader,
-            nonce
+            nonce,
         ].joined(separator: "\n")
 
         let expectedSignature = hmacSHA256Hex(message: signedPayload, secret: sharedSecret)

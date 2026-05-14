@@ -37,8 +37,8 @@ final class APIPreEnrollment: Model, Content, @unchecked Sendable {
     init() {}
 
     init(id: UUID? = nil, courseID: UUID, username: String) {
-        self.id           = id
-        self.$course.id   = courseID
-        self.username     = username
+        self.id = id
+        self.$course.id = courseID
+        self.username = username
     }
 }

@@ -9,8 +9,8 @@
 // format as the hand-authored templates, so the runner cannot distinguish a
 // generated script from one an instructor wrote by hand.
 
-import Foundation
 import Core
+import Foundation
 
 /// One rendered case: a filename, the Python source to write to the zip, and
 /// enough metadata to construct a TestSuiteEntry that points back at the
@@ -42,13 +42,15 @@ func renderPatternFamily(
     // Pre-combine globals and section vars into a single "scope" list so the
     // existing render-* helpers stay parameterised on a single prepend list.
     let scopeVariables = globalVariables + sectionVariables
-    let hash = patternFamilySpecHash(family,
-                                     sectionVariables: sectionVariables,
-                                     globalVariables: globalVariables)
+    let hash = patternFamilySpecHash(
+        family,
+        sectionVariables: sectionVariables,
+        globalVariables: globalVariables)
     return family.cases.compactMap { c in
         guard c.enabled else { return nil }
-        return renderCase(family: family, case: c,
-                          sectionVariables: scopeVariables, specHash: hash)
+        return renderCase(
+            family: family, case: c,
+            sectionVariables: scopeVariables, specHash: hash)
     }
 }
 
@@ -86,7 +88,7 @@ func patternFamilySpecHash(
     // Mix section + global variables into the hash so changing either busts
     // the manifest cache the same way changing the family itself does.
     let sectionVarsData = (try? encoder.encode(sectionVariables)) ?? Data()
-    let globalVarsData  = (try? encoder.encode(globalVariables))  ?? Data()
+    let globalVarsData = (try? encoder.encode(globalVariables)) ?? Data()
     var buf = Data()
     buf.append(familyData)
     buf.append(sectionVarsData)
@@ -105,37 +107,44 @@ private func renderCase(
     let source: String
     switch family.kind {
     case .boundaryEquality:
-        source = renderBoundaryEquality(family: family, case: c,
-                                         sectionVariables: sectionVariables, specHash: specHash)
+        source = renderBoundaryEquality(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     case .approximateEquality:
-        source = renderApproximateEquality(family: family, case: c,
-                                            sectionVariables: sectionVariables, specHash: specHash)
+        source = renderApproximateEquality(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     case .variableEquality:
-        source = renderVariableEquality(family: family, case: c,
-                                         sectionVariables: sectionVariables, specHash: specHash)
+        source = renderVariableEquality(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     case .returnTypeCheck:
-        source = renderReturnTypeCheck(family: family, case: c,
-                                        sectionVariables: sectionVariables, specHash: specHash)
+        source = renderReturnTypeCheck(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     case .exceptionExpected:
-        source = renderExceptionExpected(family: family, case: c,
-                                          sectionVariables: sectionVariables, specHash: specHash)
+        source = renderExceptionExpected(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     case .performanceThreshold:
-        source = renderPerformanceThreshold(family: family, case: c,
-                                             sectionVariables: sectionVariables, specHash: specHash)
+        source = renderPerformanceThreshold(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     case .stdoutEquality:
-        source = renderStdoutEquality(family: family, case: c,
-                                       sectionVariables: sectionVariables, specHash: specHash)
+        source = renderStdoutEquality(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash)
     }
 
     let tier = c.resolvedTier(defaults: family.defaults)
     return GeneratedScript(
-        filename:    generatedScriptFilename(familyID: family.id, caseKey: c.key, tier: tier),
-        source:      source,
-        tier:        tier,
-        points:      c.resolvedPoints(defaults: family.defaults),
+        filename: generatedScriptFilename(familyID: family.id, caseKey: c.key, tier: tier),
+        source: source,
+        tier: tier,
+        points: c.resolvedPoints(defaults: family.defaults),
         displayName: c.label,
-        caseKey:     c.key,
-        familyID:    family.id
+        caseKey: c.key,
+        familyID: family.id
     )
 }
 
@@ -198,10 +207,10 @@ private func callContext(for family: PatternFamily, case c: PatternCase) -> Call
         }
     }()
 
-    var declLineList:     [String] = []
-    var callArgsParts:    [String] = []
-    var previewParts:     [String] = []
-    var reprParts:        [String] = []
+    var declLineList: [String] = []
+    var callArgsParts: [String] = []
+    var previewParts: [String] = []
+    var reprParts: [String] = []
     var sawOmission = false
     for (idx, name) in argNames.enumerated() {
         let isProvided = idx < provided.count ? provided[idx] : true
@@ -235,10 +244,10 @@ private func callContext(for family: PatternFamily, case c: PatternCase) -> Call
     }
 
     return CallContext(
-        declLines:        declLineList.joined(separator: "\n"),
-        callArgs:         callArgsParts.joined(separator: ", "),
+        declLines: declLineList.joined(separator: "\n"),
+        callArgs: callArgsParts.joined(separator: ", "),
         inputLineLiteral: inputLineLiteral,
-        callReprExpr:     reprParts.joined(separator: ", ")
+        callReprExpr: reprParts.joined(separator: ", ")
     )
 }
 
@@ -275,51 +284,51 @@ private func renderBoundaryEquality(
     // this file sees which family produced it, but the runtime label stays
     // student-readable.
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-    expected = \(c.expected.pythonLiteral)
+        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected = \(c.expected.pythonLiteral)
 
-    try:
-        result = student_module.\(family.functionName)(\(ctx.callArgs))
-    except Exception as ex:
-        # v0.4.105: bare AssertionError (`assert x == y` with no message)
-        # used to render as just `error: AssertionError:` with no context.
-        # Walk the traceback's last frame to pull the source line that
-        # actually raised — this gives `error: AssertionError -- assert
-        # name == record["name"]["given"]`, which tells the student
-        # exactly which assertion failed.  Falls back silently when the
-        # traceback can't be extracted.
-        import traceback as _tb
-        _tb_frames = _tb.extract_tb(ex.__traceback__)
-        _tb_src = ""
-        if _tb_frames and _tb_frames[-1].line:
-            _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
-        failed(
-            "unexpected exception\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected!r}\\n"
-            f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-            \(hintLine)
-        )
+        try:
+            result = student_module.\(family.functionName)(\(ctx.callArgs))
+        except Exception as ex:
+            # v0.4.105: bare AssertionError (`assert x == y` with no message)
+            # used to render as just `error: AssertionError:` with no context.
+            # Walk the traceback's last frame to pull the source line that
+            # actually raised — this gives `error: AssertionError -- assert
+            # name == record["name"]["given"]`, which tells the student
+            # exactly which assertion failed.  Falls back silently when the
+            # traceback can't be extracted.
+            import traceback as _tb
+            _tb_frames = _tb.extract_tb(ex.__traceback__)
+            _tb_src = ""
+            if _tb_frames and _tb_frames[-1].line:
+                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+            failed(
+                "unexpected exception\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected!r}\\n"
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
+                \(hintLine)
+            )
 
-    if result != expected:
-        failed(
-            "wrong value\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected!r}\\n"
-            f"  got:      {result!r}\\n"
-            \(hintLine)
-        )
+        if result != expected:
+            failed(
+                "wrong value\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected!r}\\n"
+                f"  got:      {result!r}\\n"
+                \(hintLine)
+            )
 
-    # v0.4.105: pass message no longer echoes the full input dict / list
-    # (which can be hundreds of characters for HL7-shaped records).  The
-    # row's case label already names the test ("Example", "Test 1", …);
-    # the failure path still emits the full input alongside expected/got,
-    # so we only lose redundant context.
-    passed(f"Returned {result!r}")
-    """
+        # v0.4.105: pass message no longer echoes the full input dict / list
+        # (which can be hundreds of characters for HL7-shaped records).  The
+        # row's case label already names the test ("Example", "Test 1", …);
+        # the failure path still emits the full input alongside expected/got,
+        # so we only lose redundant context.
+        passed(f"Returned {result!r}")
+        """
 }
 
 // MARK: - approximateEquality
@@ -356,54 +365,54 @@ private func renderApproximateEquality(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-    expected = \(c.expected.pythonLiteral)
-    tolerance = \(toleranceLiteral)
+        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected = \(c.expected.pythonLiteral)
+        tolerance = \(toleranceLiteral)
 
-    try:
-        result = student_module.\(family.functionName)(\(ctx.callArgs))
-    except Exception as ex:
-        # v0.4.105: see renderBoundaryEquality — append source line for
-        # traceback context (especially useful for bare AssertionError).
-        import traceback as _tb
-        _tb_frames = _tb.extract_tb(ex.__traceback__)
-        _tb_src = ""
-        if _tb_frames and _tb_frames[-1].line:
-            _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
-        failed(
-            "unexpected exception\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected!r} (±{tolerance})\\n"
-            f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-            \(hintLine)
-        )
+        try:
+            result = student_module.\(family.functionName)(\(ctx.callArgs))
+        except Exception as ex:
+            # v0.4.105: see renderBoundaryEquality — append source line for
+            # traceback context (especially useful for bare AssertionError).
+            import traceback as _tb
+            _tb_frames = _tb.extract_tb(ex.__traceback__)
+            _tb_src = ""
+            if _tb_frames and _tb_frames[-1].line:
+                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+            failed(
+                "unexpected exception\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected!r} (±{tolerance})\\n"
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
+                \(hintLine)
+            )
 
-    if not isinstance(result, (int, float)) or isinstance(result, bool):
-        failed(
-            "wrong return type\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: a number close to {expected!r}\\n"
-            f"  got:      {result!r} (type {type(result).__name__})\\n"
-            \(hintLine)
-        )
+        if not isinstance(result, (int, float)) or isinstance(result, bool):
+            failed(
+                "wrong return type\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: a number close to {expected!r}\\n"
+                f"  got:      {result!r} (type {type(result).__name__})\\n"
+                \(hintLine)
+            )
 
-    delta = abs(result - expected)
-    if delta > tolerance:
-        failed(
-            "value outside tolerance\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected!r} (±{tolerance})\\n"
-            f"  got:      {result!r}\\n"
-            f"  delta:    {delta}\\n"
-            \(hintLine)
-        )
+        delta = abs(result - expected)
+        if delta > tolerance:
+            failed(
+                "value outside tolerance\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected!r} (±{tolerance})\\n"
+                f"  got:      {result!r}\\n"
+                f"  delta:    {delta}\\n"
+                \(hintLine)
+            )
 
-    # v0.4.105: see renderBoundaryEquality — drop the input echo.
-    passed(f"Returned {result!r} (within ±{tolerance})")
-    """
+        # v0.4.105: see renderBoundaryEquality — drop the input echo.
+        passed(f"Returned {result!r} (within ±{tolerance})")
+        """
 }
 
 // MARK: - variableEquality
@@ -441,31 +450,31 @@ private func renderVariableEquality(
     let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
 
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    variable_name = \(nameLiteral)
-    expected      = \(c.expected.pythonLiteral)
+        variable_name = \(nameLiteral)
+        expected      = \(c.expected.pythonLiteral)
 
-    _MISSING = object()
-    actual = getattr(student_module, variable_name, _MISSING)
-    if actual is _MISSING:
-        failed(
-            f"Variable `{variable_name}` is not defined\\n"
-            f"  expected: {expected!r}\\n"
-            \(hintLine)
-        )
+        _MISSING = object()
+        actual = getattr(student_module, variable_name, _MISSING)
+        if actual is _MISSING:
+            failed(
+                f"Variable `{variable_name}` is not defined\\n"
+                f"  expected: {expected!r}\\n"
+                \(hintLine)
+            )
 
-    if actual != expected:
-        failed(
-            f"Variable `{variable_name}` has the wrong value\\n"
-            f"  expected: {expected!r}\\n"
-            f"  got:      {actual!r}\\n"
-            \(hintLine)
-        )
+        if actual != expected:
+            failed(
+                f"Variable `{variable_name}` has the wrong value\\n"
+                f"  expected: {expected!r}\\n"
+                f"  got:      {actual!r}\\n"
+                \(hintLine)
+            )
 
-    passed(f"{variable_name} == {actual!r}")
-    """
+        passed(f"{variable_name} == {actual!r}")
+        """
 }
 
 // MARK: - returnTypeCheck
@@ -479,14 +488,14 @@ private func renderVariableEquality(
 private func returnTypeCheckExpression(typeName: String) -> String {
     switch typeName {
     // Python builtins — straightforward isinstance.
-    case "int":      return "isinstance(result, int) and not isinstance(result, bool)"
-    case "float":    return "isinstance(result, float)"
-    case "bool":     return "isinstance(result, bool)"
-    case "str":      return "isinstance(result, str)"
-    case "list":     return "isinstance(result, list)"
-    case "tuple":    return "isinstance(result, tuple)"
-    case "dict":     return "isinstance(result, dict)"
-    case "set":      return "isinstance(result, set)"
+    case "int": return "isinstance(result, int) and not isinstance(result, bool)"
+    case "float": return "isinstance(result, float)"
+    case "bool": return "isinstance(result, bool)"
+    case "str": return "isinstance(result, str)"
+    case "list": return "isinstance(result, list)"
+    case "tuple": return "isinstance(result, tuple)"
+    case "dict": return "isinstance(result, dict)"
+    case "set": return "isinstance(result, set)"
     case "NoneType": return "result is None"
     // Library types — walk the MRO by class name so we don't have to
     // import the library to do the check.  Same trick as
@@ -527,39 +536,39 @@ private func renderReturnTypeCheck(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-    expected_type_name = \(typeNameLiteral)
+        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected_type_name = \(typeNameLiteral)
 
-    try:
-        result = student_module.\(family.functionName)(\(ctx.callArgs))
-    except Exception as ex:
-        import traceback as _tb
-        _tb_frames = _tb.extract_tb(ex.__traceback__)
-        _tb_src = ""
-        if _tb_frames and _tb_frames[-1].line:
-            _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
-        failed(
-            "unexpected exception\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: a {expected_type_name} return value\\n"
-            f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-            \(hintLine)
-        )
+        try:
+            result = student_module.\(family.functionName)(\(ctx.callArgs))
+        except Exception as ex:
+            import traceback as _tb
+            _tb_frames = _tb.extract_tb(ex.__traceback__)
+            _tb_src = ""
+            if _tb_frames and _tb_frames[-1].line:
+                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+            failed(
+                "unexpected exception\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: a {expected_type_name} return value\\n"
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
+                \(hintLine)
+            )
 
-    if not (\(typeCheckExpr)):
-        failed(
-            "wrong return type\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected_type_name}\\n"
-            f"  got:      {type(result).__name__} (value: {result!r})\\n"
-            \(hintLine)
-        )
+        if not (\(typeCheckExpr)):
+            failed(
+                "wrong return type\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected_type_name}\\n"
+                f"  got:      {type(result).__name__} (value: {result!r})\\n"
+                \(hintLine)
+            )
 
-    passed(f"Returned a {type(result).__name__}")
-    """
+        passed(f"Returned a {type(result).__name__}")
+        """
 }
 
 // MARK: - exceptionExpected
@@ -585,45 +594,45 @@ private func renderExceptionExpected(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-    expected_exception_name = \(exceptionLiteral)
+        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected_exception_name = \(exceptionLiteral)
 
-    raised = None
-    result = None
-    try:
-        result = student_module.\(family.functionName)(\(ctx.callArgs))
-    except BaseException as ex:
-        raised = ex
+        raised = None
+        result = None
+        try:
+            result = student_module.\(family.functionName)(\(ctx.callArgs))
+        except BaseException as ex:
+            raised = ex
 
-    if raised is None:
-        failed(
-            "expected exception was not raised\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected_exception_name}\\n"
-            f"  got:      no exception (returned {result!r})\\n"
-            \(hintLine)
-        )
+        if raised is None:
+            failed(
+                "expected exception was not raised\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected_exception_name}\\n"
+                f"  got:      no exception (returned {result!r})\\n"
+                \(hintLine)
+            )
 
-    # Match by class-name MRO walk so the test doesn't need to import
-    # the user's exception class in this scope.  Any class in the
-    # raised exception's __mro__ with __name__ == expected_exception_name
-    # counts as a match — gives `ValueError` matching when the student
-    # raises a subclass too.
-    raised_chain = [getattr(b, "__name__", "") for b in type(raised).__mro__]
-    if expected_exception_name not in raised_chain:
-        failed(
-            "wrong exception type\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected_exception_name}\\n"
-            f"  got:      {type(raised).__name__}: {raised}\\n"
-            \(hintLine)
-        )
+        # Match by class-name MRO walk so the test doesn't need to import
+        # the user's exception class in this scope.  Any class in the
+        # raised exception's __mro__ with __name__ == expected_exception_name
+        # counts as a match — gives `ValueError` matching when the student
+        # raises a subclass too.
+        raised_chain = [getattr(b, "__name__", "") for b in type(raised).__mro__]
+        if expected_exception_name not in raised_chain:
+            failed(
+                "wrong exception type\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected_exception_name}\\n"
+                f"  got:      {type(raised).__name__}: {raised}\\n"
+                \(hintLine)
+            )
 
-    passed(f"Raised {type(raised).__name__} as expected")
-    """
+        passed(f"Raised {type(raised).__name__} as expected")
+        """
 }
 
 // MARK: - performanceThreshold
@@ -642,8 +651,8 @@ private func renderPerformanceThreshold(
     let thresholdMs: Double = {
         switch c.expected {
         case .double(let d): return d
-        case .int(let i):    return Double(i)
-        default:             return 1000.0
+        case .int(let i): return Double(i)
+        default: return 1000.0
         }
     }()
     let thresholdLiteral = JSONValue.double(thresholdMs).pythonLiteral
@@ -652,43 +661,43 @@ private func renderPerformanceThreshold(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    import time as _time
+        import time as _time
 
-    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-    threshold_ms = \(thresholdLiteral)
+        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        threshold_ms = \(thresholdLiteral)
 
-    _start = _time.perf_counter()
-    try:
-        result = student_module.\(family.functionName)(\(ctx.callArgs))
-    except Exception as ex:
-        import traceback as _tb
-        _tb_frames = _tb.extract_tb(ex.__traceback__)
-        _tb_src = ""
-        if _tb_frames and _tb_frames[-1].line:
-            _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
-        failed(
-            "unexpected exception\\n"
-            \(ctx.inputLineLiteral)
-            f"  threshold: {threshold_ms} ms\\n"
-            f"  error:     {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-            \(hintLine)
-        )
-    _elapsed_ms = (_time.perf_counter() - _start) * 1000.0
+        _start = _time.perf_counter()
+        try:
+            result = student_module.\(family.functionName)(\(ctx.callArgs))
+        except Exception as ex:
+            import traceback as _tb
+            _tb_frames = _tb.extract_tb(ex.__traceback__)
+            _tb_src = ""
+            if _tb_frames and _tb_frames[-1].line:
+                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+            failed(
+                "unexpected exception\\n"
+                \(ctx.inputLineLiteral)
+                f"  threshold: {threshold_ms} ms\\n"
+                f"  error:     {type(ex).__name__}: {ex}" + _tb_src + "\\n"
+                \(hintLine)
+            )
+        _elapsed_ms = (_time.perf_counter() - _start) * 1000.0
 
-    if _elapsed_ms > threshold_ms:
-        failed(
-            "ran too slowly\\n"
-            \(ctx.inputLineLiteral)
-            f"  threshold: {threshold_ms} ms\\n"
-            f"  elapsed:   {_elapsed_ms:.2f} ms\\n"
-            \(hintLine)
-        )
+        if _elapsed_ms > threshold_ms:
+            failed(
+                "ran too slowly\\n"
+                \(ctx.inputLineLiteral)
+                f"  threshold: {threshold_ms} ms\\n"
+                f"  elapsed:   {_elapsed_ms:.2f} ms\\n"
+                \(hintLine)
+            )
 
-    passed(f"Completed in {_elapsed_ms:.2f} ms (threshold {threshold_ms} ms)")
-    """
+        passed(f"Completed in {_elapsed_ms:.2f} ms (threshold {threshold_ms} ms)")
+        """
 }
 
 // MARK: - stdoutEquality
@@ -717,66 +726,66 @@ private func renderStdoutEquality(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-    # Test: \(c.label)
-    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        # Test: \(c.label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
 
-    import io as _io
-    import contextlib as _contextlib
+        import io as _io
+        import contextlib as _contextlib
 
-    \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-    expected = \(c.expected.pythonLiteral)
+        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected = \(c.expected.pythonLiteral)
 
-    _buf = _io.StringIO()
-    try:
-        with _contextlib.redirect_stdout(_buf):
-            student_module.\(family.functionName)(\(ctx.callArgs))
-    except Exception as ex:
-        # Same traceback-context trick as renderBoundaryEquality —
-        # bare AssertionErrors get a `source:` line so the student
-        # sees which line raised.
-        import traceback as _tb
-        _tb_frames = _tb.extract_tb(ex.__traceback__)
-        _tb_src = ""
-        if _tb_frames and _tb_frames[-1].line:
-            _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
-        failed(
-            "unexpected exception\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected stdout: {expected!r}\\n"
-            f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-            \(hintLine)
-        )
+        _buf = _io.StringIO()
+        try:
+            with _contextlib.redirect_stdout(_buf):
+                student_module.\(family.functionName)(\(ctx.callArgs))
+        except Exception as ex:
+            # Same traceback-context trick as renderBoundaryEquality —
+            # bare AssertionErrors get a `source:` line so the student
+            # sees which line raised.
+            import traceback as _tb
+            _tb_frames = _tb.extract_tb(ex.__traceback__)
+            _tb_src = ""
+            if _tb_frames and _tb_frames[-1].line:
+                _tb_src = f"\\n  source:   {_tb_frames[-1].line.strip()}"
+            failed(
+                "unexpected exception\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected stdout: {expected!r}\\n"
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
+                \(hintLine)
+            )
 
-    # Trim a single trailing newline on both sides so `print("hi")`
-    # (which emits "hi\\n") matches an instructor-typed Expected of "hi".
-    # Internal newlines and leading whitespace are preserved.
-    actual = _buf.getvalue()
-    if actual.endswith("\\n"):
-        actual = actual[:-1]
-    expected_norm = expected
-    if isinstance(expected_norm, str) and expected_norm.endswith("\\n"):
-        expected_norm = expected_norm[:-1]
+        # Trim a single trailing newline on both sides so `print("hi")`
+        # (which emits "hi\\n") matches an instructor-typed Expected of "hi".
+        # Internal newlines and leading whitespace are preserved.
+        actual = _buf.getvalue()
+        if actual.endswith("\\n"):
+            actual = actual[:-1]
+        expected_norm = expected
+        if isinstance(expected_norm, str) and expected_norm.endswith("\\n"):
+            expected_norm = expected_norm[:-1]
 
-    if actual != expected_norm:
-        failed(
-            "wrong stdout\\n"
-            \(ctx.inputLineLiteral)
-            f"  expected: {expected_norm!r}\\n"
-            f"  got:      {actual!r}\\n"
-            \(hintLine)
-        )
+        if actual != expected_norm:
+            failed(
+                "wrong stdout\\n"
+                \(ctx.inputLineLiteral)
+                f"  expected: {expected_norm!r}\\n"
+                f"  got:      {actual!r}\\n"
+                \(hintLine)
+            )
 
-    passed(f"Printed {actual!r}")
-    """
+        passed(f"Printed {actual!r}")
+        """
 }
 
 // MARK: - Helpers
 
 private func tierFilenamePrefix(_ tier: TestTier) -> String {
     switch tier {
-    case .pub:     return "public"
+    case .pub: return "public"
     case .release: return "release"
-    case .secret:  return "secret"
+    case .secret: return "secret"
     }
 }
 

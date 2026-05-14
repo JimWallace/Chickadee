@@ -2,10 +2,11 @@
 //
 // Unit tests for the iCalendar parsing functions used by UWImportantDatesCache.
 
-import Testing
-@testable import chickadee_server
 import Fluent
 import Foundation
+import Testing
+
+@testable import chickadee_server
 
 @Suite struct UWImportantDatesTests {
 
@@ -120,10 +121,11 @@ import Foundation
 
     // MARK: - nextDayISO
 
-    @Test(arguments: zip(
-        ["2026-03-21", "2026-01-31", "2025-12-31", "2024-02-28", "2024-02-29"],
-        ["2026-03-22", "2026-02-01", "2026-01-01", "2024-02-29", "2024-03-01"]
-    ))
+    @Test(
+        arguments: zip(
+            ["2026-03-21", "2026-01-31", "2025-12-31", "2024-02-28", "2024-02-29"],
+            ["2026-03-22", "2026-02-01", "2026-01-01", "2024-02-29", "2024-03-01"]
+        ))
     func nextDayAdvances(input: String, expected: String) {
         #expect(nextDayISO(input) == expected)
     }
@@ -136,23 +138,23 @@ import Foundation
 
     @Test func parseFullICS() {
         let ics = """
-        BEGIN:VCALENDAR
-        VERSION:2.0
-        BEGIN:VEVENT
-        DTSTART;VALUE=DATE:20260216
-        DTEND;VALUE=DATE:20260221
-        SUMMARY:Reading Week
-        END:VEVENT
-        BEGIN:VEVENT
-        DTSTART;VALUE=DATE:20260403
-        SUMMARY:Good Friday
-        END:VEVENT
-        BEGIN:VEVENT
-        DTSTART;VALUE=DATE:20260901
-        SUMMARY:Classes begin
-        END:VEVENT
-        END:VCALENDAR
-        """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            BEGIN:VEVENT
+            DTSTART;VALUE=DATE:20260216
+            DTEND;VALUE=DATE:20260221
+            SUMMARY:Reading Week
+            END:VEVENT
+            BEGIN:VEVENT
+            DTSTART;VALUE=DATE:20260403
+            SUMMARY:Good Friday
+            END:VEVENT
+            BEGIN:VEVENT
+            DTSTART;VALUE=DATE:20260901
+            SUMMARY:Classes begin
+            END:VEVENT
+            END:VCALENDAR
+            """
         let events = parseICSEvents(ics)
         #expect(events.count == 3)
 
@@ -177,13 +179,13 @@ import Foundation
 
     @Test func parseICSSkipsEventsWithoutDateOrSummary() {
         let ics = """
-        BEGIN:VEVENT
-        SUMMARY:No date event
-        END:VEVENT
-        BEGIN:VEVENT
-        DTSTART:20260101
-        END:VEVENT
-        """
+            BEGIN:VEVENT
+            SUMMARY:No date event
+            END:VEVENT
+            BEGIN:VEVENT
+            DTSTART:20260101
+            END:VEVENT
+            """
         // First has no date, second has no summary — both skipped.
         #expect(parseICSEvents(ics).isEmpty)
     }

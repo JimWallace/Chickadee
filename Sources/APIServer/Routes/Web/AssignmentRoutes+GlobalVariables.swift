@@ -30,10 +30,10 @@
 // On success: 200 OK + JSON body with the reconciled lists and any
 // non-blocking warnings.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -90,8 +90,7 @@ extension AssignmentRoutes {
             }
             guard !Self.reservedGlobalNames.contains(v.name) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "'\(v.name)' is reserved for Chickadee's personalization seed. " +
-                            "Choose another name.")
+                    reason: "'\(v.name)' is reserved for Chickadee's personalization seed. " + "Choose another name.")
             }
             guard seenNames.insert(v.name).inserted else {
                 throw WebAssignmentError.unprocessable(
@@ -105,19 +104,18 @@ extension AssignmentRoutes {
             }
             guard !Self.reservedGlobalNames.contains(e.name) else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "'\(e.name)' is reserved for Chickadee's personalization seed. " +
-                            "Choose another name.")
+                    reason: "'\(e.name)' is reserved for Chickadee's personalization seed. " + "Choose another name.")
             }
             let trimmed = e.expression.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Global expression '\(e.name)' has an empty body. " +
-                            "Provide a Python expression after the leading `=` (e.g. `= seed % 26`).")
+                    reason: "Global expression '\(e.name)' has an empty body. "
+                        + "Provide a Python expression after the leading `=` (e.g. `= seed % 26`).")
             }
             guard seenNames.insert(e.name).inserted else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Duplicate global input name '\(e.name)'. " +
-                            "Names must be unique across literal values and expressions.")
+                    reason: "Duplicate global input name '\(e.name)'. "
+                        + "Names must be unique across literal values and expressions.")
             }
         }
 
@@ -126,9 +124,9 @@ extension AssignmentRoutes {
             for sv in section.variables {
                 guard !seenNames.contains(sv.name) else {
                     throw WebAssignmentError.unprocessable(
-                        reason: "Global input name '\(sv.name)' is already used by " +
-                                "section '\(section.name)'. Section and global names share a " +
-                                "namespace; rename one to avoid shadowing.")
+                        reason: "Global input name '\(sv.name)' is already used by "
+                            + "section '\(section.name)'. Section and global names share a "
+                            + "namespace; rename one to avoid shadowing.")
                 }
             }
         }
@@ -139,15 +137,17 @@ extension AssignmentRoutes {
             for sv in section.variables { declared.insert(sv.name) }
         }
         if let starterName = manifest.starterNotebook,
-           let notebookData = extractZipEntry(zipPath: setup.zipPath,
-                                              entryName: starterName) {
+            let notebookData = extractZipEntry(
+                zipPath: setup.zipPath,
+                entryName: starterName)
+        {
             let used = NotebookSubstitution.placeholderNames(in: notebookData)
             let unknown = used.filter { !declared.contains($0) }
             if !unknown.isEmpty {
                 let list = unknown.map { "{{\($0)}}" }.joined(separator: ", ")
                 throw WebAssignmentError.unprocessable(
-                    reason: "Starter notebook references unknown placeholder(s): \(list). " +
-                            "Declare them as global or section inputs first.")
+                    reason: "Starter notebook references unknown placeholder(s): \(list). "
+                        + "Declare them as global or section inputs first.")
             }
         }
 
@@ -157,7 +157,8 @@ extension AssignmentRoutes {
         // so typos don't reach students.  Skipped when no expressions
         // were declared (most common case).
         if !expressions.isEmpty, let userID = (try req.auth.require(APIUser.self)).id,
-           let assignmentID = assignment.id {
+            let assignmentID = assignment.id
+        {
             let seedHex = try await AssignmentSeedStore.ensureSeed(
                 userID: userID,
                 assignmentID: assignmentID,
@@ -179,12 +180,12 @@ extension AssignmentRoutes {
             } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
                 let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
                 throw WebAssignmentError.unprocessable(
-                    reason: "One of your expressions failed to evaluate: \(tail). " +
-                            "Fix the expression(s) and save again.")
+                    reason: "One of your expressions failed to evaluate: \(tail). "
+                        + "Fix the expression(s) and save again.")
             } catch PersonalizationEvaluatorError.timedOut {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Expression evaluation timed out (>5s). " +
-                            "Simplify the expressions or move heavy lifting into a support module.")
+                    reason: "Expression evaluation timed out (>5s). "
+                        + "Simplify the expressions or move heavy lifting into a support module.")
             } catch {
                 throw WebAssignmentError.internalFailure(
                     reason: "Expression evaluator failed: \(error)")
@@ -220,7 +221,7 @@ extension AssignmentRoutes {
 
     private func decodeManifest(setup: APITestSetup) throws -> TestProperties {
         guard let data = setup.manifest.data(using: .utf8),
-              let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
         else {
             throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
         }

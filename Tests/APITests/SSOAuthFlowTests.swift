@@ -7,12 +7,13 @@
 // callback error paths. End-to-end token exchange requires real IdP credentials
 // and is out of scope for unit tests.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-import JWT
 import Foundation
+import JWT
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class SSOAuthFlowTests: XCTestCase {
 
@@ -62,20 +63,29 @@ final class SSOAuthFlowTests: XCTestCase {
             case .alwaysFail:
                 return (.badRequest, #"{"error":"invalid_grant"}"#)
             case .succeedImmediately(let idToken):
-                return (.ok, """
-                {"access_token":"access-token","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
-                """)
+                return (
+                    .ok,
+                    """
+                    {"access_token":"access-token","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
+                    """
+                )
             case .succeedImmediatelyWithRefreshToken(let idToken, let refreshToken):
-                return (.ok, """
-                {"access_token":"access-token","refresh_token":"\(refreshToken)","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
-                """)
+                return (
+                    .ok,
+                    """
+                    {"access_token":"access-token","refresh_token":"\(refreshToken)","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
+                    """
+                )
             case .succeedWithoutVerifier(let idToken):
                 if body.contains("code_verifier=") {
                     return (.badRequest, #"{"error":"pkce_not_supported"}"#)
                 }
-                return (.ok, """
-                {"access_token":"access-token","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
-                """)
+                return (
+                    .ok,
+                    """
+                    {"access_token":"access-token","id_token":"\(idToken)","token_type":"Bearer","expires_in":300}
+                    """
+                )
             }
         }
 
@@ -157,7 +167,9 @@ final class SSOAuthFlowTests: XCTestCase {
             .sign(claims)
     }
 
-    private func makeMockOIDCProvider(mode: MockTokenEndpoint.Mode) async throws -> (app: Application, port: Int, endpoint: MockTokenEndpoint) {
+    private func makeMockOIDCProvider(
+        mode: MockTokenEndpoint.Mode
+    ) async throws -> (app: Application, port: Int, endpoint: MockTokenEndpoint) {
         let tokenEndpoint = MockTokenEndpoint(mode: mode)
 
         let app = try await Application.make(Environment(name: "testing", arguments: ["test"]))
@@ -189,15 +201,19 @@ final class SSOAuthFlowTests: XCTestCase {
         return (app, port, tokenEndpoint)
     }
 
-    private func startSSOSession(on app: Application, path: String = "/auth/sso/start") async throws -> (cookie: String, state: String) {
+    private func startSSOSession(
+        on app: Application, path: String = "/auth/sso/start"
+    ) async throws -> (cookie: String, state: String) {
         var sessionCookie = ""
         var redirectLocation = ""
 
-        try await app.asyncTest(.GET, path, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            sessionCookie = res.headers.first(name: .setCookie) ?? ""
-            redirectLocation = res.headers.first(name: .location) ?? ""
-        })
+        try await app.asyncTest(
+            .GET, path,
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                sessionCookie = res.headers.first(name: .setCookie) ?? ""
+                redirectLocation = res.headers.first(name: .location) ?? ""
+            })
 
         let components = try XCTUnwrap(URLComponents(string: redirectLocation))
         let state = components.queryItems?.first(where: { $0.name == "state" })?.value ?? ""
@@ -255,16 +271,16 @@ final class SSOAuthFlowTests: XCTestCase {
     }
 
     private static let mockOIDCConfig = OIDCConfiguration(
-        clientID:     "test-client-id",
+        clientID: "test-client-id",
         clientSecret: "test-client-secret",
-        redirectURI:  "http://localhost:8080/auth/sso/callback",
+        redirectURI: "http://localhost:8080/auth/sso/callback",
         discovery: OIDCDiscovery(
-            issuer:                "https://duo-test.example.com/oidc/test-client-id",
+            issuer: "https://duo-test.example.com/oidc/test-client-id",
             authorizationEndpoint: "https://duo-test.example.com/oidc/test-client-id/authorize",
-            tokenEndpoint:         "https://duo-test.example.com/oidc/test-client-id/token",
-            jwksURI:               "https://duo-test.example.com/oidc/test-client-id/keys",
-            revocationEndpoint:    nil,
-            endSessionEndpoint:    nil
+            tokenEndpoint: "https://duo-test.example.com/oidc/test-client-id/token",
+            jwksURI: "https://duo-test.example.com/oidc/test-client-id/keys",
+            revocationEndpoint: nil,
+            endSessionEndpoint: nil
         ),
         claimConfig: OIDCClaimConfig()
     )
@@ -273,27 +289,31 @@ final class SSOAuthFlowTests: XCTestCase {
 
     func testSSOStart_redirectsToAuthorizationEndpoint() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.asyncTest(.GET, "/auth/sso/start", afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                let location = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(
-                    location.hasPrefix("https://duo-test.example.com"),
-                    "Expected redirect to DUO test host, got: \(location)"
-                )
-                XCTAssertTrue(location.contains("client_id=test-client-id"))
-                XCTAssertTrue(location.contains("response_type=code"))
-                XCTAssertTrue(location.contains("code_challenge_method=S256"))
-                XCTAssertTrue(location.contains("scope=openid"))
-            })
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                afterResponse: { res in
+                    XCTAssertEqual(res.status, .seeOther)
+                    let location = res.headers.first(name: .location) ?? ""
+                    XCTAssertTrue(
+                        location.hasPrefix("https://duo-test.example.com"),
+                        "Expected redirect to DUO test host, got: \(location)"
+                    )
+                    XCTAssertTrue(location.contains("client_id=test-client-id"))
+                    XCTAssertTrue(location.contains("response_type=code"))
+                    XCTAssertTrue(location.contains("code_challenge_method=S256"))
+                    XCTAssertTrue(location.contains("scope=openid"))
+                })
         }
     }
 
     func testSSOStart_includesRedirectURI() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.asyncTest(.GET, "/auth/sso/start", afterResponse: { res in
-                let location = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(location.contains("redirect_uri="))
-            })
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                afterResponse: { res in
+                    let location = res.headers.first(name: .location) ?? ""
+                    XCTAssertTrue(location.contains("redirect_uri="))
+                })
         }
     }
 
@@ -301,24 +321,28 @@ final class SSOAuthFlowTests: XCTestCase {
 
     func testSSOCallback_missingStateFails() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.asyncTest(.GET, "/auth/sso/callback?code=abc&state=wrong", afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertTrue(
-                    res.headers.first(name: .location)?.contains("sso_failed") == true,
-                    "Expected sso_failed redirect"
-                )
-            })
+            try await app.asyncTest(
+                .GET, "/auth/sso/callback?code=abc&state=wrong",
+                afterResponse: { res in
+                    XCTAssertEqual(res.status, .seeOther)
+                    XCTAssertTrue(
+                        res.headers.first(name: .location)?.contains("sso_failed") == true,
+                        "Expected sso_failed redirect"
+                    )
+                })
         }
     }
 
     func testSSOCallback_missingCodeFails() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.asyncTest(.GET, "/auth/sso/callback?state=somestate", afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertTrue(
-                    res.headers.first(name: .location)?.contains("sso_failed") == true
-                )
-            })
+            try await app.asyncTest(
+                .GET, "/auth/sso/callback?state=somestate",
+                afterResponse: { res in
+                    XCTAssertEqual(res.status, .seeOther)
+                    XCTAssertTrue(
+                        res.headers.first(name: .location)?.contains("sso_failed") == true
+                    )
+                })
         }
     }
 
@@ -341,9 +365,11 @@ final class SSOAuthFlowTests: XCTestCase {
 
     func testLocalMode_ssoStartNotRegistered() async throws {
         try await withApp(try await makeApp(authMode: .local)) { app in
-            try await app.asyncTest(.GET, "/auth/sso/start", afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
-            })
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                afterResponse: { res in
+                    XCTAssertEqual(res.status, .notFound)
+                })
         }
     }
 
@@ -601,7 +627,7 @@ final class SSOAuthFlowTests: XCTestCase {
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
             subject: subject,
-            username: nil,          // no preferred_username in token
+            username: nil,  // no preferred_username in token
             name: "Jane Doe",
             email: "jane@example.com",
             extraClaims: ["winaccountname": "janedoe"]
@@ -730,12 +756,14 @@ final class SSOAuthFlowTests: XCTestCase {
 
                 let revocations = await waitForRevocationCount(2, on: provider.endpoint)
                 XCTAssertEqual(revocations.count, 2)
-                XCTAssertTrue(revocations.contains(where: {
-                    $0.contains("token=access-token") && $0.contains("token_type_hint=access_token")
-                }))
-                XCTAssertTrue(revocations.contains(where: {
-                    $0.contains("token=refresh-token") && $0.contains("token_type_hint=refresh_token")
-                }))
+                XCTAssertTrue(
+                    revocations.contains(where: {
+                        $0.contains("token=access-token") && $0.contains("token_type_hint=access_token")
+                    }))
+                XCTAssertTrue(
+                    revocations.contains(where: {
+                        $0.contains("token=refresh-token") && $0.contains("token_type_hint=refresh_token")
+                    }))
             }
         }
     }
@@ -773,10 +801,12 @@ final class SSOAuthFlowTests: XCTestCase {
     func testCustomOIDCCallbackRouteUsesConfiguredPath() async throws {
         try await withEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
             try await withApp(try await makeApp()) { app in
-                try await app.asyncTest(.GET, "/oidc/custom/callback?error=access_denied", afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(res.headers.first(name: .location)?.contains("sso_denied") == true)
-                })
+                try await app.asyncTest(
+                    .GET, "/oidc/custom/callback?error=access_denied",
+                    afterResponse: { res in
+                        XCTAssertEqual(res.status, .seeOther)
+                        XCTAssertTrue(res.headers.first(name: .location)?.contains("sso_denied") == true)
+                    })
             }
         }
     }

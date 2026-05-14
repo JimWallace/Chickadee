@@ -7,10 +7,10 @@
 // focused unit so a UI fix to one slice doesn't require re-reading the
 // other four.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 // MARK: - Intermediate query results
 
@@ -107,7 +107,7 @@ extension AssignmentRoutes {
                 .all()
                 .sorted { lhs, rhs in
                     switch (lhs.lastSeenAt, rhs.lastSeenAt) {
-                    case let (l?, r?):
+                    case (let l?, let r?):
                         if l != r { return l > r }
                     case (.some, nil):
                         return true
@@ -159,15 +159,21 @@ extension AssignmentRoutes {
 
         let now = Date()
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
-        let recentSubmissions = allSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID ~~ allSetupIDs)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .filter(\.$submittedAt >= windowStart)
-            .all()
-        let allCourseStudentSubmissions = allSetupIDs.isEmpty ? [] : try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID ~~ allSetupIDs)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
+        let recentSubmissions =
+            allSetupIDs.isEmpty
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ allSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$submittedAt >= windowStart)
+                .all()
+        let allCourseStudentSubmissions =
+            allSetupIDs.isEmpty
+            ? []
+            : try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ allSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .all()
         let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
             for: allSetupIDs,
             on: req.db
@@ -210,14 +216,17 @@ extension AssignmentRoutes {
         // Diagnostics with a null test_setup_id (the supplied setup ID didn't
         // resolve) are excluded since they can't be attributed to a course.
         let setupIDSet = Set(allSetupIDs)
-        let recentClientDiagnostics = allSetupIDs.isEmpty ? [] : try await APIClientDiagnostic.query(on: req.db)
-            .filter(\.$createdAt >= windowStart)
-            .all()
+        let recentClientDiagnostics =
+            allSetupIDs.isEmpty
+            ? []
+            : try await APIClientDiagnostic.query(on: req.db)
+                .filter(\.$createdAt >= windowStart)
+                .all()
         let studentsWithBrowserErrors = Set(
             recentClientDiagnostics.compactMap { record -> UUID? in
                 guard let setupID = record.testSetupID,
-                      setupIDSet.contains(setupID),
-                      activeStudentIDs.contains(record.userID)
+                    setupIDSet.contains(setupID),
+                    activeStudentIDs.contains(record.userID)
                 else { return nil }
                 return record.userID
             }
@@ -228,7 +237,7 @@ extension AssignmentRoutes {
             InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
             InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
             InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
-            InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)")
+            InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)"),
         ]
 
         return CourseRosterData(
@@ -246,7 +255,7 @@ extension AssignmentRoutes {
             InstructorDashboardMetric(label: "24h Submissions", value: "—"),
             InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
             InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
-            InstructorDashboardMetric(label: "Students With Browser Errors", value: "—")
+            InstructorDashboardMetric(label: "Students With Browser Errors", value: "—"),
         ]
     }
 
@@ -288,10 +297,10 @@ extension AssignmentRoutes {
     ) -> [AssignmentRow] {
         allSetups.map { setup in
             let assignment = assignmentBySetup[setup.id ?? ""]
-            let setupID    = setup.id ?? ""
+            let setupID = setup.id ?? ""
             let suiteCount: Int = {
-                guard let data  = setup.manifest.data(using: .utf8),
-                      let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                guard let data = setup.manifest.data(using: .utf8),
+                    let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
                 else { return 0 }
                 return props.testSuites.count
             }()
@@ -307,27 +316,27 @@ extension AssignmentRoutes {
 
             let vanityURL: String? = {
                 guard let assignment,
-                      let title = assignment.title as String?, !title.isEmpty,
-                      let courseCode = activeCourse?.code, !courseCode.isEmpty,
-                      !assignment.slug.isEmpty
+                    let title = assignment.title as String?, !title.isEmpty,
+                    let courseCode = activeCourse?.code, !courseCode.isEmpty,
+                    !assignment.slug.isEmpty
                 else { return nil }
                 return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment.slug)
             }()
 
             return AssignmentRow(
-                setupID:      setupID,
+                setupID: setupID,
                 assignmentID: assignment?.publicID,
-                title:        assignment?.title,
-                isOpen:       assignment?.isOpen,
-                dueAt:        assignment?.dueAt.map { fmt.string(from: $0) },
-                status:       status,
-                sortOrder:    assignment?.sortOrder,
+                title: assignment?.title,
+                isOpen: assignment?.isOpen,
+                dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
+                status: status,
+                sortOrder: assignment?.sortOrder,
                 validationStatus: validationStatus,
                 validationSubmissionID: validationSubmissionID,
-                suiteCount:   suiteCount,
-                createdAt:    setup.createdAt.map { fmt.string(from: $0) } ?? "—",
+                suiteCount: suiteCount,
+                createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 submittedStudentCount: assignment != nil ? (uniqueSubmittersBySetup[setupID] ?? 0) : nil,
-                vanityURL:    vanityURL
+                vanityURL: vanityURL
             )
         }
     }
@@ -348,7 +357,7 @@ extension AssignmentRoutes {
 
             if lhsPublished && rhsPublished {
                 switch (lhs.sortOrder, rhs.sortOrder) {
-                case let (l?, r?) where l != r:
+                case (let l?, let r?) where l != r:
                     return l < r
                 case (_?, nil):
                     return true

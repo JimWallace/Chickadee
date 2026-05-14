@@ -1,11 +1,11 @@
 // APIServer/APIServerApp.swift
 
-import Vapor
-import Fluent
-import Leaf
 import CSRF
 import Core
+import Fluent
 import Foundation
+import Leaf
+import Vapor
 
 @main
 struct APIServerApp {
@@ -16,7 +16,7 @@ struct APIServerApp {
 
         let app = try await Application.make(env)
         app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
-        
+
         do {
             try configure(app, cliWorkerSecret: cliWorkerSecret)
 
@@ -32,7 +32,7 @@ struct APIServerApp {
             try await app.asyncShutdown()
             throw error
         }
-        
+
         await app.localRunnerManager.stopIfRunning(logger: app.logger)
         try await app.asyncShutdown()
     }
@@ -46,26 +46,28 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     let alertWebhookURLFile = workDir + ".alert-webhook-url"
     let requestedAuthMode = AuthMode.fromEnvironment()
     let nonSSOModesEnabled = environmentBool("ENABLE_NON_SSO_AUTH_MODES") ?? false
-    let authMode = authModeOverride ?? resolvedAuthMode(
-        requestedMode: requestedAuthMode,
-        nonSSOModesEnabled: nonSSOModesEnabled
-    )
+    let authMode =
+        authModeOverride
+        ?? resolvedAuthMode(
+            requestedMode: requestedAuthMode,
+            nonSSOModesEnabled: nonSSOModesEnabled
+        )
     let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
     let ssoAdminUsers = parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
     let ssoInstructorUsers = parseSSOIdentityAllowlist(Environment.get("SSO_INSTRUCTOR_USERS"))
 
     // MARK: - Directories
 
-    let resultsDir    = workDir + "results/"
-    let setupsDir     = workDir + "testsetups/"
+    let resultsDir = workDir + "results/"
+    let setupsDir = workDir + "testsetups/"
     let submissionsDir = workDir + "submissions/"
 
     for dir in [resultsDir, setupsDir, submissionsDir] {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     }
 
-    app.storage[ResultsDirectoryKey.self]     = resultsDir
-    app.storage[TestSetupsDirectoryKey.self]  = setupsDir
+    app.storage[ResultsDirectoryKey.self] = resultsDir
+    app.storage[TestSetupsDirectoryKey.self] = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
     app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
     app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
@@ -76,12 +78,13 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
         workerSecretFilePath: workerSecretFile,
         workerSecretWordlistPath: workerSecretWordlistFile
     )
-    let localRunnerAutoStartEnabled = readLocalRunnerAutoStartFromDisk(
-        filePath: localRunnerAutoStartFile
-    ) ?? false
-    app.storage[WorkerClaimQueueKey.self]      = WorkerClaimQueue()
-    app.storage[WorkerSecretStoreKey.self]    = WorkerSecretStore(initialOverride: startupWorkerSecret)
-    app.storage[WorkerActivityStoreKey.self]  = WorkerActivityStore()
+    let localRunnerAutoStartEnabled =
+        readLocalRunnerAutoStartFromDisk(
+            filePath: localRunnerAutoStartFile
+        ) ?? false
+    app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
+    app.storage[WorkerSecretStoreKey.self] = WorkerSecretStore(initialOverride: startupWorkerSecret)
+    app.storage[WorkerActivityStoreKey.self] = WorkerActivityStore()
     app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
         initialEnabled: localRunnerAutoStartEnabled
     )
@@ -99,7 +102,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     sessionConfig.cookieFactory = { sessionID in
         HTTPCookies.Value(
             string: sessionID.string,
-            expires: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7), // one week
+            expires: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7),  // one week
             maxAge: nil,
             domain: nil,
             path: "/",
@@ -172,8 +175,9 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
             )
         }
         if let requestedAuthMode,
-           requestedAuthMode != .sso,
-           !nonSSOModesEnabled {
+            requestedAuthMode != .sso,
+            !nonSSOModesEnabled
+        {
             app.logger.warning(
                 "AUTH_MODE=\(requestedAuthMode.rawValue) ignored because ENABLE_NON_SSO_AUTH_MODES is not enabled; using sso."
             )
@@ -248,9 +252,10 @@ enum AuthMode: String, Sendable {
     case dual
 
     static func fromEnvironment() -> Self? {
-        guard let raw = Environment.get("AUTH_MODE")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
+        guard
+            let raw = Environment.get("AUTH_MODE")?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
             !raw.isEmpty
         else {
             return nil
@@ -311,10 +316,12 @@ struct AppSecurityConfiguration: Sendable {
             }
         let publicBaseIsHTTPS = (publicBaseURL?.scheme?.lowercased() == "https")
 
-        let enforceHTTPS = environmentBool("ENFORCE_HTTPS")
+        let enforceHTTPS =
+            environmentBool("ENFORCE_HTTPS")
             ?? (authMode != .local && publicBaseIsHTTPS)
         let trustForwardedProto = environmentBool("TRUST_X_FORWARDED_PROTO") ?? true
-        let sessionCookieSecure = environmentBool("SESSION_COOKIE_SECURE")
+        let sessionCookieSecure =
+            environmentBool("SESSION_COOKIE_SECURE")
             ?? (publicBaseIsHTTPS || authMode != .local)
 
         return AppSecurityConfiguration(
@@ -448,18 +455,21 @@ actor WorkerActivityStore {
     func snapshotsSortedByRecent(cutoff: TimeInterval = 3600, now: Date = Date()) -> [WorkerActivitySnapshot] {
         // Prune any entry that hasn't been seen within the cutoff window.
         entries = entries.filter { now.timeIntervalSince($0.value.lastSeen) <= cutoff }
-        return entries
-            .map { WorkerActivitySnapshot(
-                workerID: $0.key,
-                lastActive: $0.value.lastSeen,
-                hostname: $0.value.hostname,
-                runnerVersion: $0.value.runnerVersion,
-                maxConcurrentJobs: $0.value.maxConcurrentJobs,
-                activeJobs: $0.value.activeJobs,
-                lastPollAt: $0.value.lastPollAt,
-                lastHeartbeatAt: $0.value.lastHeartbeatAt,
-                serverAssignedJobCountSinceStart: $0.value.serverAssignedJobCountSinceStart
-            ) }
+        return
+            entries
+            .map {
+                WorkerActivitySnapshot(
+                    workerID: $0.key,
+                    lastActive: $0.value.lastSeen,
+                    hostname: $0.value.hostname,
+                    runnerVersion: $0.value.runnerVersion,
+                    maxConcurrentJobs: $0.value.maxConcurrentJobs,
+                    activeJobs: $0.value.activeJobs,
+                    lastPollAt: $0.value.lastPollAt,
+                    lastHeartbeatAt: $0.value.lastHeartbeatAt,
+                    serverAssignedJobCountSinceStart: $0.value.serverAssignedJobCountSinceStart
+                )
+            }
             .sorted { $0.lastActive > $1.lastActive }
     }
 
@@ -512,12 +522,13 @@ actor LocalRunnerManager {
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = argsPrefix + [
-            "--api-base-url", apiBaseURL,
-            "--worker-id", workerID,
-            "--max-jobs", "1",
-            "--sandbox"
-        ]
+        proc.arguments =
+            argsPrefix + [
+                "--api-base-url", apiBaseURL,
+                "--worker-id", workerID,
+                "--max-jobs", "1",
+                "--sandbox",
+            ]
         var childEnvironment = ProcessInfo.processInfo.environment
         childEnvironment["RUNNER_SHARED_SECRET"] = secret
         // Keep legacy name for older runners until all environments migrate.
@@ -602,9 +613,10 @@ func runnerSharedSecretFromEnvironment() -> String? {
 }
 
 func environmentBool(_ key: String) -> Bool? {
-    guard let raw = Environment.get(key)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .lowercased(),
+    guard
+        let raw = Environment.get(key)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
         !raw.isEmpty
     else {
         return nil
@@ -622,7 +634,8 @@ func environmentBool(_ key: String) -> Bool? {
 
 func parseSSOIdentityAllowlist(_ raw: String?) -> Set<String> {
     guard let raw else { return [] }
-    let values = raw
+    let values =
+        raw
         .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isNewline })
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
         .filter { !$0.isEmpty }
@@ -672,7 +685,10 @@ extension Application {
     }
 
     var workerSecretFilePath: String {
-        get { storage[WorkerSecretFilePathKey.self] ?? (DirectoryConfiguration.detect().workingDirectory + ".worker-secret") }
+        get {
+            storage[WorkerSecretFilePathKey.self]
+                ?? (DirectoryConfiguration.detect().workingDirectory + ".worker-secret")
+        }
         set { storage[WorkerSecretFilePathKey.self] = newValue }
     }
 
@@ -716,7 +732,7 @@ func extractWorkerSecretArgument(from env: inout Environment) -> String? {
     var found: String?
     var cleaned: [String] = []
     cleaned.reserveCapacity(args.count)
-    cleaned.append(args[0]) // executable path
+    cleaned.append(args[0])  // executable path
 
     var i = 1
     while i < args.count {
@@ -753,8 +769,9 @@ func resolveStartupWorkerSecret(
 ) -> String {
     // 1. Explicit CLI argument — highest priority.
     if let cli = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines),
-       !cli.isEmpty,
-       !isPlaceholderWorkerSecret(cli) {
+        !cli.isEmpty,
+        !isPlaceholderWorkerSecret(cli)
+    {
         writeWorkerSecretToDisk(secret: cli, workerSecretFilePath: workerSecretFilePath)
         return cli
     }
@@ -763,13 +780,15 @@ func resolveStartupWorkerSecret(
     //    var is always sufficient to sync the server and runner; the disk file is only
     //    used when no env var is present (development / auto-generated mode).
     if let envSecret = runnerSharedSecretFromEnvironment(),
-       !isPlaceholderWorkerSecret(envSecret) {
+        !isPlaceholderWorkerSecret(envSecret)
+    {
         return envSecret
     }
     // 3. Previously persisted secret on disk (written by auto-generate or admin panel).
     if let previous = readWorkerSecretFromDisk(workerSecretFilePath: workerSecretFilePath),
-       !previous.isEmpty,
-       !isPlaceholderWorkerSecret(previous) {
+        !previous.isEmpty,
+        !isPlaceholderWorkerSecret(previous)
+    {
         return previous
     }
     // 4. Auto-generate a diceware passphrase (dev / first-time startup with no env var).
@@ -780,9 +799,10 @@ func resolveStartupWorkerSecret(
 
 func readWorkerSecretFromDisk(workerSecretFilePath: String) -> String? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: workerSecretFilePath)),
-          let text = String(data: data, encoding: .utf8)?
+        let text = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
-          !text.isEmpty else {
+        !text.isEmpty
+    else {
         return nil
     }
     return text
@@ -800,7 +820,7 @@ func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
         "oak", "river", "falcon", "amber", "lumen", "cedar", "thunder", "pebble",
         "meadow", "quartz", "north", "willow", "harbor", "maple", "breeze",
         "summit", "pixel", "cipher", "comet", "forest", "frost", "sparrow",
-        "orbit", "cobalt", "dawn", "ember", "ridge", "tunnel", "canyon", "signal"
+        "orbit", "cobalt", "dawn", "ember", "ridge", "tunnel", "canyon", "signal",
     ]
     let words = loadDicewareWords(from: workerSecretWordlistPath)
     let source = words.count >= 2048 ? words : fallbackWords
@@ -832,10 +852,11 @@ func loadDicewareWords(from path: String) -> [String] {
 
 func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-          let text = String(data: data, encoding: .utf8)?
+        let text = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased(),
-          !text.isEmpty else {
+        !text.isEmpty
+    else {
         return nil
     }
     return text == "1" || text == "true" || text == "yes" || text == "on"

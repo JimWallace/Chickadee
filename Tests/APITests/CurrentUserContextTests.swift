@@ -1,6 +1,7 @@
-import XCTest
-@testable import chickadee_server
 import Fluent
+import XCTest
+
+@testable import chickadee_server
 
 final class CurrentUserContextTests: XCTestCase {
 

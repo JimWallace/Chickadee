@@ -22,7 +22,7 @@ let package = Package(
         .target(
             name: "Core",
             dependencies: [
-                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "Crypto", package: "swift-crypto")
             ],
             path: "Sources/Core",
             exclude: ["README.md"]
@@ -61,7 +61,7 @@ let package = Package(
         .testTarget(
             name: "CoreTests",
             dependencies: [
-                .target(name: "Core"),
+                .target(name: "Core")
             ],
             path: "Tests/CoreTests"
         ),
@@ -80,7 +80,7 @@ let package = Package(
         .testTarget(
             name: "WorkerTests",
             dependencies: [
-                .target(name: "chickadee-runner"),
+                .target(name: "chickadee-runner")
             ],
             path: "Tests/WorkerTests"
         ),

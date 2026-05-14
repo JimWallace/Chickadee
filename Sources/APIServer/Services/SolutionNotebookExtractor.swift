@@ -23,8 +23,8 @@ enum SolutionNotebookExtractor {
     /// are skipped.  Returns nil when the input isn't a valid notebook.
     static func extractCodeToPython(notebookData: Data) -> String? {
         guard let obj = try? JSONSerialization.jsonObject(with: notebookData),
-              let nb  = obj as? [String: Any],
-              let cells = nb["cells"] as? [[String: Any]]
+            let nb = obj as? [String: Any],
+            let cells = nb["cells"] as? [[String: Any]]
         else { return nil }
 
         var lines: [String] = [
@@ -32,7 +32,7 @@ enum SolutionNotebookExtractor {
             "# Used by personalization expressions to import the instructor's",
             "# canonical helpers (e.g. `solution.caesar_encode(...)`).",
             "# Regenerated on every test-setup save; do not edit by hand.",
-            ""
+            "",
         ]
 
         for cell in cells {
@@ -73,7 +73,8 @@ enum SolutionNotebookExtractor {
         guard let py = extractCodeToPython(notebookData: notebookData) else { return false }
         // Skip when the notebook had no executable cells — writing an
         // empty `solution.py` would shadow nothing useful.
-        let effectiveLines = py
+        let effectiveLines =
+            py
             .split(separator: "\n", omittingEmptySubsequences: false)
             .drop(while: { $0.hasPrefix("#") || $0.trimmingCharacters(in: .whitespaces).isEmpty })
         guard !effectiveLines.isEmpty else { return false }
@@ -82,8 +83,9 @@ enum SolutionNotebookExtractor {
             // Make sure the directory exists; the caller usually creates
             // it via extractSupportFilesToSharedDirectory but defend
             // against an out-of-order call.
-            try fm.createDirectory(atPath: sharedDirectory,
-                                   withIntermediateDirectories: true)
+            try fm.createDirectory(
+                atPath: sharedDirectory,
+                withIntermediateDirectories: true)
             try py.write(toFile: target, atomically: true, encoding: .utf8)
             return true
         } catch {

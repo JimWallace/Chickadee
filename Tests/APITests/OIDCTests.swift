@@ -1,8 +1,9 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import JWT
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class OIDCTests: XCTestCase {
 
@@ -127,7 +128,7 @@ final class OIDCTests: XCTestCase {
                 "OIDC_CLIENT_ID": "test-client",
                 "OIDC_CLIENT_SECRET": "super-secret",
                 "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client/",
-                "OIDC_CALLBACK": "oidc/callback"
+                "OIDC_CALLBACK": "oidc/callback",
             ]) {
                 try await withApp(try await makeOIDCApp(publicBaseURL: "https://courses.example.edu/")) { app in
                     let config = try await OIDCConfiguration.load(from: app)
@@ -150,7 +151,7 @@ final class OIDCTests: XCTestCase {
                 "OIDC_CLIENT_ID": "test-client",
                 "OIDC_CLIENT_SECRET": "super-secret",
                 "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/custom/.well-known/openid-configuration",
-                "OIDC_CALLBACK": ""
+                "OIDC_CALLBACK": "",
             ]) {
                 try await withApp(try await makeOIDCApp()) { app in
                     let config = try await OIDCConfiguration.load(from: app)
@@ -165,7 +166,7 @@ final class OIDCTests: XCTestCase {
             "OIDC_CLIENT_ID": "   ",
             "OIDC_CLIENT_SECRET": "super-secret",
             "OIDC_AUTH_SERVER": "",
-            "OIDC_CALLBACK": ""
+            "OIDC_CALLBACK": "",
         ]) {
             try await withApp(try await makeOIDCApp()) { app in
                 await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
@@ -181,7 +182,7 @@ final class OIDCTests: XCTestCase {
             "OIDC_CLIENT_ID": "test-client",
             "OIDC_CLIENT_SECRET": "   ",
             "OIDC_AUTH_SERVER": "",
-            "OIDC_CALLBACK": ""
+            "OIDC_CALLBACK": "",
         ]) {
             try await withApp(try await makeOIDCApp()) { app in
                 await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
@@ -201,7 +202,7 @@ final class OIDCTests: XCTestCase {
             try await withEnvironment([
                 "OIDC_CLIENT_ID": "test-client",
                 "OIDC_CLIENT_SECRET": "super-secret",
-                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client",
             ]) {
                 try await withApp(try await makeOIDCApp()) { app in
                     await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
@@ -222,7 +223,7 @@ final class OIDCTests: XCTestCase {
             try await withEnvironment([
                 "OIDC_CLIENT_ID": "test-client",
                 "OIDC_CLIENT_SECRET": "super-secret",
-                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client",
             ]) {
                 try await withApp(try await makeOIDCApp()) { app in
                     await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app)) { error in
@@ -243,7 +244,7 @@ final class OIDCTests: XCTestCase {
             try await withEnvironment([
                 "OIDC_CLIENT_ID": "test-client",
                 "OIDC_CLIENT_SECRET": "super-secret",
-                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client"
+                "OIDC_AUTH_SERVER": "http://127.0.0.1:\(provider.port)/oidc/test-client",
             ]) {
                 try await withApp(try await makeOIDCApp()) { app in
                     await XCTAssertThrowsErrorAsync(try await OIDCConfiguration.load(from: app))

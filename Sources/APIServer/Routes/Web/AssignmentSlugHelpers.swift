@@ -3,10 +3,10 @@
 // Public-ID and per-course slug allocation for assignments.  Extracted
 // from AssignmentHelpers.swift (issue #442) — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 func assignmentByPublicID(_ publicID: String, on db: Database) async throws -> APIAssignment? {
     try await APIAssignment.query(on: db)
@@ -64,7 +64,8 @@ func createAssignmentWithUniquePublicID(
 ) async throws -> APIAssignment {
     for _ in 0..<32 {
         let candidate = APIAssignment.generatePublicID()
-        let exists = try await APIAssignment.query(on: req.db)
+        let exists =
+            try await APIAssignment.query(on: req.db)
             .filter(\.$publicID == candidate)
             .count() > 0
         if exists { continue }
@@ -85,7 +86,8 @@ func createAssignmentWithUniquePublicID(
         do {
             try await assignment.save(on: req.db)
         } catch {
-            let conflict = try await APIAssignment.query(on: req.db)
+            let conflict =
+                try await APIAssignment.query(on: req.db)
                 .filter(\.$publicID == candidate)
                 .count() > 0
             if conflict { continue }

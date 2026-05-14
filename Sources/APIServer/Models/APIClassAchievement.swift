@@ -50,10 +50,10 @@ final class APIClassAchievement: Model, Content, @unchecked Sendable {
         submissionID: String,
         metricValue: Double? = nil
     ) {
-        self.testSetupID   = testSetupID
+        self.testSetupID = testSetupID
         self.achievementID = achievementID
-        self.userID        = userID
-        self.submissionID  = submissionID
-        self.metricValue   = metricValue
+        self.userID = userID
+        self.submissionID = submissionID
+        self.metricValue = metricValue
     }
 }

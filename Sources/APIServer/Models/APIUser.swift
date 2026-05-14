@@ -5,9 +5,9 @@
 // Phase 6: username/password auth, three roles.
 // Phase 7+ can swap authentication to SSO without changing callers.
 
+import Core
 import Fluent
 import Vapor
-import Core
 
 final class APIUser: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context,
@@ -82,8 +82,8 @@ final class APIUser: Model, Content, @unchecked Sendable {
         lastLoginAt: Date? = nil,
         lastSeenAt: Date? = nil
     ) {
-        self.id           = id
-        self.username     = username
+        self.id = id
+        self.username = username
         self.passwordHash = passwordHash
         self.authProvider = authProvider
         self.externalSubject = externalSubject
@@ -94,14 +94,14 @@ final class APIUser: Model, Content, @unchecked Sendable {
         self.displayName = displayName
         self.lastLoginAt = lastLoginAt
         self.lastSeenAt = lastSeenAt
-        self.role         = role
+        self.role = role
     }
 }
 
 // MARK: - Role helpers
 
 extension APIUser {
-    var isAdmin:      Bool { role == "admin" }
+    var isAdmin: Bool { role == "admin" }
     var isInstructor: Bool { role == "instructor" || role == "admin" }
 }
 
@@ -120,8 +120,8 @@ struct UserSessionAuthenticator: AsyncSessionAuthenticator {
 
     func authenticate(sessionID: String, for request: Request) async throws {
         guard let uuid = UUID(uuidString: sessionID),
-              let user = try await APIUser.find(uuid, on: request.db)
-        else { return }    // Not found → stay unauthenticated; middleware handles it.
+            let user = try await APIUser.find(uuid, on: request.db)
+        else { return }  // Not found → stay unauthenticated; middleware handles it.
         request.auth.login(user)
     }
 }
@@ -210,10 +210,11 @@ extension Request {
             .filter(\.$userID == userID)
             .with(\.$course)
             .all()
-        return enrollments
+        return
+            enrollments
             .compactMap { e -> CourseContext? in
                 guard let id = e.course.id else { return nil }
-                guard !e.course.isArchived else { return nil }   // hide archived courses everywhere
+                guard !e.course.isArchived else { return nil }  // hide archived courses everywhere
                 return CourseContext(id: id.uuidString, code: e.course.code, name: e.course.name, isActive: false)
             }
             .sorted { $0.code < $1.code }
@@ -232,9 +233,9 @@ struct CourseContext: Encodable {
 
 /// The result of resolving which course is "active" for the current request.
 struct ResolvedCourseState {
-    let active: CourseContext?        // nil → user is not enrolled anywhere
-    let all: [CourseContext]          // all enrolled courses (isActive set on one)
-    let activeCourseUUID: UUID?       // for DB query filters; nil → no active course
+    let active: CourseContext?  // nil → user is not enrolled anywhere
+    let all: [CourseContext]  // all enrolled courses (isActive set on one)
+    let activeCourseUUID: UUID?  // for DB query filters; nil → no active course
 }
 
 /// Encodable snapshot of the authenticated user, safe to embed in any Leaf context.
@@ -264,15 +265,15 @@ struct CurrentUserContext: Encodable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let email = (normalizedEmail?.isEmpty == false) ? normalizedEmail : nil
 
-        self.username      = user.username
+        self.username = user.username
         self.preferredName = preferredName
-        self.displayName   = displayName
-        self.email         = email
-        self.role          = user.role
-        self.isAdmin       = user.isAdmin
-        self.isInstructor  = user.isInstructor
-        self.activeCourse  = activeCourse
+        self.displayName = displayName
+        self.email = email
+        self.role = user.role
+        self.isAdmin = user.isAdmin
+        self.isInstructor = user.isInstructor
+        self.activeCourse = activeCourse
         self.enrolledCourses = enrolledCourses
-        self.showCourseTabs  = enrolledCourses.count > 1
+        self.showCourseTabs = enrolledCourses.count > 1
     }
 }

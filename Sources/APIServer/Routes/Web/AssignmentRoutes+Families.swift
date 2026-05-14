@@ -6,10 +6,10 @@
 // atomically — validation, zip mutation, and manifest rewrite all happen in
 // `applyPatternFamilies`.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -26,7 +26,7 @@ extension AssignmentRoutes {
 
         let families: [PatternFamily] = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return props.patternFamilies
         }()

@@ -25,10 +25,10 @@
 //   Body: raw notebook JSON. Saves to disk as testsetups/<id>.ipynb and
 //   updates notebookPath in DB. Returns 204 No Content.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 // MARK: - Notebook cell filtering / merging helpers (free functions)
 
@@ -36,15 +36,15 @@ import Foundation
 let hiddenTiersForStudents: Set<String> = ["secret", "release"]
 
 // JupyterLite kernel identifiers used when normalizing notebook metadata.
-let jupyterLitePythonKernelName        = "python"
+let jupyterLitePythonKernelName = "python"
 let jupyterLitePythonKernelDisplayName = "Python (Pyodide)"
-let jupyterLiteRKernelName             = "webr"
-let jupyterLiteRKernelDisplayName      = "R (WebR)"
+let jupyterLiteRKernelName = "webr"
+let jupyterLiteRKernelDisplayName = "R (WebR)"
 
 /// Extracts the joined source string for a notebook cell dictionary.
 func cellSource(_ cell: [String: Any]) -> String? {
     if let arr = cell["source"] as? [String] { return arr.joined() }
-    if let str = cell["source"] as? String   { return str }
+    if let str = cell["source"] as? String { return str }
     return nil
 }
 
@@ -52,7 +52,8 @@ func cellSource(_ cell: [String: Any]) -> String? {
 /// whose `tier=` value is in `hiddenTiers`.
 func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
     guard let source = cellSource(cell) else { return false }
-    let firstLine = source
+    let firstLine =
+        source
         .split(separator: "\n", omittingEmptySubsequences: true)
         .first.map(String.init) ?? ""
     guard firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil
@@ -63,14 +64,15 @@ func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
             return hiddenTiers.contains(String(kv[1]))
         }
     }
-    return false    // no explicit tier= found → default "public" → not hidden
+    return false  // no explicit tier= found → default "public" → not hidden
 }
 
 /// Returns true when the cell's first non-empty line is ANY `# TEST:` comment,
 /// regardless of tier. Used to separate solution cells from test cells during merge.
 func isTestCell(_ cell: [String: Any]) -> Bool {
     guard let source = cellSource(cell) else { return false }
-    let firstLine = source
+    let firstLine =
+        source
         .split(separator: "\n", omittingEmptySubsequences: true)
         .first.map(String.init) ?? ""
     return firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil
@@ -79,8 +81,8 @@ func isTestCell(_ cell: [String: Any]) -> Bool {
 /// Returns a copy of `data` (notebook JSON) with cells matching `hiddenTiers` removed.
 /// Returns the original data unchanged if parsing fails.
 func filterNotebook(_ data: Data, hiddenTiers: Set<String>) -> Data {
-    guard var nb    = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-          let cells = nb["cells"] as? [[String: Any]]
+    guard var nb = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+        let cells = nb["cells"] as? [[String: Any]]
     else { return data }
     nb["cells"] = cells.filter { !isHiddenTestCell($0, hiddenTiers: hiddenTiers) }
     return (try? JSONSerialization.data(withJSONObject: nb)) ?? data
@@ -95,14 +97,14 @@ func filterNotebook(_ data: Data, hiddenTiers: Set<String>) -> Data {
 ///
 /// Returns `studentData` unchanged if either notebook fails to parse.
 func mergeNotebook(student studentData: Data, instructor instructorData: Data) -> Data {
-    guard var studentNB    = (try? JSONSerialization.jsonObject(with: studentData))    as? [String: Any],
-          let instructorNB = (try? JSONSerialization.jsonObject(with: instructorData)) as? [String: Any],
-          let studentCells    = studentNB["cells"]    as? [[String: Any]],
-          let instructorCells = instructorNB["cells"] as? [[String: Any]]
+    guard var studentNB = (try? JSONSerialization.jsonObject(with: studentData)) as? [String: Any],
+        let instructorNB = (try? JSONSerialization.jsonObject(with: instructorData)) as? [String: Any],
+        let studentCells = studentNB["cells"] as? [[String: Any]],
+        let instructorCells = instructorNB["cells"] as? [[String: Any]]
     else { return studentData }
 
-    let solutionCells = studentCells.filter   { !isTestCell($0) }
-    let testCells     = instructorCells.filter {  isTestCell($0) }
+    let solutionCells = studentCells.filter { !isTestCell($0) }
+    let testCells = instructorCells.filter { isTestCell($0) }
 
     studentNB["cells"] = solutionCells + testCells
     return (try? JSONSerialization.data(withJSONObject: studentNB)) ?? studentData
@@ -124,12 +126,12 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     let existingKernelSpec = metadata["kernelspec"] as? [String: Any]
     let existingName = (existingKernelSpec?["name"] as? String)?.lowercased()
 
-    var kernelSpec   = existingKernelSpec ?? [:]
+    var kernelSpec = existingKernelSpec ?? [:]
     var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
 
     if let name = existingName, name == "ir" || name == "r" {
         // R notebook (IRkernel) → normalize to the JupyterLite webR kernel.
-        kernelSpec["name"]         = jupyterLiteRKernelName
+        kernelSpec["name"] = jupyterLiteRKernelName
         kernelSpec["display_name"] = jupyterLiteRKernelDisplayName
         metadata["kernelspec"] = kernelSpec
         if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
@@ -137,12 +139,13 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
         }
         metadata["language_info"] = languageInfo
     } else if let name = existingName, !name.isEmpty,
-              name != "python", name != "python3" {
+        name != "python", name != "python3"
+    {
         // Unknown non-Python, non-R kernel → leave unchanged.
         return data
     } else {
         // Python kernel (or missing kernelspec) → normalize to Python (Pyodide).
-        kernelSpec["name"]         = jupyterLitePythonKernelName
+        kernelSpec["name"] = jupyterLitePythonKernelName
         kernelSpec["display_name"] = jupyterLitePythonKernelDisplayName
         metadata["kernelspec"] = kernelSpec
         if (languageInfo["name"] as? String)?.isEmpty != false {
@@ -163,8 +166,9 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
 ///   middleware maps it to HTTP 404 automatically.
 func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
     if let path = setup.notebookPath,
-       let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-       !data.isEmpty {
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !data.isEmpty
+    {
         return normalizeNotebookForJupyterLite(data)
     }
 
@@ -172,7 +176,8 @@ func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
     let preferredEntryNames = notebookCandidateEntryNames(for: setup, entries: entries)
     for entryName in preferredEntryNames {
         guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
-              !data.isEmpty else { continue }
+            !data.isEmpty
+        else { continue }
         return normalizeNotebookForJupyterLite(data)
     }
 
@@ -182,7 +187,8 @@ func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
 private func notebookCandidateEntryNames(for setup: APITestSetup, entries: [String]) -> [String] {
     let manifestStarterName: String? = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        else {
             return nil
         }
         return props.starterNotebook?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,11 +231,11 @@ struct TestSetupRoutes: RouteCollection {
         let api = routes.grouped("api", "v1", "testsetups")
         api.post(use: uploadTestSetup)
         api.group(":testSetupID") { group in
-            group.get("download",                      use: downloadTestSetup)
-            group.get("assignment",                    use: getAssignment)
-            group.get("assignment", "download",        use: downloadAssignment)
-            group.put("assignment",                    use: saveAssignment)
-            group.get("support", ":filename",          use: downloadSupportFile)
+            group.get("download", use: downloadTestSetup)
+            group.get("assignment", use: getAssignment)
+            group.get("assignment", "download", use: downloadAssignment)
+            group.put("assignment", use: saveAssignment)
+            group.get("support", ":filename", use: downloadSupportFile)
         }
     }
 
@@ -261,7 +267,8 @@ struct TestSetupRoutes: RouteCollection {
         switch manifest.gradingMode {
         case .browser:
             guard zipContainsNotebook(upload.files) else {
-                throw Abort(.unprocessableEntity, reason: "Browser-mode test setup must contain at least one .ipynb file")
+                throw Abort(
+                    .unprocessableEntity, reason: "Browser-mode test setup must contain at least one .ipynb file")
             }
         case .worker:
             guard !manifest.testSuites.isEmpty else {
@@ -271,19 +278,20 @@ struct TestSetupRoutes: RouteCollection {
 
         // Persist the zip.
         let setupsDir = req.application.testSetupsDirectory
-        let setupID   = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath   = setupsDir + "\(setupID).zip"
+        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let zipPath = setupsDir + "\(setupID).zip"
 
-        let zipBytes  = upload.files
+        let zipBytes = upload.files
         try zipBytes.write(to: URL(fileURLWithPath: zipPath))
 
         // Store metadata in DB.
-        let storedManifest = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
+        let storedManifest =
+            String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
 
         let setup = APITestSetup(
-            id:       setupID,
+            id: setupID,
             manifest: storedManifest,
-            zipPath:  zipPath,
+            zipPath: zipPath,
             courseID: upload.courseID
         )
         try await setup.save(on: req.db)
@@ -319,7 +327,7 @@ struct TestSetupRoutes: RouteCollection {
         guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("testSetupID"),
-              let setup = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -332,13 +340,14 @@ struct TestSetupRoutes: RouteCollection {
     func getAssignment(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
-              let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else { throw Abort(.notFound) }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let raw  = try notebookData(for: setup)
-        let data = caller.isInstructor
+        let raw = try notebookData(for: setup)
+        let data =
+            caller.isInstructor
             ? raw
             : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
@@ -355,28 +364,30 @@ struct TestSetupRoutes: RouteCollection {
     func downloadAssignment(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
-              let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else { throw Abort(.notFound) }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let raw      = try notebookData(for: setup)
+        let raw = try notebookData(for: setup)
         let filtered = caller.isInstructor ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
         // Determine a safe filename from the assignment title (if present).
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
-        let title    = assignment?.title ?? setupID
-        let safeName = title
+        let title = assignment?.title ?? setupID
+        let safeName =
+            title
             .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespaces)
 
         var headers = HTTPHeaders()
         headers.contentType = .json
-        headers.add(name: .contentDisposition,
-                    value: "attachment; filename=\"\(safeName).ipynb\"")
+        headers.add(
+            name: .contentDisposition,
+            value: "attachment; filename=\"\(safeName).ipynb\"")
         return Response(status: .ok, headers: headers, body: .init(data: filtered))
     }
 
@@ -395,8 +406,8 @@ struct TestSetupRoutes: RouteCollection {
     func downloadSupportFile(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
         guard let setupID = req.parameters.get("testSetupID"),
-              let filename = req.parameters.get("filename"),
-              let setup    = try await APITestSetup.find(setupID, on: req.db)
+            let filename = req.parameters.get("filename"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else { throw Abort(.notFound) }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
@@ -405,8 +416,8 @@ struct TestSetupRoutes: RouteCollection {
         // slashes, backslashes, or `..` segments are never produced by
         // legitimate uploads.
         guard !filename.isEmpty,
-              !filename.contains("/"), !filename.contains("\\"),
-              !filename.contains("..")
+            !filename.contains("/"), !filename.contains("\\"),
+            !filename.contains("..")
         else { throw Abort(.badRequest, reason: "Invalid filename") }
 
         // Confirm the file is classified as a support file: must exist
@@ -417,7 +428,7 @@ struct TestSetupRoutes: RouteCollection {
 
         let testScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
@@ -431,11 +442,13 @@ struct TestSetupRoutes: RouteCollection {
         }
 
         var headers = HTTPHeaders()
-        headers.contentType = HTTPMediaType.fileExtension(
-            (filename as NSString).pathExtension.lowercased()
-        ) ?? .binary
-        headers.add(name: .contentDisposition,
-                    value: "attachment; filename=\"\(filename)\"")
+        headers.contentType =
+            HTTPMediaType.fileExtension(
+                (filename as NSString).pathExtension.lowercased()
+            ) ?? .binary
+        headers.add(
+            name: .contentDisposition,
+            value: "attachment; filename=\"\(filename)\"")
         return Response(status: .ok, headers: headers, body: .init(data: bytes))
     }
 
@@ -447,14 +460,14 @@ struct TestSetupRoutes: RouteCollection {
         guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("testSetupID"),
-              let setup = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
 
         // Collect the raw request body as Data.
         guard let bodyBuffer = req.body.data,
-              bodyBuffer.readableBytes > 0
+            bodyBuffer.readableBytes > 0
         else {
             throw Abort(.badRequest, reason: "Request body is empty")
         }
@@ -510,10 +523,10 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
 
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments     = ["-l", tmp.path]
+    proc.arguments = ["-l", tmp.path]
     let pipe = Pipe()
     proc.standardOutput = pipe
-    proc.standardError  = Pipe()
+    proc.standardError = Pipe()
     guard (try? proc.run()) != nil else { return false }
     let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()
@@ -525,11 +538,13 @@ func zipContainsNotebook(_ zipData: Data) -> Bool {
 /// or nil if the file is not present or unzip fails.
 func extractNotebookFromZip(zipPath: String) -> Data? {
     let entries = listZipEntries(zipPath: zipPath)
-    let candidate = entries.first {
-        ($0 as NSString).lastPathComponent == "assignment.ipynb"
-    } ?? entries.first {
-        URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb"
-    }
+    let candidate =
+        entries.first {
+            ($0 as NSString).lastPathComponent == "assignment.ipynb"
+        }
+        ?? entries.first {
+            URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb"
+        }
     guard let candidate else { return nil }
     return extractZipEntry(zipPath: zipPath, entryName: candidate)
 }
