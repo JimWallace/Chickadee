@@ -6,6 +6,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.167] - 2026-05-14
+
+### Added
+
+- **AppScan / vulnerability-scanner hardening pass.**  Five new
+  defenses, all live in production after this release:
+
+  1. **`SCAN_MODE=true` operational seatbelt.**  When set, the new
+     `ScanModeMiddleware` returns 503 for POSTs against destructive
+     routes (`/api/v1/submissions{,/file,/browser-result,/runner-submit}`,
+     `/api/v1/testsetups`, `/testsetups/*/submit`,
+     `/instructor/*/retest`, `/admin/users/*/delete`,
+     `/admin/users/*/role`).  Login, dashboards, admin UI, and static
+     files continue to work so the scanner can crawl them.  Disable
+     after the scan window by unsetting the env var and restarting.
+
+  2. **Login / register brute-force protection.**  New
+     `LoginRateLimitMiddleware` enforces a per-IP cap of
+     `LOGIN_RATE_LIMIT_PER_MIN` requests/minute (default 10) on
+     `/login` and `/register`.  Beyond the cap, requests get
+     `429 Too Many Requests` with `Retry-After`.  Inside the login
+     handler, `LoginAttemptStore` tracks per-username failures —
+     `LOGIN_LOCKOUT_THRESHOLD` failures (default 5) inside
+     `LOGIN_LOCKOUT_WINDOW_SEC` (default 900s) flip the account into
+     a sliding-window soft lockout that surfaces as a "Too many
+     failed sign-in attempts." message.  A successful login clears
+     the failure record.  IP extraction honors `X-Forwarded-For`
+     only when `TRUST_X_FORWARDED_PROTO` is true so spoofing behind
+     untrusted proxies can't game the cap.  Store is in-memory
+     (mirrors `WorkerNonceStore` pattern) — fine for Chickadee's
+     single-process deployment.
+
+  3. **Periodic session cleanup.**  Vapor's `_fluent_sessions` table
+     gained a `created_at` column (via the new `AddSessionsCreatedAt`
+     migration, which uses `DEFAULT CURRENT_TIMESTAMP` so the model
+     class stays untouched).  New `SessionReaperLifecycleHandler`
+     runs hourly and deletes rows older than 8 days (cookie lifetime
+     plus 1-day grace).  Pre-migration NULL rows are preserved and
+     roll out as Vapor rewrites them on the next login.
+
+  4. **Security-header polish.**  `SecurityHeadersMiddleware` now
+     sets a Content-Security-Policy permissive enough for JupyterLite
+     + Pyodide (`script-src 'self' 'unsafe-eval' 'unsafe-inline'`,
+     `worker-src 'self' blob:`); a Permissions-Policy that denies
+     camera, microphone, geolocation, payment, and several others
+     Chickadee never uses; and (when `ENFORCE_HTTPS` is on) a
+     2-year `Strict-Transport-Security` header with subdomain
+     coverage.  HSTS is gated on enforceHTTPS so dev `http://`
+     servers don't get pinned.
+
+  5. **Structured audit logging.**  New `audit_log` table +
+     `APIAuditLogEntry` model + `AuditLogger.record(…)` helper.
+     Hooks land on user delete, role change, runner secret rotation,
+     runner autostart toggle, retest-all, and the three login
+     outcomes (success, failure, lockout).  Each row carries actor
+     (user + denormalised username), action, target type/ID, remote
+     address, User-Agent, and a small JSON `metadata` blob.  Visible
+     to admins at the new `/admin/audit` page (linked from the admin
+     dashboard, newest 200 rows).
+
+- Tight per-endpoint body limit (8 KB) on `POST /login` and
+  `POST /register` so OOM via giant form posts is closed off
+  independently of the 10 MB global default.
+
+### Environment variables (new)
+
+- `SCAN_MODE` — `true` to enable the destructive-route 503 seatbelt.
+- `LOGIN_RATE_LIMIT_ENABLED` — `false` to disable login throttling
+  (defaults to enabled).
+- `LOGIN_RATE_LIMIT_PER_MIN` — per-IP login/register request cap
+  per 60-second window (default 10).
+- `LOGIN_LOCKOUT_THRESHOLD` — failed-login count that triggers
+  per-username lockout (default 5).
+- `LOGIN_LOCKOUT_WINDOW_SEC` — sliding window in seconds for the
+  failed-login counter (default 900).
+
 ## [0.4.166] - 2026-05-14
 
 ### Changed

@@ -211,4 +211,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateClientDiagnostics())
     app.migrations.add(CreateAssignmentPersonalizationSeeds())
     app.migrations.add(AddJobDiskUsageMetrics())
+    app.migrations.add(AddSessionsCreatedAt())
+    app.migrations.add(CreateAuditLog())
 }

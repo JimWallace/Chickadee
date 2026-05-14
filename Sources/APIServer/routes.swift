@@ -10,7 +10,10 @@ func routes(_ app: Application) throws {
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: HealthRoutes())
-    try app.grouped(csrf).register(collection: AuthRoutes())
+    let loginRateLimit = LoginRateLimitMiddleware(
+        configuration: app.loginRateLimitConfiguration
+    )
+    try app.grouped(csrf, loginRateLimit).register(collection: AuthRoutes())
     if app.authMode != .local {
         try app.register(collection: SSOAuthRoutes())
     }

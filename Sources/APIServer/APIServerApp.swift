@@ -53,6 +53,10 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
             nonSSOModesEnabled: nonSSOModesEnabled
         )
     let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
+    let scanModeConfiguration = ScanModeConfiguration.fromEnvironment()
+    let loginRateLimitConfiguration = LoginRateLimitConfiguration.fromEnvironment(
+        trustForwardedFor: securityConfiguration.trustForwardedProto
+    )
     let ssoAdminUsers = parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
     let ssoInstructorUsers = parseSSOIdentityAllowlist(Environment.get("SSO_INSTRUCTOR_USERS"))
 
@@ -91,6 +95,8 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.storage[AuthModeKey.self] = authMode
     app.storage[SecurityConfigurationKey.self] = securityConfiguration
+    app.storage[ScanModeConfigurationKey.self] = scanModeConfiguration
+    app.storage[LoginRateLimitConfigurationKey.self] = loginRateLimitConfiguration
     app.storage[SSOAdminUsersKey.self] = ssoAdminUsers
     app.storage[SSOInstructorUsersKey.self] = ssoInstructorUsers
     app.authProvider = LocalAuthProvider()
@@ -122,6 +128,16 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.middleware.use(UserSessionAuthenticator())
     app.middleware.use(UserActivityMiddleware(debounceWindow: 60))
     app.middleware.use(UserFileNamespaceMiddleware())
+    // Scan-mode seatbelt: when SCAN_MODE=true is set in the environment, the
+    // middleware 503s POSTs against destructive routes (submissions, test-setup
+    // uploads, retests, user delete/role) so an in-progress vulnerability scan
+    // can crawl the app without polluting prod data or fanning out work.
+    if scanModeConfiguration.enabled {
+        app.logger.warning(
+            "SCAN_MODE=true — destructive POST endpoints are returning 503. Disable after the scan window."
+        )
+    }
+    app.middleware.use(ScanModeMiddleware(configuration: scanModeConfiguration))
     // Allow notebook uploads from the assignment-creation flow.
     app.routes.defaultMaxBodySize = "10mb"
 
@@ -144,7 +160,14 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     // fallback — so cross-origin isolation on the iframe document is unnecessary.
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware())
-    app.middleware.use(SecurityHeadersMiddleware())
+    // HSTS is set only when HTTPS enforcement is active. Pinning Strict-
+    // Transport-Security against a dev http://localhost server would brick
+    // local browsers; the enforceHTTPS gate matches HTTPSRedirectMiddleware.
+    let hstsValue: String? =
+        securityConfiguration.enforceHTTPS
+        ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
+        : nil
+    app.middleware.use(SecurityHeadersMiddleware(strictTransportSecurity: hstsValue))
 
     // MARK: - Database
 
@@ -158,6 +181,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.lifecycle.use(ObservabilityLifecycleHandler())
     app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
     app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
+    app.lifecycle.use(SessionReaperLifecycleHandler())
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // BrightSpace grade sync (only registered when env vars are present).
@@ -239,6 +263,7 @@ struct AuthModeKey: StorageKey {
 struct SecurityConfigurationKey: StorageKey {
     typealias Value = AppSecurityConfiguration
 }
+// Storage key for ScanModeConfigurationKey lives in ScanModeMiddleware.swift.
 struct SSOAdminUsersKey: StorageKey {
     typealias Value = Set<String>
 }

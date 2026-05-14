@@ -545,6 +545,16 @@ extension AssignmentRoutes {
 
         req.logger.info(
             "retest_all_triggered assignment=\(assignmentIDRaw) count=\(count) by=\(user.id?.uuidString ?? "nil")")
+        await AuditLogger.record(
+            action: .submissionRetestAll,
+            targetType: .testSetup,
+            targetID: setup.id,
+            metadata: [
+                "assignment": assignmentIDRaw,
+                "submission_count": String(count),
+            ],
+            on: req
+        )
 
         let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
         struct RetestAllBody: Content { var returnTo: String? }

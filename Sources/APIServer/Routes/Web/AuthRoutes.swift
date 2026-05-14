@@ -20,10 +20,13 @@ import Vapor
 
 struct AuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
+        // Tight per-endpoint body limits on the public auth POSTs: login and
+        // register only carry two short form fields, so 8 KB is generous and
+        // closes the OOM vector that the 10 MB global default leaves open.
         routes.get("login", use: loginForm)
-        routes.post("login", use: login)
+        routes.on(.POST, "login", body: .collect(maxSize: "8kb"), use: login)
         routes.get("register", use: registerForm)
-        routes.post("register", use: register)
+        routes.on(.POST, "register", body: .collect(maxSize: "8kb"), use: register)
         routes.post("logout", use: logout)
     }
 
@@ -65,6 +68,30 @@ struct AuthRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(LoginBody.self)
+        let rateConfig = req.application.loginRateLimitConfiguration
+        let attemptStore = req.application.loginAttemptStore
+        let usernameKey = body.username.lowercased()
+        let now = Date()
+
+        if rateConfig.enabled {
+            let locked = await attemptStore.isLocked(
+                username: usernameKey,
+                now: now,
+                windowSeconds: rateConfig.lockoutWindowSeconds,
+                threshold: rateConfig.lockoutThreshold
+            )
+            if locked {
+                req.logger.warning("Login locked for user '\(usernameKey)' (too many failures)")
+                await AuditLogger.record(
+                    action: .loginLocked,
+                    targetType: .auth,
+                    metadata: ["username": usernameKey],
+                    actorUsernameOverride: usernameKey,
+                    on: req
+                )
+                return req.redirect(to: "/login?error=locked")
+            }
+        }
 
         guard
             let user = try await req.application.authProvider.authenticate(
@@ -73,16 +100,40 @@ struct AuthRoutes: RouteCollection {
                 on: req
             )
         else {
+            if rateConfig.enabled {
+                await attemptStore.recordFailure(
+                    username: usernameKey,
+                    now: now,
+                    windowSeconds: rateConfig.lockoutWindowSeconds
+                )
+            }
+            await AuditLogger.record(
+                action: .loginFailure,
+                targetType: .auth,
+                metadata: ["username": usernameKey],
+                actorUsernameOverride: usernameKey,
+                on: req
+            )
             return req.redirect(to: "/login?error=invalid")
         }
 
-        let now = Date()
+        if rateConfig.enabled {
+            await attemptStore.clearFailures(username: usernameKey)
+        }
         user.lastLoginAt = now
         user.lastSeenAt = now
         try await user.save(on: req.db)
 
         req.auth.login(user)
         req.session.authenticate(user)
+        await AuditLogger.record(
+            action: .loginSuccess,
+            targetType: .auth,
+            targetID: user.id?.uuidString,
+            metadata: ["username": user.username],
+            actorOverride: user,
+            on: req
+        )
         // Resolve any pending pre-enrollments for this username (the
         // bulk-enroll path may have queued course enrollments before
         // this user existed).  Errors are swallowed inside the
