@@ -13,6 +13,8 @@ Notebook
         <div class="notebook-actions">
             #if(showSubmit):
             <button class="btn btn-primary" id="nb-submit">Submit</button>
+            #elseif(isClosed):
+            <span class="nb-closed-notice" style="color:var(--gray-600);font-size:.9rem">This assignment is closed &mdash; view only.</span>
             #endif
             #if(downloadURL):
             <a class="btn"
@@ -31,6 +33,7 @@ Notebook
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
     data-working-copy-mtime="#(workingCopyMtime)"
+    data-read-only="#(isClosed)"
     src="#(jupyterLiteEditorURL)"
     loading="eager">
 </iframe>

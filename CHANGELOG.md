@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.166] - 2026-05-14
+
+### Changed
+
+- **Closed assignments now load read-only instead of editable.**  When
+  a student visits a closed assignment via either the vanity URL
+  (`/:courseCode/:assignmentSlug`) or the canonical
+  `/testsetups/:id/notebook` route, the JupyterLite iframe now mounts
+  in a true read-only mode: cell editors are `contenteditable=false`,
+  cell toolbars (run buttons) are hidden, and Shift / Ctrl / Cmd / Alt
+  + Enter are swallowed at the iframe-document keydown level so the
+  kernel can't be triggered.  The Submit button is replaced by a "This
+  assignment is closed — view only." notice.  Past submissions and
+  history links continue to work; the server-side
+  `requireOpenStudentAssignment` gate on POST endpoints stays as the
+  authoritative reject (403).  On the student dashboard, the notebook
+  link is now reachable for closed assignments (rendered as an eye
+  icon with title "View"); the upload link remains hidden when closed.
+  A new `isClosed` flag flows from `NotebookContext` → `notebook.leaf`
+  (`data-read-only` on the iframe) → `notebook.js`, which extends the
+  existing `applyLockedNotebookUI()` pattern.  No JupyterLite extension
+  changes; no Pyodide changes.
+
 ## [0.4.164] - 2026-05-14
 
 ### Added

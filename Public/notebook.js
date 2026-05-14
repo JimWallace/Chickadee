@@ -22,6 +22,11 @@
     const uploadFile = document.getElementById('nb-upload-file');
     const setupID     = frame ? frame.dataset.setupId : null;
     const gradingMode = frame ? frame.dataset.gradingMode : null;
+    // Closed-assignment read-only mode.  Plumbed from the server via
+    // NotebookContext.isClosed → notebook.leaf data-read-only.  Disables
+    // editing, run shortcuts, and the upload fallback handler.  The submit
+    // button is also suppressed server-side (showSubmit=false) when closed.
+    const readOnly    = frame ? frame.dataset.readOnly === 'true' : false;
 
     if (!frame || !setupID) return;
 
@@ -705,15 +710,41 @@
     function applyLockedNotebookUI() {
         if (!frame.contentDocument) return;
         const doc = frame.contentDocument;
-        if (doc.getElementById('chickadee-notebook-lock-style')) return;
+        if (!doc.getElementById('chickadee-notebook-lock-style')) {
+            const rules = [
+                '.jp-SideBar, .jp-SidePanel, .jp-FileBrowser, .jp-FileBrowser-Panel, .jp-DirListing { display: none !important; }',
+                '.lm-MenuBar, .jp-MenuBar, .jp-TopBar { display: none !important; }'
+            ];
+            if (readOnly) {
+                rules.push(
+                    '.jp-Toolbar, .jp-Cell .jp-Toolbar, .jp-CellHeader, .jp-CellFooter { display: none !important; }',
+                    '.cm-content { caret-color: transparent !important; }'
+                );
+            }
+            const style = doc.createElement('style');
+            style.id = 'chickadee-notebook-lock-style';
+            style.textContent = rules.join('\n');
+            doc.head.appendChild(style);
+        }
 
-        const style = doc.createElement('style');
-        style.id = 'chickadee-notebook-lock-style';
-        style.textContent = [
-            '.jp-SideBar, .jp-SidePanel, .jp-FileBrowser, .jp-FileBrowser-Panel, .jp-DirListing { display: none !important; }',
-            '.lm-MenuBar, .jp-MenuBar, .jp-TopBar { display: none !important; }'
-        ].join('\n');
-        doc.head.appendChild(style);
+        if (readOnly) {
+            doc.querySelectorAll('.cm-content').forEach((el) => {
+                if (el.getAttribute('contenteditable') !== 'false') {
+                    el.setAttribute('contenteditable', 'false');
+                }
+            });
+            if (!doc.__chickadeeReadOnlyKeyHandler) {
+                const handler = (event) => {
+                    if (event.key !== 'Enter') return;
+                    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                };
+                doc.addEventListener('keydown', handler, true);
+                doc.__chickadeeReadOnlyKeyHandler = handler;
+            }
+        }
     }
 
     function looksLikeNotebook(value) {
@@ -758,8 +789,16 @@
     // 3. Upload & submit — read file → queue runner grading
     // -------------------------------------------------------------------------
 
+    if (uploadFile && readOnly) {
+        uploadFile.disabled = true;
+    }
     if (uploadFile) {
         uploadFile.addEventListener('change', async () => {
+            if (readOnly) {
+                uploadFile.value = '';
+                setStatus('error', 'This assignment is closed — submissions are no longer accepted.');
+                return;
+            }
             const file = uploadFile.files && uploadFile.files[0];
             if (!file) return;
 
