@@ -6,6 +6,18 @@ on:
     branches: [main]
 
 jobs:
+  format-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    container:
+      image: swift:6.3-jammy
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check formatting
+        run: scripts/lint.sh
+
   core-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20

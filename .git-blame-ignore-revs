@@ -1,0 +1,11 @@
+# Revisions listed below are skipped by `git blame`.
+#
+# To honor this file locally, run once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub's web blame view honors this file automatically.
+#
+# Append the full 40-char SHA of any large, mechanical commit (e.g. bulk
+# formatter passes) on its own line below.
+
+# Bulk swift-format pass — add SHA after committing.
