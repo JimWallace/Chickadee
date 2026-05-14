@@ -43,7 +43,7 @@ final class WorkerRoutesTests: XCTestCase {
 
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app, options: .runnerCompatibility)
+        try await configureTestDatabase(app)
         configureLeaf(app)
         try routes(app)
 

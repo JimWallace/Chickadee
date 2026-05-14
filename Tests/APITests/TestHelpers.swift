@@ -14,30 +14,7 @@ import FluentPostgresDriver
 import Foundation
 import SQLKit
 
-struct TestDatabaseOptions: Sendable {
-    let includeObservability: Bool
-    let includeRunnerCompatibility: Bool
-
-    static let `default` = TestDatabaseOptions(
-        includeObservability: false,
-        includeRunnerCompatibility: false
-    )
-
-    static let observability = TestDatabaseOptions(
-        includeObservability: true,
-        includeRunnerCompatibility: false
-    )
-
-    static let runnerCompatibility = TestDatabaseOptions(
-        includeObservability: true,
-        includeRunnerCompatibility: true
-    )
-}
-
-func configureTestDatabase(
-    _ app: Application,
-    options: TestDatabaseOptions = .default
-) async throws {
+func configureTestDatabase(_ app: Application) async throws {
     let settings = try testDatabaseSettingsFromEnvironment()
     try configureDatabase(app, settings: settings)
 
@@ -45,13 +22,7 @@ func configureTestDatabase(
         try await resetPostgresTestSchema(app)
     }
 
-    registerBaseTestMigrations(on: app)
-    if options.includeObservability {
-        registerObservabilityTestMigrations(on: app)
-    }
-    if options.includeRunnerCompatibility {
-        registerRunnerCompatibilityTestMigrations(on: app)
-    }
+    registerMigrations(on: app)
 
     try await app.autoMigrate()
 }
@@ -108,45 +79,6 @@ func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
             password: password
         )
     }
-}
-
-private func registerBaseTestMigrations(on app: Application) {
-    app.migrations.add(CreateUsers())
-    app.migrations.add(CreateCourses())
-    app.migrations.add(CreateCourseEnrollments())
-    app.migrations.add(CreateTestSetups())
-    app.migrations.add(CreateSubmissions())
-    app.migrations.add(CreateResults())
-    app.migrations.add(CreateAssignments())
-    app.migrations.add(AddAssignmentSlugs())
-    app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
-    app.migrations.add(AddSubmissionRetestedAt())
-    app.migrations.add(AddAssignmentDeadlineOverrideActive())
-    app.migrations.add(CreateClassAchievements())
-    app.migrations.add(AddSubmissionRetestedByUserID())
-    app.migrations.add(AddTestSetupLastRetestedManifestHash())
-    app.migrations.add(CreatePreEnrollments())
-    app.migrations.add(AddUserLastSeenAt())
-    app.migrations.add(AddBrightSpaceSyncFields())
-    app.migrations.add(CreateClientDiagnostics())
-    app.migrations.add(CreateAssignmentPersonalizationSeeds())
-}
-
-private func registerObservabilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateSubmissionDiagnostics())
-    app.migrations.add(CreateRequestMetrics())
-    app.migrations.add(CreateJobExecutionMetrics())
-    app.migrations.add(AddJobExecutionStageTimings())
-    app.migrations.add(CreateRunnerSnapshots())
-    app.migrations.add(CreateRunnerProfiles())
-    app.migrations.add(AddJobDiskUsageMetrics())
-}
-
-private func registerRunnerCompatibilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateAssignmentRequirements())
 }
 
 // MARK: - Async app lifecycle

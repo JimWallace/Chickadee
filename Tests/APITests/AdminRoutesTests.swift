@@ -30,7 +30,7 @@ final class AdminRoutesTests: XCTestCase {
         app.sessions.use(.memory)
         app.middleware.use(app.sessions.middleware)
 
-        try await configureTestDatabase(app, options: .observability)
+        try await configureTestDatabase(app)
 
         configureLeaf(app)
         try routes(app)

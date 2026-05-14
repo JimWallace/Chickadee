@@ -31,7 +31,7 @@ final class ResultRoutesTests: XCTestCase {
         app.middleware.use(app.sessions.middleware)
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
 
-        try await configureTestDatabase(app, options: .observability)
+        try await configureTestDatabase(app)
 
         try routes(app)
     }

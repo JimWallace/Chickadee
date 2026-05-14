@@ -183,13 +183,13 @@ struct DatabaseConfigurationTests {
         }
     }
 
-    @Test func observabilityTestDatabaseIncludesRunnerProfiles() async throws {
+    @Test func configureTestDatabaseIncludesRunnerProfiles() async throws {
         let env = EnvironmentScope()
         env.set("TEST_DATABASE_BACKEND", nil)
 
         let app = try await Application.make(.testing)
         try await withApp(app) { app in
-            try await configureTestDatabase(app, options: .observability)
+            try await configureTestDatabase(app)
 
             let now = Date()
             let profile = RunnerProfile()
