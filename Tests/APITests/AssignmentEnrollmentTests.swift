@@ -15,32 +15,12 @@ import Core
 final class AssignmentEnrollmentTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-enroll-\(UUID().uuidString)/")
-            .path
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app)
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-enroll")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers

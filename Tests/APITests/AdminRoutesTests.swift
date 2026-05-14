@@ -8,37 +8,15 @@ import Core
 final class AdminRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-admin-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory = dirs[0]
-        app.testSetupsDirectory = dirs[1]
-        app.submissionsDirectory = dirs[2]
-        app.workerSecretFilePath = tmpDir + ".worker-secret"
-        app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-admin")
+        app.workerSecretFilePath = app.testDataDirectory! + ".worker-secret"
+        app.localRunnerAutoStartFilePath = app.testDataDirectory! + ".local-runner-autostart"
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     private func loginAsAdmin() async throws -> String {

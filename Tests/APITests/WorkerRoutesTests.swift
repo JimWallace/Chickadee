@@ -15,7 +15,6 @@ import Core
 final class WorkerRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: URL!
     private let workerSecret = "test-worker-secret-abc123"
 
     // Minimal worker-mode manifest JSON (gradingMode defaults to .worker)
@@ -29,23 +28,7 @@ final class WorkerRoutesTests: XCTestCase {
     """
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-worker-\(UUID().uuidString)")
-        let dirs = ["results", "testsetups", "submissions"].map { tmpDir.appendingPathComponent($0) }
-        for dir in dirs {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0].path + "/"
-        app.testSetupsDirectory  = dirs[1].path + "/"
-        app.submissionsDirectory = dirs[2].path + "/"
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app)
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-worker")
 
         // Initialize the claim queue before requests start (mirrors configure() eager-init pattern).
         app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
@@ -54,8 +37,7 @@ final class WorkerRoutesTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(at: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers
@@ -92,7 +74,7 @@ final class WorkerRoutesTests: XCTestCase {
 
     private func makeTestSetup(id: String, manifest: String) async throws -> APITestSetup {
         let zipPath = try makeDummyZip(named: "\(id).zip",
-                                       in: tmpDir.appendingPathComponent("testsetups"))
+                                       in: URL(fileURLWithPath: app.testSetupsDirectory))
         // Each test setup needs a course (FK constraint); create a throw-away one.
         let course = APICourse(code: "WK_\(id)", name: "Worker Test Course", enrollmentMode: .closed)
         try await course.save(on: app.db)
@@ -105,7 +87,7 @@ final class WorkerRoutesTests: XCTestCase {
     private func makeSubmission(id: String, setupID: String, status: String = "pending",
                                  kind: String = APISubmission.Kind.student) async throws -> APISubmission {
         let zipPath = try makeDummyZip(named: "\(id).zip",
-                                       in: tmpDir.appendingPathComponent("submissions"))
+                                       in: URL(fileURLWithPath: app.submissionsDirectory))
         let sub = APISubmission(id: id, testSetupID: setupID, zipPath: zipPath,
                                 attemptNumber: 1, status: status,
                                 filename: "submission.zip", userID: nil, kind: kind)

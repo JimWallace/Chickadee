@@ -17,32 +17,12 @@ import Core
 final class SectionRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-sect-\(UUID().uuidString)/")
-            .path
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app)
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-sect")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers
@@ -73,7 +53,7 @@ final class SectionRoutesTests: XCTestCase {
         {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null,"gradingMode":"worker"}
         """
         let setup = APITestSetup(id: setupID, manifest: manifest,
-                                  zipPath: tmpDir + "testsetups/\(setupID).zip", courseID: courseID)
+                                  zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(testSetupID: setupID, title: title,
                                         dueAt: nil, isOpen: true, courseID: courseID)
@@ -433,7 +413,7 @@ final class SectionRoutesTests: XCTestCase {
         """
         let setupID = "move_setup3"
         let setup = APITestSetup(id: setupID, manifest: manifest,
-                                  zipPath: tmpDir + "testsetups/\(setupID).zip", courseID: courseID)
+                                  zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(testSetupID: setupID, title: "GradeModeTest",
                                         dueAt: nil, isOpen: true, courseID: courseID)

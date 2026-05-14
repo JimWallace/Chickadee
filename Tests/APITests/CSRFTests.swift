@@ -12,35 +12,13 @@ import Foundation
 final class CSRFTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-csrf-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-csrf")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - URL-encoded form (login)
@@ -95,7 +73,7 @@ final class CSRFTests: XCTestCase {
         let course = APICourse(code: courseCode, name: "\(courseCode) Course")
         try await course.save(on: app.db)
 
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         let emptyZip = Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
         try emptyZip.write(to: URL(fileURLWithPath: zipPath))
 

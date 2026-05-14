@@ -12,29 +12,9 @@ import Foundation
 final class RoleMiddlewareTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-role-\(UUID().uuidString)", isDirectory: true)
-            .path + "/"
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-role")
 
         // Register lightweight test-only routes with each protection level.
         // Browser-style paths (no /api/ prefix) → unauthenticated → 303 /login.
@@ -59,8 +39,7 @@ final class RoleMiddlewareTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Unauthenticated

@@ -16,36 +16,13 @@ import Foundation
 final class SubmissionQueryRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-sqr-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        // Sessions are required because routes.swift now registers UserSessionAuthenticator.
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-sqr")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helper
@@ -75,7 +52,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let setup = APITestSetup(
             id: id,
             manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
-            zipPath: tmpDir + "testsetups/\(id).zip",
+            zipPath: app.testSetupsDirectory + "\(id).zip",
             courseID: courseID
         )
         try await setup.save(on: app.db)
@@ -95,7 +72,7 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: id,
             testSetupID: testSetupID,
-            zipPath: tmpDir + "submissions/\(id).zip",
+            zipPath: app.submissionsDirectory + "\(id).zip",
             attemptNumber: attemptNumber,
             status: status,
             userID: userID

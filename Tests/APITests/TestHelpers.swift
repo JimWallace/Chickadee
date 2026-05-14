@@ -94,6 +94,71 @@ func withApp(_ app: Application, _ body: (Application) async throws -> Void) asy
     }
 }
 
+// MARK: - Standard test app
+
+private struct TestDataDirectoryKey: StorageKey {
+    typealias Value = String
+}
+
+extension Application {
+    /// Filesystem directory created by `makeTestApp` for this app's
+    /// results/testsetups/submissions trees. Nil if the app wasn't built
+    /// via `makeTestApp`.
+    var testDataDirectory: String? {
+        storage[TestDataDirectoryKey.self]
+    }
+
+    /// Shuts the app down and removes the temp directory created by
+    /// `makeTestApp`. Use in tearDown for any app obtained from
+    /// `makeTestApp`.
+    func tearDownTestApp() async throws {
+        let dir = storage[TestDataDirectoryKey.self]
+        try await asyncShutdown()
+        if let dir {
+            try? FileManager.default.removeItem(atPath: dir)
+        }
+    }
+}
+
+/// Builds a `.testing` Vapor application with the standard test wiring:
+/// per-app temp directories for results/testsetups/submissions,
+/// in-memory sessions, the production migration list, Leaf views, and
+/// the full route tree mounted.
+///
+/// Caller owns the lifecycle — pair with `app.tearDownTestApp()` in
+/// tearDown.  For unit tests that need a bare app (single-middleware
+/// isolation, custom auth modes, custom database configuration), use
+/// `Application.make(.testing)` directly.
+func makeTestApp(
+    prefix: String = "chickadee-test",
+    authMode: AuthMode = .local
+) async throws -> Application {
+    let app = try await Application.make(.testing)
+    app.authMode = authMode
+
+    let tmpDir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
+        .path
+    let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+    for dir in dirs {
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    }
+    app.resultsDirectory     = dirs[0]
+    app.testSetupsDirectory  = dirs[1]
+    app.submissionsDirectory = dirs[2]
+    app.storage[TestDataDirectoryKey.self] = tmpDir
+
+    app.sessions.use(.memory)
+    app.middleware.use(app.sessions.middleware)
+
+    try await configureTestDatabase(app)
+
+    configureLeaf(app)
+    try routes(app)
+
+    return app
+}
+
 extension Application {
     @discardableResult
     func asyncTest(

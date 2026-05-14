@@ -22,29 +22,12 @@ import Core
 final class DraftSuiteSectionRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-dssrt-\(UUID().uuidString)/")
-            .path
-        for dir in ["results/", "testsetups/", "submissions/"].map({ tmpDir + $0 }) {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = tmpDir + "results/"
-        app.testSetupsDirectory  = tmpDir + "testsetups/"
-        app.submissionsDirectory = tmpDir + "submissions/"
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app)
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-dssrt")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Fixture

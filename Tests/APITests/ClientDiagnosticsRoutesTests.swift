@@ -16,19 +16,11 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
     private var app: Application!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-cdr")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers
