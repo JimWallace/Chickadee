@@ -16,8 +16,6 @@ import Foundation
 final class NotebookDownloadTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     // A notebook with 4 cells: public test, secret test, release test, solution.
     private let mixedNotebookJSON = """
     {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
@@ -29,32 +27,11 @@ final class NotebookDownloadTests: XCTestCase {
     """
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-dl-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-dl")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helpers
@@ -81,12 +58,12 @@ final class NotebookDownloadTests: XCTestCase {
     /// Saves a notebook JSON directly as a flat .ipynb file and returns the setup ID.
     private func insertSetupWithNotebook(notebookJSON: String) async throws -> String {
         let setupID      = "setup_test_\(UUID().uuidString.lowercased().prefix(6))"
-        let notebookPath = tmpDir + "testsetups/\(setupID).ipynb"
+        let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
         let manifest = """
         {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
         """
         // Write a dummy zip (the flat .ipynb takes priority in getAssignment).
-        let dummyZipPath = tmpDir + "testsetups/\(setupID).zip"
+        let dummyZipPath = app.testSetupsDirectory + "\(setupID).zip"
         try Data().write(to: URL(fileURLWithPath: dummyZipPath))
         try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
 

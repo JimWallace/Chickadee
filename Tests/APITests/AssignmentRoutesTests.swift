@@ -19,35 +19,12 @@ import Core
 final class AssignmentRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-art-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-art")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helpers
@@ -77,7 +54,7 @@ final class AssignmentRoutesTests: XCTestCase {
         {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
         """
         let courseID = try await makeTestCourseID()
-        let setup = APITestSetup(id: id, manifest: manifest, zipPath: tmpDir + "testsetups/\(id).zip", courseID: courseID)
+        let setup = APITestSetup(id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
         try await setup.save(on: app.db)
         return setup
     }
@@ -149,7 +126,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: id,
             testSetupID: testSetupID,
-            zipPath: tmpDir + "submissions/\(id).zip",
+            zipPath: app.submissionsDirectory + "\(id).zip",
             attemptNumber: attemptNumber,
             status: status,
             userID: userID,
@@ -829,12 +806,12 @@ final class AssignmentRoutesTests: XCTestCase {
         let courseID = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_display"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
         {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
         """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(publicID: "ABC123", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
         try await assignment.save(on: app.db)
@@ -867,12 +844,12 @@ final class AssignmentRoutesTests: XCTestCase {
         let courseID = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
         let setupID = "setup_edit_display_reload"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
         {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
         """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(publicID: "GHI789", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
         try await assignment.save(on: app.db)
@@ -992,14 +969,14 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
         let setupID = "setup_draft_finalize"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
-        let notebookDir = tmpDir + "testsetups/notebooks/\(setupID)/"
+        let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let assignmentPath = notebookDir + "assignment.ipynb"
         try defaultNotebookData(title: "Draft Finalize").write(to: URL(fileURLWithPath: assignmentPath))
-        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: tmpDir + "testsetups/", setupID: setupID)
+        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
         try defaultNotebookData(title: "Draft Finalize Solution").write(to: URL(fileURLWithPath: solutionPath))
 
         let setup = APITestSetup(
@@ -1071,14 +1048,14 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
         let setupID = "setup_generated_suite_finalize"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
         let manifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false, gradingMode: "worker")
-        let notebookDir = tmpDir + "testsetups/notebooks/\(setupID)/"
+        let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let assignmentPath = notebookDir + "assignment.ipynb"
         try defaultNotebookData(title: "Generated Suite").write(to: URL(fileURLWithPath: assignmentPath))
-        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: tmpDir + "testsetups/", setupID: setupID)
+        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
         try defaultNotebookData(title: "Generated Suite Solution").write(to: URL(fileURLWithPath: solutionPath))
 
         let setup = APITestSetup(
@@ -1155,7 +1132,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
         let setupID = "setup_validation_runner_gate"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         var suiteBuffer = ByteBufferAllocator().buffer(capacity: 16)
         suiteBuffer.writeString("print('ok')\n")
         _ = try createRunnerSetupZip(
@@ -1177,11 +1154,11 @@ final class AssignmentRoutesTests: XCTestCase {
             includeMakefile: false,
             gradingMode: "worker"
         )
-        let notebookDir = tmpDir + "testsetups/notebooks/\(setupID)/"
+        let notebookDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let assignmentPath = notebookDir + "assignment.ipynb"
         try defaultNotebookData(title: "Runner Gate").write(to: URL(fileURLWithPath: assignmentPath))
-        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: tmpDir + "testsetups/", setupID: setupID)
+        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
         try defaultNotebookData(title: "Runner Gate Solution").write(to: URL(fileURLWithPath: solutionPath))
 
         let setup = APITestSetup(
@@ -1326,7 +1303,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let submission = APISubmission(
             id: "sub_retest_1",
             testSetupID: "setup_retest",
-            zipPath: tmpDir + "submissions/sub_retest_1.zip",
+            zipPath: app.submissionsDirectory + "sub_retest_1.zip",
             attemptNumber: 1,
             status: "complete",
             userID: student.id
@@ -1364,7 +1341,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let submission = APISubmission(
             id: "sub_retest_mismatch",
             testSetupID: "setup_b",
-            zipPath: tmpDir + "submissions/sub_retest_mismatch.zip",
+            zipPath: app.submissionsDirectory + "sub_retest_mismatch.zip",
             attemptNumber: 1,
             status: "complete",
             userID: student.id
@@ -1403,7 +1380,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let subA = APISubmission(
             id: "sub_retest_all_a",
             testSetupID: "setup_retest_all",
-            zipPath: tmpDir + "submissions/sub_retest_all_a.zip",
+            zipPath: app.submissionsDirectory + "sub_retest_all_a.zip",
             attemptNumber: 1,
             status: "complete",
             userID: student.id
@@ -1415,7 +1392,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let subB = APISubmission(
             id: "sub_retest_all_b",
             testSetupID: "setup_retest_all",
-            zipPath: tmpDir + "submissions/sub_retest_all_b.zip",
+            zipPath: app.submissionsDirectory + "sub_retest_all_b.zip",
             attemptNumber: 2,
             status: "pending",
             userID: student.id
@@ -1426,7 +1403,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let validation = APISubmission(
             id: "sub_retest_all_validation",
             testSetupID: "setup_retest_all",
-            zipPath: tmpDir + "submissions/sub_retest_all_validation.zip",
+            zipPath: app.submissionsDirectory + "sub_retest_all_validation.zip",
             attemptNumber: 1,
             status: "complete",
             userID: nil,
@@ -1511,14 +1488,14 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
 
         let setupID = "setup_no_runner"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
         {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
         """
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath,
-            notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb",
+            notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb",
             courseID: courseID
         )
         try await setup.save(on: app.db)
@@ -1533,7 +1510,7 @@ final class AssignmentRoutesTests: XCTestCase {
         // `loadExistingSolution` returns data — otherwise
         // `scheduleValidationAfterSuiteEdit` returns early before
         // reaching the runner pre-check.
-        let solutionPath = tmpDir + "submissions/no_runner_solution.ipynb"
+        let solutionPath = app.submissionsDirectory + "no_runner_solution.ipynb"
         try defaultNotebookData(title: "Solution").write(to: URL(fileURLWithPath: solutionPath))
         let validation = APISubmission(
             id: "sub_no_runner_validation",
@@ -1638,7 +1615,7 @@ final class AssignmentRoutesTests: XCTestCase {
         let submission = APISubmission(
             id: "sub_display_name",
             testSetupID: "setup_submissions_display_name",
-            zipPath: tmpDir + "submissions/sub_display_name.zip",
+            zipPath: app.submissionsDirectory + "sub_display_name.zip",
             attemptNumber: 1,
             status: "complete",
             filename: "submission.ipynb",
@@ -1693,8 +1670,9 @@ final class AssignmentRoutesTests: XCTestCase {
         to setup: APITestSetup,
         bytes: Data
     ) async throws -> String {
-        try FileManager.default.createDirectory(atPath: tmpDir + "starters/", withIntermediateDirectories: true)
-        let starterPath = tmpDir + "starters/\(setup.id ?? "x").ipynb"
+        let startersDir = app.testDataDirectory! + "starters/"
+        try FileManager.default.createDirectory(atPath: startersDir, withIntermediateDirectories: true)
+        let starterPath = startersDir + "\(setup.id ?? "x").ipynb"
         try bytes.write(to: URL(fileURLWithPath: starterPath))
         setup.notebookPath = starterPath
         try await setup.save(on: app.db)
@@ -2110,14 +2088,14 @@ final class AssignmentRoutesTests: XCTestCase {
         let courseID = try await makeTestCourseID()
         let cookie   = try await loginAsInstructor()
         let setupID  = "setup_edit_upload_btn_reg"
-        let zipPath  = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath  = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
         {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
         """
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath,
-            notebookPath: tmpDir + "testsetups/notebooks/\(setupID)/assignment.ipynb",
+            notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb",
             courseID: courseID
         )
         try await setup.save(on: app.db)

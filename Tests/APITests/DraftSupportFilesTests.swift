@@ -20,29 +20,12 @@ import Core
 final class DraftSupportFilesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-dsft-\(UUID().uuidString)/")
-            .path
-        for dir in ["results/", "testsetups/", "submissions/"].map({ tmpDir + $0 }) {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = tmpDir + "results/"
-        app.testSetupsDirectory  = tmpDir + "testsetups/"
-        app.submissionsDirectory = tmpDir + "submissions/"
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app)
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-dsft")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // Creates a course + draft test setup with a real zip file containing

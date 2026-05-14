@@ -20,32 +20,12 @@ import Crypto
 final class AccountRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-acct-\(UUID().uuidString)/")
-            .path
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        try await configureTestDatabase(app)
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-acct")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers
@@ -191,7 +171,7 @@ final class AccountRoutesTests: XCTestCase {
 
         // Create a minimal test setup and submission record.
         let setupID = UUID().uuidString
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try Data("PK".utf8).write(to: URL(fileURLWithPath: zipPath))
         let manifest = """
             {"schemaVersion":1,"testSuites":[{"tier":"public","script":"t.sh"}],"timeLimitSeconds":5}
@@ -201,7 +181,7 @@ final class AccountRoutesTests: XCTestCase {
         try await setup.save(on: app.db)
 
         let subID = UUID().uuidString
-        let subZip = tmpDir + "submissions/\(subID).zip"
+        let subZip = app.submissionsDirectory + "\(subID).zip"
         try Data("PK".utf8).write(to: URL(fileURLWithPath: subZip))
         let sub = APISubmission(id: subID, testSetupID: setupID, zipPath: subZip,
                                 attemptNumber: 1, status: "complete",

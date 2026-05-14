@@ -10,19 +10,12 @@ final class RunnerCompatibilityTests: XCTestCase {
     private let workerSecret = "compatibility-secret"
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
+        app = try await makeTestApp(prefix: "chickadee-rct")
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
-
-        try await configureTestDatabase(app, options: .runnerCompatibility)
-
-        configureLeaf(app)
-        try routes(app)
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
+        try await app.tearDownTestApp()
     }
 
     func testVersionComparatorSupportsMinimumAndExactMatches() {

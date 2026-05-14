@@ -17,35 +17,12 @@ import Core
 final class WebRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-wrt-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-wrt")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helpers
@@ -93,7 +70,7 @@ final class WebRoutesTests: XCTestCase {
         """
         let course = try await makeCourse()
         let courseID = try course.requireID()
-        let setup = APITestSetup(id: id, manifest: manifest, zipPath: tmpDir + "testsetups/\(id).zip", courseID: courseID)
+        let setup = APITestSetup(id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
         try await setup.save(on: app.db)
         return setup
     }
@@ -124,7 +101,7 @@ final class WebRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: id,
             testSetupID: testSetupID,
-            zipPath: tmpDir + "submissions/\(id).py",
+            zipPath: app.submissionsDirectory + "\(id).py",
             attemptNumber: attemptNumber,
             status: status,
             filename: filename,
@@ -295,7 +272,7 @@ final class WebRoutesTests: XCTestCase {
         let setupID = "setup_browser_first_open"
         let course = try await makeCourse()
         let courseID = try course.requireID()
-        let notebookPath = tmpDir + "testsetups/\(setupID).ipynb"
+        let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
         let notebookJSON = """
         {"cells":[{"cell_type":"markdown","metadata":{},"source":["Browser starter"]}],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
         """
@@ -307,7 +284,7 @@ final class WebRoutesTests: XCTestCase {
         let setup = APITestSetup(
             id: setupID,
             manifest: manifest,
-            zipPath: tmpDir + "testsetups/\(setupID).zip",
+            zipPath: app.testSetupsDirectory + "\(setupID).zip",
             notebookPath: notebookPath,
             courseID: courseID
         )
@@ -637,7 +614,7 @@ final class WebRoutesTests: XCTestCase {
         let setup = APITestSetup(
             id: "setup_browser_names",
             manifest: manifest,
-            zipPath: tmpDir + "testsetups/setup_browser_names.zip",
+            zipPath: app.testSetupsDirectory + "setup_browser_names.zip",
             courseID: courseID
         )
         try await setup.save(on: app.db)

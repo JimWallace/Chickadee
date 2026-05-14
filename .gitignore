@@ -6,7 +6,9 @@
 .swiftpm/xcode/package.xcworkspace/xcuserdata/
 
 # Local tooling environments
-.claude/
+.claude/*
+!.claude/hooks/
+!.claude/settings.json
 .venv-jlite/
 .jupyterlite.doit.db
 Tools/jupyterlite/.jupyterlite.doit.db

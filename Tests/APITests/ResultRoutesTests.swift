@@ -8,37 +8,16 @@ import Foundation
 final class ResultRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpResultsDir: String!
     private let workerSecret = "test-worker-secret"
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        // Use a temp directory so tests don't pollute the project directory
-        tmpResultsDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-test-results-\(UUID().uuidString)", isDirectory: true)
-            .path + "/"
-        try FileManager.default.createDirectory(
-            atPath: tmpResultsDir,
-            withIntermediateDirectories: true
-        )
-
-        app.resultsDirectory = tmpResultsDir
+        app = try await makeTestApp(prefix: "chickadee-test-results")
         app.routes.defaultMaxBodySize = "10mb"
-
-        // Sessions are required because routes.swift now registers UserSessionAuthenticator.
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
-
-        try await configureTestDatabase(app, options: .observability)
-
-        try routes(app)
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpResultsDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers
@@ -91,7 +70,7 @@ final class ResultRoutesTests: XCTestCase {
             let setup = APITestSetup(
                 id: testSetupID,
                 manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
-                zipPath: tmpResultsDir + "\(testSetupID).zip",
+                zipPath: app.resultsDirectory + "\(testSetupID).zip",
                 courseID: courseID
             )
             try setup.save(on: app.db).wait()
@@ -101,7 +80,7 @@ final class ResultRoutesTests: XCTestCase {
             let submission = APISubmission(
                 id: submissionID,
                 testSetupID: testSetupID,
-                zipPath: tmpResultsDir + "\(submissionID).zip",
+                zipPath: app.resultsDirectory + "\(submissionID).zip",
                 attemptNumber: 1,
                 status: "pending",
                 kind: APISubmission.Kind.student
@@ -143,7 +122,7 @@ final class ResultRoutesTests: XCTestCase {
             XCTAssertEqual(res.status, .ok)
         })
 
-        let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
+        let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
         let resultFile = files.first { $0.hasPrefix("sub_disktest") }
         XCTAssertNotNil(resultFile, "Expected a result file for sub_disktest to be written")
     }
@@ -185,7 +164,7 @@ final class ResultRoutesTests: XCTestCase {
             XCTAssertEqual(res.status, .ok)
         })
 
-        let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
+        let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
         let resultFile = files.first { $0.hasPrefix(collection.submissionID) }
         XCTAssertNotNil(resultFile, "Expected a result file for wrapped reports to be written")
     }

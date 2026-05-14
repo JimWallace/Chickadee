@@ -14,30 +14,7 @@ import FluentPostgresDriver
 import Foundation
 import SQLKit
 
-struct TestDatabaseOptions: Sendable {
-    let includeObservability: Bool
-    let includeRunnerCompatibility: Bool
-
-    static let `default` = TestDatabaseOptions(
-        includeObservability: false,
-        includeRunnerCompatibility: false
-    )
-
-    static let observability = TestDatabaseOptions(
-        includeObservability: true,
-        includeRunnerCompatibility: false
-    )
-
-    static let runnerCompatibility = TestDatabaseOptions(
-        includeObservability: true,
-        includeRunnerCompatibility: true
-    )
-}
-
-func configureTestDatabase(
-    _ app: Application,
-    options: TestDatabaseOptions = .default
-) async throws {
+func configureTestDatabase(_ app: Application) async throws {
     let settings = try testDatabaseSettingsFromEnvironment()
     try configureDatabase(app, settings: settings)
 
@@ -45,13 +22,7 @@ func configureTestDatabase(
         try await resetPostgresTestSchema(app)
     }
 
-    registerBaseTestMigrations(on: app)
-    if options.includeObservability {
-        registerObservabilityTestMigrations(on: app)
-    }
-    if options.includeRunnerCompatibility {
-        registerRunnerCompatibilityTestMigrations(on: app)
-    }
+    registerMigrations(on: app)
 
     try await app.autoMigrate()
 }
@@ -110,45 +81,6 @@ func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
     }
 }
 
-private func registerBaseTestMigrations(on app: Application) {
-    app.migrations.add(CreateUsers())
-    app.migrations.add(CreateCourses())
-    app.migrations.add(CreateCourseEnrollments())
-    app.migrations.add(CreateTestSetups())
-    app.migrations.add(CreateSubmissions())
-    app.migrations.add(CreateResults())
-    app.migrations.add(CreateAssignments())
-    app.migrations.add(AddAssignmentSlugs())
-    app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
-    app.migrations.add(AddSubmissionRetestedAt())
-    app.migrations.add(AddAssignmentDeadlineOverrideActive())
-    app.migrations.add(CreateClassAchievements())
-    app.migrations.add(AddSubmissionRetestedByUserID())
-    app.migrations.add(AddTestSetupLastRetestedManifestHash())
-    app.migrations.add(CreatePreEnrollments())
-    app.migrations.add(AddUserLastSeenAt())
-    app.migrations.add(AddBrightSpaceSyncFields())
-    app.migrations.add(CreateClientDiagnostics())
-    app.migrations.add(CreateAssignmentPersonalizationSeeds())
-}
-
-private func registerObservabilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateSubmissionDiagnostics())
-    app.migrations.add(CreateRequestMetrics())
-    app.migrations.add(CreateJobExecutionMetrics())
-    app.migrations.add(AddJobExecutionStageTimings())
-    app.migrations.add(CreateRunnerSnapshots())
-    app.migrations.add(CreateRunnerProfiles())
-    app.migrations.add(AddJobDiskUsageMetrics())
-}
-
-private func registerRunnerCompatibilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateAssignmentRequirements())
-}
-
 // MARK: - Async app lifecycle
 
 /// Runs an async test body with a Vapor application and always shuts it down.
@@ -160,6 +92,71 @@ func withApp(_ app: Application, _ body: (Application) async throws -> Void) asy
         try? await app.asyncShutdown()
         throw error
     }
+}
+
+// MARK: - Standard test app
+
+private struct TestDataDirectoryKey: StorageKey {
+    typealias Value = String
+}
+
+extension Application {
+    /// Filesystem directory created by `makeTestApp` for this app's
+    /// results/testsetups/submissions trees. Nil if the app wasn't built
+    /// via `makeTestApp`.
+    var testDataDirectory: String? {
+        storage[TestDataDirectoryKey.self]
+    }
+
+    /// Shuts the app down and removes the temp directory created by
+    /// `makeTestApp`. Use in tearDown for any app obtained from
+    /// `makeTestApp`.
+    func tearDownTestApp() async throws {
+        let dir = storage[TestDataDirectoryKey.self]
+        try await asyncShutdown()
+        if let dir {
+            try? FileManager.default.removeItem(atPath: dir)
+        }
+    }
+}
+
+/// Builds a `.testing` Vapor application with the standard test wiring:
+/// per-app temp directories for results/testsetups/submissions,
+/// in-memory sessions, the production migration list, Leaf views, and
+/// the full route tree mounted.
+///
+/// Caller owns the lifecycle — pair with `app.tearDownTestApp()` in
+/// tearDown.  For unit tests that need a bare app (single-middleware
+/// isolation, custom auth modes, custom database configuration), use
+/// `Application.make(.testing)` directly.
+func makeTestApp(
+    prefix: String = "chickadee-test",
+    authMode: AuthMode = .local
+) async throws -> Application {
+    let app = try await Application.make(.testing)
+    app.authMode = authMode
+
+    let tmpDir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
+        .path
+    let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+    for dir in dirs {
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    }
+    app.resultsDirectory     = dirs[0]
+    app.testSetupsDirectory  = dirs[1]
+    app.submissionsDirectory = dirs[2]
+    app.storage[TestDataDirectoryKey.self] = tmpDir
+
+    app.sessions.use(.memory)
+    app.middleware.use(app.sessions.middleware)
+
+    try await configureTestDatabase(app)
+
+    configureLeaf(app)
+    try routes(app)
+
+    return app
 }
 
 extension Application {

@@ -15,35 +15,12 @@ import Foundation
 final class TestSetupEditTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-edit-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-edit")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helpers
@@ -77,7 +54,7 @@ final class TestSetupEditTests: XCTestCase {
         let setup = APITestSetup(
             id: id,
             manifest: manifest,
-            zipPath: tmpDir + "testsetups/\(id).zip",
+            zipPath: app.testSetupsDirectory + "\(id).zip",
             courseID: courseID
         )
         try await setup.save(on: app.db)
@@ -178,7 +155,7 @@ final class TestSetupEditTests: XCTestCase {
         )
 
         // File should be on disk.
-        let expectedPath = tmpDir + "testsetups/setup_put1.ipynb"
+        let expectedPath = app.testSetupsDirectory + "setup_put1.ipynb"
         XCTAssertTrue(FileManager.default.fileExists(atPath: expectedPath),
                       "Expected flat .ipynb file at \(expectedPath)")
     }
@@ -220,7 +197,7 @@ final class TestSetupEditTests: XCTestCase {
             }
         )
 
-        let expectedPath = tmpDir + "testsetups/setup_put_kernel.ipynb"
+        let expectedPath = app.testSetupsDirectory + "setup_put_kernel.ipynb"
         let savedData = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
         let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
         let metadata = savedJSON?["metadata"] as? [String: Any]
@@ -234,7 +211,7 @@ final class TestSetupEditTests: XCTestCase {
         try await insertSetup(id: "setup_flat")
 
         // Write a flat notebook file directly.
-        let flatPath = tmpDir + "testsetups/setup_flat.ipynb"
+        let flatPath = app.testSetupsDirectory + "setup_flat.ipynb"
         let editedJSON = """
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","source":["# edited"],"metadata":{},"outputs":[]}]}
         """
@@ -262,7 +239,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_flat_kernel")
 
-        let flatPath = tmpDir + "testsetups/setup_flat_kernel.ipynb"
+        let flatPath = app.testSetupsDirectory + "setup_flat_kernel.ipynb"
         try python3NotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
 
         let setup = try await APITestSetup.find("setup_flat_kernel", on: app.db)!
@@ -401,7 +378,7 @@ final class TestSetupEditTests: XCTestCase {
             }
         )
 
-        let expectedPath = tmpDir + "testsetups/setup_put_ir.ipynb"
+        let expectedPath = app.testSetupsDirectory + "setup_put_ir.ipynb"
         let savedData    = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
         let savedJSON    = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
         let metadata     = savedJSON?["metadata"]  as? [String: Any]
@@ -414,7 +391,7 @@ final class TestSetupEditTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "setup_flat_ir")
 
-        let flatPath = tmpDir + "testsetups/setup_flat_ir.ipynb"
+        let flatPath = app.testSetupsDirectory + "setup_flat_ir.ipynb"
         try irNotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
 
         let setup = try await APITestSetup.find("setup_flat_ir", on: app.db)!
@@ -453,7 +430,7 @@ final class TestSetupEditTests: XCTestCase {
             }
         )
 
-        let expectedPath = tmpDir + "testsetups/setup_put_py_check.ipynb"
+        let expectedPath = app.testSetupsDirectory + "setup_put_py_check.ipynb"
         let savedData    = try Data(contentsOf: URL(fileURLWithPath: expectedPath))
         let savedJSON    = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
         let metadata     = savedJSON?["metadata"]  as? [String: Any]

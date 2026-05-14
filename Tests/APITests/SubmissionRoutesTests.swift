@@ -13,35 +13,13 @@ import Foundation
 final class SubmissionRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-subr-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-subr")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helpers
@@ -80,7 +58,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let setup = APITestSetup(
             id: id,
             manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
-            zipPath: tmpDir + "testsetups/\(id).zip",
+            zipPath: app.testSetupsDirectory + "\(id).zip",
             courseID: courseID
         )
         try await setup.save(on: app.db)
@@ -263,7 +241,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: "sub_dl_own",
             testSetupID: "setup_dl",
-            zipPath: tmpDir + "submissions/sub_dl_own.zip",
+            zipPath: app.submissionsDirectory + "sub_dl_own.zip",
             attemptNumber: 1,
             userID: ownerID
         )
@@ -290,7 +268,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: "sub_dl_instr",
             testSetupID: "setup_dl2",
-            zipPath: tmpDir + "submissions/sub_dl_instr.zip",
+            zipPath: app.submissionsDirectory + "sub_dl_instr.zip",
             attemptNumber: 1,
             userID: studentID
         )
@@ -314,7 +292,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: "sub_dl_forbid",
             testSetupID: "setup_dl3",
-            zipPath: tmpDir + "submissions/sub_dl_forbid.zip",
+            zipPath: app.submissionsDirectory + "sub_dl_forbid.zip",
             attemptNumber: 1,
             userID: idA
         )
@@ -346,7 +324,7 @@ final class SubmissionRoutesTests: XCTestCase {
         let sub = APISubmission(
             id: "sub_dl_fname",
             testSetupID: "setup_fname",
-            zipPath: tmpDir + "submissions/sub_dl_fname.ipynb",
+            zipPath: app.submissionsDirectory + "sub_dl_fname.ipynb",
             attemptNumber: 1,
             filename: "my_notebook.ipynb"
         )

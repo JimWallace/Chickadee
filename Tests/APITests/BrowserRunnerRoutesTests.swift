@@ -20,35 +20,13 @@ import Foundation
 final class BrowserRunnerRoutesTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
 
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-br-\(UUID().uuidString)/")
-            .path
-
-        for subdir in ["results/", "testsetups/", "submissions/"] {
-            try FileManager.default.createDirectory(
-                atPath: tmpDir + subdir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = tmpDir + "results/"
-        app.testSetupsDirectory  = tmpDir + "testsetups/"
-        app.submissionsDirectory = tmpDir + "submissions/"
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-br")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Helpers
@@ -60,7 +38,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     /// Creates a test setup with a given manifest JSON and a small dummy zip.
     private func insertSetup(manifest: String) async throws -> String {
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         // Write a minimal valid ZIP (end-of-central-directory record only).
         let emptyZip = Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
         try emptyZip.write(to: URL(fileURLWithPath: zipPath))

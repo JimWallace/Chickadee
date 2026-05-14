@@ -17,35 +17,12 @@ import Core
 final class CourseBundleTests: XCTestCase {
 
     private var app: Application!
-    private var tmpDir: String!
-
     override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-cbtest-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        app = try await makeTestApp(prefix: "chickadee-cbtest")
     }
 
     override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+        try await app.tearDownTestApp()
     }
 
     // MARK: - Auth helpers
@@ -75,7 +52,7 @@ final class CourseBundleTests: XCTestCase {
         let manifest = """
         {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
         """
-        let zipPath = tmpDir + "testsetups/\(id).zip"
+        let zipPath = app.testSetupsDirectory + "\(id).zip"
         // Minimal valid ZIP end-of-central-directory record (22 bytes)
         try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
             .write(to: URL(fileURLWithPath: zipPath))
