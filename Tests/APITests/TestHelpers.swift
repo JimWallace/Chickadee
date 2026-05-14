@@ -142,6 +142,7 @@ private func registerObservabilityTestMigrations(on app: Application) {
     app.migrations.add(AddJobExecutionStageTimings())
     app.migrations.add(CreateRunnerSnapshots())
     app.migrations.add(CreateRunnerProfiles())
+    app.migrations.add(AddJobDiskUsageMetrics())
 }
 
 private func registerRunnerCompatibilityTestMigrations(on app: Application) {

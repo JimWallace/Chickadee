@@ -55,6 +55,18 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
     public let stdoutBytes: Int?
     public let stderrBytes: Int?
     public let stageTimings: WorkerExecutionStageTimings?
+    /// Free space on the runner's temp filesystem at the moment the job
+    /// was accepted, before any download or unpack happened. Compare with
+    /// `freeDiskMBAtEnd` to see net disk consumed by the job (with other
+    /// concurrent jobs as confounders).
+    public let freeDiskMBAtStart: Int?
+    /// Free space measured after `workDir` was removed in cleanup. Useful
+    /// for detecting cache growth and persistent leftovers.
+    public let freeDiskMBAtEnd: Int?
+    /// Size of the per-job `workDir` (bytes) measured just before cleanup
+    /// — a usable proxy for the job's peak working-set on disk, since
+    /// `workDir` accumulates downloads + unpacks monotonically.
+    public let workdirPeakBytes: Int?
 
     public init(
         runnerID: String,
@@ -69,7 +81,10 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
         childProcessCount: Int?,
         stdoutBytes: Int?,
         stderrBytes: Int?,
-        stageTimings: WorkerExecutionStageTimings? = nil
+        stageTimings: WorkerExecutionStageTimings? = nil,
+        freeDiskMBAtStart: Int? = nil,
+        freeDiskMBAtEnd: Int? = nil,
+        workdirPeakBytes: Int? = nil
     ) {
         self.runnerID = runnerID
         self.startedAt = startedAt
@@ -84,6 +99,9 @@ public struct WorkerExecutionDiagnostics: Codable, Sendable {
         self.stdoutBytes = stdoutBytes
         self.stderrBytes = stderrBytes
         self.stageTimings = stageTimings
+        self.freeDiskMBAtStart = freeDiskMBAtStart
+        self.freeDiskMBAtEnd = freeDiskMBAtEnd
+        self.workdirPeakBytes = workdirPeakBytes
     }
 }
 

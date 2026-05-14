@@ -669,7 +669,10 @@ struct CoreCodableTests {
                 testSetupAcquireMs: 45,
                 submissionPrepareMs: 210,
                 testExecutionMs: 10_000
-            )
+            ),
+            freeDiskMBAtStart: 1024,
+            freeDiskMBAtEnd: 960,
+            workdirPeakBytes: 33_554_432
         )
         let report = WorkerExecutionReport(collection: col, diagnostics: diag)
 
@@ -682,6 +685,40 @@ struct CoreCodableTests {
         #expect(decoded.diagnostics?.terminationReason   == nil)
         #expect(decoded.diagnostics?.stageTimings?.submissionDownloadMs == 120)
         #expect(decoded.diagnostics?.stageTimings?.testExecutionMs == 10_000)
+        #expect(decoded.diagnostics?.freeDiskMBAtStart == 1024)
+        #expect(decoded.diagnostics?.freeDiskMBAtEnd == 960)
+        #expect(decoded.diagnostics?.workdirPeakBytes == 33_554_432)
+    }
+
+    @Test func workerExecutionDiagnosticsDecodesLegacyPayloadWithoutDiskFields() throws {
+        // Older runners predate the disk-usage fields. Verify the synthesized
+        // Codable decoder still accepts those payloads with the new optional
+        // fields landing as nil.
+        let legacyJSON = """
+        {
+            "runnerID": "runner-legacy",
+            "startedAt": "2024-01-01T00:00:00Z",
+            "finishedAt": "2024-01-01T00:00:10Z",
+            "finalStatus": "passed",
+            "timedOut": false,
+            "exitCode": 0,
+            "terminationReason": null,
+            "peakRSSBytes": null,
+            "wallClockMs": 10000,
+            "childProcessCount": null,
+            "stdoutBytes": null,
+            "stderrBytes": null,
+            "stageTimings": null
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(WorkerExecutionDiagnostics.self, from: legacyJSON)
+        #expect(decoded.runnerID == "runner-legacy")
+        #expect(decoded.freeDiskMBAtStart == nil)
+        #expect(decoded.freeDiskMBAtEnd == nil)
+        #expect(decoded.workdirPeakBytes == nil)
     }
 
     @Test func workerExecutionReportNilDiagnosticsRoundTrip() throws {

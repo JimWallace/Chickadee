@@ -132,10 +132,19 @@ actor TestSetupCache {
         while lruKeys.count >= maxEntries {
             let evicted = lruKeys.removeFirst()
             let evictedRoot = cacheRoot.appendingPathComponent(evicted)
-            try? FileManager.default.removeItem(at: evictedRoot)
-            writeStructuredRunnerLog(event: "test_setup_cache_evicted", fields: [
-                "test_setup_id": evicted,
-            ])
+            do {
+                try FileManager.default.removeItem(at: evictedRoot)
+                writeStructuredRunnerLog(event: "test_setup_cache_evicted", fields: [
+                    "test_setup_id": evicted,
+                ])
+            } catch {
+                writeStructuredRunnerLog(event: "test_setup_cache_evict_failed", fields: [
+                    "test_setup_id": evicted,
+                    "path": evictedRoot.path,
+                    "error_type": String(describing: type(of: error)),
+                    "error_message_summary": error.localizedDescription,
+                ])
+            }
         }
     }
 

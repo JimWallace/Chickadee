@@ -18,6 +18,7 @@ final class RunnerDaemonConfigTests: XCTestCase {
             "RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS":     "9",
             "RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS": "12",
             "RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS":      "3",
+            "RUNNER_MIN_FREE_DISK_MB":                 "1024",
         ]
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
         XCTAssertEqual(config.capabilityDiscoveryEnabled,    false)
@@ -28,6 +29,21 @@ final class RunnerDaemonConfigTests: XCTestCase {
         XCTAssertEqual(config.heartbeatRetryMaxAttempts,     9)
         XCTAssertEqual(config.resultUploadRetryMaxAttempts,  12)
         XCTAssertEqual(config.downloadRetryMaxAttempts,      3)
+        XCTAssertEqual(config.minFreeDiskMB,                 1024)
+    }
+
+    func testMinFreeDiskZeroDisablesPrecheck() {
+        let config = RunnerDaemonConfig.loadFromEnvironment([
+            "RUNNER_MIN_FREE_DISK_MB": "0"
+        ])
+        XCTAssertEqual(config.minFreeDiskMB, 0)
+    }
+
+    func testMinFreeDiskInvalidFallsBackToDefault() {
+        let config = RunnerDaemonConfig.loadFromEnvironment([
+            "RUNNER_MIN_FREE_DISK_MB": "not-a-number"
+        ])
+        XCTAssertEqual(config.minFreeDiskMB, RunnerDaemonConfig.defaults.minFreeDiskMB)
     }
 
     func testBoolAcceptsCommonAliases() {
@@ -74,7 +90,8 @@ final class RunnerDaemonConfigTests: XCTestCase {
             retryMaxDelayMs:              45_000,
             heartbeatRetryMaxAttempts:    7,
             resultUploadRetryMaxAttempts: 11,
-            downloadRetryMaxAttempts:     5
+            downloadRetryMaxAttempts:     5,
+            minFreeDiskMB:                128
         )
         let heartbeat = RunnerRetryPolicy.heartbeat(config: config)
         XCTAssertEqual(heartbeat.maxAttempts,  7)

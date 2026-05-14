@@ -103,6 +103,20 @@ final class JobExecutionMetric: Model, Content, @unchecked Sendable {
     @OptionalField(key: "skipped_count")
     var skippedCount: Int?
 
+    /// Free disk (MB) at the temp filesystem just before this job staged.
+    @OptionalField(key: "free_disk_mb_at_start")
+    var freeDiskMBAtStart: Int?
+
+    /// Free disk (MB) at end of execution, before workDir cleanup —
+    /// worst-case free-space reading for this job.
+    @OptionalField(key: "free_disk_mb_at_end")
+    var freeDiskMBAtEnd: Int?
+
+    /// Size (bytes) of the per-job workDir at end of execution. Proxy for
+    /// peak working-set on disk.
+    @OptionalField(key: "workdir_peak_bytes")
+    var workdirPeakBytes: Int?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

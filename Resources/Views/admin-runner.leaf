@@ -55,8 +55,8 @@ Runner #(runner.workerID)
                 <th data-sort-type="text"><button class="sort-header" type="button">Status</button></th>
                 <th class="time" data-sort-type="number"><button class="sort-header" type="button">Queue Wait</button></th>
                 <th class="time" data-sort-type="number"><button class="sort-header" type="button">Execution</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Setup/Other</button></th>
                 <th class="time" data-sort-type="number"><button class="sort-header" type="button">Total</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Peak Disk</button></th>
                 <th class="time" data-sort-type="date"><button class="sort-header" type="button">Completed</button></th>
             </tr>
         </thead>
@@ -68,8 +68,8 @@ Runner #(runner.workerID)
                 <td data-sort-value="#(job.finalStatus)">#(job.finalStatus)</td>
                 <td class="time" #if(job.queueWaitMs):data-sort-value="#(job.queueWaitMs)"#else:data-sort-value="-1"#endif>#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
                 <td class="time" #if(job.executionMs):data-sort-value="#(job.executionMs)"#else:data-sort-value="-1"#endif>#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
-                <td class="time" #if(job.overheadMs):data-sort-value="#(job.overheadMs)"#else:data-sort-value="-1"#endif>#if(job.overheadFormatted):#(job.overheadFormatted)#else:—#endif</td>
                 <td class="time" #if(job.totalProcessingMs):data-sort-value="#(job.totalProcessingMs)"#else:data-sort-value="-1"#endif>#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
+                <td class="time" #if(job.workdirPeakBytes):data-sort-value="#(job.workdirPeakBytes)"#else:data-sort-value="-1"#endif>#if(job.workdirPeakFormatted):#(job.workdirPeakFormatted)#else:—#endif</td>
                 <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
                     #if(job.completedAt):#(job.completedAt)#else:—#endif
                 </td>

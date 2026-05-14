@@ -113,7 +113,7 @@ struct WorkerCommand: AsyncParsableCommand {
 
         let env = ProcessInfo.processInfo.environment
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
-        let runnerProfile = RunnerProfileDetector(discoveryEnabled: config.capabilityDiscoveryEnabled).detect()
+        let runnerProfile = await RunnerProfileDetector(discoveryEnabled: config.capabilityDiscoveryEnabled).detect()
         guard let effectiveWorkerSecret = resolveWorkerSharedSecret(
             cliWorkerSecret: workerSecret,
             environment: env
@@ -452,26 +452,80 @@ actor WorkerDaemon {
         ])
         try? await sendHeartbeat()
 
+        // Heartbeat loop scoped to the lifetime of this job. We use a manual
+        // Task + defer-cancel rather than a `withTaskGroup` because the
+        // remainder of `process()` is straight-line code with many local
+        // bindings; wrapping it in a group closure would balloon nesting
+        // without changing behaviour.
+        //
+        // Cancellation flow: when the outer worker loop is cancelled, the
+        // current `await` in `process()` throws, control runs to the defer,
+        // we cancel the heartbeat task explicitly, and `Task.sleep`'s
+        // `CancellationError` short-circuits the loop on its next wake.
         let heartbeatTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    break  // cancellation: skip the final heartbeat
+                }
                 try? await self.sendHeartbeat()
             }
         }
         defer {
             heartbeatTask.cancel()
+            // Fire-and-forget end-of-job heartbeat so the server's
+            // last-seen timestamp advances even if this job took >30s.
             Task { try? await self.sendHeartbeat() }
         }
 
-        let workDir = FileManager.default.temporaryDirectory
+        let tempRoot = FileManager.default.temporaryDirectory
+        let freeDiskMBAtStart = freeSpaceMB(at: tempRoot)
+        if config.minFreeDiskMB > 0,
+           let freeMB = freeDiskMBAtStart,
+           freeMB < config.minFreeDiskMB {
+            writeStructuredRunnerLog(event: "insufficient_disk_space", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "path": tempRoot.path,
+                "free_mb": freeMB,
+                "required_mb": config.minFreeDiskMB,
+            ])
+            throw WorkerDaemonError.insufficientDiskSpace(
+                path: tempRoot.path,
+                freeMB: freeMB,
+                requiredMB: config.minFreeDiskMB
+            )
+        }
+
+        let workDir = tempRoot
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
         let workDirSetupStartedAt = Date()
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
         stageTimings.record("workdir_setup", milliseconds: Int(Date().timeIntervalSince(workDirSetupStartedAt) * 1000))
+
+        // Mutable so the body can populate them before building the
+        // diagnostics report (and so the defer can emit a structured event
+        // even on error paths where the body didn't reach the report).
+        // `freeDiskMBAtEnd` is sampled just before cleanup, so it represents
+        // the worst-case free-disk reading for this job.
+        var workdirPeakBytes: Int? = nil
+        var freeDiskMBAtEnd: Int? = nil
         defer {
+            // If the happy path already measured these (right before the
+            // report), don't double-walk the directory.
+            if workdirPeakBytes == nil {
+                workdirPeakBytes = directorySizeBytes(at: workDir)
+            }
+            if freeDiskMBAtEnd == nil {
+                freeDiskMBAtEnd = freeSpaceMB(at: tempRoot)
+            }
+
             let cleanupStartedAt = Date()
             try? FileManager.default.removeItem(at: workDir)
             stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
+
+            let freeDiskMBPostCleanup = freeSpaceMB(at: tempRoot)
             let totalWallClockMs = Int(Date().timeIntervalSince(jobStartedAt) * 1000)
             var fields: [String: Any] = [
                 "runner_id": workerID,
@@ -483,6 +537,21 @@ actor WorkerDaemon {
                 fields[key] = value
             }
             writeStructuredRunnerLog(event: "job_stage_timings", fields: fields)
+
+            // Emit a dedicated disk-usage event so ops can answer "are we
+            // close to the floor?" without having to join across log events.
+            var diskFields: [String: Any] = [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "job_id": job.submissionID,
+                "path": tempRoot.path,
+                "min_free_disk_mb": config.minFreeDiskMB,
+            ]
+            if let v = freeDiskMBAtStart      { diskFields["free_disk_mb_at_start"] = v }
+            if let v = freeDiskMBAtEnd        { diskFields["free_disk_mb_at_end"] = v }
+            if let v = freeDiskMBPostCleanup  { diskFields["free_disk_mb_post_cleanup"] = v }
+            if let v = workdirPeakBytes       { diskFields["workdir_peak_bytes"] = v }
+            writeStructuredRunnerLog(event: "job_disk_usage", fields: diskFields)
         }
 
         // Download submission and acquire the prepared test setup concurrently.
@@ -588,20 +657,85 @@ actor WorkerDaemon {
             try writeRRuntimeHelper(in: testSetupDir)
         }
 
-        // Run each test script and collect outcomes.
-        // `passedScripts` tracks which scripts produced a .pass outcome so that
-        // dependent tests can check their prerequisites before running.
+        let testExecutionStartedAt = Date()
+        let outcomes = await executeTestSuites(
+            manifest: manifest,
+            testSetupDir: testSetupDir,
+            job: job
+        )
+        stageTimings.record("test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
+
+        // Sample disk usage at end-of-execution, before the report is sent,
+        // so the persisted diagnostics reflect this job's actual footprint.
+        // The defer will re-use these readings instead of walking again.
+        workdirPeakBytes = directorySizeBytes(at: workDir)
+        freeDiskMBAtEnd = freeSpaceMB(at: tempRoot)
+
+        let collection = makeCollection(
+            outcomes: outcomes,
+            warnings: normalizationWarnings,
+            job: job,
+            startedAt: jobStartedAt
+        )
+        let diagnostics = WorkerExecutionDiagnostics(
+            runnerID: workerID,
+            startedAt: jobStartedAt,
+            finishedAt: collection.timestamp,
+            finalStatus: inferredCollectionStatus(collection).rawValue,
+            timedOut: collection.timeoutCount > 0,
+            exitCode: nil,
+            terminationReason: nil,
+            peakRSSBytes: nil,
+            wallClockMs: collection.executionTimeMs,
+            childProcessCount: nil,
+            stdoutBytes: nil,
+            stderrBytes: nil,
+            stageTimings: stageTimings.asWorkerExecutionStageTimings(),
+            freeDiskMBAtStart: freeDiskMBAtStart,
+            freeDiskMBAtEnd: freeDiskMBAtEnd,
+            workdirPeakBytes: workdirPeakBytes
+        )
+        do {
+            let resultReportStartedAt = Date()
+            try await reporter.report(WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
+            stageTimings.record("result_report", milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000))
+            writeStructuredRunnerLog(event: "result_submission_succeeded", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "status": inferredCollectionStatus(collection).rawValue,
+            ])
+        } catch {
+            writeStructuredRunnerLog(event: "result_submission_failed", fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "error_type": String(describing: type(of: error)),
+                "error_message_summary": String(describing: error),
+            ])
+            throw error
+        }
+    }
+
+    // MARK: - Test execution
+
+    /// Walks `manifest.testSuites` in order, honouring the `dependsOn`
+    /// pass-gate: a test whose prerequisite hasn't passed is auto-failed
+    /// with a `Skipped:` short result instead of executed. Missing script
+    /// files are logged and skipped entirely (no outcome emitted, matching
+    /// the pre-extraction behaviour).
+    private func executeTestSuites(
+        manifest: TestProperties,
+        testSetupDir: URL,
+        job: Job
+    ) async -> [TestOutcome] {
         var outcomes: [TestOutcome] = []
         var passedScripts: Set<String> = []
-        let testExecutionStartedAt = Date()
+
         for entry in manifest.testSuites {
-            // Dependency pre-check: if any prerequisite did not pass, auto-fail
-            // without running the script.
             if let blockedBy = entry.dependsOn.first(where: { !passedScripts.contains($0) }),
                !entry.dependsOn.isEmpty {
                 let baseName = (entry.script as NSString).deletingPathExtension
                 let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-                let skipped = TestOutcome(
+                outcomes.append(TestOutcome(
                     testName:           displayName ?? (baseName.isEmpty ? entry.script : baseName),
                     testClass:          nil,
                     tier:               entry.tier,
@@ -612,8 +746,7 @@ actor WorkerDaemon {
                     memoryUsageBytes:   nil,
                     attemptNumber:      job.attemptNumber,
                     isFirstPassSuccess: false
-                )
-                outcomes.append(skipped)
+                ))
                 continue
             }
 
@@ -634,10 +767,10 @@ actor WorkerDaemon {
                 "submission_id": job.submissionID,
                 "test_id": entry.script,
             ])
+
             // Phase 1 of issue #461 — surface the per-(student, assignment)
             // seed to the grading subprocess. Nil seed means non-personalized
-            // job; we leave the env var unset so existing scripts behave
-            // identically.
+            // job; leaving the env var unset preserves legacy behaviour.
             var scriptEnv: [String: String] = [:]
             if let seed = job.assignmentSeed, !seed.isEmpty {
                 scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
@@ -663,47 +796,8 @@ actor WorkerDaemon {
                 passedScripts.insert(entry.script)
             }
         }
-        stageTimings.record("test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
 
-        let collection = makeCollection(
-            outcomes: outcomes,
-            warnings: normalizationWarnings,
-            job: job,
-            startedAt: jobStartedAt
-        )
-        let diagnostics = WorkerExecutionDiagnostics(
-            runnerID: workerID,
-            startedAt: jobStartedAt,
-            finishedAt: collection.timestamp,
-            finalStatus: inferredCollectionStatus(collection).rawValue,
-            timedOut: collection.timeoutCount > 0,
-            exitCode: nil,
-            terminationReason: nil,
-            peakRSSBytes: nil,
-            wallClockMs: collection.executionTimeMs,
-            childProcessCount: nil,
-            stdoutBytes: nil,
-            stderrBytes: nil,
-            stageTimings: stageTimings.asWorkerExecutionStageTimings()
-        )
-        do {
-            let resultReportStartedAt = Date()
-            try await reporter.report(WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
-            stageTimings.record("result_report", milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000))
-            writeStructuredRunnerLog(event: "result_submission_succeeded", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "status": inferredCollectionStatus(collection).rawValue,
-            ])
-        } catch {
-            writeStructuredRunnerLog(event: "result_submission_failed", fields: [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "error_type": String(describing: type(of: error)),
-                "error_message_summary": String(describing: error),
-            ])
-            throw error
-        }
+        return outcomes
     }
 
     // MARK: - Script output interpretation
@@ -844,7 +938,7 @@ actor WorkerDaemon {
                         return classifyHTTPRetry(statusCode: statusCode, body: body)
                     case .downloadFailed(let failedURL):
                         return .terminal("Failed to download \(failedURL.absoluteString)")
-                    case .unzipFailed, .makeFailed:
+                    case .unzipFailed, .makeFailed, .insufficientDiskSpace:
                         return .terminal(String(describing: workerError))
                     }
                 }
@@ -1028,9 +1122,55 @@ actor WorkerDaemon {
     }
 }
 
-private func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory: URL) throws {
+/// Returns the free space (megabytes) reported by the filesystem holding
+/// `path`. Returns nil only if the OS refuses to answer; callers should
+/// treat that as "skip the precheck and let downstream errors surface".
+func freeSpaceMB(at path: URL) -> Int? {
+    guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path.path),
+          let free = attrs[.systemFreeSize] as? NSNumber else {
+        return nil
+    }
+    return Int(truncating: free) / (1024 * 1024)
+}
+
+/// Walks `directory` (skipping hidden files) and sums the size of every
+/// regular file. Returns nil if the directory doesn't exist or can't be
+/// enumerated — useful so telemetry can distinguish "0 bytes" (empty
+/// workspace) from "couldn't measure" (cleanup already ran, etc.). Used
+/// as a proxy for a job's peak workspace footprint — accurate enough for
+/// the monotonically-growing workDir we care about.
+func directorySizeBytes(at directory: URL) -> Int? {
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+          isDirectory.boolValue else {
+        return nil
+    }
     guard let enumerator = FileManager.default.enumerator(
-        at: sourceDirectory,
+        at: directory,
+        includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+        options: [.skipsHiddenFiles]
+    ) else {
+        return nil
+    }
+    var total: Int = 0
+    for case let url as URL in enumerator {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              let size = values.fileSize else { continue }
+        total += size
+    }
+    return total
+}
+
+private func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory: URL) throws {
+    // Resolve symlinks once on the source root so that the prefix comparison
+    // below works even when callers pass paths through `/var` vs `/private/var`
+    // (macOS) or otherwise-aliased mounts.
+    let sourceRoot = sourceDirectory.resolvingSymlinksInPath().standardizedFileURL
+    let sourceRootComponents = sourceRoot.pathComponents
+
+    guard let enumerator = FileManager.default.enumerator(
+        at: sourceRoot,
         includingPropertiesForKeys: [.isRegularFileKey],
         options: [.skipsHiddenFiles]
     ) else {
@@ -1040,8 +1180,21 @@ private func mergeDirectoryContents(from sourceDirectory: URL, into destinationD
     for case let sourceURL as URL in enumerator {
         let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey])
         guard values.isRegularFile == true else { continue }
-        let relativePath = sourceURL.path.replacingOccurrences(of: sourceDirectory.path + "/", with: "")
-        let destinationURL = destinationDirectory.appendingPathComponent(relativePath)
+
+        let resolved = sourceURL.resolvingSymlinksInPath().standardizedFileURL
+        let entryComponents = resolved.pathComponents
+        guard entryComponents.count > sourceRootComponents.count,
+              Array(entryComponents.prefix(sourceRootComponents.count)) == sourceRootComponents else {
+            // Enumerator handed us something outside the source root — skip
+            // rather than write to an unintended destination.
+            continue
+        }
+        let relativeComponents = Array(entryComponents.dropFirst(sourceRootComponents.count))
+
+        var destinationURL = destinationDirectory
+        for component in relativeComponents {
+            destinationURL.appendPathComponent(component)
+        }
         try FileManager.default.createDirectory(
             at: destinationURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -1154,6 +1307,7 @@ enum WorkerDaemonError: Error, LocalizedError {
     case httpDownloadFailure(statusCode: Int, body: String)
     case unzipFailed(URL)
     case makeFailed(String?)
+    case insufficientDiskSpace(path: String, freeMB: Int, requiredMB: Int)
 
     var errorDescription: String? {
         switch self {
@@ -1162,6 +1316,8 @@ enum WorkerDaemonError: Error, LocalizedError {
             return "HTTP \(statusCode) while downloading artifacts: \(body)"
         case .unzipFailed(let url):     return "Failed to unzip \(url.lastPathComponent)"
         case .makeFailed(let target):   return "make \(target ?? "") failed"
+        case .insufficientDiskSpace(let path, let freeMB, let requiredMB):
+            return "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
         }
     }
 }

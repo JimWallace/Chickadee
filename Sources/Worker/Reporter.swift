@@ -19,27 +19,30 @@ struct Reporter: Sendable {
     private let signer: WorkerRequestSigner
     private let heartbeatRetryPolicy: RunnerRetryPolicy
     private let resultUploadRetryPolicy: RunnerRetryPolicy
+    private let session: URLSession
 
     init(
         apiBaseURL: URL,
         workerID: String,
         workerSecret: String,
         heartbeatRetryPolicy: RunnerRetryPolicy = .heartbeat(),
-        resultUploadRetryPolicy: RunnerRetryPolicy = .resultUpload()
+        resultUploadRetryPolicy: RunnerRetryPolicy = .resultUpload(),
+        session: URLSession = Reporter.defaultSession()
     ) {
         self.apiBaseURL = apiBaseURL
         self.workerID   = workerID
         self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.heartbeatRetryPolicy = heartbeatRetryPolicy
         self.resultUploadRetryPolicy = resultUploadRetryPolicy
+        self.session = session
     }
 
-    private static let session: URLSession = {
+    static func defaultSession() -> URLSession {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest  = 30
         cfg.timeoutIntervalForResource = 60
         return URLSession(configuration: cfg)
-    }()
+    }
 
     func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/results")
@@ -110,7 +113,7 @@ struct Reporter: Sendable {
                 ])
             }
         ) {
-            let result = await Self.attemptReport(request: request, expectedStatus: 200)
+            let result = await Self.attemptReport(session: session, request: request, expectedStatus: 200)
             switch result {
             case .success:
                 return ()
@@ -135,10 +138,10 @@ extension Reporting {
 }
 
 private extension Reporter {
-    static func attemptReport(request: URLRequest, expectedStatus: Int) async -> Result<Void, ReporterError> {
+    static func attemptReport(session: URLSession, request: URLRequest, expectedStatus: Int) async -> Result<Void, ReporterError> {
         let data: Data
         let response: URLResponse
-        do { (data, response) = try await Self.session.data(for: request) }
+        do { (data, response) = try await session.data(for: request) }
         catch { return .failure(.transportError(error)) }
         guard let http = response as? HTTPURLResponse else { return .failure(.unexpectedResponse) }
         guard http.statusCode == expectedStatus else {
