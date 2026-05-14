@@ -17,9 +17,9 @@ import Foundation
 actor TestSetupCache {
 
     static let defaultMaxEntries = 16
-    static let defaultCacheRoot  = URL(fileURLWithPath: "/tmp/chickadee-runner-cache")
+    static let defaultCacheRoot = URL(fileURLWithPath: "/tmp/chickadee-runner-cache")
 
-    private let cacheRoot:  URL
+    private let cacheRoot: URL
     private let maxEntries: Int
 
     /// LRU order — index 0 is least-recently-used, last is most-recently-used.
@@ -29,10 +29,10 @@ actor TestSetupCache {
     private var inProgress: [String: Task<URL, Error>] = [:]
 
     init(
-        cacheRoot:  URL = TestSetupCache.defaultCacheRoot,
+        cacheRoot: URL = TestSetupCache.defaultCacheRoot,
         maxEntries: Int = TestSetupCache.defaultMaxEntries
     ) {
-        self.cacheRoot  = cacheRoot
+        self.cacheRoot = cacheRoot
         self.maxEntries = maxEntries
     }
 
@@ -60,17 +60,21 @@ actor TestSetupCache {
         // ── Cache hit ────────────────────────────────────────────────────────
         if FileManager.default.fileExists(atPath: preparedDir.path) {
             touchLRU(key: testSetupID)
-            writeStructuredRunnerLog(event: "test_setup_cache_hit", fields: [
-                "test_setup_id": testSetupID,
-            ])
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_hit",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
             return try copyToScratch(source: preparedDir, label: testSetupID)
         }
 
         // ── Already populating — await in-flight task ─────────────────────
         if let task = inProgress[testSetupID] {
-            writeStructuredRunnerLog(event: "test_setup_cache_await_in_progress", fields: [
-                "test_setup_id": testSetupID,
-            ])
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_await_in_progress",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
             let populated = try await task.value
             // Another caller may have already registered this key in lruKeys;
             // touchLRU is idempotent and safe to call from any code path.
@@ -79,11 +83,13 @@ actor TestSetupCache {
         }
 
         // ── Cache miss — start population ────────────────────────────────────
-        writeStructuredRunnerLog(event: "test_setup_cache_miss", fields: [
-            "test_setup_id": testSetupID,
-        ])
+        writeStructuredRunnerLog(
+            event: "test_setup_cache_miss",
+            fields: [
+                "test_setup_id": testSetupID
+            ])
 
-        let cacheRoot   = self.cacheRoot          // capture value type, not actor ref
+        let cacheRoot = self.cacheRoot  // capture value type, not actor ref
         let populateTask = Task<URL, Error> {
             let stagingDir = try await populate()
             return try Self.commit(stagingDir: stagingDir, testSetupID: testSetupID, cacheRoot: cacheRoot)
@@ -98,17 +104,21 @@ actor TestSetupCache {
             // never evict unnecessarily or double-register.
             evictIfNeededForNew(key: testSetupID)
             touchLRU(key: testSetupID)
-            writeStructuredRunnerLog(event: "test_setup_cache_populated", fields: [
-                "test_setup_id": testSetupID,
-            ])
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_populated",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
             return try copyToScratch(source: populated, label: testSetupID)
         } catch {
             inProgress.removeValue(forKey: testSetupID)
             cleanupPartialEntry(testSetupID: testSetupID)
-            writeStructuredRunnerLog(event: "test_setup_cache_populate_failed", fields: [
-                "test_setup_id":         testSetupID,
-                "error_message_summary": String(describing: error),
-            ])
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_populate_failed",
+                fields: [
+                    "test_setup_id": testSetupID,
+                    "error_message_summary": String(describing: error),
+                ])
             throw error
         }
     }
@@ -134,16 +144,20 @@ actor TestSetupCache {
             let evictedRoot = cacheRoot.appendingPathComponent(evicted)
             do {
                 try FileManager.default.removeItem(at: evictedRoot)
-                writeStructuredRunnerLog(event: "test_setup_cache_evicted", fields: [
-                    "test_setup_id": evicted,
-                ])
+                writeStructuredRunnerLog(
+                    event: "test_setup_cache_evicted",
+                    fields: [
+                        "test_setup_id": evicted
+                    ])
             } catch {
-                writeStructuredRunnerLog(event: "test_setup_cache_evict_failed", fields: [
-                    "test_setup_id": evicted,
-                    "path": evictedRoot.path,
-                    "error_type": String(describing: type(of: error)),
-                    "error_message_summary": error.localizedDescription,
-                ])
+                writeStructuredRunnerLog(
+                    event: "test_setup_cache_evict_failed",
+                    fields: [
+                        "test_setup_id": evicted,
+                        "path": evictedRoot.path,
+                        "error_type": String(describing: type(of: error)),
+                        "error_message_summary": error.localizedDescription,
+                    ])
             }
         }
     }
@@ -176,9 +190,9 @@ actor TestSetupCache {
     /// Uses a `<testSetupID>.tmp` intermediate to ensure the final entry is
     /// never partially visible.
     private static func commit(stagingDir: URL, testSetupID: String, cacheRoot: URL) throws -> URL {
-        let tmpRoot     = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
+        let tmpRoot = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
         let tmpPrepared = tmpRoot.appendingPathComponent("prepared")
-        let entryRoot   = cacheRoot.appendingPathComponent(testSetupID)
+        let entryRoot = cacheRoot.appendingPathComponent(testSetupID)
         let preparedDir = entryRoot.appendingPathComponent("prepared")
 
         // Remove any leftover from a previous failed attempt.
@@ -198,7 +212,7 @@ actor TestSetupCache {
     /// Remove any partial cache artefacts left by a failed population.
     private func cleanupPartialEntry(testSetupID: String) {
         let entryRoot = cacheRoot.appendingPathComponent(testSetupID)
-        let tmpRoot   = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
+        let tmpRoot = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
         try? FileManager.default.removeItem(at: entryRoot)
         try? FileManager.default.removeItem(at: tmpRoot)
     }

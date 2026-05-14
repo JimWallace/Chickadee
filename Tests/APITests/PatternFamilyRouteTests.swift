@@ -4,12 +4,13 @@
 // the full round-trip: PUT a family list, GET reads it back, raw-script
 // endpoints reject edits of generated files.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class PatternFamilyRouteTests: XCTestCase {
 
@@ -66,7 +67,7 @@ final class PatternFamilyRouteTests: XCTestCase {
         zip.currentDirectoryURL = root
         zip.arguments = ["-q", "-r", zipPath, "."]
         zip.standardOutput = Pipe()
-        zip.standardError  = Pipe()
+        zip.standardError = Pipe()
         try zip.run()
         zip.waitUntilExit()
         XCTAssertEqual(zip.terminationStatus, 0)
@@ -96,13 +97,16 @@ final class PatternFamilyRouteTests: XCTestCase {
     func testGetFamilies_emptyByDefault() async throws {
         let id = try await makeAssignment()
         let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
-        try await app.asyncTest(.GET, "/instructor/\(id)/families", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = res.body.string
-            XCTAssertEqual(body, "[]")
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/families",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = res.body.string
+                XCTAssertEqual(body, "[]")
+            })
     }
 
     func testPutFamilies_acceptsValidSpecAndRendersScripts() async throws {
@@ -110,25 +114,31 @@ final class PatternFamilyRouteTests: XCTestCase {
         let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(.PUT, "/instructor/\(id)/families", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: sampleFamilyJSON())
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            // Response echoes the applied list.
-            XCTAssertTrue(res.body.string.contains("bmi_category"))
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/families",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: sampleFamilyJSON())
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                // Response echoes the applied list.
+                XCTAssertTrue(res.body.string.contains("bmi_category"))
+            })
 
         // Confirm via GET that state is persistent.
-        try await app.asyncTest(.GET, "/instructor/\(id)/families", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue(res.body.string.contains("\"id\":\"bmi_category\""))
-            XCTAssertTrue(res.body.string.contains("\"key\":\"01\""))
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/families",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertTrue(res.body.string.contains("\"id\":\"bmi_category\""))
+                XCTAssertTrue(res.body.string.contains("\"key\":\"01\""))
+            })
 
         // The zip now contains the generated .py files.
         let assignment = try await APIAssignment.query(on: app.db)
@@ -145,19 +155,22 @@ final class PatternFamilyRouteTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
         let bad = #"""
-        [{"id":"f","name":"f","kind":"boundary_equality","functionName":"2bad",
-          "paramNames":["x"],"defaults":{"tier":"public","points":1},
-          "cases":[{"key":"01","label":"a","args":[1],"expected":1}]}]
-        """#
+            [{"id":"f","name":"f","kind":"boundary_equality","functionName":"2bad",
+              "paramNames":["x"],"defaults":{"tier":"public","points":1},
+              "cases":[{"key":"01","label":"a","args":[1],"expected":1}]}]
+            """#
 
-        try await app.asyncTest(.PUT, "/instructor/\(id)/families", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: bad)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unprocessableEntity)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/families",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: bad)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .unprocessableEntity)
+            })
     }
 
     func testPutFamilies_studentCannotEdit() async throws {
@@ -165,16 +178,20 @@ final class PatternFamilyRouteTests: XCTestCase {
         let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: studentCookie, on: app)
 
-        try await app.asyncTest(.PUT, "/instructor/\(id)/families", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: sampleFamilyJSON())
-        }, afterResponse: { res in
-            // Students are blocked at the role middleware before the handler runs.
-            XCTAssertTrue(res.status == .forbidden || res.status == .seeOther || res.status == .notFound,
-                          "Expected forbidden/redirect for student PUT, got \(res.status)")
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/families",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: sampleFamilyJSON())
+            },
+            afterResponse: { res in
+                // Students are blocked at the role middleware before the handler runs.
+                XCTAssertTrue(
+                    res.status == .forbidden || res.status == .seeOther || res.status == .notFound,
+                    "Expected forbidden/redirect for student PUT, got \(res.status)")
+            })
     }
 
     func testPutScript_rejectsEditOfGeneratedFile() async throws {
@@ -183,14 +200,17 @@ final class PatternFamilyRouteTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
         // First, create a family so the zip has a generated file.
-        try await app.asyncTest(.PUT, "/instructor/\(id)/families", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: sampleFamilyJSON())
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/families",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: sampleFamilyJSON())
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         // Attempting to edit a generated file via the raw-script endpoint must fail.
         try await app.asyncTest(
@@ -201,10 +221,12 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 try req.content.encode(["content": "# tampered\npassed('x')\n"])
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .conflict)
-                XCTAssertTrue(res.body.string.contains("Edit the family"),
-                              "Expected hint to edit the family, got: \(res.body.string)")
+                XCTAssertTrue(
+                    res.body.string.contains("Edit the family"),
+                    "Expected hint to edit the family, got: \(res.body.string)")
             })
 
         // Deleting via the raw endpoint must also fail.
@@ -214,7 +236,8 @@ final class PatternFamilyRouteTests: XCTestCase {
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .conflict)
             })
     }

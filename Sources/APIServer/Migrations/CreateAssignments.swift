@@ -16,23 +16,23 @@ struct CreateAssignments: AsyncMigration {
                 .required,
                 .references("test_setups", "id", onDelete: .cascade)
             )
-            .field("title",         .string,   .required)
-            .field("due_at",        .datetime)
-            .field("is_open",       .bool,     .required)
+            .field("title", .string, .required)
+            .field("due_at", .datetime)
+            .field("is_open", .bool, .required)
             .field("validation_status", .string)
             .field(
                 "validation_submission_id",
                 .string,
                 .references("submissions", "id", onDelete: .setNull)
             )
-            .field("sort_order",    .int)
+            .field("sort_order", .int)
             .field(
                 "course_id",
                 .uuid,
                 .required,
                 .references("courses", "id", onDelete: .cascade)
             )
-            .field("created_at",    .datetime)
+            .field("created_at", .datetime)
             .unique(on: "public_id")
             .unique(on: "test_setup_id")
             .create()

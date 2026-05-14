@@ -3,10 +3,10 @@
 // Notebook-related handlers and helpers for WebRoutes.
 // Extracted from WebRoutes.swift — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 enum NotebookFileKind: String {
     case assignment
@@ -78,15 +78,17 @@ extension WebRoutes {
                 userID: userID,
                 fallbackSetup: setup,
                 relativePath: submissionRelativePath,
-                overwriteWith: notebookData   // always overwrite — we want the exact submission
+                overwriteWith: notebookData  // always overwrite — we want the exact submission
             )
-            let encodedPath = submissionRelativePath
+            let encodedPath =
+                submissionRelativePath
                 .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
                 ?? submissionRelativePath
             let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
             let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
             let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
-            let submissionViewAbsPath = req.application.directory.publicDirectory
+            let submissionViewAbsPath =
+                req.application.directory.publicDirectory
                 + "jupyterlite/files/" + submissionRelativePath
             let manifestGradingMode: String = {
                 let data = Data(setup.manifest.utf8)
@@ -95,15 +97,16 @@ extension WebRoutes {
                 }
                 return manifest.gradingMode.rawValue
             }()
-            return try await req.view.render("notebook",
+            return try await req.view.render(
+                "notebook",
                 NotebookContext(
                     testSetupID: setupID,
                     assignmentTitle: assignmentTitle,
                     notebookURL: notebookURL,
                     jupyterLiteEditorURL: editorURL,
-                    downloadURL: nil,           // download link lives on the submission page
+                    downloadURL: nil,  // download link lives on the submission page
                     gradingMode: manifestGradingMode,
-                    showSubmit: false,          // read-only view
+                    showSubmit: false,  // read-only view
                     isClosed: isClosed,
                     workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                     currentUser: req.currentUserContext
@@ -129,20 +132,23 @@ extension WebRoutes {
                 fallbackSetup: setup
             )
         }
-        let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
-        let encodedPath = jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(
+            setupID: setupID, userID: userID, fileKind: fileKind)
+        let encodedPath =
+            jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
             ?? jupyterLiteNotebookPath
         let workspaceID = "\(setupID)-\(userSlug)-\(fileKind.rawValue)"
         let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
-        let notebookURL = switch fileKind {
+        let notebookURL =
+            switch fileKind {
             case .assignment: "/testsetups/\(setupID)/notebook/source"
-            case .solution:   "/testsetups/\(setupID)/notebook/source?file=solution"
-        }
+            case .solution: "/testsetups/\(setupID)/notebook/source?file=solution"
+            }
         let downloadURL: String? = {
             guard let assignment else { return nil }
             return switch fileKind {
-                case .assignment: "/api/v1/testsetups/\(setupID)/assignment/download"
-                case .solution:   "/instructor/\(assignment.publicID)/files/solution"
+            case .assignment: "/api/v1/testsetups/\(setupID)/assignment/download"
+            case .solution: "/instructor/\(assignment.publicID)/files/solution"
             }
         }()
 
@@ -156,9 +162,11 @@ extension WebRoutes {
             return manifest.gradingMode.rawValue
         }()
 
-        let workingCopyAbsPath = req.application.directory.publicDirectory
+        let workingCopyAbsPath =
+            req.application.directory.publicDirectory
             + "jupyterlite/files/" + jupyterLiteNotebookPath
-        return try await req.view.render("notebook",
+        return try await req.view.render(
+            "notebook",
             NotebookContext(
                 testSetupID: setupID,
                 assignmentTitle: assignmentTitle,
@@ -215,11 +223,12 @@ extension WebRoutes {
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
-        let defaultData: Data? = if fileKind == .solution {
-            try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
-        } else {
-            nil
-        }
+        let defaultData: Data? =
+            if fileKind == .solution {
+                try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            } else {
+                nil
+            }
 
         let payload = try await ensureUserNotebookWorkingCopy(
             req: req,
@@ -275,7 +284,7 @@ func userNotebookWorkingCopyAbsolutePath(req: Request, setupID: String, userID: 
 /// reset) and force-reseed.
 func workingCopyMtimeEpoch(absolutePath: String) -> Int {
     guard let attrs = try? FileManager.default.attributesOfItem(atPath: absolutePath),
-          let mtime = attrs[.modificationDate] as? Date
+        let mtime = attrs[.modificationDate] as? Date
     else {
         return 0
     }
@@ -293,7 +302,8 @@ func ensureUserNotebookWorkingCopy(
 ) async throws -> Data {
     let fileManager = FileManager.default
     let resolvedRelativePath = relativePath ?? userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
-    let workingCopyPath = req.application.directory.publicDirectory
+    let workingCopyPath =
+        req.application.directory.publicDirectory
         + "jupyterlite/files/"
         + resolvedRelativePath
     let workingCopyDir = (workingCopyPath as NSString).deletingLastPathComponent
@@ -307,8 +317,9 @@ func ensureUserNotebookWorkingCopy(
     }
 
     if let existingData = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
-       !existingData.isEmpty,
-       (try? JSONSerialization.jsonObject(with: existingData)) != nil {
+        !existingData.isEmpty,
+        (try? JSONSerialization.jsonObject(with: existingData)) != nil
+    {
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
         createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
@@ -316,16 +327,17 @@ func ensureUserNotebookWorkingCopy(
         return existingData
     }
 
-    let seedData = if let defaultData {
-        defaultData
-    } else {
-        try await latestNotebookSubmissionData(
-            req: req,
-            setupID: setupID,
-            userID: userID,
-            fallbackSetup: fallbackSetup
-        ).data
-    }
+    let seedData =
+        if let defaultData {
+            defaultData
+        } else {
+            try await latestNotebookSubmissionData(
+                req: req,
+                setupID: setupID,
+                userID: userID,
+                fallbackSetup: fallbackSetup
+            ).data
+        }
 
     // Slice 1 + Slice 2 + Slice 4: substitute `{{name}}` placeholders in
     // the starter notebook.  Slice 5: the evaluator can now import
@@ -371,8 +383,10 @@ private func applyNotebookSubstitutionsIfNeeded(
     logger: Logger
 ) async -> Data {
     guard let manifestData = setup.manifest.data(using: .utf8),
-          let manifest = try? ManifestCodec.decoder.decode(TestProperties.self,
-                                                          from: manifestData) else {
+        let manifest = try? ManifestCodec.decoder.decode(
+            TestProperties.self,
+            from: manifestData)
+    else {
         return seedData
     }
     // Combined static name pool — same precedence rules the runner sees.
@@ -396,10 +410,11 @@ private func applyNotebookSubstitutionsIfNeeded(
     }
     if !allExpressions.isEmpty {
         do {
-            guard let assignment = try await APIAssignment.query(on: db)
-                .filter(\.$testSetupID == setup.id!)
-                .first(),
-                  let assignmentID = assignment.id
+            guard
+                let assignment = try await APIAssignment.query(on: db)
+                    .filter(\.$testSetupID == setup.id!)
+                    .first(),
+                let assignmentID = assignment.id
             else {
                 logger.warning("No assignment found for setup \(setup.id ?? "<nil>"); skipping expression eval.")
                 return try applySubstitutions(seedData, substitutions: substitutions, setup: setup, logger: logger)
@@ -423,15 +438,18 @@ private func applyNotebookSubstitutionsIfNeeded(
                 substitutions[name] = literal
             }
         } catch {
-            let msg = "Personalization evaluator failed for setup \(setup.id ?? "<nil>"): \(error). " +
-                      "Notebook will be substituted with literal values only."
+            let msg =
+                "Personalization evaluator failed for setup \(setup.id ?? "<nil>"): \(error). "
+                + "Notebook will be substituted with literal values only."
             logger.warning(Logger.Message(stringLiteral: msg))
         }
     }
 
     guard !substitutions.isEmpty else { return seedData }
-    return (try? applySubstitutions(seedData, substitutions: substitutions,
-                                     setup: setup, logger: logger)) ?? seedData
+    return
+        (try? applySubstitutions(
+            seedData, substitutions: substitutions,
+            setup: setup, logger: logger)) ?? seedData
 }
 
 private func applySubstitutions(
@@ -444,7 +462,7 @@ private func applySubstitutions(
         return try NotebookSubstitution.apply(
             notebookData: seedData,
             substitutions: substitutions,
-            strict: false   // editor save-time scan is authoritative; soft-fail at runtime
+            strict: false  // editor save-time scan is authoritative; soft-fail at runtime
         )
     } catch {
         logger.warning("Notebook substitution failed for setup \(setup.id ?? "<nil>"): \(error)")
@@ -458,26 +476,29 @@ private func solutionNotebookData(
     db: Database
 ) async throws -> Data {
     if let entryName = listZipEntries(zipPath: setup.zipPath).first(where: { $0.hasPrefix("solution.") }),
-       let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
-       !data.isEmpty {
+        let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
+        !data.isEmpty
+    {
         return normalizeNotebookForJupyterLite(data)
     }
 
     if let validationID = assignment?.validationSubmissionID,
-       let validationSubmission = try await APISubmission.find(validationID, on: db),
-       let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-       !data.isEmpty {
+        let validationSubmission = try await APISubmission.find(validationID, on: db),
+        let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
+        !data.isEmpty
+    {
         return normalizeNotebookForJupyterLite(data)
     }
 
     if let setupID = assignment?.testSetupID,
-       let fallbackSubmission = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.validation)
-        .sort(\.$submittedAt, .descending)
-        .first(),
-       let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-       !data.isEmpty {
+        let fallbackSubmission = try await APISubmission.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.validation)
+            .sort(\.$submittedAt, .descending)
+            .first(),
+        let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
+        !data.isEmpty
+    {
         return normalizeNotebookForJupyterLite(data)
     }
 
@@ -512,7 +533,8 @@ func notebookDataForHistorySelection(
 
     let dataURL = URL(fileURLWithPath: submission.zipPath)
     guard let data = try? Data(contentsOf: dataURL),
-          (try? JSONSerialization.jsonObject(with: data)) != nil else {
+        (try? JSONSerialization.jsonObject(with: data)) != nil
+    else {
         throw Abort(.notFound, reason: "Notebook artifact is unavailable for this submission")
     }
     return normalizeNotebookForJupyterLite(data)
@@ -524,7 +546,7 @@ func removeLegacyUserNotebookCopies(req: Request, userID: UUID) {
         req.application.directory.publicDirectory + "files/",
         req.application.directory.publicDirectory + "jupyterlite/files/",
         req.application.directory.publicDirectory + "jupyterlite/lab/files/",
-        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
+        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/",
     ]
 
     let fileManager = FileManager.default
@@ -542,7 +564,8 @@ func removeLegacyUserNotebookCopies(req: Request, userID: UUID) {
                 continue
             }
             let lower = name.lowercased()
-            let shouldRemove = lower == "assignment.ipynb"
+            let shouldRemove =
+                lower == "assignment.ipynb"
                 || lower == "submission.ipynb"
                 || (lower.hasPrefix("sub_") && lower.hasSuffix(".ipynb"))
             guard shouldRemove else { continue }
@@ -571,7 +594,8 @@ func latestNotebookSubmissionData(
             continue
         }
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: submission.zipPath)),
-              (try? JSONSerialization.jsonObject(with: data)) != nil else {
+            (try? JSONSerialization.jsonObject(with: data)) != nil
+        else {
             continue
         }
         return (data, submission.filename)
@@ -599,7 +623,7 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     // Derive the list of support files: everything in the zip except test suite scripts
     // and the canonical notebooks.
     guard let manifestData = setup.manifest.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
     else { return }
 
     let testScriptNames = Set(props.testSuites.map { $0.script })
@@ -614,10 +638,10 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     let fm = FileManager.default
 
     for name in supportNames {
-        let src  = sharedDir + name
+        let src = sharedDir + name
         let dest = studentDir + "/" + name
-        guard !fm.fileExists(atPath: dest) else { continue }   // idempotent
-        guard  fm.fileExists(atPath: src)  else { continue }   // skip if not yet extracted
+        guard !fm.fileExists(atPath: dest) else { continue }  // idempotent
+        guard fm.fileExists(atPath: src) else { continue }  // skip if not yet extracted
         try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
     }
 }

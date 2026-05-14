@@ -33,11 +33,11 @@ struct COEPMiddleware: AsyncMiddleware {
         let response = try await next.respond(to: request)
         guard needsCOEP(path: request.url.path) else { return response }
         response.headers.replaceOrAdd(
-            name:  "Cross-Origin-Opener-Policy",
+            name: "Cross-Origin-Opener-Policy",
             value: "same-origin"
         )
         response.headers.replaceOrAdd(
-            name:  "Cross-Origin-Embedder-Policy",
+            name: "Cross-Origin-Embedder-Policy",
             value: "require-corp"
         )
         return response

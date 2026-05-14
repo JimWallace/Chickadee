@@ -6,14 +6,15 @@
 // auto-retest dedup key.  Extracted from AssignmentHelpers.swift
 // (issue #442) — no behaviour changes.
 
-import Vapor
 import Core
 import Foundation
+import Vapor
 
 /// Returns the scripts in the manifest that list `filename` in their `dependsOn`.
 func manifestDependents(manifestJSON: String, filename: String) -> [String] {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         return []
     }
     return props.testSuites
@@ -27,7 +28,8 @@ func manifestDependents(manifestJSON: String, filename: String) -> [String] {
 /// that must instead go through the family editor.
 func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         return nil
     }
     return props.testSuites.first(where: { $0.script == filename })?.generatedBy
@@ -38,7 +40,7 @@ func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
 /// to refuse saving an empty suite.
 func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
     else { return false }
     return !props.testSuites.isEmpty
 }
@@ -52,7 +54,8 @@ func updateManifestAddingScript(
     entry: ConfiguredSuiteEntry
 ) -> String? {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         return nil
     }
     let existing = props.testSuites.enumerated().map { idx, e in
@@ -91,7 +94,8 @@ func updateManifestAddingScript(
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
     guard let data = manifestJSON.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         return nil
     }
     let updated = props.testSuites
@@ -160,7 +164,7 @@ func makeWorkerManifestJSON(
         "requiredFiles": [],
         "testSuites": testSuiteJSON,
         "timeLimitSeconds": 10,
-        "makefile": includeMakefile ? ["target": NSNull()] : NSNull()
+        "makefile": includeMakefile ? ["target": NSNull()] : NSNull(),
     ]
     if let starterNotebook {
         manifest["starterNotebook"] = starterNotebook
@@ -241,14 +245,14 @@ func makeWorkerManifestJSON(
 /// Regression guard: `testApply_familyWithDependencyStaysInlineAfterPrereq`
 /// (v0.4.95).
 private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [ConfiguredSuiteEntry] {
-    var inDegree:   [String: Int] = [:]
+    var inDegree: [String: Int] = [:]
     var dependents: [String: [String]] = [:]
-    var byScript:   [String: ConfiguredSuiteEntry] = [:]
-    var origIdx:    [String: Int] = [:]
+    var byScript: [String: ConfiguredSuiteEntry] = [:]
+    var origIdx: [String: Int] = [:]
 
     for (i, entry) in entries.enumerated() {
         byScript[entry.script] = entry
-        origIdx[entry.script]  = i
+        origIdx[entry.script] = i
         inDegree[entry.script, default: 0] += 0
         for dep in entry.dependsOn {
             dependents[dep, default: []].append(entry.script)
@@ -265,9 +269,11 @@ private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [Configur
         // Pop the ready node with the smallest authored index — that's
         // what keeps a family in-line with its prereq rather than
         // letting downstream no-dep scripts jump ahead of it.
-        guard let nodeName = ready.min(by: {
-            (origIdx[$0] ?? 0) < (origIdx[$1] ?? 0)
-        }), let entry = byScript[nodeName] else { break }
+        guard
+            let nodeName = ready.min(by: {
+                (origIdx[$0] ?? 0) < (origIdx[$1] ?? 0)
+            }), let entry = byScript[nodeName]
+        else { break }
         ready.remove(nodeName)
         result.append(entry)
         for dependent in dependents[nodeName] ?? [] {

@@ -1,6 +1,7 @@
-import Crypto
 import Core
+import Crypto
 import Foundation
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -38,17 +39,17 @@ struct WorkerRequestSigner: Sendable {
     }
 
     private func applySignature(to request: inout URLRequest, timestamp: Int64, nonce: String) {
-        let method   = (request.httpMethod ?? "GET").uppercased()
-        let path     = request.url?.path ?? "/"
+        let method = (request.httpMethod ?? "GET").uppercased()
+        let path = request.url?.path ?? "/"
         let bodyBytes = request.httpBody.map { Array($0) } ?? []
 
-        let tsString  = String(timestamp)
-        let bodyHash  = sha256HexDigest(Data(bodyBytes))
-        let payload   = [method, path, bodyHash, tsString, nonce].joined(separator: "\n")
+        let tsString = String(timestamp)
+        let bodyHash = sha256HexDigest(Data(bodyBytes))
+        let payload = [method, path, bodyHash, tsString, nonce].joined(separator: "\n")
         let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
 
         request.setValue(tsString, forHTTPHeaderField: "X-Worker-Timestamp")
-        request.setValue(nonce,    forHTTPHeaderField: "X-Worker-Nonce")
+        request.setValue(nonce, forHTTPHeaderField: "X-Worker-Nonce")
         request.setValue(bodyHash, forHTTPHeaderField: "X-Worker-Body-SHA256")
         request.setValue(signature, forHTTPHeaderField: "X-Worker-Signature")
         if let workerID, !workerID.isEmpty {

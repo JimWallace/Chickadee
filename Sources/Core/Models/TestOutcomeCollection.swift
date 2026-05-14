@@ -6,7 +6,7 @@ import Foundation
 public enum BuildStatus: String, Codable, Sendable {
     case passed
     case failed
-    case skipped   // e.g. download-only mode during development
+    case skipped  // e.g. download-only mode during development
 }
 
 /// The complete result for one submission run.
@@ -19,7 +19,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
 
     // MARK: - Build
     public let buildStatus: BuildStatus
-    public let compilerOutput: String?    // nil if build succeeded
+    public let compilerOutput: String?  // nil if build succeeded
 
     // MARK: - Test outcomes
     // Empty if buildStatus == .failed
@@ -31,7 +31,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
     public let failCount: Int
     public let errorCount: Int
     public let timeoutCount: Int
-    public let executionTimeMs: Int       // wall time for the full run
+    public let executionTimeMs: Int  // wall time for the full run
 
     // MARK: - Weighted grade stats
     /// Sum of `points` for all outcomes. Equals `totalTests` when all weights are 1.
@@ -42,7 +42,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
     // MARK: - Metadata
     public let warnings: [String]
     public let jobStartedAt: Date?
-    public let runnerVersion: String      // e.g. "shell-runner/1.0"
+    public let runnerVersion: String  // e.g. "shell-runner/1.0"
     public let timestamp: Date
 
     public init(
@@ -65,47 +65,47 @@ public struct TestOutcomeCollection: Codable, Sendable {
         runnerVersion: String,
         timestamp: Date
     ) {
-        self.submissionID    = submissionID
-        self.testSetupID     = testSetupID
-        self.attemptNumber   = attemptNumber
-        self.buildStatus     = buildStatus
-        self.compilerOutput  = compilerOutput
-        self.outcomes        = outcomes
-        self.totalTests      = totalTests
-        self.passCount       = passCount
-        self.failCount       = failCount
-        self.errorCount      = errorCount
-        self.timeoutCount    = timeoutCount
+        self.submissionID = submissionID
+        self.testSetupID = testSetupID
+        self.attemptNumber = attemptNumber
+        self.buildStatus = buildStatus
+        self.compilerOutput = compilerOutput
+        self.outcomes = outcomes
+        self.totalTests = totalTests
+        self.passCount = passCount
+        self.failCount = failCount
+        self.errorCount = errorCount
+        self.timeoutCount = timeoutCount
         self.executionTimeMs = executionTimeMs
-        self.totalPoints     = totalPoints  ?? totalTests
-        self.earnedPoints    = earnedPoints ?? passCount
-        self.warnings        = warnings
-        self.jobStartedAt    = jobStartedAt
-        self.runnerVersion   = runnerVersion
-        self.timestamp       = timestamp
+        self.totalPoints = totalPoints ?? totalTests
+        self.earnedPoints = earnedPoints ?? passCount
+        self.warnings = warnings
+        self.jobStartedAt = jobStartedAt
+        self.runnerVersion = runnerVersion
+        self.timestamp = timestamp
     }
 
     // Custom decoder so old records without totalPoints/earnedPoints fall back
     // to totalTests/passCount, preserving correct grade display for existing results.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        submissionID    = try c.decode(String.self,        forKey: .submissionID)
-        testSetupID     = try c.decode(String.self,        forKey: .testSetupID)
-        attemptNumber   = try c.decode(Int.self,           forKey: .attemptNumber)
-        buildStatus     = try c.decode(BuildStatus.self,   forKey: .buildStatus)
-        compilerOutput  = try c.decodeIfPresent(String.self, forKey: .compilerOutput)
-        outcomes        = try c.decode([TestOutcome].self, forKey: .outcomes)
-        totalTests      = try c.decode(Int.self,           forKey: .totalTests)
-        passCount       = try c.decode(Int.self,           forKey: .passCount)
-        failCount       = try c.decode(Int.self,           forKey: .failCount)
-        errorCount      = try c.decode(Int.self,           forKey: .errorCount)
-        timeoutCount    = try c.decode(Int.self,           forKey: .timeoutCount)
-        executionTimeMs = try c.decode(Int.self,           forKey: .executionTimeMs)
-        totalPoints     = try c.decodeIfPresent(Int.self,  forKey: .totalPoints)  ?? totalTests
-        earnedPoints    = try c.decodeIfPresent(Int.self,  forKey: .earnedPoints) ?? passCount
-        warnings        = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
-        jobStartedAt    = try c.decodeIfPresent(Date.self, forKey: .jobStartedAt)
-        runnerVersion   = try c.decode(String.self,        forKey: .runnerVersion)
-        timestamp       = try c.decode(Date.self,          forKey: .timestamp)
+        submissionID = try c.decode(String.self, forKey: .submissionID)
+        testSetupID = try c.decode(String.self, forKey: .testSetupID)
+        attemptNumber = try c.decode(Int.self, forKey: .attemptNumber)
+        buildStatus = try c.decode(BuildStatus.self, forKey: .buildStatus)
+        compilerOutput = try c.decodeIfPresent(String.self, forKey: .compilerOutput)
+        outcomes = try c.decode([TestOutcome].self, forKey: .outcomes)
+        totalTests = try c.decode(Int.self, forKey: .totalTests)
+        passCount = try c.decode(Int.self, forKey: .passCount)
+        failCount = try c.decode(Int.self, forKey: .failCount)
+        errorCount = try c.decode(Int.self, forKey: .errorCount)
+        timeoutCount = try c.decode(Int.self, forKey: .timeoutCount)
+        executionTimeMs = try c.decode(Int.self, forKey: .executionTimeMs)
+        totalPoints = try c.decodeIfPresent(Int.self, forKey: .totalPoints) ?? totalTests
+        earnedPoints = try c.decodeIfPresent(Int.self, forKey: .earnedPoints) ?? passCount
+        warnings = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
+        jobStartedAt = try c.decodeIfPresent(Date.self, forKey: .jobStartedAt)
+        runnerVersion = try c.decode(String.self, forKey: .runnerVersion)
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
     }
 }

@@ -9,15 +9,15 @@
 //   GET /auth/sso/start     → generate PKCE + state, redirect to IdP authorization URL
 //   GET /auth/sso/callback  → validate state, exchange code, verify ID token, upsert user
 
-import Vapor
-import Fluent
-import JWT
 import Crypto
+import Fluent
 import Foundation
+import JWT
+import Vapor
 
 struct SSOAuthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        routes.get("auth", "sso", "start",    use: ssoStart)
+        routes.get("auth", "sso", "start", use: ssoStart)
         routes.get("auth", "sso", "callback", use: ssoCallback)
         registerConfiguredCallbackRoute(on: routes)
     }
@@ -42,18 +42,18 @@ struct SSOAuthRoutes: RouteCollection {
         let state = Data(stateBytes).base64URLEncoded()
 
         // Persist in session so callback can validate
-        req.session.data["oidc_state"]    = state
+        req.session.data["oidc_state"] = state
         req.session.data["oidc_verifier"] = codeVerifier
 
         // Build the IdP authorization URL
         var components = URLComponents(string: config.discovery.authorizationEndpoint)
         components?.queryItems = [
-            URLQueryItem(name: "client_id",             value: config.clientID),
-            URLQueryItem(name: "response_type",         value: "code"),
-            URLQueryItem(name: "scope",                 value: "openid profile email groups"),
-            URLQueryItem(name: "redirect_uri",          value: config.redirectURI),
-            URLQueryItem(name: "state",                 value: state),
-            URLQueryItem(name: "code_challenge",        value: codeChallenge),
+            URLQueryItem(name: "client_id", value: config.clientID),
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "scope", value: "openid profile email groups"),
+            URLQueryItem(name: "redirect_uri", value: config.redirectURI),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
         ]
 
@@ -83,11 +83,11 @@ struct SSOAuthRoutes: RouteCollection {
 
         // CSRF: validate state matches what we stored in the session
         let returnedState = req.query[String.self, at: "state"] ?? ""
-        let storedState   = req.session.data["oidc_state"] ?? ""
-        let codeVerifier  = req.session.data["oidc_verifier"] ?? ""
+        let storedState = req.session.data["oidc_state"] ?? ""
+        let codeVerifier = req.session.data["oidc_verifier"] ?? ""
 
         // Always clear session values — whether we succeed or fail below
-        req.session.data["oidc_state"]    = nil
+        req.session.data["oidc_state"] = nil
         req.session.data["oidc_verifier"] = nil
 
         guard !returnedState.isEmpty, returnedState == storedState else {
@@ -103,12 +103,14 @@ struct SSOAuthRoutes: RouteCollection {
         // Exchange authorization code for tokens.
         let tokenResponse: OIDCTokenResponse
         do {
-            guard let exchanged = try await exchangeToken(
-                code: code,
-                codeVerifier: codeVerifier,
-                config: config,
-                on: req
-            ) else {
+            guard
+                let exchanged = try await exchangeToken(
+                    code: code,
+                    codeVerifier: codeVerifier,
+                    config: config,
+                    on: req
+                )
+            else {
                 return req.redirect(to: "/login?error=sso_failed")
             }
             tokenResponse = exchanged
@@ -160,7 +162,7 @@ struct SSOAuthRoutes: RouteCollection {
         // - id token:     passed as id_token_hint to end_session_endpoint
         req.session.data["oidc_access_token"] = tokenResponse.accessToken
         req.session.data["oidc_refresh_token"] = tokenResponse.refreshToken
-        req.session.data["oidc_id_token"]     = tokenResponse.idToken
+        req.session.data["oidc_id_token"] = tokenResponse.idToken
 
         // Establish session — identical to local login
         req.auth.login(user)
@@ -212,33 +214,33 @@ struct SSOAuthRoutes: RouteCollection {
             existing.username = username
             existing.preferredName = preferredName ?? existing.preferredName
             existing.userIdentifier = userIdentifier
-            existing.studentID     = studentID ?? existing.studentID
-            existing.email        = email ?? existing.email
-            existing.displayName  = displayName ?? existing.displayName
+            existing.studentID = studentID ?? existing.studentID
+            existing.email = email ?? existing.email
+            existing.displayName = displayName ?? existing.displayName
             if let mappedRole {
                 existing.role = mappedRole
             }
             let now = Date()
-            existing.lastLoginAt  = now
-            existing.lastSeenAt   = now
+            existing.lastLoginAt = now
+            existing.lastSeenAt = now
             try await existing.save(on: req.db)
             return existing
         }
 
         let now = Date()
         let newUser = APIUser(
-            username:        username,
-            passwordHash:    "",            // SSO users have no local password
-            role:            mappedRole ?? "student",
-            authProvider:    "duo-oidc",
+            username: username,
+            passwordHash: "",  // SSO users have no local password
+            role: mappedRole ?? "student",
+            authProvider: "duo-oidc",
             externalSubject: subject,
-            email:           email,
-            preferredName:   preferredName,
-            userIdentifier:  userIdentifier,
-            studentID:       studentID,
-            displayName:     displayName,
-            lastLoginAt:     now,
-            lastSeenAt:      now
+            email: email,
+            preferredName: preferredName,
+            userIdentifier: userIdentifier,
+            studentID: studentID,
+            displayName: displayName,
+            lastLoginAt: now,
+            lastSeenAt: now
         )
         try await newUser.save(on: req.db)
         return newUser
@@ -264,12 +266,13 @@ struct SSOAuthRoutes: RouteCollection {
                     username: config.clientID,
                     password: config.clientSecret
                 )
-                try tokenReq.content.encode([
-                    "grant_type":    "authorization_code",
-                    "code":          code,
-                    "redirect_uri":  config.redirectURI,
-                    "code_verifier": codeVerifier,
-                ] as [String: String], as: .urlEncodedForm)
+                try tokenReq.content.encode(
+                    [
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": config.redirectURI,
+                        "code_verifier": codeVerifier,
+                    ] as [String: String], as: .urlEncodedForm)
             }
             if response.status == .ok {
                 return try response.content.decode(OIDCTokenResponse.self)
@@ -283,14 +286,15 @@ struct SSOAuthRoutes: RouteCollection {
         do {
             let response = try await req.client.post(endpoint) { tokenReq in
                 tokenReq.headers.contentType = .urlEncodedForm
-                try tokenReq.content.encode([
-                    "grant_type":    "authorization_code",
-                    "code":          code,
-                    "redirect_uri":  config.redirectURI,
-                    "client_id":     config.clientID,
-                    "client_secret": config.clientSecret,
-                    "code_verifier": codeVerifier,
-                ] as [String: String], as: .urlEncodedForm)
+                try tokenReq.content.encode(
+                    [
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": config.redirectURI,
+                        "client_id": config.clientID,
+                        "client_secret": config.clientSecret,
+                        "code_verifier": codeVerifier,
+                    ] as [String: String], as: .urlEncodedForm)
             }
             if response.status == .ok {
                 return try response.content.decode(OIDCTokenResponse.self)
@@ -304,13 +308,14 @@ struct SSOAuthRoutes: RouteCollection {
         do {
             let response = try await req.client.post(endpoint) { tokenReq in
                 tokenReq.headers.contentType = .urlEncodedForm
-                try tokenReq.content.encode([
-                    "grant_type":    "authorization_code",
-                    "code":          code,
-                    "redirect_uri":  config.redirectURI,
-                    "client_id":     config.clientID,
-                    "client_secret": config.clientSecret,
-                ] as [String: String], as: .urlEncodedForm)
+                try tokenReq.content.encode(
+                    [
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": config.redirectURI,
+                        "client_id": config.clientID,
+                        "client_secret": config.clientSecret,
+                    ] as [String: String], as: .urlEncodedForm)
             }
             if response.status == .ok {
                 return try response.content.decode(OIDCTokenResponse.self)
@@ -364,7 +369,8 @@ extension SSOAuthRoutes {
             return
         }
 
-        let components = raw
+        let components =
+            raw
             .split(separator: "/")
             .map(String.init)
             .filter { !$0.isEmpty }

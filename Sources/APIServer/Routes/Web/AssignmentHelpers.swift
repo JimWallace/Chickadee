@@ -19,10 +19,10 @@
 // helpers, sort-order allocation, grade-extraction helpers, CSV
 // escaping, and student-ID name inference.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 /// Validates a sectionID string (UUID) against the given course and returns the UUID if valid.
 /// Returns nil for absent, empty, or "none" values (meaning "ungrouped").
@@ -32,7 +32,8 @@ func resolveSectionID(_ raw: String?, courseID: UUID, db: Database) async throws
         throw WebAssignmentError.invalidParameter(name: "sectionID", reason: "Invalid sectionID format.")
     }
     guard let section = try await APICourseSection.find(uuid, on: db),
-          section.courseID == courseID else {
+        section.courseID == courseID
+    else {
         // Section not found or belongs to a different course — silently ignore.
         return nil
     }
@@ -69,7 +70,8 @@ func splitHumanName(_ raw: String?) -> (surname: String, givenNames: String)? {
     if trimmed.contains(",") {
         let parts = trimmed.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
         let surname = String(parts.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let givenNames = parts.count > 1
+        let givenNames =
+            parts.count > 1
             ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
         return (
@@ -134,7 +136,8 @@ func normalizedDeadlineOverrideAfterDueDateChange(
 }
 
 func nextAssignmentSortOrder(req: Request) async throws -> Int {
-    let maxOrder = try await APIAssignment.query(on: req.db)
+    let maxOrder =
+        try await APIAssignment.query(on: req.db)
         .all()
         .compactMap(\.sortOrder)
         .max() ?? 0
@@ -146,7 +149,8 @@ func nextAssignmentSortOrder(req: Request) async throws -> Int {
 /// When earnedPoints/totalPoints are absent, falls back to passCount.
 func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
     guard let data = collectionJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
         return nil
     }
     // Prefer weighted points when present (non-nil and non-zero totalPoints).
@@ -162,19 +166,22 @@ func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
 
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
     guard let data = collectionJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
         return nil
     }
     // Prefer weighted points when present (non-nil and non-zero totalPoints).
     if let earnedPoints = root["earnedPoints"] as? Int,
-       let totalPoints  = root["totalPoints"]  as? Int,
-       totalPoints > 0 {
+        let totalPoints = root["totalPoints"] as? Int,
+        totalPoints > 0
+    {
         return Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
     }
     // Fall back to unweighted count for old results.
-    guard let passCount  = root["passCount"]  as? Int,
-          let totalTests = root["totalTests"] as? Int,
-          totalTests > 0 else { return nil }
+    guard let passCount = root["passCount"] as? Int,
+        let totalTests = root["totalTests"] as? Int,
+        totalTests > 0
+    else { return nil }
     return Int((Double(passCount) / Double(totalTests) * 100).rounded())
 }
 
@@ -192,4 +199,3 @@ func inferNameFromStudentID(_ studentID: String) -> (surname: String, givenNames
     if let parsed = splitHumanName(raw), raw.contains(",") { return parsed }
     return ("—", "—")
 }
-

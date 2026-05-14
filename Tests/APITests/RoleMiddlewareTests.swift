@@ -3,11 +3,12 @@
 // Integration tests for RoleMiddleware — verifies redirect vs 401 for
 // unauthenticated requests, and 403 for insufficient-role requests.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class RoleMiddlewareTests: XCTestCase {
 
@@ -66,101 +67,137 @@ final class RoleMiddlewareTests: XCTestCase {
     // MARK: - Student role
 
     func testStudent_authenticatedRoute_returns200() async throws {
-        let cookie = try await loginUser(username: "role_student", password: "pw",
-                                         role: "student", on: app)
-        try await app.asyncTest(.GET, "/__test_auth", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.body.string, "auth-ok")
-        })
+        let cookie = try await loginUser(
+            username: "role_student", password: "pw",
+            role: "student", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_auth",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, "auth-ok")
+            })
     }
 
     func testStudent_instructorRoute_returns403() async throws {
-        let cookie = try await loginUser(username: "role_student2", password: "pw",
-                                         role: "student", on: app)
-        try await app.asyncTest(.GET, "/__test_instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        let cookie = try await loginUser(
+            username: "role_student2", password: "pw",
+            role: "student", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     func testStudent_adminRoute_returns403() async throws {
-        let cookie = try await loginUser(username: "role_student3", password: "pw",
-                                         role: "student", on: app)
-        try await app.asyncTest(.GET, "/__test_admin", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        let cookie = try await loginUser(
+            username: "role_student3", password: "pw",
+            role: "student", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_admin",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     // MARK: - Instructor role
 
     func testInstructor_authenticatedRoute_returns200() async throws {
-        let cookie = try await loginUser(username: "role_instructor", password: "pw",
-                                         role: "instructor", on: app)
-        try await app.asyncTest(.GET, "/__test_auth", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        let cookie = try await loginUser(
+            username: "role_instructor", password: "pw",
+            role: "instructor", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_auth",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
     }
 
     func testInstructor_instructorRoute_returns200() async throws {
-        let cookie = try await loginUser(username: "role_instructor2", password: "pw",
-                                         role: "instructor", on: app)
-        try await app.asyncTest(.GET, "/__test_instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.body.string, "instructor-ok")
-        })
+        let cookie = try await loginUser(
+            username: "role_instructor2", password: "pw",
+            role: "instructor", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, "instructor-ok")
+            })
     }
 
     func testInstructor_adminRoute_returns403() async throws {
-        let cookie = try await loginUser(username: "role_instructor3", password: "pw",
-                                         role: "instructor", on: app)
-        try await app.asyncTest(.GET, "/__test_admin", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        let cookie = try await loginUser(
+            username: "role_instructor3", password: "pw",
+            role: "instructor", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_admin",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     // MARK: - Admin role
 
     func testAdmin_authenticatedRoute_returns200() async throws {
-        let cookie = try await loginUser(username: "role_admin", password: "pw",
-                                         role: "admin", on: app)
-        try await app.asyncTest(.GET, "/__test_auth", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        let cookie = try await loginUser(
+            username: "role_admin", password: "pw",
+            role: "admin", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_auth",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
     }
 
     func testAdmin_instructorRoute_returns200() async throws {
         // Admin implies instructor — should be granted access.
-        let cookie = try await loginUser(username: "role_admin2", password: "pw",
-                                         role: "admin", on: app)
-        try await app.asyncTest(.GET, "/__test_instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.body.string, "instructor-ok")
-        })
+        let cookie = try await loginUser(
+            username: "role_admin2", password: "pw",
+            role: "admin", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, "instructor-ok")
+            })
     }
 
     func testAdmin_adminRoute_returns200() async throws {
-        let cookie = try await loginUser(username: "role_admin3", password: "pw",
-                                         role: "admin", on: app)
-        try await app.asyncTest(.GET, "/__test_admin", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.body.string, "admin-ok")
-        })
+        let cookie = try await loginUser(
+            username: "role_admin3", password: "pw",
+            role: "admin", on: app)
+        try await app.asyncTest(
+            .GET, "/__test_admin",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, "admin-ok")
+            })
     }
 }

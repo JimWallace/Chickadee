@@ -10,9 +10,9 @@
 // If BrightSpace is unreachable the error is recorded on the result row and the
 // push retries on the next sweep — no work is lost.
 
-import Vapor
 import Fluent
 import Foundation
+import Vapor
 
 // MARK: - Pure sweep function
 
@@ -71,7 +71,7 @@ private func pushGradeForResult(
 
     // Skip validation submissions.
     guard submission.kind == APISubmission.Kind.student,
-          let userID = submission.userID
+        let userID = submission.userID
     else {
         result.brightspaceSyncPending = false
         try await result.save(on: db)
@@ -81,9 +81,10 @@ private func pushGradeForResult(
     let testSetupID = submission.testSetupID
 
     // Find the assignment for this test setup.
-    guard let assignment = try await APIAssignment.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .first(),
+    guard
+        let assignment = try await APIAssignment.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .first(),
         let gradeObjectID = assignment.brightspaceGradeObjectID,
         !gradeObjectID.isEmpty
     else {
@@ -95,8 +96,8 @@ private func pushGradeForResult(
 
     // Find the course's org unit ID.
     guard let course = try await APICourse.find(assignment.courseID, on: db),
-          let orgUnitID = course.brightspaceOrgUnitID,
-          !orgUnitID.isEmpty
+        let orgUnitID = course.brightspaceOrgUnitID,
+        !orgUnitID.isEmpty
     else {
         result.brightspaceSyncPending = false
         try await result.save(on: db)
@@ -125,7 +126,8 @@ private func pushGradeForResult(
     let workerResults = allResults.filter { $0.source != "browser" }
     let resultsForGrade = workerResults.isEmpty ? allResults : workerResults
 
-    let bestPoints = resultsForGrade
+    let bestPoints =
+        resultsForGrade
         .compactMap { gradePointsFromCollectionJSON($0.collectionJSON) }
         .max()
 
@@ -201,8 +203,8 @@ final class BrightSpaceGradeSyncMonitor: @unchecked Sendable {
 
     func start(application: Application) {
         guard task == nil,
-              let client = application.brightSpaceClient,
-              let config = application.brightSpaceSyncConfig
+            let client = application.brightSpaceClient,
+            let config = application.brightSpaceSyncConfig
         else { return }
 
         task = Task {

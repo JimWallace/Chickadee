@@ -18,8 +18,8 @@
 // We don't rely on the JupyterLite Drive for persistence — Chickadee
 // has its own server-side notebook snapshot mechanism.
 
-import XCTest
 import Foundation
+import XCTest
 
 final class JupyterLiteConfigTests: XCTestCase {
 
@@ -37,7 +37,7 @@ final class JupyterLiteConfigTests: XCTestCase {
         let url = URL(fileURLWithPath: sourceConfigPath)
         let data = try Data(contentsOf: url)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let cfg = root["jupyter-config-data"] as? [String: Any]
+            let cfg = root["jupyter-config-data"] as? [String: Any]
         else {
             XCTFail("source jupyter-lite.json missing or malformed at \(sourceConfigPath)")
             return
@@ -47,10 +47,10 @@ final class JupyterLiteConfigTests: XCTestCase {
         XCTAssertTrue(
             disabled.contains("@jupyterlite/application-extension:service-worker-manager"),
             "Expected source JupyterLite config (\(sourceConfigPath)) to disable the "
-            + "service-worker-manager plugin so pyodide-kernel sets mountDrive=false "
-            + "after the next rebuild. Got disabledExtensions=\(disabled). "
-            + "Re-add the entry; do not remove without checking that pyodide-kernel "
-            + "no longer auto-mounts the Drive (the failure mode caught in PR #467 / v0.4.150)."
+                + "service-worker-manager plugin so pyodide-kernel sets mountDrive=false "
+                + "after the next rebuild. Got disabledExtensions=\(disabled). "
+                + "Re-add the entry; do not remove without checking that pyodide-kernel "
+                + "no longer auto-mounts the Drive (the failure mode caught in PR #467 / v0.4.150)."
         )
     }
 
@@ -58,7 +58,7 @@ final class JupyterLiteConfigTests: XCTestCase {
         let url = URL(fileURLWithPath: configPath)
         let data = try Data(contentsOf: url)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let cfg = root["jupyter-config-data"] as? [String: Any]
+            let cfg = root["jupyter-config-data"] as? [String: Any]
         else {
             XCTFail("jupyter-lite.json missing or malformed at \(configPath)")
             return
@@ -68,8 +68,8 @@ final class JupyterLiteConfigTests: XCTestCase {
         XCTAssertTrue(
             disabled.contains("@jupyterlite/application-extension:service-worker-manager"),
             "Expected built JupyterLite bundle to disable the service-worker-manager "
-            + "plugin so pyodide-kernel sets mountDrive=false. Got disabledExtensions=\(disabled). "
-            + "Add it to Tools/jupyterlite/jupyter-lite.json and re-run scripts/build-jupyterlite.sh."
+                + "plugin so pyodide-kernel sets mountDrive=false. Got disabledExtensions=\(disabled). "
+                + "Add it to Tools/jupyterlite/jupyter-lite.json and re-run scripts/build-jupyterlite.sh."
         )
     }
 
@@ -81,7 +81,8 @@ final class JupyterLiteConfigTests: XCTestCase {
         // says, so this catches stale labels after a version bump.
         let reqData = try Data(contentsOf: URL(fileURLWithPath: "Tools/jupyterlite/requirements.txt"))
         let reqText = String(data: reqData, encoding: .utf8) ?? ""
-        let jlPin: String? = reqText
+        let jlPin: String? =
+            reqText
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first { $0.hasPrefix("jupyterlite==") }
             .map { String($0.replacingOccurrences(of: "jupyterlite==", with: "")) }
@@ -93,8 +94,8 @@ final class JupyterLiteConfigTests: XCTestCase {
         let url = URL(fileURLWithPath: configPath)
         let data = try Data(contentsOf: url)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let cfg = root["jupyter-config-data"] as? [String: Any],
-              let appVersion = cfg["appVersion"] as? String
+            let cfg = root["jupyter-config-data"] as? [String: Any],
+            let appVersion = cfg["appVersion"] as? String
         else {
             XCTFail("jupyter-lite.json missing or malformed at \(configPath)")
             return
@@ -103,8 +104,8 @@ final class JupyterLiteConfigTests: XCTestCase {
         XCTAssertTrue(
             appVersion.hasPrefix(pin),
             "appVersion label '\(appVersion)' in the built bundle does not start with "
-            + "the pinned JupyterLite version '\(pin)' from requirements.txt. Update "
-            + "Tools/jupyterlite/jupyter-lite.json's appVersion to match (e.g. '\(pin)-chickadee.N')."
+                + "the pinned JupyterLite version '\(pin)' from requirements.txt. Update "
+                + "Tools/jupyterlite/jupyter-lite.json's appVersion to match (e.g. '\(pin)-chickadee.N')."
         )
     }
 }

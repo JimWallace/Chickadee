@@ -9,10 +9,10 @@
 //   POST /admin/runner-secret                → set/clear runtime runner secret
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct AdminRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -33,8 +33,8 @@ struct AdminRoutes: RouteCollection {
         admin.get("courses", ":courseID", use: courseDetail)
         admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
-        admin.post("courses", ":courseID", "copy",    use: copyCourse)
-        admin.post("courses", ":courseID", "delete",  use: deleteCourse)
+        admin.post("courses", ":courseID", "copy", use: copyCourse)
+        admin.post("courses", ":courseID", "delete", use: deleteCourse)
         admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
@@ -52,7 +52,7 @@ struct AdminRoutes: RouteCollection {
             .all()
             .sorted { lhs, rhs in
                 switch (lhs.lastSeenAt, rhs.lastSeenAt) {
-                case let (l?, r?):
+                case (let l?, let r?):
                     if l != r { return l > r }
                 case (.some, nil):
                     return true
@@ -73,10 +73,10 @@ struct AdminRoutes: RouteCollection {
 
         let userRows = users.map { u in
             AdminUserRow(
-                id:        u.id?.uuidString ?? "",
+                id: u.id?.uuidString ?? "",
                 displayName: u.displayName,
-                username:  u.username,
-                role:      u.role,
+                username: u.username,
+                role: u.role,
                 createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
                 lastSeenAt: u.lastSeenAt.map { ISO8601DateFormatter().string(from: $0) }
             )
@@ -87,32 +87,32 @@ struct AdminRoutes: RouteCollection {
         let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
 
         // Course management data — all three queries are independent so run in parallel.
-        async let coursesFetch      = APICourse.query(on: req.db).sort(\.$createdAt).all()
-        async let enrollmentsFetch  = enrolledStudentCountsByCourse(on: req.db)
-        async let assignmentsFetch  = assignmentCountsByCourse(on: req.db)
+        async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
+        async let enrollmentsFetch = enrolledStudentCountsByCourse(on: req.db)
+        async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
         let (allCourses, enrollmentCounts, assignmentCounts) =
             try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
         let bsSyncEnabled = req.application.brightSpaceClient != nil
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
             guard let id = course.id else { return nil }
             return AdminCourseRow(
-                id:                     id.uuidString,
-                code:                   course.code,
-                name:                   course.name,
-                isArchived:             course.isArchived,
-                enrollmentMode:         course.enrollmentMode.rawValue,
-                enrollmentCount:        enrollmentCounts[id] ?? 0,
-                assignmentCount:        assignmentCounts[id] ?? 0,
-                createdAt:              course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                brightspaceOrgUnitID:   course.brightspaceOrgUnitID,
+                id: id.uuidString,
+                code: course.code,
+                name: course.name,
+                isArchived: course.isArchived,
+                enrollmentMode: course.enrollmentMode.rawValue,
+                enrollmentCount: enrollmentCounts[id] ?? 0,
+                assignmentCount: assignmentCounts[id] ?? 0,
+                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                brightspaceOrgUnitID: course.brightspaceOrgUnitID,
                 brightspaceSyncEnabled: bsSyncEnabled
             )
         }
 
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
-            users:       userRows,
-            workers:     workerRows,
+            users: userRows,
+            workers: workerRows,
             workerSecret: effectiveSecret,
             localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
             courses: courseRows,
@@ -151,10 +151,11 @@ struct AdminRoutes: RouteCollection {
             // Runner was pruned from the in-memory store (offline >60 min).
             // Reconstruct a minimal row from the most recent DB snapshot so
             // the detail page can still render historical data instead of 404.
-            guard let latestSnapshot = try await RunnerSnapshot.query(on: req.db)
-                .filter(\.$runnerID == runnerID)
-                .sort(\.$recordedAt, .descending)
-                .first()
+            guard
+                let latestSnapshot = try await RunnerSnapshot.query(on: req.db)
+                    .filter(\.$runnerID == runnerID)
+                    .sort(\.$recordedAt, .descending)
+                    .first()
             else {
                 throw Abort(.notFound)
             }
@@ -197,13 +198,17 @@ struct AdminRoutes: RouteCollection {
 
         // Batch-fetch usernames for all distinct user IDs in recent jobs.
         let userIDs = Array(Set(recentJobs.compactMap { $0.userID }))
-        let users = userIDs.isEmpty ? [] : try await APIUser.query(on: req.db)
-            .filter(\.$id ~~ userIDs)
-            .all()
-        let usernameByID: [UUID: String] = Dictionary(uniqueKeysWithValues: users.compactMap {
-            guard let id = $0.id else { return nil }
-            return (id, $0.username)
-        })
+        let users =
+            userIDs.isEmpty
+            ? []
+            : try await APIUser.query(on: req.db)
+                .filter(\.$id ~~ userIDs)
+                .all()
+        let usernameByID: [UUID: String] = Dictionary(
+            uniqueKeysWithValues: users.compactMap {
+                guard let id = $0.id else { return nil }
+                return (id, $0.username)
+            })
 
         // Earliest snapshot for this runner tells us how long it's been online.
         let firstSnapshot = try await RunnerSnapshot.query(on: req.db)
@@ -219,7 +224,8 @@ struct AdminRoutes: RouteCollection {
         }
 
         let snapshotRows = snapshots.map {
-            let utilizationPercent = $0.maxJobs > 0
+            let utilizationPercent =
+                $0.maxJobs > 0
                 ? Int((Double($0.activeJobs) / Double($0.maxJobs) * 100).rounded())
                 : 0
             return AdminRunnerSnapshotRow(
@@ -282,15 +288,17 @@ struct AdminRoutes: RouteCollection {
             return values
         }()
 
-        return try await req.view.render("admin-runner", AdminRunnerDetailContext(
-            currentUser: req.currentUserContext,
-            runner: worker,
-            tags: tags,
-            summary: summary,
-            recentJobs: jobRows,
-            snapshots: snapshotRows,
-            firstSeenAt: firstSeenAt
-        ))
+        return try await req.view.render(
+            "admin-runner",
+            AdminRunnerDetailContext(
+                currentUser: req.currentUserContext,
+                runner: worker,
+                tags: tags,
+                summary: summary,
+                recentJobs: jobRows,
+                snapshots: snapshotRows,
+                firstSeenAt: firstSeenAt
+            ))
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -301,8 +309,8 @@ struct AdminRoutes: RouteCollection {
 
         guard
             let idString = req.parameters.get("userID"),
-            let uuid     = UUID(uuidString: idString),
-            let user     = try await APIUser.find(uuid, on: req.db)
+            let uuid = UUID(uuidString: idString),
+            let user = try await APIUser.find(uuid, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -416,8 +424,8 @@ struct AdminRoutes: RouteCollection {
 
         if !trimmed.isEmpty {
             guard let parsed = URL(string: trimmed),
-                  let scheme = parsed.scheme?.lowercased(),
-                  scheme == "http" || scheme == "https"
+                let scheme = parsed.scheme?.lowercased(),
+                scheme == "http" || scheme == "https"
             else {
                 return req.redirect(to: alertsRedirect(error: "Webhook URL must start with http:// or https://"))
             }
@@ -453,8 +461,8 @@ struct AdminRoutes: RouteCollection {
     func userDetail(req: Request) async throws -> View {
         guard
             let idString = req.parameters.get("userID"),
-            let userID   = UUID(uuidString: idString),
-            let user     = try await APIUser.find(userID, on: req.db)
+            let userID = UUID(uuidString: idString),
+            let user = try await APIUser.find(userID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -471,7 +479,8 @@ struct AdminRoutes: RouteCollection {
 
         let enrolledIDs = Set(enrollments.map { $0.$course.id })
 
-        let enrolledRows = enrollments
+        let enrolledRows =
+            enrollments
             .compactMap { e -> AdminUserCourseRow? in
                 guard let id = e.course.id else { return nil }
                 return AdminUserCourseRow(id: id.uuidString, code: e.course.code, name: e.course.name)
@@ -483,15 +492,17 @@ struct AdminRoutes: RouteCollection {
             return AdminUserCourseRow(id: id.uuidString, code: c.code, name: c.name)
         }
 
-        return try await req.view.render("admin-user", AdminUserDetailContext(
-            currentUser:      req.currentUserContext,
-            targetUserID:     idString,
-            displayName:      user.displayName,
-            username:         user.username,
-            role:             user.role,
-            enrolledCourses:  enrolledRows,
-            availableCourses: availableRows
-        ))
+        return try await req.view.render(
+            "admin-user",
+            AdminUserDetailContext(
+                currentUser: req.currentUserContext,
+                targetUserID: idString,
+                displayName: user.displayName,
+                username: user.username,
+                role: user.role,
+                enrolledCourses: enrolledRows,
+                availableCourses: availableRows
+            ))
     }
 
     // MARK: - POST /admin/users/:userID/delete
@@ -500,8 +511,8 @@ struct AdminRoutes: RouteCollection {
     func deleteUser(req: Request) async throws -> Response {
         guard
             let idString = req.parameters.get("userID"),
-            let uuid     = UUID(uuidString: idString),
-            let user     = try await APIUser.find(uuid, on: req.db)
+            let uuid = UUID(uuidString: idString),
+            let user = try await APIUser.find(uuid, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -545,26 +556,27 @@ private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
 
     // Fetch rolling averages (last 50 jobs per runner) via the diagnostics service.
     let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
-    let averages = (try? await req.application.diagnostics.rollingAverages(
-        for: runnerIDs, sampleSize: 50, on: req.db
-    )) ?? [:]
+    let averages =
+        (try? await req.application.diagnostics.rollingAverages(
+            for: runnerIDs, sampleSize: 50, on: req.db
+        )) ?? [:]
 
     return workers.map { snapshot in
-        let assigned  = assignedByWorkerID[snapshot.workerID,  default: 0]
+        let assigned = assignedByWorkerID[snapshot.workerID, default: 0]
         let processed = processedByWorkerID[snapshot.workerID, default: 0]
         let avg = averages[snapshot.workerID]
         let avgExec = avg?.avgExecutionMs
         let avgWait = avg?.avgQueueWaitMs
         return AdminWorkerRow(
-            workerID:              snapshot.workerID,
-            hostname:              snapshot.hostname,
-            runnerVersion:         snapshot.runnerVersion,
-            maxConcurrentJobs:     snapshot.maxConcurrentJobs,
-            lastActive:            iso.string(from: snapshot.lastActive),
-            assignedJobs:          assigned,
-            jobsProcessed:         processed,
-            avgExecutionMs:        avgExec,
-            avgQueueWaitMs:        avgWait,
+            workerID: snapshot.workerID,
+            hostname: snapshot.hostname,
+            runnerVersion: snapshot.runnerVersion,
+            maxConcurrentJobs: snapshot.maxConcurrentJobs,
+            lastActive: iso.string(from: snapshot.lastActive),
+            assignedJobs: assigned,
+            jobsProcessed: processed,
+            avgExecutionMs: avgExec,
+            avgQueueWaitMs: avgWait,
             avgExecutionFormatted: avgExec.map(formatMs),
             avgQueueWaitFormatted: avgWait.map(formatMs)
         )

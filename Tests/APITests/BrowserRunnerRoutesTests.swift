@@ -11,11 +11,12 @@
 // Also covers the submission path with dependency-skipped outcomes to confirm
 // the full round-trip works after the dependsOn pre-check was added.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class BrowserRunnerRoutesTests: XCTestCase {
 
@@ -83,7 +84,8 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testManifestRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             afterResponse: { res in
                 XCTAssertTrue(
                     res.status == .unauthorized || res.status == .seeOther,
@@ -93,27 +95,32 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
     func testManifestReturnsJSON() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let ct = res.headers.first(name: .contentType) ?? ""
-                XCTAssertTrue(ct.contains("application/json"),
-                              "manifest endpoint must return application/json, got: \(ct)")
+                XCTAssertTrue(
+                    ct.contains("application/json"),
+                    "manifest endpoint must return application/json, got: \(ct)")
             })
     }
 
     func testManifestBodyIsParseable() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let data = Data(res.body.readableBytesView)
                 let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -129,26 +136,28 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     /// versions of browser-runner.js.
     func testManifestIncludesDependsOnArrays() async throws {
         let manifest = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "browser",
-          "requiredFiles": [],
-          "testSuites": [
-            { "tier": "public",  "script": "test_build.py" },
-            { "tier": "public",  "script": "test_unit.py",  "dependsOn": ["test_build.py"] },
-            { "tier": "release", "script": "test_extra.py", "dependsOn": ["test_build.py"] }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": null
-        }
-        """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "browser",
+              "requiredFiles": [],
+              "testSuites": [
+                { "tier": "public",  "script": "test_build.py" },
+                { "tier": "public",  "script": "test_unit.py",  "dependsOn": ["test_build.py"] },
+                { "tier": "release", "script": "test_extra.py", "dependsOn": ["test_build.py"] }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": null
+            }
+            """
         let setupID = try await insertSetup(manifest: manifest)
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let data = Data(res.body.readableBytesView)
                 let json = try XCTUnwrap(
@@ -166,9 +175,11 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 // Second and third entries must have dependsOn = ["test_build.py"]
                 for idx in [1, 2] {
                     let entry = suites[idx]
-                    let deps  = try XCTUnwrap(entry["dependsOn"] as? [String],
+                    let deps = try XCTUnwrap(
+                        entry["dependsOn"] as? [String],
                         "suites[\(idx)] must have a dependsOn string array")
-                    XCTAssertEqual(deps, ["test_build.py"],
+                    XCTAssertEqual(
+                        deps, ["test_build.py"],
                         "suites[\(idx)] dependsOn should be [\"test_build.py\"]")
                 }
             })
@@ -177,10 +188,12 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testManifestReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/setup_doesnotexist/manifest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             })
     }
@@ -190,7 +203,8 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testDownloadRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             afterResponse: { res in
                 XCTAssertTrue(
                     res.status == .unauthorized || res.status == .seeOther,
@@ -200,13 +214,16 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
     func testDownloadSucceedsForAuthenticatedStudent() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
-                XCTAssertEqual(res.status, .ok,
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .ok,
                     "authenticated student must be able to download test setup zip")
             })
     }
@@ -214,10 +231,12 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testDownloadReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
+        try await app.asyncTest(
+            .GET, "/api/v1/browser-runner/testsetups/setup_missing/download",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             })
     }
@@ -231,73 +250,78 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testBrowserResultAcceptsDependencySkippedOutcomes() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        let nb      = minimalNotebook()
+        let nb = minimalNotebook()
 
         // Simulate the collection the browser runner produces when test_build
         // fails and test_unit is auto-failed as a dependency skip.
         let collection = """
-        {
-          "submissionID": "",
-          "testSetupID": "\(setupID)",
-          "attemptNumber": 1,
-          "buildStatus": "passed",
-          "compilerOutput": null,
-          "outcomes": [
             {
-              "testName": "test_build",
-              "testClass": null,
-              "tier": "public",
-              "status": "fail",
-              "shortResult": "assertion failed",
-              "longResult": null,
+              "submissionID": "",
+              "testSetupID": "\(setupID)",
+              "attemptNumber": 1,
+              "buildStatus": "passed",
+              "compilerOutput": null,
+              "outcomes": [
+                {
+                  "testName": "test_build",
+                  "testClass": null,
+                  "tier": "public",
+                  "status": "fail",
+                  "shortResult": "assertion failed",
+                  "longResult": null,
+                  "executionTimeMs": 42,
+                  "memoryUsageBytes": null,
+                  "attemptNumber": 1,
+                  "isFirstPassSuccess": false
+                },
+                {
+                  "testName": "test_unit",
+                  "testClass": null,
+                  "tier": "public",
+                  "status": "fail",
+                  "shortResult": "Skipped: prerequisite 'test_build.py' did not pass",
+                  "longResult": null,
+                  "executionTimeMs": 0,
+                  "memoryUsageBytes": null,
+                  "attemptNumber": 1,
+                  "isFirstPassSuccess": false
+                }
+              ],
+              "totalTests": 2,
+              "passCount": 0,
+              "failCount": 2,
+              "errorCount": 0,
+              "timeoutCount": 0,
               "executionTimeMs": 42,
-              "memoryUsageBytes": null,
-              "attemptNumber": 1,
-              "isFirstPassSuccess": false
-            },
-            {
-              "testName": "test_unit",
-              "testClass": null,
-              "tier": "public",
-              "status": "fail",
-              "shortResult": "Skipped: prerequisite 'test_build.py' did not pass",
-              "longResult": null,
-              "executionTimeMs": 0,
-              "memoryUsageBytes": null,
-              "attemptNumber": 1,
-              "isFirstPassSuccess": false
+              "runnerVersion": "browser-wasm-runner/1.0",
+              "timestamp": "2026-01-01T00:00:00Z"
             }
-          ],
-          "totalTests": 2,
-          "passCount": 0,
-          "failCount": 2,
-          "errorCount": 0,
-          "timeoutCount": 0,
-          "executionTimeMs": 42,
-          "runnerVersion": "browser-wasm-runner/1.0",
-          "timestamp": "2026-01-01T00:00:00Z"
-        }
-        """
+            """
 
         var submissionID = ""
-        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
+        try await app.asyncTest(
+            .POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
-                req.body = .init(buffer: multipartBody(
-                    boundary: "dep-test-boundary",
-                    fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                    file: ("notebook", "notebook.ipynb", nb)
-                ))
+                req.body = .init(
+                    buffer: multipartBody(
+                        boundary: "dep-test-boundary",
+                        fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                        file: ("notebook", "notebook.ipynb", nb)
+                    ))
                 req.headers.contentType = HTTPMediaType(
                     type: "multipart", subType: "form-data",
                     parameters: ["boundary": "dep-test-boundary"])
-            }, afterResponse: { res in
-                XCTAssertEqual(res.status, .ok,
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .ok,
                     "server must accept collection with dependency-skipped outcomes, body: \(res.body.string)")
                 if let json = try? JSONSerialization.jsonObject(
-                    with: Data(res.body.readableBytesView)) as? [String: String] {
+                    with: Data(res.body.readableBytesView)) as? [String: String]
+                {
                     submissionID = json["submissionID"] ?? ""
                 }
             })
@@ -317,25 +341,29 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     func testRunnerSubmitRejectsBrowserGradedAssignments() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        let nb      = minimalNotebook()
+        let nb = minimalNotebook()
 
-        try await app.asyncTest(.POST, "/api/v1/submissions/runner-submit",
+        try await app.asyncTest(
+            .POST, "/api/v1/submissions/runner-submit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
-                req.body = .init(buffer: multipartBody(
-                    boundary: "runner-submit-browser-boundary",
-                    fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
-                    file: ("notebook", "submission.ipynb", nb)
-                ))
+                req.body = .init(
+                    buffer: multipartBody(
+                        boundary: "runner-submit-browser-boundary",
+                        fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
+                        file: ("notebook", "submission.ipynb", nb)
+                    ))
                 req.headers.contentType = HTTPMediaType(
                     type: "multipart", subType: "form-data",
                     parameters: ["boundary": "runner-submit-browser-boundary"])
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .badRequest)
                 XCTAssertTrue(
-                    res.body.string.contains("Browser-graded assignments must be submitted through the browser runner."),
+                    res.body.string.contains(
+                        "Browser-graded assignments must be submitted through the browser runner."),
                     "expected browser-mode runner-submit requests to be rejected with a clear error"
                 )
             })
@@ -351,25 +379,28 @@ final class BrowserRunnerRoutesTests: XCTestCase {
             isOpen: true,
             dueAt: Date().addingTimeInterval(-60)
         )
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        let nb      = minimalNotebook()
+        let nb = minimalNotebook()
         let collection = """
-        {"submissionID":"","testSetupID":"\(setupID)","attemptNumber":1,"buildStatus":"passed","compilerOutput":null,"outcomes":[],"totalTests":0,"passCount":0,"failCount":0,"errorCount":0,"timeoutCount":0,"executionTimeMs":0,"runnerVersion":"browser-wasm-runner/1.0","timestamp":"2026-01-01T00:00:00Z"}
-        """
+            {"submissionID":"","testSetupID":"\(setupID)","attemptNumber":1,"buildStatus":"passed","compilerOutput":null,"outcomes":[],"totalTests":0,"passCount":0,"failCount":0,"errorCount":0,"timeoutCount":0,"executionTimeMs":0,"runnerVersion":"browser-wasm-runner/1.0","timestamp":"2026-01-01T00:00:00Z"}
+            """
 
-        try await app.asyncTest(.POST, "/api/v1/submissions/browser-result",
+        try await app.asyncTest(
+            .POST, "/api/v1/submissions/browser-result",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
-                req.body = .init(buffer: multipartBody(
-                    boundary: "browser-result-overdue-boundary",
-                    fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                    file: ("notebook", "notebook.ipynb", nb)
-                ))
+                req.body = .init(
+                    buffer: multipartBody(
+                        boundary: "browser-result-overdue-boundary",
+                        fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                        file: ("notebook", "notebook.ipynb", nb)
+                    ))
                 req.headers.contentType = HTTPMediaType(
                     type: "multipart", subType: "form-data",
                     parameters: ["boundary": "browser-result-overdue-boundary"])
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
                 XCTAssertTrue(res.body.string.contains("closed"))
             })
@@ -382,39 +413,42 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
     func testRunnerSubmitRejectsOverdueAssignmentsAndClosesThem() async throws {
         let manifest = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": [],
-          "testSuites": [
-            { "tier": "public", "script": "test_public.py" }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": null
-        }
-        """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": [],
+              "testSuites": [
+                { "tier": "public", "script": "test_public.py" }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": null
+            }
+            """
         let setupID = try await insertSetup(manifest: manifest)
         let assignment = try await insertAssignment(
             testSetupID: setupID,
             isOpen: true,
             dueAt: Date().addingTimeInterval(-60)
         )
-        let cookie  = try await loginAsStudent()
+        let cookie = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        let nb      = minimalNotebook()
+        let nb = minimalNotebook()
 
-        try await app.asyncTest(.POST, "/api/v1/submissions/runner-submit",
+        try await app.asyncTest(
+            .POST, "/api/v1/submissions/runner-submit",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
-                req.body = .init(buffer: multipartBody(
-                    boundary: "runner-submit-overdue-boundary",
-                    fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
-                    file: ("notebook", "submission.ipynb", nb)
-                ))
+                req.body = .init(
+                    buffer: multipartBody(
+                        boundary: "runner-submit-overdue-boundary",
+                        fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
+                        file: ("notebook", "submission.ipynb", nb)
+                    ))
                 req.headers.contentType = HTTPMediaType(
                     type: "multipart", subType: "form-data",
                     parameters: ["boundary": "runner-submit-overdue-boundary"])
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
                 XCTAssertTrue(res.body.string.contains("closed"))
             })
@@ -444,10 +478,10 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
     private func minimalNotebook() -> Data {
         let json = """
-        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
-          {"cell_type":"code","source":["x = 1"],"metadata":{},"outputs":[]}
-        ]}
-        """
+            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
+              {"cell_type":"code","source":["x = 1"],"metadata":{},"outputs":[]}
+            ]}
+            """
         return json.data(using: .utf8)!
     }
 

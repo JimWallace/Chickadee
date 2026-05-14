@@ -74,8 +74,10 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
     /// families.  When nil the renderer uses a sensible default (1e-6).
     public let tolerance: Double?
 
-    public init(tier: TestTier = .pub, points: Int = 1, hint: String? = nil,
-                tolerance: Double? = nil) {
+    public init(
+        tier: TestTier = .pub, points: Int = 1, hint: String? = nil,
+        tolerance: Double? = nil
+    ) {
         self.tier = tier
         self.points = points
         self.hint = hint
@@ -84,10 +86,10 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        tier      = try c.decodeIfPresent(TestTier.self, forKey: .tier)      ?? .pub
-        points    = try c.decodeIfPresent(Int.self,      forKey: .points)    ?? 1
-        hint      = try c.decodeIfPresent(String.self,   forKey: .hint)
-        tolerance = try c.decodeIfPresent(Double.self,   forKey: .tolerance)
+        tier = try c.decodeIfPresent(TestTier.self, forKey: .tier) ?? .pub
+        points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        hint = try c.decodeIfPresent(String.self, forKey: .hint)
+        tolerance = try c.decodeIfPresent(Double.self, forKey: .tolerance)
     }
 }
 
@@ -134,15 +136,17 @@ public struct PatternCase: Codable, Equatable, Sendable {
     /// Disabled cases remain in the spec but are not rendered into the zip.
     public let enabled: Bool
 
-    public init(key: String, label: String, args: [JSONValue], expected: JSONValue,
-                argsProvided: [Bool] = [], argVarRefs: [String?] = [],
-                hint: String? = nil, tier: TestTier? = nil, points: Int? = nil,
-                enabled: Bool = true) {
+    public init(
+        key: String, label: String, args: [JSONValue], expected: JSONValue,
+        argsProvided: [Bool] = [], argVarRefs: [String?] = [],
+        hint: String? = nil, tier: TestTier? = nil, points: Int? = nil,
+        enabled: Bool = true
+    ) {
         self.key = key
         self.label = label
         self.args = args
         self.argsProvided = argsProvided.count == args.count ? argsProvided : []
-        self.argVarRefs   = argVarRefs.count   == args.count ? argVarRefs   : []
+        self.argVarRefs = argVarRefs.count == args.count ? argVarRefs : []
         self.expected = expected
         self.hint = hint
         self.tier = tier
@@ -152,18 +156,18 @@ public struct PatternCase: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        key      = try c.decode(String.self, forKey: .key)
-        label    = try c.decode(String.self, forKey: .label)
-        args     = try c.decodeIfPresent([JSONValue].self, forKey: .args) ?? []
+        key = try c.decode(String.self, forKey: .key)
+        label = try c.decode(String.self, forKey: .label)
+        args = try c.decodeIfPresent([JSONValue].self, forKey: .args) ?? []
         let decodedProvided = try c.decodeIfPresent([Bool].self, forKey: .argsProvided) ?? []
         argsProvided = decodedProvided.count == args.count ? decodedProvided : []
         let decodedVarRefs = try c.decodeIfPresent([String?].self, forKey: .argVarRefs) ?? []
-        argVarRefs   = decodedVarRefs.count == args.count ? decodedVarRefs : []
+        argVarRefs = decodedVarRefs.count == args.count ? decodedVarRefs : []
         expected = try c.decode(JSONValue.self, forKey: .expected)
-        hint     = try c.decodeIfPresent(String.self,   forKey: .hint)
-        tier     = try c.decodeIfPresent(TestTier.self, forKey: .tier)
-        points   = try c.decodeIfPresent(Int.self,      forKey: .points)
-        enabled  = try c.decodeIfPresent(Bool.self,     forKey: .enabled) ?? true
+        hint = try c.decodeIfPresent(String.self, forKey: .hint)
+        tier = try c.decodeIfPresent(TestTier.self, forKey: .tier)
+        points = try c.decodeIfPresent(Int.self, forKey: .points)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
     }
 }
 
@@ -184,7 +188,7 @@ public struct FamilyVariable: Codable, Equatable, Sendable {
     public let value: JSONValue
 
     public init(name: String, value: JSONValue) {
-        self.name  = name
+        self.name = name
         self.value = value
     }
 }
@@ -221,12 +225,14 @@ public struct PatternFamily: Codable, Equatable, Sendable {
     /// concrete script names.
     public let dependsOn: [String]
 
-    public init(id: String, name: String, kind: PatternKind,
-                functionName: String, paramNames: [String] = [],
-                defaults: PatternDefaults = PatternDefaults(),
-                cases: [PatternCase] = [],
-                variables: [FamilyVariable] = [],
-                dependsOn: [String] = []) {
+    public init(
+        id: String, name: String, kind: PatternKind,
+        functionName: String, paramNames: [String] = [],
+        defaults: PatternDefaults = PatternDefaults(),
+        cases: [PatternCase] = [],
+        variables: [FamilyVariable] = [],
+        dependsOn: [String] = []
+    ) {
         self.id = id
         self.name = name
         self.kind = kind
@@ -240,15 +246,15 @@ public struct PatternFamily: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id           = try c.decode(String.self,            forKey: .id)
-        name         = try c.decode(String.self,            forKey: .name)
-        kind         = try c.decode(PatternKind.self,       forKey: .kind)
-        functionName = try c.decode(String.self,            forKey: .functionName)
-        paramNames   = try c.decodeIfPresent([String].self, forKey: .paramNames) ?? []
-        defaults     = try c.decodeIfPresent(PatternDefaults.self, forKey: .defaults) ?? PatternDefaults()
-        cases        = try c.decodeIfPresent([PatternCase].self,   forKey: .cases)    ?? []
-        variables    = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
-        dependsOn    = try c.decodeIfPresent([String].self,        forKey: .dependsOn) ?? []
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        kind = try c.decode(PatternKind.self, forKey: .kind)
+        functionName = try c.decode(String.self, forKey: .functionName)
+        paramNames = try c.decodeIfPresent([String].self, forKey: .paramNames) ?? []
+        defaults = try c.decodeIfPresent(PatternDefaults.self, forKey: .defaults) ?? PatternDefaults()
+        cases = try c.decodeIfPresent([PatternCase].self, forKey: .cases) ?? []
+        variables = try c.decodeIfPresent([FamilyVariable].self, forKey: .variables) ?? []
+        dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
     }
 }
 

@@ -3,8 +3,8 @@
 // Shared utilities for CSV-based bulk enrollment, used by both AdminRoutes
 // and AssignmentRoutes so the logic and result view context stay in sync.
 
-import Foundation
 import Fluent
+import Foundation
 import Vapor
 
 /// Parses a flat list of usernames from a CSV upload.
@@ -22,8 +22,10 @@ import Vapor
 /// Surrounding whitespace and quotes are stripped from each cell.  Blank
 /// cells and a `#` end-of-line marker are filtered out.
 func parseUsernamesFromCSV(_ data: Data) -> [String] {
-    guard let text = String(data: data, encoding: .utf8)
-                  ?? String(data: data, encoding: .isoLatin1) else {
+    guard
+        let text = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+    else {
         return []
     }
 
@@ -34,7 +36,7 @@ func parseUsernamesFromCSV(_ data: Data) -> [String] {
     let headerKeywords: Set<String> = [
         "username", "user", "login",
         "id", "studentid", "userid", "loginid",
-        "orgdefinedid",                          // Brightspace gradebook export
+        "orgdefinedid",  // Brightspace gradebook export
     ]
     func normaliseHeaderCell(_ raw: String) -> String {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -57,7 +59,8 @@ func parseUsernamesFromCSV(_ data: Data) -> [String] {
             // pair is the motivating case — we want the friendlier
             // Username value when both are populated.
             if let usernameIdx = cells.firstIndex(of: "username"),
-               usernameIdx < cells.count {
+                usernameIdx < cells.count
+            {
                 usernameColumn = usernameIdx
             }
         }
@@ -147,8 +150,9 @@ struct EnrollCSVResultContext: Encodable {
 /// surfaces rejected names so the instructor can clean the CSV.
 func isAcceptableUsernameForEnrollment(_ s: String) -> Bool {
     guard !s.isEmpty, s.count <= 64 else { return false }
-    let allowed = CharacterSet(charactersIn:
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@+")
+    let allowed = CharacterSet(
+        charactersIn:
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@+")
     return s.unicodeScalars.allSatisfy { allowed.contains($0) }
 }
 
@@ -194,10 +198,10 @@ func enrollUsernamesInCourse(
         .all()
     let alreadyPreEnrolledUsernames = Set(existingPreEnrollments.map { $0.username })
 
-    var enrolledCount        = 0
-    var preEnrolledCount     = 0
+    var enrolledCount = 0
+    var preEnrolledCount = 0
     var alreadyEnrolledCount = 0
-    var rejected:    [String] = []
+    var rejected: [String] = []
 
     for name in uniqueUsernames {
         if let user = byUsername[name] {
@@ -229,10 +233,10 @@ func enrollUsernamesInCourse(
     }
 
     return EnrollUsernamesResult(
-        enrolledCount:        enrolledCount,
-        preEnrolledCount:     preEnrolledCount,
+        enrolledCount: enrolledCount,
+        preEnrolledCount: preEnrolledCount,
         alreadyEnrolledCount: alreadyEnrolledCount,
-        rejectedUsernames:    rejected.sorted()
+        rejectedUsernames: rejected.sorted()
     )
 }
 
@@ -276,7 +280,8 @@ func resolvePendingPreEnrollments(
             do {
                 try await row.delete(on: db)
             } catch {
-                logger.warning("Pre-enrollment resolve: failed to delete pending row for \(username) in \(courseID): \(error)")
+                logger.warning(
+                    "Pre-enrollment resolve: failed to delete pending row for \(username) in \(courseID): \(error)")
             }
         }
     } catch {

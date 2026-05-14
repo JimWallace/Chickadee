@@ -5,9 +5,9 @@ import Fluent
 struct CreateTestSetups: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("test_setups")
-            .field("id",         .string, .identifier(auto: false))
-            .field("manifest",   .string, .required)
-            .field("zip_path",   .string, .required)
+            .field("id", .string, .identifier(auto: false))
+            .field("manifest", .string, .required)
+            .field("zip_path", .string, .required)
             .field("notebook_path", .string)
             .field(
                 "course_id",

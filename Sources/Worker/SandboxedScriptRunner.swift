@@ -18,7 +18,7 @@ import Foundation
 struct SandboxedScriptRunner: ScriptRunner {
 
     func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
-#if os(Linux)
+        #if os(Linux)
         let launch = configureLinuxSandboxedProcess(
             script: script,
             workDir: workDir,
@@ -31,7 +31,7 @@ struct SandboxedScriptRunner: ScriptRunner {
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script"
         )
-#else
+        #else
         let proc = Process()
         let launch = configureSandboxedProcess(
             proc,
@@ -48,7 +48,7 @@ struct SandboxedScriptRunner: ScriptRunner {
             usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
             usesExternalTimeout: launch.usesExternalTimeout
         )
-#endif
+        #endif
     }
 }
 
@@ -62,7 +62,7 @@ private func configureSandboxedProcess(
     env: [String: String]
 ) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
-#if os(macOS)
+    #if os(macOS)
     let profile = macOSSandboxProfile(workDir: workDir)
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
     proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
@@ -72,7 +72,7 @@ private func configureSandboxedProcess(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
-#else
+    #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
     proc.executableURL = invocation.executableURL
@@ -83,7 +83,7 @@ private func configureSandboxedProcess(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
-#endif
+    #endif
 }
 
 // MARK: - macOS sandbox profile
@@ -106,7 +106,7 @@ private func configureLinuxSandboxedProcess(
             "--user",
             "--net",
             "--map-root-user",
-            invocation.executableURL.path
+            invocation.executableURL.path,
         ] + invocation.arguments,
         env: mergedScriptEnvironment(overrides: env)
     )
@@ -131,19 +131,19 @@ private func macOSSandboxProfile(workDir: URL) -> String {
         return String(cString: buf)
     }
     return """
-    (version 1)
-    (deny default)
-    (allow file-read* (subpath "/"))
-    (allow file-write*
-        (subpath "\(wd)")
-        (literal "/dev/null")
-        (literal "/dev/stdout")
-        (literal "/dev/stderr"))
-    (allow process-exec process-fork)
-    (allow signal)
-    (allow sysctl-read)
-    (allow mach-lookup)
-    (deny network* (remote ip))
-    """
+        (version 1)
+        (deny default)
+        (allow file-read* (subpath "/"))
+        (allow file-write*
+            (subpath "\(wd)")
+            (literal "/dev/null")
+            (literal "/dev/stdout")
+            (literal "/dev/stderr"))
+        (allow process-exec process-fork)
+        (allow signal)
+        (allow sysctl-read)
+        (allow mach-lookup)
+        (deny network* (remote ip))
+        """
 }
 #endif

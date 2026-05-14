@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import Core
 
 struct CoreModelTests {
@@ -34,10 +35,11 @@ struct CoreModelTests {
         #expect(tier == decoded)
     }
 
-    @Test(arguments: zip(
-        [TestTier.pub, .release, .secret],
-        ["public",     "release", "secret"]
-    ))
+    @Test(
+        arguments: zip(
+            [TestTier.pub, .release, .secret],
+            ["public", "release", "secret"]
+        ))
     func testTierRawValue(tier: TestTier, expectedRaw: String) {
         #expect(tier.rawValue == expectedRaw)
     }
@@ -50,13 +52,14 @@ struct CoreModelTests {
         #expect(manifest.gradingMode == .worker)
     }
 
-    @Test(arguments: zip(
-        [
-            #"{ "schemaVersion": 1, "gradingMode": "browser" }"#,
-            #"{ "schemaVersion": 1, "gradingMode": "worker"  }"#
-        ],
-        [GradingMode.browser, GradingMode.worker]
-    ))
+    @Test(
+        arguments: zip(
+            [
+                #"{ "schemaVersion": 1, "gradingMode": "browser" }"#,
+                #"{ "schemaVersion": 1, "gradingMode": "worker"  }"#,
+            ],
+            [GradingMode.browser, GradingMode.worker]
+        ))
     func gradingModeExplicit(json: String, expected: GradingMode) throws {
         let manifest = try decoder.decode(TestProperties.self, from: json.data(using: .utf8)!)
         #expect(manifest.gradingMode == expected)
@@ -73,17 +76,17 @@ struct CoreModelTests {
 
     @Test func testPropertiesRoundTrip() throws {
         let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": ["warmup.py"],
-          "testSuites": [
-            { "tier": "public",  "script": "test_bit_count.sh"  },
-            { "tier": "release", "script": "test_first_digit.sh" }
-          ],
-          "timeLimitSeconds": 10
-        }
-        """.data(using: .utf8)!
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": ["warmup.py"],
+              "testSuites": [
+                { "tier": "public",  "script": "test_bit_count.sh"  },
+                { "tier": "release", "script": "test_first_digit.sh" }
+              ],
+              "timeLimitSeconds": 10
+            }
+            """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.schemaVersion == 1)
@@ -104,17 +107,17 @@ struct CoreModelTests {
 
     @Test func testPropertiesWithMakefileRoundTrip() throws {
         let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": ["warmup.py"],
-          "testSuites": [
-            { "tier": "public", "script": "test_bit_count.sh" }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": { "target": "build" }
-        }
-        """.data(using: .utf8)!
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": ["warmup.py"],
+              "testSuites": [
+                { "tier": "public", "script": "test_bit_count.sh" }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": { "target": "build" }
+            }
+            """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.makefile != nil)
@@ -127,17 +130,17 @@ struct CoreModelTests {
 
     @Test func testPropertiesWithDefaultMakeTarget() throws {
         let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": ["warmup.py"],
-          "testSuites": [
-            { "tier": "public", "script": "test_bit_count.sh" }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": { "target": null }
-        }
-        """.data(using: .utf8)!
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": ["warmup.py"],
+              "testSuites": [
+                { "tier": "public", "script": "test_bit_count.sh" }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": { "target": null }
+            }
+            """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.makefile != nil)
@@ -166,17 +169,17 @@ struct CoreModelTests {
 
     @Test func testPropertiesWithDependencyChainRoundTrip() throws {
         let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "testSuites": [
-            { "tier": "public",  "script": "test_build.sh" },
-            { "tier": "public",  "script": "test_unit_a.sh",  "dependsOn": ["test_build.sh"] },
-            { "tier": "release", "script": "test_unit_b.sh",  "dependsOn": ["test_build.sh"] }
-          ],
-          "timeLimitSeconds": 10
-        }
-        """.data(using: .utf8)!
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "testSuites": [
+                { "tier": "public",  "script": "test_build.sh" },
+                { "tier": "public",  "script": "test_unit_a.sh",  "dependsOn": ["test_build.sh"] },
+                { "tier": "release", "script": "test_unit_b.sh",  "dependsOn": ["test_build.sh"] }
+              ],
+              "timeLimitSeconds": 10
+            }
+            """.data(using: .utf8)!
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.testSuites.count == 3)

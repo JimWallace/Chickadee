@@ -1,6 +1,7 @@
-import XCTest
-@testable import chickadee_server
 import Fluent
+import XCTest
+
+@testable import chickadee_server
 
 final class SSORoleMappingTests: XCTestCase {
 
@@ -61,4 +62,3 @@ final class SSORoleMappingTests: XCTestCase {
         XCTAssertEqual(role, "instructor")
     }
 }
-

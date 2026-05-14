@@ -21,10 +21,10 @@
 // knows about but the runner doesn't won't be stripped on save.  Same
 // approach `moveToSection` uses for the `gradingMode` field.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -45,7 +45,7 @@ extension AssignmentRoutes {
         try await mutateManifest(setup: setup, on: req.db) { dict in
             var sections = (dict["sections"] as? [[String: Any]]) ?? []
             sections.append([
-                "id":   UUID().uuidString,
+                "id": UUID().uuidString,
                 "name": name,
             ])
             dict["sections"] = sections
@@ -175,13 +175,13 @@ extension AssignmentRoutes {
             let trimmed = e.expression.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Section expression '\(e.name)' has an empty body. " +
-                            "Provide a Python expression after the leading `=`.")
+                    reason: "Section expression '\(e.name)' has an empty body. "
+                        + "Provide a Python expression after the leading `=`.")
             }
             guard seenNames.insert(e.name).inserted else {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Duplicate section input name '\(e.name)'. " +
-                            "Names must be unique across literal values and expressions.")
+                    reason: "Duplicate section input name '\(e.name)'. "
+                        + "Names must be unique across literal values and expressions.")
             }
         }
 
@@ -189,8 +189,10 @@ extension AssignmentRoutes {
         // namespace may collide with a name in `globalVariables`,
         // `globalExpressions`, or any OTHER section's variables/expressions.
         guard let manifestData = setup.manifest.data(using: .utf8),
-              let manifest = try? ManifestCodec.decoder.decode(TestProperties.self,
-                                                                from: manifestData) else {
+            let manifest = try? ManifestCodec.decoder.decode(
+                TestProperties.self,
+                from: manifestData)
+        else {
             throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
         }
         var otherNames: Set<String> = []
@@ -202,15 +204,16 @@ extension AssignmentRoutes {
         }
         for n in seenNames where otherNames.contains(n) {
             throw WebAssignmentError.unprocessable(
-                reason: "Section input '\(n)' is already used by a global input or another section. " +
-                        "Names share one namespace across the assignment; rename to avoid shadowing.")
+                reason: "Section input '\(n)' is already used by a global input or another section. "
+                    + "Names share one namespace across the assignment; rename to avoid shadowing.")
         }
 
         // Save-time eval check: run every expression once against the
         // instructor's own seed so typos surface as a 400.
         if !expressions.isEmpty,
-           let userID = (try req.auth.require(APIUser.self)).id,
-           let assignmentID = assignment.id {
+            let userID = (try req.auth.require(APIUser.self)).id,
+            let assignmentID = assignment.id
+        {
             let seedHex = try await AssignmentSeedStore.ensureSeed(
                 userID: userID, assignmentID: assignmentID, on: req.db)
             // Combine: globals + section vars from THIS section's new
@@ -231,12 +234,12 @@ extension AssignmentRoutes {
             } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
                 let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
                 throw WebAssignmentError.unprocessable(
-                    reason: "One of your section expressions failed to evaluate: \(tail). " +
-                            "Fix the expression(s) and save again.")
+                    reason: "One of your section expressions failed to evaluate: \(tail). "
+                        + "Fix the expression(s) and save again.")
             } catch PersonalizationEvaluatorError.timedOut {
                 throw WebAssignmentError.unprocessable(
-                    reason: "Expression evaluation timed out (>5s). " +
-                            "Simplify the expressions or move heavy lifting into a support module.")
+                    reason: "Expression evaluation timed out (>5s). "
+                        + "Simplify the expressions or move heavy lifting into a support module.")
             } catch {
                 throw WebAssignmentError.internalFailure(
                     reason: "Expression evaluator failed: \(error)")
@@ -249,7 +252,8 @@ extension AssignmentRoutes {
         let varData = try encoder.encode(body.variables)
         let exprData = try encoder.encode(expressions)
         guard let parsedVars = try JSONSerialization.jsonObject(with: varData) as? [Any],
-              let parsedExprs = try JSONSerialization.jsonObject(with: exprData) as? [Any] else {
+            let parsedExprs = try JSONSerialization.jsonObject(with: exprData) as? [Any]
+        else {
             throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise section inputs.")
         }
 
@@ -296,8 +300,10 @@ extension AssignmentRoutes {
             )
             // Validate the set of ids matches exactly.
             guard Set(body.sectionIDs) == Set(byID.keys),
-                  body.sectionIDs.count == existing.count else {
-                throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
+                body.sectionIDs.count == existing.count
+            else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
             }
             dict["sections"] = body.sectionIDs.compactMap { byID[$0] }
         }

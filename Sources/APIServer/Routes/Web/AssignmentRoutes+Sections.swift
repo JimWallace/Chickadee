@@ -3,8 +3,8 @@
 // Section-management handlers for AssignmentRoutes.
 // Extracted from AssignmentRoutes.swift — no behaviour changes.
 
-import Vapor
 import Fluent
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -28,12 +28,15 @@ extension AssignmentRoutes {
         }
         let mode = body.defaultGradingMode
         guard mode == "browser" || mode == "worker" else {
-            throw WebAssignmentError.invalidParameter(name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
+            throw WebAssignmentError.invalidParameter(
+                name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
         }
-        let maxOrder = try await APICourseSection.query(on: req.db)
+        let maxOrder =
+            try await APICourseSection.query(on: req.db)
             .filter(\.$courseID == courseID)
             .max(\.$sortOrder) ?? 0
-        let section = APICourseSection(name: name, defaultGradingMode: mode, sortOrder: maxOrder + 1, courseID: courseID)
+        let section = APICourseSection(
+            name: name, defaultGradingMode: mode, sortOrder: maxOrder + 1, courseID: courseID)
         try await section.save(on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -51,19 +54,22 @@ extension AssignmentRoutes {
         let body = try req.content.decode(ReorderBody.self)
         let uuids = body.sectionIDs.compactMap { UUID(uuidString: $0) }
         guard uuids.count == body.sectionIDs.count, !uuids.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Invalid section ID in reorder payload.")
+            throw WebAssignmentError.invalidParameter(
+                name: "sectionIDs", reason: "Invalid section ID in reorder payload.")
         }
         let sections = try await APICourseSection.query(on: req.db)
             .filter(\.$courseID == courseID)
             .filter(\.$id ~~ uuids)
             .all()
         guard sections.count == uuids.count else {
-            throw WebAssignmentError.invalidParameter(name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
+            throw WebAssignmentError.invalidParameter(
+                name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
         }
-        let byID = Dictionary(uniqueKeysWithValues: sections.compactMap { s -> (UUID, APICourseSection)? in
-            guard let id = s.id else { return nil }
-            return (id, s)
-        })
+        let byID = Dictionary(
+            uniqueKeysWithValues: sections.compactMap { s -> (UUID, APICourseSection)? in
+                guard let id = s.id else { return nil }
+                return (id, s)
+            })
         for (index, uuid) in uuids.enumerated() {
             guard let section = byID[uuid] else { continue }
             section.sortOrder = index + 1
@@ -86,11 +92,13 @@ extension AssignmentRoutes {
             throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
         guard let sectionIDStr = req.parameters.get("sectionID"),
-              let sectionUUID = UUID(uuidString: sectionIDStr) else {
+            let sectionUUID = UUID(uuidString: sectionIDStr)
+        else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
-              section.courseID == courseID else {
+            section.courseID == courseID
+        else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(RenameSectionBody.self)
@@ -100,7 +108,8 @@ extension AssignmentRoutes {
         }
         let mode = body.defaultGradingMode
         guard mode == "browser" || mode == "worker" else {
-            throw WebAssignmentError.invalidParameter(name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
+            throw WebAssignmentError.invalidParameter(
+                name: "defaultGradingMode", reason: "defaultGradingMode must be 'browser' or 'worker'.")
         }
         section.name = name
         section.defaultGradingMode = mode
@@ -118,11 +127,13 @@ extension AssignmentRoutes {
             throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
         guard let sectionIDStr = req.parameters.get("sectionID"),
-              let sectionUUID = UUID(uuidString: sectionIDStr) else {
+            let sectionUUID = UUID(uuidString: sectionIDStr)
+        else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         guard let section = try await APICourseSection.find(sectionUUID, on: req.db),
-              section.courseID == courseID else {
+            section.courseID == courseID
+        else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         // FK SET NULL: assignments in this section will have section_id → NULL (ungrouped).
@@ -144,7 +155,8 @@ extension AssignmentRoutes {
         }
         let idStr = try assignmentPublicIDParameter(from: req)
         guard let assignment = try await assignmentByPublicID(idStr, on: req.db),
-              assignment.courseID == courseID else {
+            assignment.courseID == courseID
+        else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
         let body = (try? req.content.decode(MoveBody.self))
@@ -156,14 +168,17 @@ extension AssignmentRoutes {
         // to match the section's defaultGradingMode.  Moving to "ungrouped"
         // (nil section) leaves the grading mode unchanged.
         if let sectionUUID = newSectionID,
-           let section     = try await APICourseSection.find(sectionUUID, on: req.db),
-           let setup        = try await APITestSetup.find(assignment.testSetupID, on: req.db) {
-            let mode = section.defaultGradingMode   // "browser" | "worker"
+            let section = try await APICourseSection.find(sectionUUID, on: req.db),
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        {
+            let mode = section.defaultGradingMode  // "browser" | "worker"
             if var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any],
-               (dict["gradingMode"] as? String) != mode {
+                (dict["gradingMode"] as? String) != mode
+            {
                 dict["gradingMode"] = mode
                 if let data = try? JSONSerialization.data(withJSONObject: dict),
-                   let json = String(data: data, encoding: .utf8) {
+                    let json = String(data: data, encoding: .utf8)
+                {
                     setup.manifest = json
                     try await setup.save(on: req.db)
                 }

@@ -1,8 +1,8 @@
 // APIServer/Models/APITestSetup.swift
 
+import Core
 import Fluent
 import Vapor
-import Core
 
 final class APITestSetup: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context,
@@ -13,7 +13,7 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
     var id: String?
 
     @Field(key: "manifest")
-    var manifest: String        // JSON blob of TestProperties
+    var manifest: String  // JSON blob of TestProperties
 
     @Field(key: "zip_path")
     var zipPath: String
@@ -43,12 +43,14 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: String, manifest: String, zipPath: String, notebookPath: String? = nil,
-         courseID: UUID) {
-        self.id           = id
-        self.manifest     = manifest
-        self.zipPath      = zipPath
+    init(
+        id: String, manifest: String, zipPath: String, notebookPath: String? = nil,
+        courseID: UUID
+    ) {
+        self.id = id
+        self.manifest = manifest
+        self.zipPath = zipPath
         self.notebookPath = notebookPath
-        self.courseID     = courseID
+        self.courseID = courseID
     }
 }

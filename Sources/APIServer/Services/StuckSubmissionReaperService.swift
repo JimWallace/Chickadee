@@ -1,6 +1,6 @@
 import Fluent
-import Vapor
 import Foundation
+import Vapor
 
 /// Default age after which an `assigned` submission with no reported result
 /// is considered orphaned and returned to the `pending` pool.  Tuned to be

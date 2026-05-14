@@ -5,7 +5,7 @@ import Fluent
 struct CreateResults: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("results")
-            .field("id",              .string, .identifier(auto: false))
+            .field("id", .string, .identifier(auto: false))
             .field(
                 "submission_id",
                 .string,
@@ -13,8 +13,8 @@ struct CreateResults: AsyncMigration {
                 .references("submissions", "id", onDelete: .cascade)
             )
             .field("collection_json", .string, .required)
-            .field("source",          .string, .required)
-            .field("received_at",     .datetime)
+            .field("source", .string, .required)
+            .field("received_at", .datetime)
             .create()
     }
 

@@ -8,8 +8,8 @@
 //
 // Registered last in the auth group so fixed-path routes always win.
 
-import Vapor
 import Fluent
+import Vapor
 
 struct VanityURLRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {

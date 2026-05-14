@@ -17,8 +17,8 @@
 // Sandboxed-exec parity with the worker (`sandbox-exec` /  `unshare`)
 // is a future hardening; called out in the docs.
 
-import Foundation
 import Core
+import Foundation
 
 enum PersonalizationEvaluatorError: Error {
     case driverWriteFailed
@@ -74,8 +74,9 @@ enum PersonalizationEvaluator {
         // not a usable helper).
         let supportModules: [String] = {
             guard let dir = supportFilesDirectory,
-                  fm.fileExists(atPath: dir),
-                  let entries = try? fm.contentsOfDirectory(atPath: dir) else {
+                fm.fileExists(atPath: dir),
+                let entries = try? fm.contentsOfDirectory(atPath: dir)
+            else {
                 return []
             }
             return entries.compactMap { entry -> String? in
@@ -137,12 +138,13 @@ enum PersonalizationEvaluator {
         // Parse the last non-empty line of stdout as JSON (mirrors the
         // runner's "last-line JSON" contract — instructor `print` calls
         // earlier in the driver don't break parsing).
-        let lastLine = stdout
+        let lastLine =
+            stdout
             .split(separator: "\n", omittingEmptySubsequences: true)
             .last
             .map(String.init) ?? ""
         guard let data = lastLine.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String]
         else {
             throw PersonalizationEvaluatorError.malformedOutput(stdout: stdout)
         }
@@ -166,7 +168,7 @@ enum PersonalizationEvaluator {
             "import importlib, json, os",
             "",
             "seed = int(os.environ['CHICKADEE_ASSIGNMENT_SEED'], 16)",
-            ""
+            "",
         ]
         // Slice 5: auto-import every .py support module Chickadee can
         // see in the support-files dir.  Bind each module object as a
@@ -243,7 +245,7 @@ enum PersonalizationEvaluator {
         let outPipe = Pipe()
         let errPipe = Pipe()
         proc.standardOutput = outPipe
-        proc.standardError  = errPipe
+        proc.standardError = errPipe
 
         do {
             try proc.run()

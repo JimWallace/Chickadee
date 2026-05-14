@@ -46,9 +46,9 @@ final class APIResult: Model, Content, @unchecked Sendable {
     init() {}
 
     init(id: String, submissionID: String, collectionJSON: String, source: String = "worker") {
-        self.id             = id
-        self.submissionID   = submissionID
+        self.id = id
+        self.submissionID = submissionID
         self.collectionJSON = collectionJSON
-        self.source         = source
+        self.source = source
     }
 }

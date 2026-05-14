@@ -7,22 +7,25 @@ struct CreateCourses: AsyncMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("courses")
             .id()
-            .field("code",        .string, .required)
-            .field("name",        .string, .required)
-            .field("is_archived", .bool,   .required)
-            .field("created_at",  .datetime)
+            .field("code", .string, .required)
+            .field("name", .string, .required)
+            .field("is_archived", .bool, .required)
+            .field("created_at", .datetime)
             .create()
         // Partial unique index: only one active course per code.
         // Archived courses are allowed to share a code (e.g. after term rollover import).
         if let sql = database as? SQLDatabase {
-            let activePredicate = sql.dialect.name == "postgresql"
+            let activePredicate =
+                sql.dialect.name == "postgresql"
                 ? "is_archived = FALSE"
                 : "is_archived = 0"
-            try await sql.raw("""
+            try await sql.raw(
+                """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_code_active
                 ON courses(code)
                 WHERE \(unsafeRaw: activePredicate)
-                """).run()
+                """
+            ).run()
         }
     }
 

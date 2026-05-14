@@ -8,10 +8,10 @@
 // queue forever when no compatible runner exists.  Extracted from
 // AssignmentHelpers.swift (issue #442) — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 enum RunnerValidationOutcome {
     case passed(summary: String)
@@ -42,13 +42,13 @@ func enqueueRunnerValidationSubmission(
 
     let user = try req.auth.require(APIUser.self)
     let submission = APISubmission(
-        id:            subID,
-        testSetupID:   setupID,
-        zipPath:       filePath,
+        id: subID,
+        testSetupID: setupID,
+        zipPath: filePath,
         attemptNumber: priorCount + 1,
-        filename:      sanitizedFilename,
-        userID:        user.id,
-        kind:          APISubmission.Kind.validation
+        filename: sanitizedFilename,
+        userID: user.id,
+        kind: APISubmission.Kind.validation
     )
     try await submission.save(on: req.db)
     return subID
@@ -184,25 +184,27 @@ func waitForRunnerValidation(
 
     while Date().timeIntervalSince(started) < timeoutSeconds {
         guard let submission = try await APISubmission.find(submissionID, on: req.db),
-              submission.kind == APISubmission.Kind.validation else {
+            submission.kind == APISubmission.Kind.validation
+        else {
             throw WebAssignmentError.notFound(resource: "Validation submission")
         }
 
         if submission.status == "complete" || submission.status == "failed" {
-            guard let result = try await APIResult.query(on: req.db)
-                .filter(\.$submissionID == submissionID)
-                .sort(\.$receivedAt, .descending)
-                .first(),
-                  let data = result.collectionJSON.data(using: .utf8) else {
+            guard
+                let result = try await APIResult.query(on: req.db)
+                    .filter(\.$submissionID == submissionID)
+                    .sort(\.$receivedAt, .descending)
+                    .first(),
+                let data = result.collectionJSON.data(using: .utf8)
+            else {
                 return .failed(summary: "no result payload")
             }
 
             let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
             let summary = "\(collection.passCount)/\(collection.totalTests) passed"
-            let passed = collection.buildStatus == .passed &&
-                collection.failCount == 0 &&
-                collection.errorCount == 0 &&
-                collection.timeoutCount == 0
+            let passed =
+                collection.buildStatus == .passed && collection.failCount == 0 && collection.errorCount == 0
+                && collection.timeoutCount == 0
             return passed ? .passed(summary: summary) : .failed(summary: summary)
         }
 

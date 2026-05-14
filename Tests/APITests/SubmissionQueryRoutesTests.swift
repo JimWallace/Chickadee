@@ -6,12 +6,13 @@
 //   GET /api/v1/submissions/:id
 //   GET /api/v1/submissions/:id/results
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-@testable import Core
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import Core
+@testable import chickadee_server
 
 final class SubmissionQueryRoutesTests: XCTestCase {
 
@@ -51,7 +52,8 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let courseID = try await makeTestCourseID()
         let setup = APITestSetup(
             id: id,
-            manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
+            manifest:
+                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
             zipPath: app.testSetupsDirectory + "\(id).zip",
             courseID: courseID
         )
@@ -151,13 +153,16 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     func testListSubmissionsEmpty() async throws {
         let cookie = try await loginAsAdmin()
 
-        try await app.asyncTest(.GET, "/api/v1/submissions", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try res.content.decode(SubmissionListResponse.self)
-            XCTAssertTrue(body.submissions.isEmpty)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try res.content.decode(SubmissionListResponse.self)
+                XCTAssertTrue(body.submissions.isEmpty)
+            })
     }
 
     func testListSubmissionsReturnsAll() async throws {
@@ -165,13 +170,16 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         try await insertSubmission(id: "sub_ls1", testSetupID: "setup_001")
         try await insertSubmission(id: "sub_ls2", testSetupID: "setup_002")
 
-        try await app.asyncTest(.GET, "/api/v1/submissions", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try res.content.decode(SubmissionListResponse.self)
-            XCTAssertEqual(body.submissions.count, 2)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try res.content.decode(SubmissionListResponse.self)
+                XCTAssertEqual(body.submissions.count, 2)
+            })
     }
 
     func testListSubmissionsFilterByTestSetupID() async throws {
@@ -180,14 +188,17 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         try await insertSubmission(id: "sub_f2", testSetupID: "setup_BBB")
         try await insertSubmission(id: "sub_f3", testSetupID: "setup_AAA")
 
-        try await app.asyncTest(.GET, "/api/v1/submissions?testSetupID=setup_AAA", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try res.content.decode(SubmissionListResponse.self)
-            XCTAssertEqual(body.submissions.count, 2)
-            XCTAssertTrue(body.submissions.allSatisfy { $0.testSetupID == "setup_AAA" })
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions?testSetupID=setup_AAA",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try res.content.decode(SubmissionListResponse.self)
+                XCTAssertEqual(body.submissions.count, 2)
+                XCTAssertTrue(body.submissions.allSatisfy { $0.testSetupID == "setup_AAA" })
+            })
     }
 
     func testListSubmissionsIncludesExpectedFields() async throws {
@@ -199,16 +210,19 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             attemptNumber: 3
         )
 
-        try await app.asyncTest(.GET, "/api/v1/submissions", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try res.content.decode(SubmissionListResponse.self)
-            let sub = try XCTUnwrap(body.submissions.first { $0.submissionID == "sub_fields" })
-            XCTAssertEqual(sub.testSetupID, "setup_001")
-            XCTAssertEqual(sub.status, "complete")
-            XCTAssertEqual(sub.attemptNumber, 3)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try res.content.decode(SubmissionListResponse.self)
+                let sub = try XCTUnwrap(body.submissions.first { $0.submissionID == "sub_fields" })
+                XCTAssertEqual(sub.testSetupID, "setup_001")
+                XCTAssertEqual(sub.status, "complete")
+                XCTAssertEqual(sub.attemptNumber, 3)
+            })
     }
 
     // MARK: - GET /api/v1/submissions/:id
@@ -222,39 +236,48 @@ final class SubmissionQueryRoutesTests: XCTestCase {
             attemptNumber: 2
         )
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_gs1", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try res.content.decode(SubmissionStatusResponse.self)
-            XCTAssertEqual(body.submissionID, "sub_gs1")
-            XCTAssertEqual(body.testSetupID, "setup_001")
-            XCTAssertEqual(body.status, "assigned")
-            XCTAssertEqual(body.attemptNumber, 2)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_gs1",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try res.content.decode(SubmissionStatusResponse.self)
+                XCTAssertEqual(body.submissionID, "sub_gs1")
+                XCTAssertEqual(body.testSetupID, "setup_001")
+                XCTAssertEqual(body.status, "assigned")
+                XCTAssertEqual(body.attemptNumber, 2)
+            })
     }
 
     func testGetSubmissionReturnsSubmittedAt() async throws {
         let cookie = try await loginAsAdmin()
         try await insertSubmission(id: "sub_ts1")
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_ts1", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try res.content.decode(SubmissionStatusResponse.self)
-            XCTAssertNotNil(body.submittedAt)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_ts1",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try res.content.decode(SubmissionStatusResponse.self)
+                XCTAssertNotNil(body.submittedAt)
+            })
     }
 
     func testGetSubmissionNotFound() async throws {
         let cookie = try await loginAsAdmin()
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/nonexistent", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/nonexistent",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - GET /api/v1/submissions/:id/results
@@ -262,22 +285,28 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     func testGetResultsNotFoundForUnknownSubmission() async throws {
         let cookie = try await loginAsAdmin()
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/no_such_sub/results", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/no_such_sub/results",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     func testGetResultsNotFoundWhenNoneStored() async throws {
         let cookie = try await loginAsAdmin()
         try await insertSubmission(id: "sub_pending")
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_pending/results", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_pending/results",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     func testGetResultsReturnsCollection() async throws {
@@ -289,19 +318,22 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_res1", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_res1/results", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try self.decodeCollection(from: res.body)
-            XCTAssertEqual(body.submissionID, "sub_res1")
-            XCTAssertEqual(body.buildStatus, .passed)
-            XCTAssertEqual(body.outcomes.count, 1)
-            XCTAssertEqual(body.warnings, [])
-            XCTAssertEqual(body.outcomes[0].testName, "test_alpha")
-            XCTAssertEqual(body.passCount, 1)
-            XCTAssertEqual(body.failCount, 0)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_res1/results",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.submissionID, "sub_res1")
+                XCTAssertEqual(body.buildStatus, .passed)
+                XCTAssertEqual(body.outcomes.count, 1)
+                XCTAssertEqual(body.warnings, [])
+                XCTAssertEqual(body.outcomes[0].testName, "test_alpha")
+                XCTAssertEqual(body.passCount, 1)
+                XCTAssertEqual(body.failCount, 0)
+            })
     }
 
     func testGetResultsReturnsWarnings() async throws {
@@ -314,13 +346,16 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_res_warn", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_res_warn/results", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try self.decodeCollection(from: res.body)
-            XCTAssertEqual(body.warnings, ["Notebook submission.py was normalized before grading."])
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_res_warn/results",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.warnings, ["Notebook submission.py was normalized before grading."])
+            })
     }
 
     func testGetResultsWithFailedBuild() async throws {
@@ -344,15 +379,18 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         )
         try await insertResult(submissionID: "sub_fail", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_fail/results", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try self.decodeCollection(from: res.body)
-            XCTAssertEqual(body.buildStatus, .failed)
-            XCTAssertTrue(body.outcomes.isEmpty)
-            XCTAssertEqual(body.compilerOutput, "make: *** [all] Error 1")
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_fail/results",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.buildStatus, .failed)
+                XCTAssertTrue(body.outcomes.isEmpty)
+                XCTAssertEqual(body.compilerOutput, "make: *** [all] Error 1")
+            })
     }
 
     func testGetResultsFiltersBySingleTier() async throws {
@@ -361,25 +399,28 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let collection = makeCollection(
             submissionID: "sub_tier1",
             outcomes: [
-                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_pub", tier: .pub, status: .pass),
                 makeOutcome(name: "test_release", tier: .release, status: .fail),
-                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_tier1", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_tier1/results?tiers=public", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try self.decodeCollection(from: res.body)
-            XCTAssertEqual(body.outcomes.count, 1)
-            XCTAssertEqual(body.outcomes[0].testName, "test_pub")
-            XCTAssertEqual(body.totalTests, 1)
-            XCTAssertEqual(body.passCount, 1)
-            XCTAssertEqual(body.failCount, 0)
-            XCTAssertEqual(body.errorCount, 0)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_tier1/results?tiers=public",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.outcomes.count, 1)
+                XCTAssertEqual(body.outcomes[0].testName, "test_pub")
+                XCTAssertEqual(body.totalTests, 1)
+                XCTAssertEqual(body.passCount, 1)
+                XCTAssertEqual(body.failCount, 0)
+                XCTAssertEqual(body.errorCount, 0)
+            })
     }
 
     func testGetResultsFiltersByMultipleTiers() async throws {
@@ -388,24 +429,27 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let collection = makeCollection(
             submissionID: "sub_tier2",
             outcomes: [
-                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_pub", tier: .pub, status: .pass),
                 makeOutcome(name: "test_release", tier: .release, status: .fail),
-                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_tier2", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_tier2/results?tiers=public,release", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try self.decodeCollection(from: res.body)
-            XCTAssertEqual(body.outcomes.count, 2)
-            XCTAssertEqual(body.totalTests, 2)
-            XCTAssertEqual(body.passCount, 1)
-            XCTAssertEqual(body.failCount, 1)
-            XCTAssertFalse(body.outcomes.contains { $0.tier == .secret })
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_tier2/results?tiers=public,release",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.outcomes.count, 2)
+                XCTAssertEqual(body.totalTests, 2)
+                XCTAssertEqual(body.passCount, 1)
+                XCTAssertEqual(body.failCount, 1)
+                XCTAssertFalse(body.outcomes.contains { $0.tier == .secret })
+            })
     }
 
     func testGetResultsNoTierFilterReturnsAll() async throws {
@@ -414,21 +458,24 @@ final class SubmissionQueryRoutesTests: XCTestCase {
         let collection = makeCollection(
             submissionID: "sub_all",
             outcomes: [
-                makeOutcome(name: "test_pub",    tier: .pub,    status: .pass),
-                makeOutcome(name: "test_release",tier: .release,status: .pass),
+                makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                makeOutcome(name: "test_release", tier: .release, status: .pass),
                 makeOutcome(name: "test_secret", tier: .secret, status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_all", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_all/results", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = try self.decodeCollection(from: res.body)
-            XCTAssertEqual(body.outcomes.count, 3)
-            XCTAssertEqual(body.totalTests, 3)
-        })
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_all/results",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = try self.decodeCollection(from: res.body)
+                XCTAssertEqual(body.outcomes.count, 3)
+                XCTAssertEqual(body.totalTests, 3)
+            })
     }
 
     // MARK: - Deadline-based tier visibility
@@ -441,7 +488,8 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     ) async throws -> APIAssignment {
         _ = try await ensureSetup(id: setupID)
         if let existing = try await APIAssignment.query(on: app.db)
-            .filter(\.$testSetupID == setupID).first() {
+            .filter(\.$testSetupID == setupID).first()
+        {
             return existing
         }
         let courseID = try await makeTestCourseID()
@@ -465,31 +513,35 @@ final class SubmissionQueryRoutesTests: XCTestCase {
 
     /// Student cannot see `release` or `secret` outcomes before the deadline.
     func testGetResultsHidesReleaseAndSecretBeforeDeadline() async throws {
-        let setupID  = "setup_deadline_before"
+        let setupID = "setup_deadline_before"
         let username = "student_db1"
-        let cookie   = try await loginAsStudent(username: username)
+        let cookie = try await loginAsStudent(username: username)
         let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
-        let student  = try XCTUnwrap(studentOpt)
-        try await ensureAssignment(setupID: setupID,
-                                   dueAt: Date().addingTimeInterval(3600))  // 1 hr from now
-        try await insertSubmission(id: "sub_db1", testSetupID: setupID,
-                                   userID: student.id)
+        let student = try XCTUnwrap(studentOpt)
+        try await ensureAssignment(
+            setupID: setupID,
+            dueAt: Date().addingTimeInterval(3600))  // 1 hr from now
+        try await insertSubmission(
+            id: "sub_db1", testSetupID: setupID,
+            userID: student.id)
         let collection = makeCollection(
             submissionID: "sub_db1",
             outcomes: [
-                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_pub", tier: .pub, status: .pass),
                 makeOutcome(name: "test_release", tier: .release, status: .fail),
-                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_db1", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_db1/results",
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_db1/results",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = try self.decodeCollection(from: res.body)
-                XCTAssertEqual(body.outcomes.count, 1,
+                XCTAssertEqual(
+                    body.outcomes.count, 1,
                     "before deadline, student should see only public outcomes")
                 XCTAssertEqual(body.outcomes[0].testName, "test_pub")
                 XCTAssertFalse(body.outcomes.contains { $0.tier == .release })
@@ -500,31 +552,35 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     /// Student can see `release` outcomes after the deadline has passed,
     /// but `secret` outcomes remain hidden.
     func testGetResultsShowsReleaseAfterDeadline() async throws {
-        let setupID  = "setup_deadline_after"
+        let setupID = "setup_deadline_after"
         let username = "student_da1"
-        let cookie   = try await loginAsStudent(username: username)
+        let cookie = try await loginAsStudent(username: username)
         let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
-        let student  = try XCTUnwrap(studentOpt)
-        try await ensureAssignment(setupID: setupID,
-                                   dueAt: Date().addingTimeInterval(-3600))  // 1 hr ago
-        try await insertSubmission(id: "sub_da1", testSetupID: setupID,
-                                   userID: student.id)
+        let student = try XCTUnwrap(studentOpt)
+        try await ensureAssignment(
+            setupID: setupID,
+            dueAt: Date().addingTimeInterval(-3600))  // 1 hr ago
+        try await insertSubmission(
+            id: "sub_da1", testSetupID: setupID,
+            userID: student.id)
         let collection = makeCollection(
             submissionID: "sub_da1",
             outcomes: [
-                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_pub", tier: .pub, status: .pass),
                 makeOutcome(name: "test_release", tier: .release, status: .fail),
-                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_da1", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_da1/results",
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_da1/results",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = try self.decodeCollection(from: res.body)
-                XCTAssertEqual(body.outcomes.count, 2,
+                XCTAssertEqual(
+                    body.outcomes.count, 2,
                     "after deadline, student should see public + release but not secret")
                 XCTAssertTrue(body.outcomes.contains { $0.tier == .pub })
                 XCTAssertTrue(body.outcomes.contains { $0.tier == .release })
@@ -534,29 +590,33 @@ final class SubmissionQueryRoutesTests: XCTestCase {
 
     /// `secret` outcomes are never visible to students, even after the deadline.
     func testGetResultsAlwaysHidesSecretFromStudent() async throws {
-        let setupID  = "setup_secret_hide"
+        let setupID = "setup_secret_hide"
         let username = "student_sh1"
-        let cookie   = try await loginAsStudent(username: username)
+        let cookie = try await loginAsStudent(username: username)
         let studentOpt = try await APIUser.query(on: app.db).filter(\.$username == username).first()
-        let student  = try XCTUnwrap(studentOpt)
-        try await ensureAssignment(setupID: setupID,
-                                   dueAt: Date().addingTimeInterval(-7200))  // well past
-        try await insertSubmission(id: "sub_sh1", testSetupID: setupID,
-                                   userID: student.id)
+        let student = try XCTUnwrap(studentOpt)
+        try await ensureAssignment(
+            setupID: setupID,
+            dueAt: Date().addingTimeInterval(-7200))  // well past
+        try await insertSubmission(
+            id: "sub_sh1", testSetupID: setupID,
+            userID: student.id)
         let collection = makeCollection(
             submissionID: "sub_sh1",
             outcomes: [
-                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass)
             ]
         )
         try await insertResult(submissionID: "sub_sh1", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_sh1/results",
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_sh1/results",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = try self.decodeCollection(from: res.body)
-                XCTAssertTrue(body.outcomes.isEmpty,
+                XCTAssertTrue(
+                    body.outcomes.isEmpty,
                     "secret outcomes must never be visible to students")
             })
     }
@@ -564,26 +624,29 @@ final class SubmissionQueryRoutesTests: XCTestCase {
     /// Instructors always see all tiers regardless of deadline.
     func testGetResultsInstructorSeesAllTiersRegardlessOfDeadline() async throws {
         let setupID = "setup_instr_all"
-        let cookie  = try await loginAsInstructor()
-        try await ensureAssignment(setupID: setupID,
-                                   dueAt: Date().addingTimeInterval(3600))  // future deadline
+        let cookie = try await loginAsInstructor()
+        try await ensureAssignment(
+            setupID: setupID,
+            dueAt: Date().addingTimeInterval(3600))  // future deadline
         try await insertSubmission(id: "sub_ia1", testSetupID: setupID)
         let collection = makeCollection(
             submissionID: "sub_ia1",
             outcomes: [
-                makeOutcome(name: "test_pub",     tier: .pub,     status: .pass),
+                makeOutcome(name: "test_pub", tier: .pub, status: .pass),
                 makeOutcome(name: "test_release", tier: .release, status: .fail),
-                makeOutcome(name: "test_secret",  tier: .secret,  status: .pass),
+                makeOutcome(name: "test_secret", tier: .secret, status: .pass),
             ]
         )
         try await insertResult(submissionID: "sub_ia1", collection: collection)
 
-        try await app.asyncTest(.GET, "/api/v1/submissions/sub_ia1/results",
+        try await app.asyncTest(
+            .GET, "/api/v1/submissions/sub_ia1/results",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = try self.decodeCollection(from: res.body)
-                XCTAssertEqual(body.outcomes.count, 3,
+                XCTAssertEqual(
+                    body.outcomes.count, 3,
                     "instructors must see all tiers regardless of deadline")
             })
     }

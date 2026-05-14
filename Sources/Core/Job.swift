@@ -39,13 +39,13 @@ public struct Job: Codable, Sendable {
         submissionFilename: String? = nil,
         assignmentSeed: String? = nil
     ) {
-        self.submissionID       = submissionID
-        self.testSetupID        = testSetupID
-        self.attemptNumber      = attemptNumber
-        self.submissionURL      = submissionURL
-        self.testSetupURL       = testSetupURL
-        self.manifest           = manifest
+        self.submissionID = submissionID
+        self.testSetupID = testSetupID
+        self.attemptNumber = attemptNumber
+        self.submissionURL = submissionURL
+        self.testSetupURL = testSetupURL
+        self.manifest = manifest
         self.submissionFilename = submissionFilename
-        self.assignmentSeed     = assignmentSeed
+        self.assignmentSeed = assignmentSeed
     }
 }

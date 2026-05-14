@@ -19,11 +19,11 @@ import Foundation
 /// at least one student or pre-enrollment.  Courses with no roster do not
 /// appear in the map; callers should fall back to 0.
 func enrolledStudentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    async let studentIDsFetch    = APIUser.query(on: db)
+    async let studentIDsFetch = APIUser.query(on: db)
         .filter(\.$role == "student")
         .all()
         .map { $0.id }
-    async let enrollmentsFetch   = APICourseEnrollment.query(on: db).all()
+    async let enrollmentsFetch = APICourseEnrollment.query(on: db).all()
     async let preEnrollmentsFetch = APIPreEnrollment.query(on: db).all()
 
     let (studentIDOpts, enrollments, preEnrollments) =
@@ -46,7 +46,8 @@ func enrolledStudentCount(forCourse courseID: UUID, on db: Database) async throw
         .filter(\.$course.$id == courseID)
         .all()
     let enrolledUserIDs = enrollments.map(\.userID)
-    async let studentCountFetch: Int = enrolledUserIDs.isEmpty
+    async let studentCountFetch: Int =
+        enrolledUserIDs.isEmpty
         ? 0
         : APIUser.query(on: db)
             .filter(\.$role == "student")

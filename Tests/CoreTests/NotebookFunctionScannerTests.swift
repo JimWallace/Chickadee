@@ -2,8 +2,9 @@
 //
 // Unit tests for NotebookFunctionScanner.
 
-import Testing
 import Foundation
+import Testing
+
 @testable import Core
 
 struct NotebookFunctionScannerTests {
@@ -12,59 +13,62 @@ struct NotebookFunctionScannerTests {
 
     /// Builds a minimal .ipynb JSON with a single code cell.
     private func notebook(code: String) -> Data {
-        let escaped = code
+        let escaped =
+            code
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "\n", with: "\\n")
         let json = """
-        {
-          "cells": [
             {
-              "cell_type": "code",
+              "cells": [
+                {
+                  "cell_type": "code",
+                  "metadata": {},
+                  "source": "\(escaped)"
+                }
+              ],
               "metadata": {},
-              "source": "\(escaped)"
+              "nbformat": 4,
+              "nbformat_minor": 5
             }
-          ],
-          "metadata": {},
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """
+            """
         return Data(json.utf8)
     }
 
     /// Builds a notebook with multiple code cells.
     private func notebook(cells: [String]) -> Data {
         let cellsJSON = cells.map { code -> String in
-            let escaped = code
+            let escaped =
+                code
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
                 .replacingOccurrences(of: "\n", with: "\\n")
             return """
-            {
-              "cell_type": "code",
-              "metadata": {},
-              "source": "\(escaped)"
-            }
-            """
+                {
+                  "cell_type": "code",
+                  "metadata": {},
+                  "source": "\(escaped)"
+                }
+                """
         }.joined(separator: ",")
         let json = """
-        {
-          "cells": [\(cellsJSON)],
-          "metadata": {},
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """
+            {
+              "cells": [\(cellsJSON)],
+              "metadata": {},
+              "nbformat": 4,
+              "nbformat_minor": 5
+            }
+            """
         return Data(json.utf8)
     }
 
     // MARK: - Tests
 
     @Test func emptyNotebook() {
-        let nb = Data("""
-        {"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}
-        """.utf8)
+        let nb = Data(
+            """
+            {"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}
+            """.utf8)
         #expect(scanNotebookForFunctions(nb).isEmpty)
     }
 
@@ -167,9 +171,10 @@ struct NotebookFunctionScannerTests {
         // the LAST definition is callable at runtime; the scanner must mark
         // earlier ones as shadowed so the family editor can warn the
         // instructor away from targeting them.
-        let nb = notebook(code:
-            "def tax(price: float) -> float:\n    return price * 1.13\n" +
-            "def tax(price: float, exempt: bool, extra: bool) -> float:\n    return price\n"
+        let nb = notebook(
+            code:
+                "def tax(price: float) -> float:\n    return price * 1.13\n"
+                + "def tax(price: float, exempt: bool, extra: bool) -> float:\n    return price\n"
         )
         let fns = scanNotebookForFunctions(nb)
         #expect(fns.count == 2)
@@ -221,7 +226,7 @@ struct NotebookFunctionScannerTests {
         let nb = notebook(cells: [
             "def foo(x):\n    return x\n",
             "x = 1  # not a function",
-            "def bar(y):\n    return y\n"
+            "def bar(y):\n    return y\n",
         ])
         let fns = scanNotebookForFunctions(nb)
         #expect(fns.count == 2)
@@ -238,19 +243,19 @@ struct NotebookFunctionScannerTests {
 
     @Test func markdownCellIgnored() {
         let json = """
-        {
-          "cells": [
             {
-              "cell_type": "markdown",
+              "cells": [
+                {
+                  "cell_type": "markdown",
+                  "metadata": {},
+                  "source": "def fake_function(x):\\n    pass"
+                }
+              ],
               "metadata": {},
-              "source": "def fake_function(x):\\n    pass"
+              "nbformat": 4,
+              "nbformat_minor": 5
             }
-          ],
-          "metadata": {},
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """
+            """
         #expect(scanNotebookForFunctions(Data(json.utf8)).isEmpty)
     }
 
@@ -263,19 +268,19 @@ struct NotebookFunctionScannerTests {
     @Test func sourceAsArrayOfLines() {
         // JupyterLite stores source as an array of strings, one per line.
         let json = """
-        {
-          "cells": [
             {
-              "cell_type": "code",
+              "cells": [
+                {
+                  "cell_type": "code",
+                  "metadata": {},
+                  "source": ["def greet(name):\\n", "    return 'hi'\\n"]
+                }
+              ],
               "metadata": {},
-              "source": ["def greet(name):\\n", "    return 'hi'\\n"]
+              "nbformat": 4,
+              "nbformat_minor": 5
             }
-          ],
-          "metadata": {},
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """
+            """
         let fns = scanNotebookForFunctions(Data(json.utf8))
         #expect(fns.count == 1)
         #expect(fns[0].name == "greet")
@@ -287,33 +292,35 @@ struct NotebookFunctionScannerTests {
     /// Each entry is either `("md", "## Section Title")` or `("code", source)`.
     private func sectionedNotebook(_ cells: [(String, String)]) -> Data {
         let cellsJSON = cells.map { kind, source -> String in
-            let escaped = source
+            let escaped =
+                source
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
                 .replacingOccurrences(of: "\n", with: "\\n")
             return """
-            {
-              "cell_type": "\(kind == "md" ? "markdown" : "code")",
-              "metadata": {},
-              "source": "\(escaped)"
-            }
-            """
+                {
+                  "cell_type": "\(kind == "md" ? "markdown" : "code")",
+                  "metadata": {},
+                  "source": "\(escaped)"
+                }
+                """
         }.joined(separator: ",")
-        return Data("""
-        {
-          "cells": [\(cellsJSON)],
-          "metadata": {},
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """.utf8)
+        return Data(
+            """
+            {
+              "cells": [\(cellsJSON)],
+              "metadata": {},
+              "nbformat": 4,
+              "nbformat_minor": 5
+            }
+            """.utf8)
     }
 
     @Test func sectionScanner_tagsFunctionsWithPreviousHeader() {
         let nb = sectionedNotebook([
-            ("md",   "## Warm Up"),
+            ("md", "## Warm Up"),
             ("code", "def foo(a):\n    return a\n"),
-            ("md",   "## Challenge"),
+            ("md", "## Challenge"),
             ("code", "def bar(b):\n    return b\n\ndef baz(c):\n    return c\n"),
         ])
         let r = scanNotebookForSectionsAndFunctions(nb)
@@ -325,7 +332,7 @@ struct NotebookFunctionScannerTests {
     @Test func sectionScanner_functionBeforeAnyHeaderHasNilSection() {
         let nb = sectionedNotebook([
             ("code", "def before_section():\n    pass\n"),
-            ("md",   "## Later Section"),
+            ("md", "## Later Section"),
             ("code", "def after_section():\n    pass\n"),
         ])
         let r = scanNotebookForSectionsAndFunctions(nb)
@@ -337,9 +344,9 @@ struct NotebookFunctionScannerTests {
 
     @Test func sectionScanner_deduplicatesRepeatedHeaderNames() {
         let nb = sectionedNotebook([
-            ("md",   "## Shared"),
+            ("md", "## Shared"),
             ("code", "def a():\n    pass\n"),
-            ("md",   "## Shared"),   // same title used again later — dedupes
+            ("md", "## Shared"),  // same title used again later — dedupes
             ("code", "def b():\n    pass\n"),
         ])
         let r = scanNotebookForSectionsAndFunctions(nb)
@@ -352,11 +359,11 @@ struct NotebookFunctionScannerTests {
         // document title, `###` is a subheading.  Keeps sections tied to
         // the "question-level" structure of the notebook.
         let nb = sectionedNotebook([
-            ("md",   "# Assignment Title"),
+            ("md", "# Assignment Title"),
             ("code", "def ignored_top():\n    pass\n"),
-            ("md",   "### Sub Heading"),
+            ("md", "### Sub Heading"),
             ("code", "def ignored_sub():\n    pass\n"),
-            ("md",   "## Real Section"),
+            ("md", "## Real Section"),
             ("code", "def actual():\n    pass\n"),
         ])
         let r = scanNotebookForSectionsAndFunctions(nb)
@@ -373,12 +380,12 @@ struct NotebookFunctionScannerTests {
         // scaffolder will turn this into one section per `##` header and
         // an exists test per detected function.
         let nb = sectionedNotebook([
-            ("md",   "# Assignment 3 — Electronic Health Records"),
-            ("md",   "## Warm Up: Patient Record as Dictionary"),
+            ("md", "# Assignment 3 — Electronic Health Records"),
+            ("md", "## Warm Up: Patient Record as Dictionary"),
             ("code", "def mailingLabel(record):\n    pass\n\ndef bmi(record):\n    pass\n"),
-            ("md",   "## Warm Up II: Calculating Patient Age"),
+            ("md", "## Warm Up II: Calculating Patient Age"),
             ("code", "def age(dob, currentDate=\"20260301\"):\n    pass\n"),
-            ("md",   "## Challenge: Answering Questions with a Patient Database"),
+            ("md", "## Challenge: Answering Questions with a Patient Database"),
             ("code", "def countPatients(patients):\n    pass\n"),
             ("code", "def countAdults(patients):\n    pass\n"),
             ("code", "def findPatientsByDiagnosis(patients, diagnosis):\n    pass\n"),
@@ -386,16 +393,18 @@ struct NotebookFunctionScannerTests {
             ("code", "def countOverWeightPatients(patients):\n    pass\n"),
         ])
         let r = scanNotebookForSectionsAndFunctions(nb)
-        #expect(r.sectionNames == [
-            "Warm Up: Patient Record as Dictionary",
-            "Warm Up II: Calculating Patient Age",
-            "Challenge: Answering Questions with a Patient Database",
-        ])
-        #expect(r.functions.map(\.info.name) == [
-            "mailingLabel", "bmi", "age",
-            "countPatients", "countAdults", "findPatientsByDiagnosis",
-            "averageAge", "countOverWeightPatients",
-        ])
+        #expect(
+            r.sectionNames == [
+                "Warm Up: Patient Record as Dictionary",
+                "Warm Up II: Calculating Patient Age",
+                "Challenge: Answering Questions with a Patient Database",
+            ])
+        #expect(
+            r.functions.map(\.info.name) == [
+                "mailingLabel", "bmi", "age",
+                "countPatients", "countAdults", "findPatientsByDiagnosis",
+                "averageAge", "countOverWeightPatients",
+            ])
         // Each function is tagged with its preceding `##` header.
         #expect(r.functions[0].sectionName == "Warm Up: Patient Record as Dictionary")
         #expect(r.functions[1].sectionName == "Warm Up: Patient Record as Dictionary")

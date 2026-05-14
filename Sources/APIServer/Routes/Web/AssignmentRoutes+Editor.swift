@@ -3,10 +3,10 @@
 // Instructor assignment editor routes: file downloads, edit/save, script
 // CRUD, and notebook scanning. All routes registered in AssignmentRoutes.boot().
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
     // MARK: - GET /instructor/:assignmentID/files/notebook
@@ -88,16 +88,18 @@ extension AssignmentRoutes {
         let solutionZipEntry = listZipEntries(zipPath: setup.zipPath)
             .first(where: { $0.hasPrefix("solution.") })
         if let entryName = solutionZipEntry,
-           let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName) {
+            let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName)
+        {
             return buildFileResponse(data: data, filename: entryName)
         }
 
         // Fall back to the most recent validation submission, preserving
         // the instructor's original filename (e.g. bmi.py, dna.py).
         if let validationID = assignment.validationSubmissionID,
-           let validationSubmission = try await APISubmission.find(validationID, on: req.db),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-           !data.isEmpty {
+            let validationSubmission = try await APISubmission.find(validationID, on: req.db),
+            let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
+            !data.isEmpty
+        {
             return buildFileResponse(data: data, filename: validationSubmission.filename ?? "solution.ipynb")
         }
 
@@ -106,8 +108,9 @@ extension AssignmentRoutes {
             .filter(\.$kind == APISubmission.Kind.validation)
             .sort(\.$submittedAt, .descending)
             .first(),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-           !data.isEmpty {
+            let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
+            !data.isEmpty
+        {
             return buildFileResponse(data: data, filename: fallbackSubmission.filename ?? "solution.ipynb")
         }
 
@@ -154,18 +157,22 @@ extension AssignmentRoutes {
             throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment upload payload")
         }
 
-        let assignmentName = try multipartTextField(named: ["assignmentName"], from: req)
+        let assignmentName =
+            try multipartTextField(named: ["assignmentName"], from: req)
             ?? bodyMany?.assignmentName
             ?? bodySingle?.assignmentName
-        let dueAtRaw = try multipartTextField(named: ["dueAt"], from: req)
+        let dueAtRaw =
+            try multipartTextField(named: ["dueAt"], from: req)
             ?? bodyMany?.dueAt
             ?? bodySingle?.dueAt
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+        let suiteFilesRaw =
+            try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
             ?? bodyMany?.suiteFiles
             ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw = try multipartTextField(named: ["suiteConfig"], from: req)
+        let suiteConfigRaw =
+            try multipartTextField(named: ["suiteConfig"], from: req)
             ?? bodyMany?.suiteConfig
             ?? bodySingle?.suiteConfig
 
@@ -192,8 +199,10 @@ extension AssignmentRoutes {
             return Data(assignmentNotebookFile.data.readableBytesView)
         }()
         guard !assignmentNotebookRaw.isEmpty,
-              (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
+            (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil
+        else {
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
@@ -209,7 +218,8 @@ extension AssignmentRoutes {
             }
             let archiveFiles = listZipEntries(zipPath: setup.zipPath)
             if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }),
-               let data = extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry) {
+                let data = extractZipEntry(zipPath: setup.zipPath, entryName: solutionEntry)
+            {
                 solutionFilename = solutionEntry
                 return data
             }
@@ -217,19 +227,22 @@ extension AssignmentRoutes {
         }()
         var resolvedSolutionNotebookRaw = solutionNotebookRaw
         if resolvedSolutionNotebookRaw.isEmpty,
-           let existingSolution = try await loadExistingSolution(req: req, assignment: assignment) {
+            let existingSolution = try await loadExistingSolution(req: req, assignment: assignment)
+        {
             resolvedSolutionNotebookRaw = existingSolution.data
             solutionFilename = existingSolution.filename
         }
         if resolvedSolutionNotebookRaw.isEmpty, let userID = user.id,
-           let draftData = draftNotebookData(
-               req: req, setupID: setup.id!, userID: userID, fileKind: .solution,
-               fallbackPath: draftSolutionNotebookPath(
-                   testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)) {
+            let draftData = draftNotebookData(
+                req: req, setupID: setup.id!, userID: userID, fileKind: .solution,
+                fallbackPath: draftSolutionNotebookPath(
+                    testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!))
+        {
             resolvedSolutionNotebookRaw = draftData
         }
         guard !resolvedSolutionNotebookRaw.isEmpty else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
         let solutionIsNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
@@ -245,14 +258,16 @@ extension AssignmentRoutes {
         _ = suiteConfigRaw
 
         guard try setupHasAnyTestEntries(manifestJSON: setup.manifest) else {
-            let q = "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
         let notebookPath: String = {
             if hasUploadedAssignmentNotebook {
-                let fallbackName = setup.notebookPath
+                let fallbackName =
+                    setup.notebookPath
                     .map { URL(fileURLWithPath: $0).lastPathComponent }
                     .flatMap { $0.isEmpty ? nil : $0 }
                     ?? "assignment.ipynb"
@@ -271,7 +286,7 @@ extension AssignmentRoutes {
 
         let activeTestSuiteScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
@@ -314,7 +329,8 @@ extension AssignmentRoutes {
         }
 
         assignment.validationStatus = "pending"
-        let solutionDataToSubmit = solutionIsNotebook
+        let solutionDataToSubmit =
+            solutionIsNotebook
             ? normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw)
             : resolvedSolutionNotebookRaw
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
@@ -339,12 +355,12 @@ extension AssignmentRoutes {
             throw WebAssignmentError.forbidden(action: "edit assignment scripts")
         }
 
-        let idStr    = try assignmentPublicIDParameter(from: req)
+        let idStr = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
 
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
@@ -367,7 +383,7 @@ extension AssignmentRoutes {
             throw WebAssignmentError.forbidden(action: "edit assignment scripts")
         }
 
-        let idStr    = try assignmentPublicIDParameter(from: req)
+        let idStr = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
 
         struct UpdateBody: Content { var content: String }
@@ -375,7 +391,7 @@ extension AssignmentRoutes {
 
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         // Verify the file exists before writing.
@@ -385,7 +401,9 @@ extension AssignmentRoutes {
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
             throw WebAssignmentError.conflict(
-                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Edit the family rather than the generated script.")
+                reason:
+                    "'\(filename)' is generated from pattern family '\(familyID)'. Edit the family rather than the generated script."
+            )
         }
 
         // Slice 1: inline global + section variables before write so the
@@ -394,7 +412,7 @@ extension AssignmentRoutes {
         // fails (degrades to pre-Slice-1 behaviour).
         let inlinedContent: String = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return body.content }
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: filename,
@@ -428,10 +446,10 @@ extension AssignmentRoutes {
 
         struct CreateBody: Content {
             var filename: String
-            var content:  String
-            var tier:     String?
-            var points:   Int?
-            var isTest:   Bool?
+            var content: String
+            var tier: String?
+            var points: Int?
+            var isTest: Bool?
         }
         let body = try req.content.decode(CreateBody.self)
 
@@ -443,7 +461,7 @@ extension AssignmentRoutes {
 
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         // Reject duplicate filenames.
@@ -457,7 +475,7 @@ extension AssignmentRoutes {
         // save will re-prepend with the correct section scope.
         let createInlined: String = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return body.content }
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: cleaned,
@@ -467,11 +485,11 @@ extension AssignmentRoutes {
         }()
         try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: createInlined)
 
-        let tier       = normalizeTier(body.tier, isTest: body.isTest)
+        let tier = normalizeTier(body.tier, isTest: body.isTest)
         // v0.4.105: allow 0-mark tests (e.g. function-existence guards
         // that exist purely to short-circuit downstream tests, not to
         // contribute to the grade).  Negative values still clamp to 0.
-        let points     = max(0, body.points ?? 1)
+        let points = max(0, body.points ?? 1)
         let shouldTest = tier != "support"
 
         if shouldTest {
@@ -492,7 +510,7 @@ extension AssignmentRoutes {
             // the bigger /edit/save flow.
             let activeTestSuiteScripts: Set<String> = {
                 guard let data = setup.manifest.data(using: .utf8),
-                      let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                    let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
                 else { return [] }
                 return Set(props.testSuites.map(\.script))
             }()
@@ -533,12 +551,12 @@ extension AssignmentRoutes {
             throw WebAssignmentError.forbidden(action: "delete assignment scripts")
         }
 
-        let idStr    = try assignmentPublicIDParameter(from: req)
+        let idStr = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
 
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
@@ -547,13 +565,17 @@ extension AssignmentRoutes {
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
             throw WebAssignmentError.conflict(
-                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family).")
+                reason:
+                    "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family)."
+            )
         }
 
         let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
         guard dependents.isEmpty else {
             throw WebAssignmentError.conflict(
-                reason: "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))")
+                reason:
+                    "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
+            )
         }
 
         do {
@@ -573,7 +595,7 @@ extension AssignmentRoutes {
         // entry in the zip, so a deleted file vanishes from there too.
         let activeTestSuiteScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
@@ -599,20 +621,22 @@ extension AssignmentRoutes {
         }
 
         guard let draftID = try? req.query.get(String.self, at: "draftID"),
-              !draftID.isEmpty,
-              let setup = try await APITestSetup.find(draftID, on: req.db)
+            !draftID.isEmpty,
+            let setup = try await APITestSetup.find(draftID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Draft assignment") }
 
         let fallbackPath = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
-        guard let data = draftNotebookData(
-            req: req, setupID: setup.id!, userID: userID,
-            fileKind: .solution, fallbackPath: fallbackPath)
+        guard
+            let data = draftNotebookData(
+                req: req, setupID: setup.id!, userID: userID,
+                fileKind: .solution, fallbackPath: fallbackPath)
         else { throw WebAssignmentError.notFound(resource: "Draft solution notebook") }
 
-        return Response(status: .ok,
-                        headers: ["Content-Type": "application/json"],
-                        body: .init(data: data))
+        return Response(
+            status: .ok,
+            headers: ["Content-Type": "application/json"],
+            body: .init(data: data))
     }
 
     // MARK: - GET /instructor/script-templates
@@ -723,7 +747,8 @@ extension AssignmentRoutes {
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
-        let sourceData = (try? notebookData(for: setup))
+        let sourceData =
+            (try? notebookData(for: setup))
             ?? defaultNotebookData(title: "\(assignment.title) Solution")
         let normalized = normalizeNotebookForJupyterLite(sourceData)
 
@@ -739,7 +764,8 @@ extension AssignmentRoutes {
                 setupID: setup.id!, userID: userID, fileKind: .solution),
             overwriteWith: normalized)
 
-        return req.redirect(to: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")
+        return req.redirect(
+            to: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")
     }
 }
 

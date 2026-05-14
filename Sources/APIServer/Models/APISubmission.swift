@@ -20,7 +20,7 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     var testSetupID: String
 
     @Field(key: "status")
-    var status: String          // pending | assigned | complete | failed
+    var status: String  // pending | assigned | complete | failed
 
     @OptionalField(key: "worker_id")
     var workerID: String?
@@ -75,13 +75,13 @@ final class APISubmission: Model, Content, @unchecked Sendable {
         userID: UUID? = nil,
         kind: String = Kind.student
     ) {
-        self.id            = id
-        self.testSetupID   = testSetupID
-        self.zipPath       = zipPath
+        self.id = id
+        self.testSetupID = testSetupID
+        self.zipPath = zipPath
         self.attemptNumber = attemptNumber
-        self.status        = status
-        self.filename      = filename
-        self.userID        = userID
-        self.kind          = kind
+        self.status = status
+        self.filename = filename
+        self.userID = userID
+        self.kind = kind
     }
 }

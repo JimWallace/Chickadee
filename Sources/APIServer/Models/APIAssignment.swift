@@ -84,27 +84,29 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         return String((0..<length).map { _ in alphabet.randomElement(using: &rng)! })
     }
 
-    init(id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
-         slug: String? = nil,
-         dueAt: Date? = nil, isOpen: Bool = true,
-         deadlineOverrideActive: Bool = false,
-         sortOrder: Int? = nil,
-         validationStatus: String? = nil,
-         validationSubmissionID: String? = nil,
-         sectionID: UUID? = nil,
-         courseID: UUID) {
-        self.id          = id
-        self.publicID    = publicID
+    init(
+        id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
+        slug: String? = nil,
+        dueAt: Date? = nil, isOpen: Bool = true,
+        deadlineOverrideActive: Bool = false,
+        sortOrder: Int? = nil,
+        validationStatus: String? = nil,
+        validationSubmissionID: String? = nil,
+        sectionID: UUID? = nil,
+        courseID: UUID
+    ) {
+        self.id = id
+        self.publicID = publicID
         self.testSetupID = testSetupID
-        self.title       = title
-        self.slug        = slug ?? VanityURLRoutes.slugify(title)
-        self.dueAt       = dueAt
-        self.isOpen      = isOpen
+        self.title = title
+        self.slug = slug ?? VanityURLRoutes.slugify(title)
+        self.dueAt = dueAt
+        self.isOpen = isOpen
         self.deadlineOverrideActive = deadlineOverrideActive
-        self.sortOrder   = sortOrder
+        self.sortOrder = sortOrder
         self.validationStatus = validationStatus
         self.validationSubmissionID = validationSubmissionID
-        self.sectionID   = sectionID
-        self.courseID    = courseID
+        self.sectionID = sectionID
+        self.courseID = courseID
     }
 }

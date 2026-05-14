@@ -5,11 +5,12 @@
 // start.  Verifies authentication, kind validation, persistence of the
 // expected fields, and the per-(user, setup, kind) rate-limit behaviour.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class ClientDiagnosticsRoutesTests: XCTestCase {
 
@@ -106,8 +107,8 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
         let auth = try await loginAsStudent()
         try await insertSetup(id: "setup_xyz")
         let body = #"""
-        {"kind":"preflight_fail","testSetupID":"setup_xyz","failedChecks":["serviceWorker","indexedDB"]}
-        """#
+            {"kind":"preflight_fail","testSetupID":"setup_xyz","failedChecks":["serviceWorker","indexedDB"]}
+            """#
         let res = try await postJSON(body, auth: auth, userAgent: "TestUA/1.0")
         XCTAssertEqual(res.status, .accepted)
 
@@ -140,8 +141,8 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
         let auth = try await loginAsStudent()
         try await insertSetup(id: "setup_kernel_unhealthy")
         let body = #"""
-        {"kind":"watchdog_timeout","testSetupID":"setup_kernel_unhealthy","failedChecks":["kernel-unhealthy"]}
-        """#
+            {"kind":"watchdog_timeout","testSetupID":"setup_kernel_unhealthy","failedChecks":["kernel-unhealthy"]}
+            """#
         let res = try await postJSON(body, auth: auth, userAgent: "TestUA/2.0")
         XCTAssertEqual(res.status, .accepted)
 
@@ -211,7 +212,7 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
             userID: userID, testSetupID: "s1", kind: "watchdog_timeout"
         )
         let t0 = Date()
-        let first  = await limiter.admit(key: key, now: t0)
+        let first = await limiter.admit(key: key, now: t0)
         let second = await limiter.admit(key: key, now: t0.addingTimeInterval(30))
         XCTAssertTrue(first)
         XCTAssertFalse(second)

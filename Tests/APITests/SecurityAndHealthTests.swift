@@ -1,9 +1,10 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-import Vapor
 import Foundation
+import Vapor
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class SecurityAndHealthTests: XCTestCase {
 
@@ -71,7 +72,8 @@ final class SecurityAndHealthTests: XCTestCase {
     func testUserFileNamespaceAllowsStudentOwnNamespace() async throws {
         let userID = UUID()
         try await withApp(try await makeNamespaceApp(user: makeUser(id: userID, role: "student"))) { app in
-            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(userID.uuidString.lowercased())/assignment.ipynb") { res in
+            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(userID.uuidString.lowercased())/assignment.ipynb")
+            { res in
                 XCTAssertEqual(res.status, .ok)
             }
         }
@@ -79,7 +81,8 @@ final class SecurityAndHealthTests: XCTestCase {
 
     func testUserFileNamespaceRejectsDifferentStudentNamespace() async throws {
         try await withApp(try await makeNamespaceApp(user: makeUser(role: "student"))) { app in
-            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb") { res in
+            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
+            { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         }
@@ -87,7 +90,8 @@ final class SecurityAndHealthTests: XCTestCase {
 
     func testUserFileNamespaceAllowsInstructorAcrossNamespaces() async throws {
         try await withApp(try await makeNamespaceApp(user: makeUser(role: "instructor"))) { app in
-            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb") { res in
+            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
+            { res in
                 XCTAssertEqual(res.status, .ok)
             }
         }
@@ -95,7 +99,8 @@ final class SecurityAndHealthTests: XCTestCase {
 
     func testUserFileNamespaceRequiresAuthenticationForGuardedPaths() async throws {
         try await withApp(try await makeNamespaceApp(user: nil)) { app in
-            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb") { res in
+            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
+            { res in
                 XCTAssertEqual(res.status, .unauthorized)
             }
         }

@@ -9,12 +9,13 @@
 //   POST /instructor/:id/close
 //   POST /instructor/:id/delete
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class AssignmentRoutesTests: XCTestCase {
 
@@ -51,10 +52,11 @@ final class AssignmentRoutesTests: XCTestCase {
     @discardableResult
     private func insertSetup(id: String) async throws -> APITestSetup {
         let manifest = """
-        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
+            """
         let courseID = try await makeTestCourseID()
-        let setup = APITestSetup(id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
+        let setup = APITestSetup(
+            id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
         try await setup.save(on: app.db)
         return setup
     }
@@ -323,12 +325,15 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/\(assignment.publicID)/open", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(assignment.publicID)/open",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let reopenedOptional = try await APIAssignment.find(assignment.id, on: app.db)
         XCTAssertNotNil(reopenedOptional)
@@ -371,36 +376,45 @@ final class AssignmentRoutesTests: XCTestCase {
 
     func testStudentCannotAccessAssignments() async throws {
         let cookie = try await loginAsStudent()
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     func testInstructorCanAccessAssignments() async throws {
         let cookie = try await loginAsInstructor()
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            // 500 expected because Leaf is not configured in tests — but middleware passed (not 401/403).
-            XCTAssertNotEqual(res.status, .unauthorized)
-            XCTAssertNotEqual(res.status, .forbidden)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                // 500 expected because Leaf is not configured in tests — but middleware passed (not 401/403).
+                XCTAssertNotEqual(res.status, .unauthorized)
+                XCTAssertNotEqual(res.status, .forbidden)
+            })
     }
 
     func testAssignmentsPageUsesDedicatedEnrollCSVPageLink() async throws {
         _ = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
 
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("href=\"/instructor/enroll-csv\""))
-            XCTAssertFalse(html.contains("id=\"enroll-csv-file\""))
-        })
+        try await app.asyncTest(
+            .GET, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("href=\"/instructor/enroll-csv\""))
+                XCTAssertFalse(html.contains("id=\"enroll-csv-file\""))
+            })
     }
 
     func testAssignmentsPageDefaultsEnrolledStudentsToMostRecentLastSeenFirst() async throws {
@@ -421,20 +435,23 @@ final class AssignmentRoutesTests: XCTestCase {
         try await recent.save(on: app.db)
         try await enrollStudentInTestCourse(recent)
 
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("id=\"enrolled-students-table\""))
-            XCTAssertTrue(html.contains("var sortCol = 3;"))
-            XCTAssertTrue(html.contains("var sortAsc = false;"))
-            let recentIndex = try XCTUnwrap(html.range(of: "recent_seen_student")?.lowerBound)
-            let olderIndex = try XCTUnwrap(html.range(of: "older_seen_student")?.lowerBound)
-            let neverIndex = try XCTUnwrap(html.range(of: "never_seen_student")?.lowerBound)
-            XCTAssertLessThan(recentIndex, olderIndex)
-            XCTAssertLessThan(olderIndex, neverIndex)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("id=\"enrolled-students-table\""))
+                XCTAssertTrue(html.contains("var sortCol = 3;"))
+                XCTAssertTrue(html.contains("var sortAsc = false;"))
+                let recentIndex = try XCTUnwrap(html.range(of: "recent_seen_student")?.lowerBound)
+                let olderIndex = try XCTUnwrap(html.range(of: "older_seen_student")?.lowerBound)
+                let neverIndex = try XCTUnwrap(html.range(of: "never_seen_student")?.lowerBound)
+                XCTAssertLessThan(recentIndex, olderIndex)
+                XCTAssertLessThan(olderIndex, neverIndex)
+            })
     }
 
     /// Regression guard for v0.4.126 — admin/instructor users enrolled in a
@@ -459,11 +476,13 @@ final class AssignmentRoutesTests: XCTestCase {
         // One extra instructor + one admin, also enrolled in the same
         // course.  These are the users whose submissions should NOT be
         // reflected in either side of the badge.
-        let i1 = try await insertUser(username: "stat_i1", role: "instructor",
-                                      displayName: "Helper Instructor")
+        let i1 = try await insertUser(
+            username: "stat_i1", role: "instructor",
+            displayName: "Helper Instructor")
         try await enrollStudentInTestCourse(i1)
-        let a1 = try await insertUser(username: "stat_a1", role: "admin",
-                                      displayName: "Helper Admin")
+        let a1 = try await insertUser(
+            username: "stat_a1", role: "admin",
+            displayName: "Helper Admin")
         try await enrollStudentInTestCourse(a1)
 
         // Setup + assignment.
@@ -476,40 +495,47 @@ final class AssignmentRoutesTests: XCTestCase {
 
         // One student-kind submission per user — same path the instructor
         // would hit when testing their own assignment via the submit form.
-        try await insertSubmission(id: "sub_s1", testSetupID: "setup_dashboard_filter",
-                                   userID: try s1.requireID())
-        try await insertSubmission(id: "sub_s2", testSetupID: "setup_dashboard_filter",
-                                   userID: try s2.requireID())
-        try await insertSubmission(id: "sub_i1", testSetupID: "setup_dashboard_filter",
-                                   userID: try i1.requireID())
-        try await insertSubmission(id: "sub_a1", testSetupID: "setup_dashboard_filter",
-                                   userID: try a1.requireID())
+        try await insertSubmission(
+            id: "sub_s1", testSetupID: "setup_dashboard_filter",
+            userID: try s1.requireID())
+        try await insertSubmission(
+            id: "sub_s2", testSetupID: "setup_dashboard_filter",
+            userID: try s2.requireID())
+        try await insertSubmission(
+            id: "sub_i1", testSetupID: "setup_dashboard_filter",
+            userID: try i1.requireID())
+        try await insertSubmission(
+            id: "sub_a1", testSetupID: "setup_dashboard_filter",
+            userID: try a1.requireID())
 
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
+        try await app.asyncTest(
+            .GET, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
 
-            // The leaf template renders the badge as
-            //   <span title="<X> / <Y> students submitted"><X> / <Y></span>
-            // We assert against the title (a unique, structural attribute)
-            // so the test doesn't depend on layout cosmetics.
-            XCTAssertTrue(
-                html.contains("title=\"2 / 2 students submitted\""),
-                "Per-assignment badge should read '2 / 2 students submitted' "
-                + "(only enrolled students count); admin/instructor "
-                + "submissions and enrollments must be filtered out. "
-                + "Assignment publicID=\(assignment.publicID)"
-            )
-            XCTAssertFalse(
-                html.contains("title=\"4 / 4 students submitted\""),
-                "Pre-v0.4.126 shape: admin/instructor inflated both X and Y. "
-                + "The fix in AssignmentRoutes.swift list() must scope both "
-                + "submittedStudentCount and enrolledStudentCount to "
-                + "enrolledStudentIDs."
-            )
-        })
+                // The leaf template renders the badge as
+                //   <span title="<X> / <Y> students submitted"><X> / <Y></span>
+                // We assert against the title (a unique, structural attribute)
+                // so the test doesn't depend on layout cosmetics.
+                XCTAssertTrue(
+                    html.contains("title=\"2 / 2 students submitted\""),
+                    "Per-assignment badge should read '2 / 2 students submitted' "
+                        + "(only enrolled students count); admin/instructor "
+                        + "submissions and enrollments must be filtered out. "
+                        + "Assignment publicID=\(assignment.publicID)"
+                )
+                XCTAssertFalse(
+                    html.contains("title=\"4 / 4 students submitted\""),
+                    "Pre-v0.4.126 shape: admin/instructor inflated both X and Y. "
+                        + "The fix in AssignmentRoutes.swift list() must scope both "
+                        + "submittedStudentCount and enrolledStudentCount to "
+                        + "enrolledStudentIDs."
+                )
+            })
     }
 
     /// Dashboard card "Students With Browser Errors" counts distinct
@@ -591,28 +617,31 @@ final class AssignmentRoutesTests: XCTestCase {
         try await dOrphan.save(on: app.db)
 
         // Expected: 2 distinct students (s1, s2).
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
+        try await app.asyncTest(
+            .GET, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
 
-            let pattern = #"Students With Browser Errors</div>\s*<div class="diagnostic-value">(\d+)</div>"#
-            let re = try NSRegularExpression(pattern: pattern)
-            let nsr = NSRange(html.startIndex..., in: html)
-            guard let match = re.firstMatch(in: html, range: nsr),
-                  let valueRange = Range(match.range(at: 1), in: html)
-            else {
-                XCTFail("Could not locate 'Students With Browser Errors' metric card in dashboard HTML")
-                return
-            }
-            XCTAssertEqual(
-                String(html[valueRange]), "2",
-                "Expected 2 students (s1 + s2 with recent diagnostics).  "
-                + "Out-of-window diagnostics and diagnostics with a null "
-                + "test_setup_id must not inflate the count."
-            )
-        })
+                let pattern = #"Students With Browser Errors</div>\s*<div class="diagnostic-value">(\d+)</div>"#
+                let re = try NSRegularExpression(pattern: pattern)
+                let nsr = NSRange(html.startIndex..., in: html)
+                guard let match = re.firstMatch(in: html, range: nsr),
+                    let valueRange = Range(match.range(at: 1), in: html)
+                else {
+                    XCTFail("Could not locate 'Students With Browser Errors' metric card in dashboard HTML")
+                    return
+                }
+                XCTAssertEqual(
+                    String(html[valueRange]), "2",
+                    "Expected 2 students (s1 + s2 with recent diagnostics).  "
+                        + "Out-of-window diagnostics and diagnostics with a null "
+                        + "test_setup_id must not inflate the count."
+                )
+            })
     }
 
     // MARK: - POST /instructor (publish → creates draft)
@@ -622,19 +651,23 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
         try await insertSetup(id: "setup_pub1")
 
-        try await app.asyncTest(.POST, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["testSetupID": "setup_pub1", "title": "Lab 1", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            // Redirects to /instructor/:id/validate
-            XCTAssertEqual(res.status, .seeOther)
-            let location = res.headers.first(name: .location) ?? ""
-            XCTAssertTrue(location.contains("/instructor/") && location.contains("/validate"),
-                          "Expected redirect to /instructor/:id/validate, got \(location)")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["testSetupID": "setup_pub1", "title": "Lab 1", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                // Redirects to /instructor/:id/validate
+                XCTAssertEqual(res.status, .seeOther)
+                let location = res.headers.first(name: .location) ?? ""
+                XCTAssertTrue(
+                    location.contains("/instructor/") && location.contains("/validate"),
+                    "Expected redirect to /instructor/:id/validate, got \(location)")
+            })
 
         // Assignment should be in DB as draft (isOpen: false)
         let assignment = try await APIAssignment.query(on: app.db)
@@ -649,15 +682,18 @@ final class AssignmentRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["testSetupID": "does_not_exist", "title": "Oops", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["testSetupID": "does_not_exist", "title": "Oops", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     func testPublishDuplicateSetupRedirects() async throws {
@@ -666,17 +702,20 @@ final class AssignmentRoutesTests: XCTestCase {
         try await insertSetup(id: "setup_dup")
         try await insertAssignment(testSetupID: "setup_dup", title: "Already Published", isOpen: false)
 
-        try await app.asyncTest(.POST, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["testSetupID": "setup_dup", "title": "Duplicate", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            // Should redirect to /instructor without creating a second record
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["testSetupID": "setup_dup", "title": "Duplicate", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                // Should redirect to /instructor without creating a second record
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let count = try await APIAssignment.query(on: app.db)
             .filter(\.$testSetupID == "setup_dup")
@@ -691,24 +730,28 @@ final class AssignmentRoutesTests: XCTestCase {
         let boundary = "Boundary-New-NoSuites"
         let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
 
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartAssignmentBody(
-                boundary: boundary,
-                csrf: csrf,
-                assignmentName: "No Tests Yet",
-                assignmentNotebook: notebook,
-                solutionNotebook: notebook
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartAssignmentBody(
+                        boundary: boundary,
+                        csrf: csrf,
+                        assignmentName: "No Tests Yet",
+                        assignmentNotebook: notebook,
+                        solutionNotebook: notebook
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "No Tests Yet")
@@ -748,37 +791,41 @@ final class AssignmentRoutesTests: XCTestCase {
         let boundary = "Boundary-New-MultiSuites"
         let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
         let suiteConfig = """
-        [
-          {"index":0,"tier":"public","order":1,"points":1},
-          {"index":1,"tier":"public","order":2,"points":1},
-          {"index":2,"tier":"support","order":3,"points":1}
-        ]
-        """
+            [
+              {"index":0,"tier":"public","order":1,"points":1},
+              {"index":1,"tier":"public","order":2,"points":1},
+              {"index":2,"tier":"support","order":3,"points":1}
+            ]
+            """
 
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartAssignmentBody(
-                boundary: boundary,
-                csrf: csrf,
-                assignmentName: "Practice Lab",
-                assignmentNotebook: notebook,
-                solutionNotebook: notebook,
-                suiteFiles: [
-                    ("test_q1.py", "text/plain", "print('q1')"),
-                    ("test_q2.py", "text/plain", "print('q2')"),
-                    ("test.properties.json", "application/json", #"{"gradingMode":"browser"}"#)
-                ],
-                suiteConfig: suiteConfig
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartAssignmentBody(
+                        boundary: boundary,
+                        csrf: csrf,
+                        assignmentName: "Practice Lab",
+                        assignmentNotebook: notebook,
+                        solutionNotebook: notebook,
+                        suiteFiles: [
+                            ("test_q1.py", "text/plain", "print('q1')"),
+                            ("test_q2.py", "text/plain", "print('q2')"),
+                            ("test.properties.json", "application/json", #"{"gradingMode":"browser"}"#),
+                        ],
+                        suiteConfig: suiteConfig
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "Practice Lab")
@@ -809,27 +856,34 @@ final class AssignmentRoutesTests: XCTestCase {
         let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
-        """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+            """
+        let setup = APITestSetup(
+            id: setupID, manifest: manifest, zipPath: zipPath,
+            notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
         try await setup.save(on: app.db)
-        let assignment = APIAssignment(publicID: "ABC123", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
+        let assignment = APIAssignment(
+            publicID: "ABC123", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false,
+            courseID: courseID)
         try await assignment.save(on: app.db)
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/ABC123/edit", cookie: cookie, on: app)
         let body = #"""
-        {"items":[
-            {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"BMI check","dependsOn":[]}}
-        ]}
-        """#
-        try await app.asyncTest(.PUT, "/instructor/ABC123/suite", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: body)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok, res.body.string)
-        })
+            {"items":[
+                {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"BMI check","dependsOn":[]}}
+            ]}
+            """#
+        try await app.asyncTest(
+            .PUT, "/instructor/ABC123/suite",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: body)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok, res.body.string)
+            })
 
         let savedSetup = try await APITestSetup.find(setupID, on: app.db)
         let props = try JSONDecoder().decode(
@@ -847,35 +901,45 @@ final class AssignmentRoutesTests: XCTestCase {
         let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
-        """
-        let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+            """
+        let setup = APITestSetup(
+            id: setupID, manifest: manifest, zipPath: zipPath,
+            notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
         try await setup.save(on: app.db)
-        let assignment = APIAssignment(publicID: "GHI789", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false, courseID: courseID)
+        let assignment = APIAssignment(
+            publicID: "GHI789", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false,
+            courseID: courseID)
         try await assignment.save(on: app.db)
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/GHI789/edit", cookie: cookie, on: app)
         let body = #"""
-        {"items":[
-            {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"BMI check","dependsOn":[]}}
-        ]}
-        """#
-        try await app.asyncTest(.PUT, "/instructor/GHI789/suite", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: body)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok, res.body.string)
-        })
+            {"items":[
+                {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"BMI check","dependsOn":[]}}
+            ]}
+            """#
+        try await app.asyncTest(
+            .PUT, "/instructor/GHI789/suite",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: body)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok, res.body.string)
+            })
 
-        try await app.asyncTest(.GET, "/instructor/GHI789/edit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            // The seeded suite-state JSON should carry the updated name.
-            XCTAssertTrue(res.body.string.contains("\"displayName\":\"BMI check\""), res.body.string)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/GHI789/edit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                // The seeded suite-state JSON should carry the updated name.
+                XCTAssertTrue(res.body.string.contains("\"displayName\":\"BMI check\""), res.body.string)
+            })
     }
 
     func testNewAssignmentPageWiresSuiteTableJS() async throws {
@@ -889,33 +953,43 @@ final class AssignmentRoutesTests: XCTestCase {
         _ = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
 
-        try await app.asyncTest(.GET, "/instructor/new", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            // Legacy IIFE markers must be gone.
-            XCTAssertFalse(html.contains("syncConfig();"),
-                           "Legacy syncConfig() must not appear after the v0.4.132 rewrite")
-            XCTAssertFalse(html.contains("chickadeeAddSuiteUploadFiles"),
-                           "Legacy upload-queue global must not appear after the v0.4.132 rewrite")
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                // Legacy IIFE markers must be gone.
+                XCTAssertFalse(
+                    html.contains("syncConfig();"),
+                    "Legacy syncConfig() must not appear after the v0.4.132 rewrite")
+                XCTAssertFalse(
+                    html.contains("chickadeeAddSuiteUploadFiles"),
+                    "Legacy upload-queue global must not appear after the v0.4.132 rewrite")
+            })
     }
 
     func testNewAssignmentPageOmitsLegacyTestColumn() async throws {
         _ = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
 
-        try await app.asyncTest(.GET, "/instructor/new", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = res.body.string
-            XCTAssertFalse(body.contains("<th>Test?</th>"),
-                           "Legacy `Test?` column header must not appear on the create page")
-            XCTAssertFalse(body.contains("id=\"suite-config-table\""),
-                           "Legacy `suite-config-table` must not appear after the v0.4.132 rewrite")
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = res.body.string
+                XCTAssertFalse(
+                    body.contains("<th>Test?</th>"),
+                    "Legacy `Test?` column header must not appear on the create page")
+                XCTAssertFalse(
+                    body.contains("id=\"suite-config-table\""),
+                    "Legacy `suite-config-table` must not appear after the v0.4.132 rewrite")
+            })
     }
 
     func testUpdateNewAssignmentDraftCreatesBlankNotebookAndRendersDraftState() async throws {
@@ -925,40 +999,47 @@ final class AssignmentRoutesTests: XCTestCase {
         let boundary = "Boundary-New-Draft-Create"
 
         var redirectLocation: String?
-        try await app.asyncTest(.POST, "/instructor/new/draft", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartBody(
-                boundary: boundary,
-                fields: [
-                    ("_csrf", csrf),
-                    ("assignmentName", "Blank Draft Lab"),
-                    ("draftAction", "create-assignment-notebook")
-                ]
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            redirectLocation = res.headers.first(name: .location)
-            XCTAssertTrue((redirectLocation ?? "").contains("/instructor/new?draftID="))
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartBody(
+                        boundary: boundary,
+                        fields: [
+                            ("_csrf", csrf),
+                            ("assignmentName", "Blank Draft Lab"),
+                            ("draftAction", "create-assignment-notebook"),
+                        ]
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                redirectLocation = res.headers.first(name: .location)
+                XCTAssertTrue((redirectLocation ?? "").contains("/instructor/new?draftID="))
+            })
 
         let setup = try await APITestSetup.query(on: app.db).first()
         XCTAssertNotNil(setup)
         XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(setup?.notebookPath)))
 
-        try await app.asyncTest(.GET, try XCTUnwrap(redirectLocation), beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("Blank Draft Lab"))
-            XCTAssertTrue(html.contains("Assignment Notebook"))  // notebook table row
-            XCTAssertTrue(html.contains("Edit"))
-        })
+        try await app.asyncTest(
+            .GET, try XCTUnwrap(redirectLocation),
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("Blank Draft Lab"))
+                XCTAssertTrue(html.contains("Assignment Notebook"))  // notebook table row
+                XCTAssertTrue(html.contains("Edit"))
+            })
     }
 
     func testSaveNewAssignmentFinalizesDraftAndPersistsRequirements() async throws {
@@ -976,7 +1057,8 @@ final class AssignmentRoutesTests: XCTestCase {
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let assignmentPath = notebookDir + "assignment.ipynb"
         try defaultNotebookData(title: "Draft Finalize").write(to: URL(fileURLWithPath: assignmentPath))
-        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
+        let solutionPath = draftSolutionNotebookPath(
+            testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
         try defaultNotebookData(title: "Draft Finalize Solution").write(to: URL(fileURLWithPath: solutionPath))
 
         let setup = APITestSetup(
@@ -989,27 +1071,31 @@ final class AssignmentRoutesTests: XCTestCase {
         try await setup.save(on: app.db)
 
         let boundary = "Boundary-New-Finalize-Draft"
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartBody(
-                boundary: boundary,
-                fields: [
-                    ("_csrf", csrf),
-                    ("draftID", setupID),
-                    ("assignmentName", "Draft-backed Lab"),
-                    ("requiredLanguagesCSV", "python"),
-                    ("requiredCapabilitiesCSV", "numpy, pandas")
-                ]
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartBody(
+                        boundary: boundary,
+                        fields: [
+                            ("_csrf", csrf),
+                            ("draftID", setupID),
+                            ("assignmentName", "Draft-backed Lab"),
+                            ("requiredLanguagesCSV", "python"),
+                            ("requiredCapabilitiesCSV", "numpy, pandas"),
+                        ]
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "Draft-backed Lab")
@@ -1055,7 +1141,8 @@ final class AssignmentRoutesTests: XCTestCase {
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let assignmentPath = notebookDir + "assignment.ipynb"
         try defaultNotebookData(title: "Generated Suite").write(to: URL(fileURLWithPath: assignmentPath))
-        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
+        let solutionPath = draftSolutionNotebookPath(
+            testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
         try defaultNotebookData(title: "Generated Suite Solution").write(to: URL(fileURLWithPath: solutionPath))
 
         let setup = APITestSetup(
@@ -1068,36 +1155,46 @@ final class AssignmentRoutesTests: XCTestCase {
         try await setup.save(on: app.db)
 
         let suiteConfig = """
-        [
-          {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":"alpha exists","index":0},
-          {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":"beta exists","index":1}
-        ]
-        """
+            [
+              {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":"alpha exists","index":0},
+              {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":"beta exists","index":1}
+            ]
+            """
         let boundary = "Boundary-New-Generated-Suite"
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartBody(
-                boundary: boundary,
-                fields: [
-                    ("_csrf", csrf),
-                    ("draftID", setupID),
-                    ("assignmentName", "Generated Suite Lab"),
-                    ("suiteConfig", suiteConfig)
-                ],
-                files: [
-                    (name: "suiteFiles[]", filename: "test_alpha.py", contentType: "text/plain", data: Data("print('alpha')\n".utf8)),
-                    (name: "suiteFiles[]", filename: "test_beta.py", contentType: "text/plain", data: Data("print('beta')\n".utf8))
-                ]
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartBody(
+                        boundary: boundary,
+                        fields: [
+                            ("_csrf", csrf),
+                            ("draftID", setupID),
+                            ("assignmentName", "Generated Suite Lab"),
+                            ("suiteConfig", suiteConfig),
+                        ],
+                        files: [
+                            (
+                                name: "suiteFiles[]", filename: "test_alpha.py", contentType: "text/plain",
+                                data: Data("print('alpha')\n".utf8)
+                            ),
+                            (
+                                name: "suiteFiles[]", filename: "test_beta.py", contentType: "text/plain",
+                                data: Data("print('beta')\n".utf8)
+                            ),
+                        ]
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "Generated Suite Lab")
@@ -1113,14 +1210,17 @@ final class AssignmentRoutesTests: XCTestCase {
         XCTAssertTrue(zipEntries.contains("test_alpha.py"), "test_alpha.py missing from zip; entries: \(zipEntries)")
         XCTAssertTrue(zipEntries.contains("test_beta.py"), "test_beta.py missing from zip; entries: \(zipEntries)")
 
-        try await app.asyncTest(.GET, "/instructor/\(try XCTUnwrap(assignment?.publicID))/edit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("test_alpha.py"))
-            XCTAssertTrue(html.contains("test_beta.py"))
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/\(try XCTUnwrap(assignment?.publicID))/edit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains("test_alpha.py"))
+                XCTAssertTrue(html.contains("test_beta.py"))
+            })
     }
 
     func testSaveNewAssignmentRequiresCompatibleRunnerForValidation() async throws {
@@ -1158,7 +1258,8 @@ final class AssignmentRoutesTests: XCTestCase {
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let assignmentPath = notebookDir + "assignment.ipynb"
         try defaultNotebookData(title: "Runner Gate").write(to: URL(fileURLWithPath: assignmentPath))
-        let solutionPath = draftSolutionNotebookPath(testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
+        let solutionPath = draftSolutionNotebookPath(
+            testSetupsDirectory: app.testSetupsDirectory + "", setupID: setupID)
         try defaultNotebookData(title: "Runner Gate Solution").write(to: URL(fileURLWithPath: solutionPath))
 
         let setup = APITestSetup(
@@ -1171,29 +1272,35 @@ final class AssignmentRoutesTests: XCTestCase {
         try await setup.save(on: app.db)
 
         let boundary = "Boundary-New-Runner-Gate"
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartBody(
-                boundary: boundary,
-                fields: [
-                    ("_csrf", csrf),
-                    ("draftID", setupID),
-                    ("assignmentName", "Needs Matplotlib"),
-                    ("requiredLanguagesCSV", "python"),
-                    ("requiredCapabilitiesCSV", "matplotlib")
-                ]
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            let location = res.headers.first(name: .location) ?? ""
-            XCTAssertTrue(location.contains("/instructor/new?"))
-            XCTAssertTrue(location.contains("No%20compatible%20active%20runner%20is%20available%20to%20validate%20this%20assignment."))
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartBody(
+                        boundary: boundary,
+                        fields: [
+                            ("_csrf", csrf),
+                            ("draftID", setupID),
+                            ("assignmentName", "Needs Matplotlib"),
+                            ("requiredLanguagesCSV", "python"),
+                            ("requiredCapabilitiesCSV", "matplotlib"),
+                        ]
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                let location = res.headers.first(name: .location) ?? ""
+                XCTAssertTrue(location.contains("/instructor/new?"))
+                XCTAssertTrue(
+                    location.contains(
+                        "No%20compatible%20active%20runner%20is%20available%20to%20validate%20this%20assignment."))
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "Needs Matplotlib")
@@ -1210,13 +1317,16 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_open", title: "Draft", isOpen: false)
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/open", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/open",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let updated = try await APIAssignment.find(a.id, on: app.db)
         XCTAssertEqual(updated?.isOpen, true)
@@ -1231,12 +1341,15 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_close", title: "Open", isOpen: true)
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/close", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/close",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let updated = try await APIAssignment.find(a.id, on: app.db)
         XCTAssertEqual(updated?.isOpen, false)
@@ -1251,12 +1364,15 @@ final class AssignmentRoutesTests: XCTestCase {
         let a = try await insertAssignment(testSetupID: "setup_del", title: "To Remove", isOpen: false)
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/delete", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/delete",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let gone = try await APIAssignment.find(a.id, on: app.db)
         XCTAssertNil(gone)
@@ -1267,12 +1383,15 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
         let fakeID = "zzzzzz"
 
-        try await app.asyncTest(.POST, "/instructor/\(fakeID)/delete", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(fakeID)/delete",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - POST /instructor/:id/open — nonexistent
@@ -1282,12 +1401,15 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
         let fakeID = "zzzzzz"
 
-        try await app.asyncTest(.POST, "/instructor/\(fakeID)/open", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(fakeID)/open",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - POST /instructor/:assignmentID/submissions/:submissionID/retest
@@ -1312,16 +1434,19 @@ final class AssignmentRoutesTests: XCTestCase {
         submission.assignedAt = Date()
         try await submission.save(on: app.db)
 
-        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_1/retest", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["returnTo": "/instructor/\(assignmentID)/submissions", "_csrf": csrf],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor/\(assignmentID)/submissions")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(assignmentID)/submissions/sub_retest_1/retest",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["returnTo": "/instructor/\(assignmentID)/submissions", "_csrf": csrf],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor/\(assignmentID)/submissions")
+            })
 
         let updated = try await APISubmission.find("sub_retest_1", on: app.db)
         XCTAssertEqual(updated?.status, "pending")
@@ -1348,12 +1473,15 @@ final class AssignmentRoutesTests: XCTestCase {
         )
         try await submission.save(on: app.db)
 
-        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/submissions/sub_retest_mismatch/retest", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(assignmentID)/submissions/sub_retest_mismatch/retest",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     // MARK: - POST /instructor/:assignmentID/retest  (v0.4.93 "Retest all")
@@ -1411,29 +1539,35 @@ final class AssignmentRoutesTests: XCTestCase {
         )
         try await validation.save(on: app.db)
 
-        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/retest", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(assignmentID)/retest",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
 
         let retestedA = try await APISubmission.find("sub_retest_all_a", on: app.db)
         XCTAssertEqual(retestedA?.status, "pending")
         XCTAssertNil(retestedA?.workerID)
         XCTAssertNil(retestedA?.assignedAt)
         XCTAssertNotNil(retestedA?.retestedAt)
-        XCTAssertNotNil(retestedA?.retestedByUserID,
-                        "Retest must stamp the instructor who clicked the button")
+        XCTAssertNotNil(
+            retestedA?.retestedByUserID,
+            "Retest must stamp the instructor who clicked the button")
 
         let retestedB = try await APISubmission.find("sub_retest_all_b", on: app.db)
         XCTAssertEqual(retestedB?.status, "pending")
-        XCTAssertNotNil(retestedB?.retestedAt,
-                        "Manual Retest All forces every submission, even already-pending ones")
+        XCTAssertNotNil(
+            retestedB?.retestedAt,
+            "Manual Retest All forces every submission, even already-pending ones")
 
         let validationAfter = try await APISubmission.find("sub_retest_all_validation", on: app.db)
-        XCTAssertEqual(validationAfter?.status, "complete",
-                       "Validation submissions must be excluded from the retest fan-out")
+        XCTAssertEqual(
+            validationAfter?.status, "complete",
+            "Validation submissions must be excluded from the retest fan-out")
         XCTAssertNil(validationAfter?.retestedAt)
 
         // The fan-out stamps `lastRetestedManifestHash` on the setup so a
@@ -1460,17 +1594,21 @@ final class AssignmentRoutesTests: XCTestCase {
             for: "/login", cookie: studentCookie, on: app
         )
 
-        try await app.asyncTest(.POST, "/instructor/\(assignmentID)/retest", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            // RoleMiddleware short-circuits non-instructors to 403 (or 302
-            // to login depending on the auth config).  Either way, the
-            // submission must not be flipped.
-            XCTAssertTrue(res.status == .forbidden
-                          || res.status.code >= 300 && res.status.code < 400,
-                          "Expected forbidden/redirect, got \(res.status)")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/\(assignmentID)/retest",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                // RoleMiddleware short-circuits non-instructors to 403 (or 302
+                // to login depending on the auth config).  Either way, the
+                // submission must not be flipped.
+                XCTAssertTrue(
+                    res.status == .forbidden
+                        || res.status.code >= 300 && res.status.code < 400,
+                    "Expected forbidden/redirect, got \(res.status)")
+            })
     }
 
     /// Regression for v0.4.130 / launch-readiness #4.  Pre-fix, a suite
@@ -1491,8 +1629,8 @@ final class AssignmentRoutesTests: XCTestCase {
         let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+            """
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath,
             notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb",
@@ -1532,24 +1670,28 @@ final class AssignmentRoutesTests: XCTestCase {
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/NRN001/edit", cookie: cookie, on: app)
         let body = #"""
-        {"items":[
-            {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"Q1","dependsOn":[]}}
-        ]}
-        """#
-        try await app.asyncTest(.PUT, "/instructor/NRN001/suite", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: "x-csrf-token", value: csrf)
-            req.headers.contentType = .json
-            req.body = ByteBuffer(string: body)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok, res.body.string)
-        })
+            {"items":[
+                {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":1,"displayName":"Q1","dependsOn":[]}}
+            ]}
+            """#
+        try await app.asyncTest(
+            .PUT, "/instructor/NRN001/suite",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                req.headers.contentType = .json
+                req.body = ByteBuffer(string: body)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok, res.body.string)
+            })
 
         let after = try await APIAssignment.query(on: app.db)
             .filter(\.$publicID == "NRN001")
             .first()
-        XCTAssertEqual(after?.validationStatus, "no-runner",
-                       "scheduleValidationAfterSuiteEdit must set 'no-runner' when no compatible runner is available")
+        XCTAssertEqual(
+            after?.validationStatus, "no-runner",
+            "scheduleValidationAfterSuiteEdit must set 'no-runner' when no compatible runner is available")
 
         // No new pending validation submission should have been enqueued.
         let pending = try await APISubmission.query(on: app.db)
@@ -1557,8 +1699,9 @@ final class AssignmentRoutesTests: XCTestCase {
             .filter(\.$kind == APISubmission.Kind.validation)
             .filter(\.$status == "pending")
             .count()
-        XCTAssertEqual(pending, 0,
-                       "Pre-check must skip the enqueue path when no compatible runner exists; otherwise the row sits forever")
+        XCTAssertEqual(
+            pending, 0,
+            "Pre-check must skip the enqueue path when no compatible runner exists; otherwise the row sits forever")
     }
 
     /// Unit test for the new `loadAssignmentRequirementSpec` helper —
@@ -1640,18 +1783,21 @@ final class AssignmentRoutesTests: XCTestCase {
                 .replacingOccurrences(of: "\u{00A0}", with: " ")
         }()
 
-        try await app.asyncTest(.GET, "/instructor/\(assignment.publicID)/submissions", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let body = res.body.string
-                .replacingOccurrences(of: "\u{202F}", with: " ")
-                .replacingOccurrences(of: "\u{00A0}", with: " ")
-            XCTAssertTrue(body.contains(">Wallace<"))
-            XCTAssertTrue(body.contains(">Jim<"))
-            XCTAssertTrue(body.contains(expectedDate))
-            XCTAssertTrue(body.contains(expectedClock), "Expected clock '\(expectedClock)' in body: \(body)")
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/\(assignment.publicID)/submissions",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let body = res.body.string
+                    .replacingOccurrences(of: "\u{202F}", with: " ")
+                    .replacingOccurrences(of: "\u{00A0}", with: " ")
+                XCTAssertTrue(body.contains(">Wallace<"))
+                XCTAssertTrue(body.contains(">Jim<"))
+                XCTAssertTrue(body.contains(expectedDate))
+                XCTAssertTrue(body.contains(expectedClock), "Expected clock '\(expectedClock)' in body: \(body)")
+            })
     }
 
     // MARK: - POST /instructor/:assignmentID/students/:studentID/reset-notebook
@@ -1687,7 +1833,8 @@ final class AssignmentRoutesTests: XCTestCase {
         userID: UUID,
         bytes: Data
     ) throws -> String {
-        let path = app.directory.publicDirectory
+        let path =
+            app.directory.publicDirectory
             + "jupyterlite/files/users/\(userID.uuidString.lowercased())/\(setupID)/assignment.ipynb"
         let dir = (path as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -1700,9 +1847,10 @@ final class AssignmentRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
         let setup = try await insertSetup(id: "setup_reset_ok")
-        let starterBytes = Data(#"""
-        {"nbformat":4,"nbformat_minor":5,"metadata":{"kernelspec":{"name":"python"}},"cells":[{"cell_type":"markdown","metadata":{},"source":["# Original assignment"]}]}
-        """#.utf8)
+        let starterBytes = Data(
+            #"""
+            {"nbformat":4,"nbformat_minor":5,"metadata":{"kernelspec":{"name":"python"}},"cells":[{"cell_type":"markdown","metadata":{},"source":["# Original assignment"]}]}
+            """#.utf8)
         try await attachStarterNotebook(to: setup, bytes: starterBytes)
         let assignment = try await insertAssignment(
             testSetupID: "setup_reset_ok", title: "Reset Lab", isOpen: true
@@ -1713,9 +1861,10 @@ final class AssignmentRoutesTests: XCTestCase {
         try await enrollStudentInTestCourse(student)
         let studentUUID = try student.requireID()
 
-        let brokenBytes = Data(#"""
-        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","source":["# student-uploaded-garbage"]}]}
-        """#.utf8)
+        let brokenBytes = Data(
+            #"""
+            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","source":["# student-uploaded-garbage"]}]}
+            """#.utf8)
         let workingCopyPath = try seedStudentWorkingCopy(
             setupID: "setup_reset_ok", userID: studentUUID, bytes: brokenBytes
         )
@@ -1723,7 +1872,9 @@ final class AssignmentRoutesTests: XCTestCase {
         // Capture mtime before the reset so we can prove the file was
         // overwritten (mtime bumped) — that's the signal `notebook.js`
         // uses to force-reseed the browser's IndexedDB copy.
-        let mtimeBefore = (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date) ?? Date.distantPast
+        let mtimeBefore =
+            (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date)
+            ?? Date.distantPast
         try await Task.sleep(nanoseconds: 1_100_000_000)  // ensure ≥1s mtime resolution
 
         try await app.asyncTest(
@@ -1749,26 +1900,32 @@ final class AssignmentRoutesTests: XCTestCase {
         // verbatim.  Instead, verify the broken content is GONE and a
         // valid Python-kernel notebook is in its place.
         let afterReset = try Data(contentsOf: URL(fileURLWithPath: workingCopyPath))
-        XCTAssertNotEqual(afterReset, brokenBytes,
+        XCTAssertNotEqual(
+            afterReset, brokenBytes,
             "Working copy must no longer contain the student's broken bytes.")
         guard let resetJSON = try JSONSerialization.jsonObject(with: afterReset) as? [String: Any],
-              let metadata  = resetJSON["metadata"] as? [String: Any],
-              let kernelspec = metadata["kernelspec"] as? [String: Any]
+            let metadata = resetJSON["metadata"] as? [String: Any],
+            let kernelspec = metadata["kernelspec"] as? [String: Any]
         else {
             XCTFail("Reset working copy is not a valid normalized notebook"); return
         }
-        XCTAssertEqual(kernelspec["name"] as? String, "python",
+        XCTAssertEqual(
+            kernelspec["name"] as? String, "python",
             "Starter must be normalized to Python (Pyodide) kernel.")
         // Sanity: starter contains the original markdown cell content
         let resetText = String(data: afterReset, encoding: .utf8) ?? ""
-        XCTAssertTrue(resetText.contains("Original assignment"),
+        XCTAssertTrue(
+            resetText.contains("Original assignment"),
             "Reset must have come from the starter, not the student upload.")
 
         // mtime must have advanced — this is the signal `notebook.js` uses
         // to force-reseed the browser's IndexedDB on the student's next
         // visit.  Without the bump, the v0.4.153 cache-bust wouldn't fire.
-        let mtimeAfter = (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date) ?? Date.distantPast
-        XCTAssertGreaterThan(mtimeAfter, mtimeBefore,
+        let mtimeAfter =
+            (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date)
+            ?? Date.distantPast
+        XCTAssertGreaterThan(
+            mtimeAfter, mtimeBefore,
             "Reset must bump the working-copy file mtime so notebook.js force-reseeds the browser's local copy.")
     }
 
@@ -1877,11 +2034,11 @@ final class AssignmentRoutesTests: XCTestCase {
         // Exact JSON that syncConfig() produces in assignment-new.leaf:
         // extra fields (source, isIncluded) must be silently ignored by SuiteConfigRow.
         let suiteConfig = """
-        [
-          {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null,"index":0},
-          {"source":"upload","isIncluded":true,"isTest":false,"tier":"support","order":2,"dependsOn":[],"points":1,"displayName":null,"index":1}
-        ]
-        """
+            [
+              {"source":"upload","isIncluded":true,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null,"index":0},
+              {"source":"upload","isIncluded":true,"isTest":false,"tier":"support","order":2,"dependsOn":[],"points":1,"displayName":null,"index":1}
+            ]
+            """
 
         var body = ByteBufferAllocator().buffer(capacity: 4096)
         func field(_ name: String, _ value: String) {
@@ -1898,49 +2055,54 @@ final class AssignmentRoutesTests: XCTestCase {
         field("_csrf", csrf)
         field("assignmentName", "Browser Format Lab")
         file("assignmentNotebookFile", filename: "assignment.ipynb", contentType: "application/json", content: notebook)
-        file("solutionNotebookFile",   filename: "solution.ipynb",   contentType: "application/json", content: notebook)
+        file("solutionNotebookFile", filename: "solution.ipynb", contentType: "application/json", content: notebook)
         // "suiteFiles[]" with brackets — exact field name sent by the browser's FormData API.
         file("suiteFiles[]", filename: "test_bmi.py", contentType: "text/plain", content: "print('test bmi')")
-        file("suiteFiles[]", filename: "helpers.py",  contentType: "text/plain", content: "# helpers")
+        file("suiteFiles[]", filename: "helpers.py", contentType: "text/plain", content: "# helpers")
         field("suiteConfig", suiteConfig)
         body.writeString("--\(boundary)--\r\n")
 
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart", subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: body)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(buffer: body)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "Browser Format Lab")
             .first()
         let setupID = try XCTUnwrap(assignment?.testSetupID)
-        let setup   = try await APITestSetup.find(setupID, on: app.db)
+        let setup = try await APITestSetup.find(setupID, on: app.db)
 
         // Manifest: test_bmi.py (isTest:true, tier:public) → 1 suite entry; helpers.py → support, not listed.
         let props = try JSONDecoder().decode(
             TestProperties.self,
             from: try XCTUnwrap(setup?.manifest.data(using: .utf8))
         )
-        XCTAssertEqual(props.testSuites.map(\.script), ["test_bmi.py"],
-                       "test_bmi.py must be the only test suite entry in manifest")
+        XCTAssertEqual(
+            props.testSuites.map(\.script), ["test_bmi.py"],
+            "test_bmi.py must be the only test suite entry in manifest")
 
         // Both files must be present in the zip (support files are stored even if not in manifest).
         let zipEntries = Set(listZipEntries(zipPath: try XCTUnwrap(setup?.zipPath)))
         XCTAssertTrue(zipEntries.contains("test_bmi.py"), "test_bmi.py missing from zip; entries: \(zipEntries)")
-        XCTAssertTrue(zipEntries.contains("helpers.py"),  "helpers.py missing from zip; entries: \(zipEntries)")
+        XCTAssertTrue(zipEntries.contains("helpers.py"), "helpers.py missing from zip; entries: \(zipEntries)")
 
         // Validation job must have been queued (Bug #2: was never queued when DataTransfer files
         // were absent from FormData, causing testSuites to be empty and shouldQueueValidation=false).
         XCTAssertEqual(assignment?.validationStatus, "pending")
-        XCTAssertNotNil(assignment?.validationSubmissionID,
-                        "validationSubmissionID must be set when suite files are present")
+        XCTAssertNotNil(
+            assignment?.validationSubmissionID,
+            "validationSubmissionID must be set when suite files are present")
     }
 
     func testEditPageShowsUploadedSolutionNotebookFilenameAfterCreate() async throws {
@@ -1967,50 +2129,54 @@ final class AssignmentRoutesTests: XCTestCase {
         let notebook = #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
         let solutionName = "BMI Boundary Cases.ipynb"
         let suiteConfig = """
-        [
-          {"index":0,"isTest":true,"tier":"public","order":1,"points":1,"displayName":"Smoke test"}
-        ]
-        """
+            [
+              {"index":0,"isTest":true,"tier":"public","order":1,"points":1,"displayName":"Smoke test"}
+            ]
+            """
 
-        try await app.asyncTest(.POST, "/instructor/new/save", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartBody(
-                boundary: boundary,
-                fields: [
-                    ("_csrf", csrf),
-                    ("assignmentName", "Named Solution Lab"),
-                    ("suiteConfig", suiteConfig)
-                ],
-                files: [
-                    (
-                        name: "assignmentNotebookFile",
-                        filename: "starter.ipynb",
-                        contentType: "application/json",
-                        data: Data(notebook.utf8)
-                    ),
-                    (
-                        name: "solutionNotebookFile",
-                        filename: solutionName,
-                        contentType: "application/json",
-                        data: Data(notebook.utf8)
-                    ),
-                    (
-                        name: "suiteFiles[]",
-                        filename: "test_smoke.py",
-                        contentType: "text/plain",
-                        data: Data("print('ok')\n".utf8)
-                    )
-                ]
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/instructor")
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartBody(
+                        boundary: boundary,
+                        fields: [
+                            ("_csrf", csrf),
+                            ("assignmentName", "Named Solution Lab"),
+                            ("suiteConfig", suiteConfig),
+                        ],
+                        files: [
+                            (
+                                name: "assignmentNotebookFile",
+                                filename: "starter.ipynb",
+                                contentType: "application/json",
+                                data: Data(notebook.utf8)
+                            ),
+                            (
+                                name: "solutionNotebookFile",
+                                filename: solutionName,
+                                contentType: "application/json",
+                                data: Data(notebook.utf8)
+                            ),
+                            (
+                                name: "suiteFiles[]",
+                                filename: "test_smoke.py",
+                                contentType: "text/plain",
+                                data: Data("print('ok')\n".utf8)
+                            ),
+                        ]
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/instructor")
+            })
 
         let assignment = try await APIAssignment.query(on: app.db)
             .filter(\.$title == "Named Solution Lab")
@@ -2019,13 +2185,16 @@ final class AssignmentRoutesTests: XCTestCase {
         let validationSubmission = try await APISubmission.find(validationID, on: app.db)
         XCTAssertEqual(validationSubmission?.filename, solutionName)
 
-        try await app.asyncTest(.GET, "/instructor/\(try XCTUnwrap(assignment?.publicID))/edit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains(solutionName), html)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/\(try XCTUnwrap(assignment?.publicID))/edit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(html.contains(solutionName), html)
+            })
     }
 
     /// v0.4.132 regression (was: bug #1 regression on the legacy
@@ -2046,53 +2215,63 @@ final class AssignmentRoutesTests: XCTestCase {
         // Create a draft via the same multipart path the UI uses.
         let boundary = "Boundary-Suite-Table-Wiring"
         var redirectLocation: String?
-        try await app.asyncTest(.POST, "/instructor/new/draft", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart",
-                subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: self.multipartBody(
-                boundary: boundary,
-                fields: [
-                    ("_csrf", csrf),
-                    ("assignmentName", "Suite Table Wiring Lab"),
-                    ("draftAction", "create-assignment-notebook")
-                ]
-            ))
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            redirectLocation = res.headers.first(name: .location)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart",
+                    subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.multipartBody(
+                        boundary: boundary,
+                        fields: [
+                            ("_csrf", csrf),
+                            ("assignmentName", "Suite Table Wiring Lab"),
+                            ("draftAction", "create-assignment-notebook"),
+                        ]
+                    ))
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                redirectLocation = res.headers.first(name: .location)
+            })
 
-        try await app.asyncTest(.GET, try XCTUnwrap(redirectLocation), beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            XCTAssertTrue(html.contains("/suite-table.js"),
-                          "Create page must load suite-table.js once a draft exists (v0.4.132)")
-            XCTAssertTrue(html.contains("chickadeeAddExistingSuiteScript"),
-                          "Create page must wire chickadeeAddExistingSuiteScript so " +
-                          "generated/edited scripts land in the suite editor live")
-            XCTAssertTrue(html.contains("/instructor/new/draft/scripts"),
-                          "Generated scripts and the CodeMirror save flow must POST to " +
-                          "the draft scripts endpoint, not bundle into the multipart submit")
-        })
+        try await app.asyncTest(
+            .GET, try XCTUnwrap(redirectLocation),
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                XCTAssertTrue(
+                    html.contains("/suite-table.js"),
+                    "Create page must load suite-table.js once a draft exists (v0.4.132)")
+                XCTAssertTrue(
+                    html.contains("chickadeeAddExistingSuiteScript"),
+                    "Create page must wire chickadeeAddExistingSuiteScript so "
+                        + "generated/edited scripts land in the suite editor live")
+                XCTAssertTrue(
+                    html.contains("/instructor/new/draft/scripts"),
+                    "Generated scripts and the CodeMirror save flow must POST to "
+                        + "the draft scripts endpoint, not bundle into the multipart submit")
+            })
     }
 
     /// Bug #1 regression: the edit assignment page must include JavaScript for the edit button
     /// on newly uploaded (not-yet-saved) suite file rows.
     func testEditAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
         let courseID = try await makeTestCourseID()
-        let cookie   = try await loginAsInstructor()
-        let setupID  = "setup_edit_upload_btn_reg"
-        let zipPath  = app.testSetupsDirectory + "\(setupID).zip"
+        let cookie = try await loginAsInstructor()
+        let setupID = "setup_edit_upload_btn_reg"
+        let zipPath = app.testSetupsDirectory + "\(setupID).zip"
         try makeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py"}],"timeLimitSeconds":10,"makefile":null}
+            """
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath,
             notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb",
@@ -2105,15 +2284,19 @@ final class AssignmentRoutesTests: XCTestCase {
         )
         try await assignment.save(on: app.db)
 
-        try await app.asyncTest(.GET, "/instructor/RGRN01/edit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let html = res.body.string
-            // The rowHTML JS function for new (uploaded) items must contain the edit-button class.
-            XCTAssertTrue(html.contains("suite-edit-upload-btn"),
-                          "Edit assignment page must contain suite-edit-upload-btn for newly uploaded suite items")
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/RGRN01/edit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let html = res.body.string
+                // The rowHTML JS function for new (uploaded) items must contain the edit-button class.
+                XCTAssertTrue(
+                    html.contains("suite-edit-upload-btn"),
+                    "Edit assignment page must contain suite-edit-upload-btn for newly uploaded suite items")
+            })
     }
 
     /// Bug #3 regression: GET /instructor/script-templates must return a non-empty JSON dict
@@ -2123,21 +2306,26 @@ final class AssignmentRoutesTests: XCTestCase {
         _ = try await makeTestCourseID()
         let cookie = try await loginAsInstructor()
 
-        try await app.asyncTest(.GET, "/instructor/script-templates", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let json = try JSONDecoder().decode([String: String].self, from: Data(res.body.readableBytesView))
-            // Must include at least one Python template and one shell template.
-            XCTAssertTrue(json.keys.contains(where: { $0.hasPrefix("py:") }),
-                          "Expected at least one py: key in script templates, got: \(json.keys.sorted())")
-            XCTAssertTrue(json.keys.contains(where: { $0.hasPrefix("sh:") }),
-                          "Expected at least one sh: key in script templates, got: \(json.keys.sorted())")
-            // Values must be non-empty script content.
-            for (key, content) in json {
-                XCTAssertFalse(content.isEmpty, "Template '\(key)' must have non-empty content")
-            }
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/script-templates",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let json = try JSONDecoder().decode([String: String].self, from: Data(res.body.readableBytesView))
+                // Must include at least one Python template and one shell template.
+                XCTAssertTrue(
+                    json.keys.contains(where: { $0.hasPrefix("py:") }),
+                    "Expected at least one py: key in script templates, got: \(json.keys.sorted())")
+                XCTAssertTrue(
+                    json.keys.contains(where: { $0.hasPrefix("sh:") }),
+                    "Expected at least one sh: key in script templates, got: \(json.keys.sorted())")
+                // Values must be non-empty script content.
+                for (key, content) in json {
+                    XCTAssertFalse(content.isEmpty, "Template '\(key)' must have non-empty content")
+                }
+            })
     }
 
     // MARK: - GET /instructor/students/:studentID/submissions
@@ -2175,14 +2363,19 @@ final class AssignmentRoutesTests: XCTestCase {
         )
 
         let url = "/instructor/students/\(try otherInstructor.requireID().uuidString)/submissions"
-        try await app.asyncTest(.GET, url, beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok,
-                           "Course-scoped submissions page must render for an enrolled non-student")
-            XCTAssertTrue(res.body.string.contains("instr_view_sub"),
-                          "Submission row for the instructor user must appear on the page")
-        })
+        try await app.asyncTest(
+            .GET, url,
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .ok,
+                    "Course-scoped submissions page must render for an enrolled non-student")
+                XCTAssertTrue(
+                    res.body.string.contains("instr_view_sub"),
+                    "Submission row for the instructor user must appear on the page")
+            })
     }
 
     /// Non-enrolled users (in any role) still 404 — the page is course-scoped
@@ -2198,11 +2391,15 @@ final class AssignmentRoutesTests: XCTestCase {
         )
 
         let url = "/instructor/students/\(try stranger.requireID().uuidString)/submissions"
-        try await app.asyncTest(.GET, url, beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound,
-                           "Non-enrolled user must 404 — enrollment is the only access gate")
-        })
+        try await app.asyncTest(
+            .GET, url,
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .notFound,
+                    "Non-enrolled user must 404 — enrollment is the only access gate")
+            })
     }
 }

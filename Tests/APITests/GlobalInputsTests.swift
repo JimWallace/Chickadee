@@ -9,10 +9,11 @@
 // Endpoint integration / route-level tests stay in the route test files;
 // these focus on the building blocks.
 
-import XCTest
-@testable import chickadee_server
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_server
 
 final class GlobalInputsTests: XCTestCase {
 
@@ -30,7 +31,7 @@ final class GlobalInputsTests: XCTestCase {
     func testPrepender_emit_multipleVariablesInOrder() {
         let vars = [
             FamilyVariable(name: "x", value: .int(1)),
-            FamilyVariable(name: "y", value: .string("hi"))
+            FamilyVariable(name: "y", value: .string("hi")),
         ]
         XCTAssertEqual(
             TestScriptVariablePrepender.emit(vars),
@@ -66,7 +67,8 @@ final class GlobalInputsTests: XCTestCase {
         XCTAssertTrue(result.contains("import os"))
         // Banner appears before the original body.
         if let bannerRange = result.range(of: TestScriptVariablePrepender.rawScriptBannerComment),
-           let importRange = result.range(of: "import os") {
+            let importRange = result.range(of: "import os")
+        {
             XCTAssertLessThan(bannerRange.upperBound, importRange.lowerBound)
         } else {
             XCTFail("Banner or import line not found")
@@ -100,9 +102,10 @@ final class GlobalInputsTests: XCTestCase {
         // Old value gone, new value present, banner appears once.
         XCTAssertFalse(secondPass.contains("x = 1"))
         XCTAssertTrue(secondPass.contains("x = 2"))
-        let bannerOccurrences = secondPass.components(
-            separatedBy: TestScriptVariablePrepender.rawScriptBannerComment
-        ).count - 1
+        let bannerOccurrences =
+            secondPass.components(
+                separatedBy: TestScriptVariablePrepender.rawScriptBannerComment
+            ).count - 1
         XCTAssertEqual(bannerOccurrences, 1, "banner should appear exactly once after re-prepending")
     }
 
@@ -155,7 +158,8 @@ final class GlobalInputsTests: XCTestCase {
         XCTAssertTrue(result.contains("s = 99"))
         // Global appears before section (broader scope first).
         if let g = result.range(of: "g = 7"),
-           let s = result.range(of: "s = 99") {
+            let s = result.range(of: "s = 99")
+        {
             XCTAssertLessThan(g.lowerBound, s.lowerBound)
         }
     }
@@ -169,14 +173,14 @@ final class GlobalInputsTests: XCTestCase {
                 "source": src,
                 "metadata": [String: Any](),
                 "execution_count": NSNull(),
-                "outputs": [Any]()
+                "outputs": [Any](),
             ]
         }
         let nb: [String: Any] = [
             "cells": cells,
             "metadata": ["kernelspec": ["name": "python3", "display_name": "Python 3"]],
             "nbformat": 4,
-            "nbformat_minor": 5
+            "nbformat_minor": 5,
         ]
         return try! JSONSerialization.data(withJSONObject: nb)
     }
@@ -194,8 +198,9 @@ final class GlobalInputsTests: XCTestCase {
             strict: true
         )
         guard let nb = try JSONSerialization.jsonObject(with: result) as? [String: Any],
-              let cells = nb["cells"] as? [[String: Any]],
-              let source = cells.first?["source"] as? String else {
+            let cells = nb["cells"] as? [[String: Any]],
+            let source = cells.first?["source"] as? String
+        else {
             XCTFail("Unexpected notebook shape")
             return
         }
@@ -210,8 +215,9 @@ final class GlobalInputsTests: XCTestCase {
             strict: false
         )
         guard let nb = try JSONSerialization.jsonObject(with: result) as? [String: Any],
-              let cells = nb["cells"] as? [[String: Any]],
-              let metadata = cells.first?["metadata"] as? [String: Any] else {
+            let cells = nb["cells"] as? [[String: Any]],
+            let metadata = cells.first?["metadata"] as? [String: Any]
+        else {
             XCTFail("Unexpected notebook shape")
             return
         }
@@ -223,11 +229,13 @@ final class GlobalInputsTests: XCTestCase {
 
     func testSubstitution_strictThrowsOnUnknown() {
         let data = minimalNotebook(cellSources: ["x = \"{{nope}}\""])
-        XCTAssertThrowsError(try NotebookSubstitution.apply(
-            notebookData: data,
-            substitutions: [:],
-            strict: true
-        )) { error in
+        XCTAssertThrowsError(
+            try NotebookSubstitution.apply(
+                notebookData: data,
+                substitutions: [:],
+                strict: true
+            )
+        ) { error in
             if case NotebookSubstitutionError.unknownPlaceholder(let name) = error {
                 XCTAssertEqual(name, "nope")
             } else {
@@ -244,8 +252,9 @@ final class GlobalInputsTests: XCTestCase {
             strict: false
         )
         guard let nb = try JSONSerialization.jsonObject(with: result) as? [String: Any],
-              let cells = nb["cells"] as? [[String: Any]],
-              let source = cells.first?["source"] as? String else {
+            let cells = nb["cells"] as? [[String: Any]],
+            let source = cells.first?["source"] as? String
+        else {
             XCTFail("Unexpected notebook shape")
             return
         }
@@ -255,14 +264,16 @@ final class GlobalInputsTests: XCTestCase {
     func testSubstitution_skipsMarkdownCells() throws {
         // Build a notebook with a markdown cell containing {{name}}.
         let nb: [String: Any] = [
-            "cells": [[
-                "cell_type": "markdown",
-                "source": "Welcome {{name}}",
-                "metadata": [String: Any]()
-            ]],
+            "cells": [
+                [
+                    "cell_type": "markdown",
+                    "source": "Welcome {{name}}",
+                    "metadata": [String: Any](),
+                ]
+            ],
             "metadata": [:],
             "nbformat": 4,
-            "nbformat_minor": 5
+            "nbformat_minor": 5,
         ]
         let data = try JSONSerialization.data(withJSONObject: nb)
         let result = try NotebookSubstitution.apply(
@@ -271,8 +282,9 @@ final class GlobalInputsTests: XCTestCase {
             strict: true
         )
         guard let nb2 = try JSONSerialization.jsonObject(with: result) as? [String: Any],
-              let cells = nb2["cells"] as? [[String: Any]],
-              let source = cells.first?["source"] as? String else {
+            let cells = nb2["cells"] as? [[String: Any]],
+            let source = cells.first?["source"] as? String
+        else {
             XCTFail("Unexpected notebook shape")
             return
         }
@@ -282,7 +294,7 @@ final class GlobalInputsTests: XCTestCase {
     func testSubstitution_placeholderNamesReturnsSortedDedupedNames() {
         let data = minimalNotebook(cellSources: [
             "a = \"{{name}}\"",
-            "b = {{shift}} + {{name}}"
+            "b = {{shift}} + {{name}}",
         ])
         XCTAssertEqual(NotebookSubstitution.placeholderNames(in: data), ["name", "shift"])
     }
@@ -295,8 +307,9 @@ final class GlobalInputsTests: XCTestCase {
             strict: true
         )
         guard let nb = try JSONSerialization.jsonObject(with: result) as? [String: Any],
-              let cells = nb["cells"] as? [[String: Any]],
-              let source = cells.first?["source"] as? String else {
+            let cells = nb["cells"] as? [[String: Any]],
+            let source = cells.first?["source"] as? String
+        else {
             XCTFail("Unexpected notebook shape")
             return
         }
@@ -306,14 +319,16 @@ final class GlobalInputsTests: XCTestCase {
     func testSubstitution_arrayShapeSourcePreserved() throws {
         // nbformat's source-as-array shape: ["line1\n", "line2"].
         let nb: [String: Any] = [
-            "cells": [[
-                "cell_type": "code",
-                "source": ["x = \"{{name}}\"\n", "y = 1"],
-                "metadata": [String: Any]()
-            ]],
+            "cells": [
+                [
+                    "cell_type": "code",
+                    "source": ["x = \"{{name}}\"\n", "y = 1"],
+                    "metadata": [String: Any](),
+                ]
+            ],
             "metadata": [:],
             "nbformat": 4,
-            "nbformat_minor": 5
+            "nbformat_minor": 5,
         ]
         let data = try JSONSerialization.data(withJSONObject: nb)
         let result = try NotebookSubstitution.apply(
@@ -322,8 +337,9 @@ final class GlobalInputsTests: XCTestCase {
             strict: true
         )
         guard let nb2 = try JSONSerialization.jsonObject(with: result) as? [String: Any],
-              let cells = nb2["cells"] as? [[String: Any]],
-              let source = cells.first?["source"] as? [String] else {
+            let cells = nb2["cells"] as? [[String: Any]],
+            let source = cells.first?["source"] as? [String]
+        else {
             XCTFail("Expected array source shape preserved")
             return
         }
@@ -337,7 +353,7 @@ final class GlobalInputsTests: XCTestCase {
         let props = TestProperties(
             globalVariables: [
                 FamilyVariable(name: "quotes", value: .array([.string("hi"), .string("hi")])),
-                FamilyVariable(name: "n", value: .int(42))
+                FamilyVariable(name: "n", value: .int(42)),
             ]
         )
         let data = try JSONEncoder().encode(props)
@@ -349,8 +365,8 @@ final class GlobalInputsTests: XCTestCase {
 
     func testTestProperties_missingGlobalVariablesDecodesAsEmpty() throws {
         let json = #"""
-        {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}
-        """#.data(using: .utf8)!
+            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}
+            """#.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(TestProperties.self, from: json)
         XCTAssertEqual(decoded.globalVariables.count, 0)
     }

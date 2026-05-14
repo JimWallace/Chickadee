@@ -1,7 +1,7 @@
 import Core
 import Fluent
-import Vapor
 import Foundation
+import Vapor
 
 enum JobFinalStatus: String, CaseIterable, Codable, Sendable {
     case passed
@@ -228,10 +228,12 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             )
             try await pruneIfNeeded(on: db, logger: logger)
         } catch {
-            logger.warning("diagnostics_submission_create_failed", metadata: [
-                "submission_id": .string(submissionID),
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "diagnostics_submission_create_failed",
+                metadata: [
+                    "submission_id": .string(submissionID),
+                    "error": .string(String(describing: error)),
+                ])
         }
     }
 
@@ -265,17 +267,20 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                     snapshot: snapshot,
                     extra: [
                         "status": .string("ok"),
-                        "available_capacity": .stringConvertible(max(0, snapshot.maxConcurrentJobs - snapshot.activeJobs)),
+                        "available_capacity": .stringConvertible(
+                            max(0, snapshot.maxConcurrentJobs - snapshot.activeJobs)),
                     ]
                 )
             )
             try await pruneIfNeeded(on: db, logger: logger)
         } catch {
-            logger.warning("diagnostics_runner_snapshot_failed", metadata: [
-                "runner_id": .string(snapshot.workerID),
-                "reason": .string(reason.rawValue),
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "diagnostics_runner_snapshot_failed",
+                metadata: [
+                    "runner_id": .string(snapshot.workerID),
+                    "reason": .string(reason.rawValue),
+                    "error": .string(String(describing: error)),
+                ])
         }
     }
 
@@ -297,9 +302,10 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 "runner_id": .string(profile.runnerID),
                 "platform": .string(capabilityProfile.platform),
                 "architecture": .string(capabilityProfile.architecture),
-                "languages": .string(capabilityProfile.languageVersions.map {
-                    "\($0.language)=\($0.version)"
-                }.joined(separator: ",")),
+                "languages": .string(
+                    capabilityProfile.languageVersions.map {
+                        "\($0.language)=\($0.version)"
+                    }.joined(separator: ",")),
                 "capabilities_count": .stringConvertible(capabilityProfile.capabilities.count),
                 "status": .string(event.rawValue),
             ]
@@ -321,7 +327,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 runnerID: submission.workerID,
                 requirements: requirements,
                 extra: [
-                    "status": .string("loaded"),
+                    "status": .string("loaded")
                 ]
             )
         )
@@ -398,7 +404,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 runnerID: runnerID,
                 requirements: requirements,
                 extra: [
-                    "status": .string("assigned"),
+                    "status": .string("assigned")
                 ]
             )
         )
@@ -485,10 +491,12 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 )
             )
         } catch {
-            logger.warning("diagnostics_job_assign_failed", metadata: [
-                "submission_id": .string(submissionID),
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "diagnostics_job_assign_failed",
+                metadata: [
+                    "submission_id": .string(submissionID),
+                    "error": .string(String(describing: error)),
+                ])
         }
     }
 
@@ -501,9 +509,11 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
         guard configuration.enabled else { return }
         do {
             guard let submission = try await APISubmission.find(collection.submissionID, on: db) else {
-                logger.warning("diagnostics_missing_submission", metadata: [
-                    "submission_id": .string(collection.submissionID),
-                ])
+                logger.warning(
+                    "diagnostics_missing_submission",
+                    metadata: [
+                        "submission_id": .string(collection.submissionID)
+                    ])
                 return
             }
             let context = try await loadSubmissionContext(for: submission, on: db)
@@ -514,7 +524,9 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             )
 
             let completedAt = workerDiagnostics?.finishedAt ?? collection.timestamp
-            let startedAt = workerDiagnostics?.startedAt ?? collection.jobStartedAt ?? diagnostics.startedAt ?? submission.assignedAt
+            let startedAt =
+                workerDiagnostics?.startedAt ?? collection.jobStartedAt ?? diagnostics.startedAt
+                ?? submission.assignedAt
             let finalStatus = workerDiagnostics?.finalStatus ?? inferredFinalStatus(from: collection).rawValue
 
             diagnostics.submittedAt = submission.submittedAt ?? diagnostics.submittedAt
@@ -526,13 +538,15 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             // time so wait and turnaround stats reflect only the re-test queue cycle.
             let effectiveEnqueuedAt = submission.retestedAt ?? diagnostics.submittedAt
             diagnostics.queueWaitMs = millisecondsBetween(effectiveEnqueuedAt, diagnostics.assignedAt)
-            diagnostics.executionMs = workerDiagnostics?.wallClockMs
+            diagnostics.executionMs =
+                workerDiagnostics?.wallClockMs
                 ?? millisecondsBetween(startedAt, completedAt)
             diagnostics.turnaroundMs = millisecondsBetween(effectiveEnqueuedAt, completedAt)
             diagnostics.finalStatus = finalStatus
             diagnostics.timedOut = finalStatus == JobFinalStatus.timeout.rawValue
             diagnostics.exitCode = workerDiagnostics?.exitCode
-            diagnostics.terminationReason = workerDiagnostics?.terminationReason
+            diagnostics.terminationReason =
+                workerDiagnostics?.terminationReason
                 ?? inferredTerminationReason(from: collection)
             diagnostics.peakRSSBytes = workerDiagnostics?.peakRSSBytes
             diagnostics.wallClockMs = workerDiagnostics?.wallClockMs
@@ -637,10 +651,12 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             )
             try await pruneIfNeeded(on: db, logger: logger)
         } catch {
-            logger.warning("diagnostics_job_finish_failed", metadata: [
-                "submission_id": .string(collection.submissionID),
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "diagnostics_job_finish_failed",
+                metadata: [
+                    "submission_id": .string(collection.submissionID),
+                    "error": .string(String(describing: error)),
+                ])
         }
     }
 
@@ -697,7 +713,8 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, submission.assignedAt)
             diagnostics.executionMs = millisecondsBetween(diagnostics.startedAt, diagnostics.finishedAt)
             diagnostics.turnaroundMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.finishedAt)
-            diagnostics.finalStatus = terminationReason == "job_timeout"
+            diagnostics.finalStatus =
+                terminationReason == "job_timeout"
                 ? JobFinalStatus.timeout.rawValue
                 : JobFinalStatus.error.rawValue
             diagnostics.timedOut = terminationReason == "job_timeout"
@@ -715,7 +732,8 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, submission.assignedAt)
             metric.executionMs = millisecondsBetween(metric.startedAt, metric.completedAt)
             metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, metric.completedAt)
-            metric.finalStatus = terminationReason == "job_timeout"
+            metric.finalStatus =
+                terminationReason == "job_timeout"
                 ? JobFinalStatus.timeout.rawValue
                 : JobFinalStatus.error.rawValue
             try await metric.save(on: db)
@@ -735,10 +753,12 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 )
             )
         } catch {
-            logger.warning("diagnostics_job_failure_record_failed", metadata: [
-                "submission_id": .string(submissionID),
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "diagnostics_job_failure_record_failed",
+                metadata: [
+                    "submission_id": .string(submissionID),
+                    "error": .string(String(describing: error)),
+                ])
         }
     }
 
@@ -930,22 +950,26 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             )
             try await metric.save(on: db)
         } catch {
-            logger.warning("diagnostics_request_metric_failed", metadata: [
-                "path": .string(path),
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "diagnostics_request_metric_failed",
+                metadata: [
+                    "path": .string(path),
+                    "error": .string(String(describing: error)),
+                ])
         }
 
         guard configuration.verboseRequestTiming || shouldAlwaysLogRequest(path: path) else { return }
-        logger.info("request_completed", metadata: [
-            "method": .string(method),
-            "path": .string(path),
-            "request_kind": .string(requestKind ?? ""),
-            "status_code": .stringConvertible(statusCode),
-            "duration_ms": .stringConvertible(durationMs),
-            "submission_id": .string(submissionID ?? ""),
-            "worker_id": .string(workerID ?? ""),
-        ])
+        logger.info(
+            "request_completed",
+            metadata: [
+                "method": .string(method),
+                "path": .string(path),
+                "request_kind": .string(requestKind ?? ""),
+                "status_code": .stringConvertible(statusCode),
+                "duration_ms": .stringConvertible(durationMs),
+                "submission_id": .string(submissionID ?? ""),
+                "worker_id": .string(workerID ?? ""),
+            ])
     }
 
     private func shouldCaptureRequest(path: String) -> Bool {
@@ -994,7 +1018,8 @@ private extension OperationalDiagnosticsService {
     ) async throws -> JobExecutionMetric {
         if let existing = try await JobExecutionMetric.query(on: db)
             .filter(\.$submissionID == (submission.id ?? ""))
-            .first() {
+            .first()
+        {
             return existing
         }
 
@@ -1014,7 +1039,9 @@ private extension OperationalDiagnosticsService {
         return created
     }
 
-    func loadSubmissionContext(for submission: APISubmission, on db: Database) async throws -> SubmissionDiagnosticsContext {
+    func loadSubmissionContext(
+        for submission: APISubmission, on db: Database
+    ) async throws -> SubmissionDiagnosticsContext {
         let courseID = try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
 
         let assignmentID: UUID?
@@ -1062,7 +1089,8 @@ private extension OperationalDiagnosticsService {
 
         for submission in try await APISubmission.query(on: db)
             .filter(\.$submittedAt >= windowStart)
-            .all() {
+            .all()
+        {
             if let id = submission.id {
                 relevantSubmissions[id] = submission
             }
@@ -1070,7 +1098,8 @@ private extension OperationalDiagnosticsService {
 
         for submission in try await APISubmission.query(on: db)
             .filter(\.$assignedAt >= windowStart)
-            .all() {
+            .all()
+        {
             if let id = submission.id {
                 relevantSubmissions[id] = submission
             }
@@ -1078,7 +1107,8 @@ private extension OperationalDiagnosticsService {
 
         for submission in try await APISubmission.query(on: db)
             .filter(\.$status == "pending")
-            .all() {
+            .all()
+        {
             if let id = submission.id {
                 relevantSubmissions[id] = submission
             }
@@ -1098,7 +1128,8 @@ private extension OperationalDiagnosticsService {
         for submission in relevantSubmissions.values {
             let isWorkerEligible =
                 submission.kind == APISubmission.Kind.validation
-                || (submission.kind == APISubmission.Kind.student && workerModeSetupIDs.contains(submission.testSetupID))
+                || (submission.kind == APISubmission.Kind.student
+                    && workerModeSetupIDs.contains(submission.testSetupID))
             guard isWorkerEligible, let submittedAt = submission.submittedAt else { continue }
 
             let assignedAt = submission.assignedAt
@@ -1194,7 +1225,8 @@ private extension OperationalDiagnosticsService {
     }
 
     func compactSummary(_ text: String) -> String {
-        let collapsed = text
+        let collapsed =
+            text
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(collapsed.prefix(160))
@@ -1227,14 +1259,18 @@ private extension OperationalDiagnosticsService {
                 .delete()
 
             await maintenance.markPruned(at: now)
-            logger.info("observability_prune_complete", metadata: [
-                "job_metric_retention_days": .stringConvertible(configuration.jobMetricRetentionDays),
-                "runner_snapshot_retention_days": .stringConvertible(configuration.runnerSnapshotRetentionDays),
-            ])
+            logger.info(
+                "observability_prune_complete",
+                metadata: [
+                    "job_metric_retention_days": .stringConvertible(configuration.jobMetricRetentionDays),
+                    "runner_snapshot_retention_days": .stringConvertible(configuration.runnerSnapshotRetentionDays),
+                ])
         } catch {
-            logger.warning("observability_prune_failed", metadata: [
-                "error": .string(String(describing: error)),
-            ])
+            logger.warning(
+                "observability_prune_failed",
+                metadata: [
+                    "error": .string(String(describing: error))
+                ])
         }
     }
 
@@ -1320,11 +1356,12 @@ private extension OperationalDiagnosticsService {
         }
         if !requirements.requiredLanguages.isEmpty {
             parts.append(
-                "languages=" + requirements.requiredLanguages.map {
-                    let min = $0.minimumVersion.map { ">=" + $0 } ?? ""
-                    let exact = $0.exactVersion.map { "==" + $0 } ?? ""
-                    return $0.language + min + exact
-                }.joined(separator: ",")
+                "languages="
+                    + requirements.requiredLanguages.map {
+                        let min = $0.minimumVersion.map { ">=" + $0 } ?? ""
+                        let exact = $0.exactVersion.map { "==" + $0 } ?? ""
+                        return $0.language + min + exact
+                    }.joined(separator: ",")
             )
         }
         if !requirements.requiredCapabilities.isEmpty {
@@ -1378,9 +1415,11 @@ private func iso8601Metadata(_ date: Date) -> Logger.MetadataValue {
 }
 
 private func environmentInt(_ key: String) -> Int? {
-    guard let raw = Environment.get(key)?
-        .trimmingCharacters(in: .whitespacesAndNewlines),
-        let value = Int(raw) else {
+    guard
+        let raw = Environment.get(key)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+        let value = Int(raw)
+    else {
         return nil
     }
     return value

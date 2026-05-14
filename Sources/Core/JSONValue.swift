@@ -22,11 +22,11 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
         let c = try decoder.singleValueContainer()
         if c.decodeNil() { self = .null; return }
         // Order matters: Int before Double so whole numbers round-trip as int.
-        if let b = try? c.decode(Bool.self)              { self = .bool(b);   return }
-        if let i = try? c.decode(Int.self)               { self = .int(i);    return }
-        if let d = try? c.decode(Double.self)            { self = .double(d); return }
-        if let s = try? c.decode(String.self)            { self = .string(s); return }
-        if let a = try? c.decode([JSONValue].self)       { self = .array(a);  return }
+        if let b = try? c.decode(Bool.self) { self = .bool(b); return }
+        if let i = try? c.decode(Int.self) { self = .int(i); return }
+        if let d = try? c.decode(Double.self) { self = .double(d); return }
+        if let s = try? c.decode(String.self) { self = .string(s); return }
+        if let a = try? c.decode([JSONValue].self) { self = .array(a); return }
         if let o = try? c.decode([String: JSONValue].self) { self = .object(o); return }
         throw DecodingError.dataCorruptedError(
             in: c,
@@ -37,12 +37,12 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
         switch self {
-        case .null:          try c.encodeNil()
-        case .bool(let b):   try c.encode(b)
-        case .int(let i):    try c.encode(i)
+        case .null: try c.encodeNil()
+        case .bool(let b): try c.encode(b)
+        case .int(let i): try c.encode(i)
         case .double(let d): try c.encode(d)
         case .string(let s): try c.encode(s)
-        case .array(let a):  try c.encode(a)
+        case .array(let a): try c.encode(a)
         case .object(let o): try c.encode(o)
         }
     }
@@ -54,9 +54,9 @@ public indirect enum JSONValue: Codable, Equatable, Sendable {
     ///   - object keys kept in sorted order so the rendered source is stable
     public var pythonLiteral: String {
         switch self {
-        case .null:          return "None"
-        case .bool(let b):   return b ? "True" : "False"
-        case .int(let i):    return String(i)
+        case .null: return "None"
+        case .bool(let b): return b ? "True" : "False"
+        case .int(let i): return String(i)
         case .double(let d):
             // Ensure the literal parses as a Python float even for whole-number
             // values (e.g. 2.0 -> "2.0", not "2.0000000…").  Swift's default
@@ -79,11 +79,11 @@ private func encodePythonString(_ s: String) -> String {
     var out = "\""
     for ch in s.unicodeScalars {
         switch ch {
-        case "\\":  out += #"\\"#
-        case "\"":  out += #"\""#
-        case "\n":  out += "\\n"
-        case "\r":  out += "\\r"
-        case "\t":  out += "\\t"
+        case "\\": out += #"\\"#
+        case "\"": out += #"\""#
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
         default:
             if ch.value < 0x20 {
                 out += String(format: "\\x%02x", ch.value)

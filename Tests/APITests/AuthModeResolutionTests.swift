@@ -1,6 +1,7 @@
-import Testing
-@testable import chickadee_server
 import Fluent
+import Testing
+
+@testable import chickadee_server
 
 @Suite struct AuthModeResolutionTests {
 

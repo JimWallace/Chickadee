@@ -7,10 +7,10 @@
 // the existing families and rebuilds the test setup zip + manifest in one
 // pass.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -26,7 +26,7 @@ extension AssignmentRoutes {
 
         let checks: [NotebookCheck] = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return [] }
             return props.notebookChecks
         }()

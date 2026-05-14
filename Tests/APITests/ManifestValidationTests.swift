@@ -3,11 +3,12 @@
 // Unit tests for validateManifestDependencies — cycle detection,
 // unknown references, and self-references in test suite dependency graphs.
 
+import Fluent
 import Testing
 import Vapor
-@testable import chickadee_server
-import Fluent
+
 @testable import Core
+@testable import chickadee_server
 
 @Suite struct ManifestValidationTests {
 

@@ -10,8 +10,8 @@
 // talking to the database directly. This keeps auth logic out of route
 // handlers and makes testing without a real SSO server straightforward.
 
-import Vapor
 import Fluent
+import Vapor
 
 // MARK: - Protocol
 
@@ -26,9 +26,10 @@ protocol AuthProvider: Sendable {
 /// BCrypt-backed credential verification against the local user table.
 struct LocalAuthProvider: AuthProvider {
     func authenticate(username: String, password: String, on req: Request) async throws -> APIUser? {
-        guard let user = try await APIUser.query(on: req.db)
-            .filter(\.$username == username)
-            .first()
+        guard
+            let user = try await APIUser.query(on: req.db)
+                .filter(\.$username == username)
+                .first()
         else {
             return nil
         }

@@ -2,11 +2,12 @@
 //
 // Unit tests for the MarmosetImportParser utility functions.
 
-import Testing
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import Testing
+
+@testable import chickadee_server
 
 @Suite struct MarmosetImportParserTests {
 
@@ -20,10 +21,10 @@ import Core
             "z.writestr(\(entry.name.debugDescription), \(entry.content.debugDescription))"
         }.joined(separator: "\n    ")
         let script = """
-import zipfile
-with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
-    \(entriesCode)
-"""
+            import zipfile
+            with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
+                \(entriesCode)
+            """
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["python3", "-c", script]
@@ -54,12 +55,12 @@ with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
 
     @Test func parseComments() {
         let input = """
-        # This is a comment
-        ! This too
-        key1=value1
-        # Another comment
-        key2=value2
-        """
+            # This is a comment
+            ! This too
+            key1=value1
+            # Another comment
+            key2=value2
+            """
         let result = parseJavaProperties(Data(input.utf8))
         #expect(result.count == 2)
         #expect(result["key1"] == "value1")
@@ -105,13 +106,13 @@ with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
 
     @Test func parseTypicalMarmosetTestProperties() {
         let input = """
-        # Marmoset test properties
-        test.class.public=TestPublicA,TestPublicB
-        test.class.release=TestReleaseA
-        test.class.secret=TestSecretA,\
-          TestSecretB
-        build.language=python
-        """
+            # Marmoset test properties
+            test.class.public=TestPublicA,TestPublicB
+            test.class.release=TestReleaseA
+            test.class.secret=TestSecretA,\
+              TestSecretB
+            build.language=python
+            """
         let result = parseJavaProperties(Data(input.utf8))
         #expect(result["test.class.public"] == "TestPublicA,TestPublicB")
         #expect(result["test.class.release"] == "TestReleaseA")
@@ -211,7 +212,7 @@ with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
 
         let suites = decoded["testSuites"] as! [[String: String]]
         #expect(suites.count == 2)
-        #expect(suites.contains { $0["tier"] == "public"  && $0["script"] == "test_public.sh" })
+        #expect(suites.contains { $0["tier"] == "public" && $0["script"] == "test_public.sh" })
         #expect(suites.contains { $0["tier"] == "release" && $0["script"] == "test_release.sh" })
     }
 
@@ -229,9 +230,9 @@ with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
         let suites = decoded["testSuites"] as! [[String: String]]
 
         #expect(suites.count == 5)
-        #expect(suites.filter { $0["tier"] == "public"  }.count == 2)
+        #expect(suites.filter { $0["tier"] == "public" }.count == 2)
         #expect(suites.filter { $0["tier"] == "release" }.count == 1)
-        #expect(suites.filter { $0["tier"] == "secret"  }.count == 2)
+        #expect(suites.filter { $0["tier"] == "secret" }.count == 2)
     }
 
     @Test func convertManifestEmptyTests() throws {
@@ -284,10 +285,12 @@ with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
     }
 
     @Test func firstNotebookInZipFindsNestedNotebook() throws {
-        guard let zipPath = try makeZip(entries: [
-            ("starter-files/Lab 1.ipynb", "{}"),
-            ("starter-files/readme.txt", "hello")
-        ]) else { return }
+        guard
+            let zipPath = try makeZip(entries: [
+                ("starter-files/Lab 1.ipynb", "{}"),
+                ("starter-files/readme.txt", "hello"),
+            ])
+        else { return }
         defer { try? FileManager.default.removeItem(atPath: zipPath) }
 
         #expect(try firstNotebookInZip(zipPath: zipPath) == "Lab 1.ipynb")
@@ -296,9 +299,11 @@ with zipfile.ZipFile(\(zipPath.debugDescription), "w") as z:
     }
 
     @Test func extractSolutionFromCanonicalZipHandlesNestedEntry() throws {
-        guard let zipPath = try makeZip(entries: [
-            ("canonical/solution.py", "print('ok')\n")
-        ]) else { return }
+        guard
+            let zipPath = try makeZip(entries: [
+                ("canonical/solution.py", "print('ok')\n")
+            ])
+        else { return }
         defer { try? FileManager.default.removeItem(atPath: zipPath) }
 
         let solution = try extractSolutionFromCanonicalZip(zipPath: zipPath)

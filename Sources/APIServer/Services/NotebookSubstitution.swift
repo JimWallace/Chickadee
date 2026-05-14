@@ -56,8 +56,10 @@ enum NotebookSubstitution {
         substitutions: [String: String],
         strict: Bool = false
     ) throws -> Data {
-        guard var notebook = (try? JSONSerialization.jsonObject(with: notebookData))
-                as? [String: Any] else {
+        guard
+            var notebook = (try? JSONSerialization.jsonObject(with: notebookData))
+                as? [String: Any]
+        else {
             throw NotebookSubstitutionError.notValidNotebookJSON
         }
         guard var cells = notebook["cells"] as? [[String: Any]] else {
@@ -107,8 +109,10 @@ enum NotebookSubstitution {
     /// `{{...}}` references as 400 errors.  Always returns deduplicated,
     /// sorted output.
     static func placeholderNames(in notebookData: Data) -> [String] {
-        guard let notebook = (try? JSONSerialization.jsonObject(with: notebookData))
-                as? [String: Any] else { return [] }
+        guard
+            let notebook = (try? JSONSerialization.jsonObject(with: notebookData))
+                as? [String: Any]
+        else { return [] }
         guard let cells = notebook["cells"] as? [[String: Any]] else { return [] }
         var found = Set<String>()
         for cell in cells {

@@ -20,7 +20,8 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
             guard allScripts.contains(dep) else {
                 throw Abort(
                     .unprocessableEntity,
-                    reason: "Manifest dependency error: '\(entry.script)' depends on '\(dep)', which is not listed in testSuites"
+                    reason:
+                        "Manifest dependency error: '\(entry.script)' depends on '\(dep)', which is not listed in testSuites"
                 )
             }
             guard dep != entry.script else {
@@ -116,11 +117,13 @@ func validatePatternFamilies(
     var seenFamilyIDs: Set<String> = []
     for family in families {
         guard isValidIdentifierFragment(family.id) else {
-            throw Abort(.unprocessableEntity,
+            throw Abort(
+                .unprocessableEntity,
                 reason: "Pattern family id '\(family.id)' must contain only letters, digits, and underscore")
         }
         guard seenFamilyIDs.insert(family.id).inserted else {
-            throw Abort(.unprocessableEntity,
+            throw Abort(
+                .unprocessableEntity,
                 reason: "Duplicate pattern family id '\(family.id)'")
         }
         // `functionName` is ignored for .variableEquality families (they
@@ -129,18 +132,23 @@ func validatePatternFamilies(
         // acceptable.  Every other kind still requires a valid identifier.
         if family.kind != .variableEquality {
             guard isValidPythonIdentifier(family.functionName) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Pattern family '\(family.id)': functionName '\(family.functionName)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': functionName '\(family.functionName)' is not a valid Python identifier"
+                )
             }
         }
         var seenParams: Set<String> = []
         for param in family.paramNames {
             guard isValidPythonIdentifier(param) else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': parameter name '\(param)' is not a valid Python identifier")
             }
             guard seenParams.insert(param).inserted else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': duplicate parameter name '\(param)'")
             }
         }
@@ -148,15 +156,20 @@ func validatePatternFamilies(
         var seenCaseKeys: Set<String> = []
         for c in family.cases {
             guard isValidIdentifierFragment(c.key) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Pattern family '\(family.id)': case key '\(c.key)' must contain only letters, digits, and underscore")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case key '\(c.key)' must contain only letters, digits, and underscore"
+                )
             }
             guard seenCaseKeys.insert(c.key).inserted else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': duplicate case key '\(c.key)'")
             }
             guard !c.label.trimmingCharacters(in: .whitespaces).isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': case '\(c.key)' is missing a label")
             }
             switch family.kind {
@@ -167,71 +180,110 @@ func validatePatternFamilies(
                 // header), not something the renderer or validator cares
                 // about.
                 guard c.args.count == 1 else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' must have exactly one arg (the variable name); got \(c.args.count)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' must have exactly one arg (the variable name); got \(c.args.count)"
+                    )
                 }
                 guard case .string(let varName) = c.args[0],
-                      !varName.trimmingCharacters(in: .whitespaces).isEmpty else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)")
+                    !varName.trimmingCharacters(in: .whitespaces).isEmpty
+                else {
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)"
+                    )
                 }
                 guard isValidPythonIdentifier(varName) else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name '\(varName)' is not a valid Python identifier")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name '\(varName)' is not a valid Python identifier"
+                    )
                 }
             case .boundaryEquality, .approximateEquality:
                 if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
+                    )
                 }
             case .returnTypeCheck:
                 if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
+                    )
                 }
                 guard case .string(let expectedType) = c.expected,
-                      !expectedType.trimmingCharacters(in: .whitespaces).isEmpty else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")")
+                    !expectedType.trimmingCharacters(in: .whitespaces).isEmpty
+                else {
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")"
+                    )
                 }
             case .exceptionExpected:
                 if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
+                    )
                 }
                 guard case .string(let exceptionType) = c.expected,
-                      !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' expected must be a non-empty string naming the exception class (e.g. \"ValueError\")")
+                    !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty
+                else {
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' expected must be a non-empty string naming the exception class (e.g. \"ValueError\")"
+                    )
                 }
             case .performanceThreshold:
                 if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
+                    )
                 }
                 let threshold: Double? = {
                     switch c.expected {
                     case .double(let d): return d
-                    case .int(let i):    return Double(i)
-                    default:             return nil
+                    case .int(let i): return Double(i)
+                    default: return nil
                     }
                 }()
                 guard let t = threshold, t.isFinite, t > 0 else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)"
+                    )
                 }
             case .stdoutEquality:
                 if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
+                    )
                 }
                 // Empty string is intentionally allowed — it means "this
                 // function should print nothing", a legitimate case for
                 // a beginner exercise where the assignment is to add the
                 // print() call.
                 guard case .string = c.expected else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)"
+                    )
                 }
             }
         }
@@ -239,7 +291,8 @@ func validatePatternFamilies(
         // Kind-specific rules: approximateEquality needs a non-negative tolerance.
         if family.kind == .approximateEquality {
             if let tol = family.defaults.tolerance, tol < 0 || !tol.isFinite {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': tolerance must be a non-negative finite number.")
             }
         }
@@ -253,16 +306,21 @@ func validatePatternFamilies(
         let paramNameSet = Set(family.paramNames)
         for v in family.variables {
             guard isValidPythonIdentifier(v.name) else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': variable name '\(v.name)' is not a valid Python identifier")
             }
             guard seenVarNames.insert(v.name).inserted else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Pattern family '\(family.id)': duplicate variable name '\(v.name)'")
             }
             if paramNameSet.contains(v.name) {
-                throw Abort(.unprocessableEntity,
-                    reason: "Pattern family '\(family.id)': variable name '\(v.name)' collides with a parameter name; the generated test would shadow the family variable.")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': variable name '\(v.name)' collides with a parameter name; the generated test would shadow the family variable."
+                )
             }
         }
         let sectionVarNamesHere = sectionVarNames(forFamily: family.id)
@@ -276,8 +334,11 @@ func validatePatternFamilies(
                 // neither" is an error.
                 guard seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref) else {
                     let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
-                    throw Abort(.unprocessableEntity,
-                        reason: "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'"
+                    )
                 }
             }
         }
@@ -290,8 +351,11 @@ func validatePatternFamilies(
     for family in families {
         for filename in patternFamilyAllGeneratedFilenames(family) {
             if rawScripts.contains(filename) {
-                throw Abort(.unprocessableEntity,
-                    reason: "Pattern family '\(family.id)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key.")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key."
+                )
             }
         }
     }
@@ -316,54 +380,74 @@ func validateNotebookChecks(
     var seenCheckIDs: Set<String> = []
     for check in checks {
         guard isValidIdentifierFragment(check.id) else {
-            throw Abort(.unprocessableEntity,
+            throw Abort(
+                .unprocessableEntity,
                 reason: "Notebook check id '\(check.id)' must contain only letters, digits, and underscore")
         }
         guard seenCheckIDs.insert(check.id).inserted else {
-            throw Abort(.unprocessableEntity,
+            throw Abort(
+                .unprocessableEntity,
                 reason: "Duplicate notebook check id '\(check.id)'")
         }
         guard check.points >= 0 else {
-            throw Abort(.unprocessableEntity,
+            throw Abort(
+                .unprocessableEntity,
                 reason: "Notebook check '\(check.id)': points must be non-negative")
         }
 
         switch check.kind {
         case .dataFrameShape:
             guard let variable = check.variable, !variable.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (data_frame_shape): variable name is required")
             }
             guard isValidPythonIdentifier(variable) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_shape): variable name '\(variable)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_shape): variable name '\(variable)' is not a valid Python identifier"
+                )
             }
             guard let rows = check.expectedRows, rows >= 0 else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_shape): expectedRows must be a non-negative integer")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_shape): expectedRows must be a non-negative integer")
             }
             guard let cols = check.expectedCols, cols >= 0 else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_shape): expectedCols must be a non-negative integer")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_shape): expectedCols must be a non-negative integer")
             }
 
         case .dataFrameColumns:
             guard let variable = check.variable, !variable.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (data_frame_columns): variable name is required")
             }
             guard isValidPythonIdentifier(variable) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_columns): variable name '\(variable)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_columns): variable name '\(variable)' is not a valid Python identifier"
+                )
             }
             guard let columns = check.expectedColumns, !columns.isEmpty else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_columns): expectedColumns must be a non-empty list")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_columns): expectedColumns must be a non-empty list")
             }
             for col in columns {
                 guard !col.isEmpty else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Notebook check '\(check.id)' (data_frame_columns): expectedColumns contains an empty entry")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Notebook check '\(check.id)' (data_frame_columns): expectedColumns contains an empty entry"
+                    )
                 }
             }
             // Under .exact, duplicate column names render an unsatisfiable
@@ -371,23 +455,34 @@ func validateNotebookChecks(
             // labels but it's a foot-gun for graded assignments).  Catch
             // it at save time.
             if (check.columnMatch ?? .exact) == .exact,
-               Set(columns).count != columns.count {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_columns): expectedColumns contains duplicate names under exact matching")
+                Set(columns).count != columns.count
+            {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_columns): expectedColumns contains duplicate names under exact matching"
+                )
             }
 
         case .dataFrameEquality:
             guard let variable = check.variable, !variable.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (data_frame_equality): variable name is required")
             }
             guard isValidPythonIdentifier(variable) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_equality): variable name '\(variable)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_equality): variable name '\(variable)' is not a valid Python identifier"
+                )
             }
             guard let csv = check.expectedCSV, !csv.isEmpty else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_equality): expectedCSV must be a non-empty CSV string")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_equality): expectedCSV must be a non-empty CSV string"
+                )
             }
             // Quick sanity: the first line should look like a header (one
             // or more comma-separated tokens or a single non-empty
@@ -395,83 +490,114 @@ func validateNotebookChecks(
             // `pd.DataFrame(...)` Python code instead of CSV.
             let firstLine = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).first ?? ""
             guard !firstLine.isEmpty else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_equality): expectedCSV must begin with a header row")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_equality): expectedCSV must begin with a header row")
             }
             if let rtol = check.rtol, !rtol.isFinite || rtol < 0 {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_equality): rtol must be a non-negative finite number")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_equality): rtol must be a non-negative finite number")
             }
             if let atol = check.atol, !atol.isFinite || atol < 0 {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (data_frame_equality): atol must be a non-negative finite number")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (data_frame_equality): atol must be a non-negative finite number")
             }
 
         case .seriesEquality:
             guard let variable = check.variable, !variable.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (series_equality): variable name is required")
             }
             guard isValidPythonIdentifier(variable) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (series_equality): variable name '\(variable)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (series_equality): variable name '\(variable)' is not a valid Python identifier"
+                )
             }
             guard let csv = check.expectedCSV, !csv.isEmpty else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (series_equality): expectedCSV must be a non-empty CSV string")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason: "Notebook check '\(check.id)' (series_equality): expectedCSV must be a non-empty CSV string"
+                )
             }
             // Single-column header check: the first line should not
             // contain a comma (a multi-column CSV would be ambiguous
             // — which column is the Series?).
             let firstLine = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).first ?? ""
             guard !firstLine.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (series_equality): expectedCSV must begin with a header row")
             }
             if firstLine.contains(",") {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (series_equality): expectedCSV must have exactly one column (header had a comma)")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (series_equality): expectedCSV must have exactly one column (header had a comma)"
+                )
             }
             if let rtol = check.rtol, !rtol.isFinite || rtol < 0 {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (series_equality): rtol must be a non-negative finite number")
             }
             if let atol = check.atol, !atol.isFinite || atol < 0 {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (series_equality): atol must be a non-negative finite number")
             }
 
         case .numericArrayClose:
             guard let variable = check.variable, !variable.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (numeric_array_close): variable name is required")
             }
             guard isValidPythonIdentifier(variable) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (numeric_array_close): variable name '\(variable)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (numeric_array_close): variable name '\(variable)' is not a valid Python identifier"
+                )
             }
             guard let array = check.expectedArray, !array.isEmpty else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (numeric_array_close): expectedArray must be a non-empty list of numbers")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (numeric_array_close): expectedArray must be a non-empty list of numbers"
+                )
             }
             if let rtol = check.rtol, !rtol.isFinite || rtol < 0 {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (numeric_array_close): rtol must be a non-negative finite number")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (numeric_array_close): rtol must be a non-negative finite number")
             }
             if let atol = check.atol, !atol.isFinite || atol < 0 {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (numeric_array_close): atol must be a non-negative finite number")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (numeric_array_close): atol must be a non-negative finite number")
             }
 
         case .figureCount:
             guard let n = check.minFigures, n >= 0 else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (figure_count): minFigures must be a non-negative integer")
             }
 
         case .cellContains:
             guard let needle = check.containsText, !needle.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (cell_contains): containsText must be a non-empty string")
             }
             // If regex, sanity-check that it compiles.  We can't run a
@@ -481,37 +607,48 @@ func validateNotebookChecks(
                 let openParens = needle.filter { $0 == "(" }.count
                 let closeParens = needle.filter { $0 == ")" }.count
                 guard openParens == closeParens else {
-                    throw Abort(.unprocessableEntity,
+                    throw Abort(
+                        .unprocessableEntity,
                         reason: "Notebook check '\(check.id)' (cell_contains): regex has unbalanced parentheses")
                 }
                 if needle.hasSuffix("\\") {
-                    throw Abort(.unprocessableEntity,
+                    throw Abort(
+                        .unprocessableEntity,
                         reason: "Notebook check '\(check.id)' (cell_contains): regex ends with a dangling backslash")
                 }
             }
 
         case .functionExists:
             guard let name = check.variable, !name.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (function_exists): function name (variable) is required")
             }
             guard isValidPythonIdentifier(name) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (function_exists): function name '\(name)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (function_exists): function name '\(name)' is not a valid Python identifier"
+                )
             }
             if let arity = check.expectedArity, arity < 0 {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (function_exists): expectedArity must be non-negative")
             }
 
         case .variableExists:
             guard let name = check.variable, !name.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (variable_exists): variable name is required")
             }
             guard isValidPythonIdentifier(name) else {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (variable_exists): variable name '\(name)' is not a valid Python identifier")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' (variable_exists): variable name '\(name)' is not a valid Python identifier"
+                )
             }
             // expectedType (if present) must be non-empty and non-whitespace.
             // Unknown type names fall through to the renderer's MRO-walk
@@ -520,34 +657,44 @@ func validateNotebookChecks(
             if let typeName = check.expectedType {
                 let trimmed = typeName.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Notebook check '\(check.id)' (variable_exists): expectedType must be a non-empty type name when set (e.g. \"int\", \"list\", \"DataFrame\")")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Notebook check '\(check.id)' (variable_exists): expectedType must be a non-empty type name when set (e.g. \"int\", \"list\", \"DataFrame\")"
+                    )
                 }
             }
 
         case .astStructure:
             guard let constructs = check.requiredConstructs, !constructs.isEmpty else {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(check.id)' (ast_structure): requiredConstructs must be a non-empty list")
             }
             let knownPredicates: Set<String> = [
-                "for_loop", "while_loop", "list_comprehension", "lambda", "recursion"
+                "for_loop", "while_loop", "list_comprehension", "lambda", "recursion",
             ]
             for raw in constructs {
                 let predicate = raw.hasPrefix("!") ? String(raw.dropFirst()) : raw
                 if predicate.hasPrefix("import:") {
                     let mod = String(predicate.dropFirst("import:".count))
                     guard !mod.isEmpty,
-                          mod.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." })
+                        mod.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." })
                     else {
-                        throw Abort(.unprocessableEntity,
-                            reason: "Notebook check '\(check.id)' (ast_structure): import predicate '\(raw)' has an invalid module name")
+                        throw Abort(
+                            .unprocessableEntity,
+                            reason:
+                                "Notebook check '\(check.id)' (ast_structure): import predicate '\(raw)' has an invalid module name"
+                        )
                     }
                     continue
                 }
                 guard knownPredicates.contains(predicate) else {
-                    throw Abort(.unprocessableEntity,
-                        reason: "Notebook check '\(check.id)' (ast_structure): unknown predicate '\(raw)' — supported: for_loop, while_loop, list_comprehension, lambda, recursion, import:<module>, optional leading `!` for negation")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason:
+                            "Notebook check '\(check.id)' (ast_structure): unknown predicate '\(raw)' — supported: for_loop, while_loop, list_comprehension, lambda, recursion, import:<module>, optional leading `!` for negation"
+                    )
                 }
             }
         }
@@ -565,16 +712,25 @@ func validateNotebookChecks(
     for check in checks {
         for filename in notebookCheckAllGeneratedFilenames(check) {
             if rawScripts.contains(filename) {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' would generate '\(filename)', but a hand-written file with that name already exists. Rename the file or change the check id.")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' would generate '\(filename)', but a hand-written file with that name already exists. Rename the file or change the check id."
+                )
             }
             if familyFilenames.contains(filename) {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' would generate '\(filename)', which collides with a pattern family's generated filename. Change the check id.")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' would generate '\(filename)', which collides with a pattern family's generated filename. Change the check id."
+                )
             }
             if !seenCheckFilenames.insert(filename).inserted {
-                throw Abort(.unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' would generate '\(filename)', which collides with another check's generated file. Change the check id.")
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Notebook check '\(check.id)' would generate '\(filename)', which collides with another check's generated file. Change the check id."
+                )
             }
         }
     }
@@ -584,7 +740,7 @@ private let pythonKeywords: Set<String> = [
     "False", "None", "True", "and", "as", "assert", "async", "await", "break",
     "class", "continue", "def", "del", "elif", "else", "except", "finally",
     "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
-    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"
+    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
 ]
 
 func isValidPythonIdentifier(_ s: String) -> Bool {

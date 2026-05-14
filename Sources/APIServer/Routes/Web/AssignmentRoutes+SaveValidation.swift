@@ -7,10 +7,10 @@
 // ran.  These helpers consolidate that into one parser + one redirect
 // builder so the handler can focus on the actual save.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 // MARK: - Parsed form payload
 
@@ -114,7 +114,8 @@ extension AssignmentRoutes {
             )
         }
 
-        let suiteFilesRaw = try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+        let suiteFilesRaw =
+            try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
             ?? bodyMany?.suiteFiles
             ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
 
@@ -159,7 +160,8 @@ extension AssignmentRoutes {
         let due = parseDueDate(form.dueAtRaw)
         let draftID = (form.draftIDRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let draftSetup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
-        let draftState = draftSetup == nil
+        let draftState =
+            draftSetup == nil
             ? NewAssignmentDraftFormState.empty
             : loadDraftFormState(req: req, draftID: draftID)
 
@@ -167,13 +169,14 @@ extension AssignmentRoutes {
         let sectionIDRaw = form.sectionIDRaw ?? ""
 
         guard !title.isEmpty else {
-            return .redirect(toURL: newAssignmentErrorRedirect(
-                title: "",
-                dueAt: dueAtRaw,
-                sectionID: sectionIDRaw,
-                draftID: draftID,
-                error: "Assignment name is required"
-            ))
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: "",
+                    dueAt: dueAtRaw,
+                    sectionID: sectionIDRaw,
+                    draftID: draftID,
+                    error: "Assignment name is required"
+                ))
         }
 
         let suiteFiles = form.suiteFilesRaw.filter { $0.data.readableBytes > 0 }
@@ -201,10 +204,11 @@ extension AssignmentRoutes {
             ) ?? Data()
         }()
         guard !assignmentNotebookRaw.isEmpty else {
-            return .redirect(toURL: newAssignmentErrorRedirect(
-                title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                error: "Assignment notebook (.ipynb) is required"
-            ))
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    error: "Assignment notebook (.ipynb) is required"
+                ))
         }
 
         let solutionNotebookRaw: Data = {
@@ -224,22 +228,25 @@ extension AssignmentRoutes {
             ) ?? Data()
         }()
         guard !solutionNotebookRaw.isEmpty else {
-            return .redirect(toURL: newAssignmentErrorRedirect(
-                title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                error: "Solution notebook (.ipynb) is required"
-            ))
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    error: "Solution notebook (.ipynb) is required"
+                ))
         }
         guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            return .redirect(toURL: newAssignmentErrorRedirect(
-                title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                error: "Assignment notebook is not valid JSON (.ipynb)"
-            ))
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    error: "Assignment notebook is not valid JSON (.ipynb)"
+                ))
         }
         guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
-            return .redirect(toURL: newAssignmentErrorRedirect(
-                title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                error: "Solution notebook is not valid JSON (.ipynb)"
-            ))
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    error: "Solution notebook is not valid JSON (.ipynb)"
+                ))
         }
 
         let requirementSpec = assignmentRequirementSpec(
@@ -249,22 +256,23 @@ extension AssignmentRoutes {
             capabilitiesCSV: form.requiredCapabilitiesCSV
         )
 
-        return .valid(ValidatedSaveNewAssignment(
-            title: title,
-            dueAt: due,
-            dueAtRaw: dueAtRaw,
-            sectionIDRaw: sectionIDRaw,
-            draftID: draftID,
-            draftSetup: draftSetup,
-            draftState: draftState,
-            assignmentNotebookRaw: assignmentNotebookRaw,
-            solutionNotebookRaw: solutionNotebookRaw,
-            uploadedAssignmentNotebookFilename: uploadedAssignmentNotebookFilename,
-            uploadedSolutionNotebookFilename: uploadedSolutionNotebookFilename,
-            suiteFiles: suiteFiles,
-            suiteConfigRaw: form.suiteConfigRaw,
-            requirementSpec: requirementSpec
-        ))
+        return .valid(
+            ValidatedSaveNewAssignment(
+                title: title,
+                dueAt: due,
+                dueAtRaw: dueAtRaw,
+                sectionIDRaw: sectionIDRaw,
+                draftID: draftID,
+                draftSetup: draftSetup,
+                draftState: draftState,
+                assignmentNotebookRaw: assignmentNotebookRaw,
+                solutionNotebookRaw: solutionNotebookRaw,
+                uploadedAssignmentNotebookFilename: uploadedAssignmentNotebookFilename,
+                uploadedSolutionNotebookFilename: uploadedSolutionNotebookFilename,
+                suiteFiles: suiteFiles,
+                suiteConfigRaw: form.suiteConfigRaw,
+                requirementSpec: requirementSpec
+            ))
     }
 
     // MARK: - Error redirect builder
@@ -280,7 +288,8 @@ extension AssignmentRoutes {
         draftID: String,
         error: String
     ) -> String {
-        let q = "assignmentName=\(urlEncode(title))"
+        let q =
+            "assignmentName=\(urlEncode(title))"
             + "&dueAt=\(urlEncode(dueAt))"
             + "&sectionID=\(urlEncode(sectionID))"
             + "&draftID=\(urlEncode(draftID))"

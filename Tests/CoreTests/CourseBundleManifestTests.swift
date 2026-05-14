@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import Core
 
 struct CourseBundleManifestTests {
@@ -37,13 +38,13 @@ struct CourseBundleManifestTests {
 
     @Test func emptyManifestRoundTrip() throws {
         let manifest = minimalManifest()
-        let data     = try encoder.encode(manifest)
-        let decoded  = try decoder.decode(CourseBundleManifest.self, from: data)
+        let data = try encoder.encode(manifest)
+        let decoded = try decoder.decode(CourseBundleManifest.self, from: data)
 
-        #expect(decoded.schemaVersion     == 1)
-        #expect(decoded.exportedBy        == "admin")
-        #expect(decoded.chickadeeVersion  == "0.4.36")
-        #expect(decoded.course.code       == "CS101")
+        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.exportedBy == "admin")
+        #expect(decoded.chickadeeVersion == "0.4.36")
+        #expect(decoded.course.code == "CS101")
         #expect(decoded.users.isEmpty)
         #expect(decoded.assignments.isEmpty)
         #expect(decoded.submissions.isEmpty)
@@ -89,21 +90,21 @@ struct CourseBundleManifestTests {
             results: [result]
         )
 
-        let data    = try encoder.encode(manifest)
+        let data = try encoder.encode(manifest)
         let decoded = try decoder.decode(CourseBundleManifest.self, from: data)
 
-        #expect(decoded.users.count             == 1)
-        #expect(decoded.users[0].username       == "alice")
-        #expect(decoded.users[0].role           == "student")
-        #expect(decoded.enrolledUserBundleIDs   == ["user_1"])
-        #expect(decoded.assignments.count       == 1)
-        #expect(decoded.assignments[0].title    == "Warmup")
-        #expect(decoded.testSetups.count        == 1)
-        #expect(decoded.testSetups[0].bundleID  == "ts_1")
-        #expect(decoded.submissions.count       == 1)
+        #expect(decoded.users.count == 1)
+        #expect(decoded.users[0].username == "alice")
+        #expect(decoded.users[0].role == "student")
+        #expect(decoded.enrolledUserBundleIDs == ["user_1"])
+        #expect(decoded.assignments.count == 1)
+        #expect(decoded.assignments[0].title == "Warmup")
+        #expect(decoded.testSetups.count == 1)
+        #expect(decoded.testSetups[0].bundleID == "ts_1")
+        #expect(decoded.submissions.count == 1)
         #expect(decoded.submissions[0].filename == "warmup.py")
-        #expect(decoded.results.count           == 1)
-        #expect(decoded.results[0].source       == "worker")
+        #expect(decoded.results.count == 1)
+        #expect(decoded.results[0].source == "worker")
     }
 
     // MARK: - Backward compatibility: enrollmentMode nil → openEnrollment
@@ -111,8 +112,8 @@ struct CourseBundleManifestTests {
     @Test func bundledCourseBackwardCompatEnrollmentModeAbsent() throws {
         // Old bundle JSON without enrollmentMode — only openEnrollment present.
         let json = """
-        { "code": "CS101", "name": "Intro CS", "openEnrollment": true }
-        """.data(using: .utf8)!
+            { "code": "CS101", "name": "Intro CS", "openEnrollment": true }
+            """.data(using: .utf8)!
 
         let course = try decoder.decode(BundledCourse.self, from: json)
         #expect(course.enrollmentMode == nil)
@@ -121,8 +122,8 @@ struct CourseBundleManifestTests {
 
     @Test func bundledCourseEnrollmentModePresent() throws {
         let json = """
-        { "code": "CS101", "name": "Intro CS", "enrollmentMode": "auto" }
-        """.data(using: .utf8)!
+            { "code": "CS101", "name": "Intro CS", "enrollmentMode": "auto" }
+            """.data(using: .utf8)!
 
         let course = try decoder.decode(BundledCourse.self, from: json)
         #expect(course.enrollmentMode == .auto)
@@ -131,17 +132,18 @@ struct CourseBundleManifestTests {
 
     // MARK: - CourseEnrollmentMode raw values
 
-    @Test(arguments: zip(
-        [CourseEnrollmentMode.open, .auto,  .closed],
-        ["open",                    "auto", "closed"]
-    ))
+    @Test(
+        arguments: zip(
+            [CourseEnrollmentMode.open, .auto, .closed],
+            ["open", "auto", "closed"]
+        ))
     func enrollmentModeRawValues(mode: CourseEnrollmentMode, raw: String) {
         #expect(mode.rawValue == raw)
     }
 
     @Test(arguments: [CourseEnrollmentMode.open, .auto, .closed])
     func enrollmentModeRoundTrip(mode: CourseEnrollmentMode) throws {
-        let data    = try encoder.encode(mode)
+        let data = try encoder.encode(mode)
         let decoded = try decoder.decode(CourseEnrollmentMode.self, from: data)
         #expect(decoded == mode)
     }
@@ -153,10 +155,10 @@ struct CourseBundleManifestTests {
             bundleID: "user_2", username: "bob",
             displayName: nil, email: nil, role: "student"
         )
-        let data    = try encoder.encode(user)
+        let data = try encoder.encode(user)
         let decoded = try decoder.decode(BundledUser.self, from: data)
         #expect(decoded.displayName == nil)
-        #expect(decoded.email       == nil)
+        #expect(decoded.email == nil)
     }
 
     @Test func bundledAssignmentNilDueAt() throws {
@@ -165,9 +167,9 @@ struct CourseBundleManifestTests {
             dueAt: nil, isOpen: true,
             sortOrder: nil, testSetupBundleID: "ts_1"
         )
-        let data    = try encoder.encode(assignment)
+        let data = try encoder.encode(assignment)
         let decoded = try decoder.decode(BundledAssignment.self, from: data)
-        #expect(decoded.dueAt     == nil)
+        #expect(decoded.dueAt == nil)
         #expect(decoded.sortOrder == nil)
     }
 
@@ -178,9 +180,9 @@ struct CourseBundleManifestTests {
             source: "browser",
             receivedAt: nil
         )
-        let data    = try encoder.encode(result)
+        let data = try encoder.encode(result)
         let decoded = try decoder.decode(BundledResult.self, from: data)
         #expect(decoded.receivedAt == nil)
-        #expect(decoded.source     == "browser")
+        #expect(decoded.source == "browser")
     }
 }

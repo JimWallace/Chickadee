@@ -7,10 +7,10 @@
 // `applyPatternFamilies`, which handles validation, zip mutation, and
 // manifest rewrite.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -37,11 +37,11 @@ extension AssignmentRoutes {
     }
 
     struct ScriptDTO: Content {
-        var script: String               // filename
+        var script: String  // filename
         var tier: TestTier
         var points: Int
         var displayName: String?
-        var dependsOn: [String]          // may contain "family:<id>" tokens
+        var dependsOn: [String]  // may contain "family:<id>" tokens
     }
 
     /// Name + opaque id of a single section.  Order of `SuitePayload.sections`
@@ -67,8 +67,8 @@ extension AssignmentRoutes {
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            items    = try c.decodeIfPresent([SuiteItemDTO].self,         forKey: .items)    ?? []
-            sections = try c.decodeIfPresent([TestSuiteSectionDTO].self,  forKey: .sections) ?? []
+            items = try c.decodeIfPresent([SuiteItemDTO].self, forKey: .items) ?? []
+            sections = try c.decodeIfPresent([TestSuiteSectionDTO].self, forKey: .sections) ?? []
         }
     }
 
@@ -100,8 +100,7 @@ extension AssignmentRoutes {
         let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let body: SuitePayload
-        do { body = try req.content.decode(SuitePayload.self) }
-        catch {
+        do { body = try req.content.decode(SuitePayload.self) } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
@@ -126,23 +125,25 @@ extension AssignmentRoutes {
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
 func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuitePayload {
     guard let data = manifest.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         return AssignmentRoutes.SuitePayload(items: [], sections: [])
     }
 
     let familyByID = Dictionary(uniqueKeysWithValues: props.patternFamilies.map { ($0.id, $0) })
-    let checkByID  = Dictionary(uniqueKeysWithValues: props.notebookChecks.map  { ($0.id, $0) })
+    let checkByID = Dictionary(uniqueKeysWithValues: props.notebookChecks.map { ($0.id, $0) })
     var familyFilenames: [String: Set<String>] = [:]
     for f in props.patternFamilies {
-        familyFilenames[f.id] = Set(f.cases
-            .filter(\.enabled)
-            .map { c in
-                generatedScriptFilename(
-                    familyID: f.id,
-                    caseKey: c.key,
-                    tier: c.resolvedTier(defaults: f.defaults)
-                )
-            })
+        familyFilenames[f.id] = Set(
+            f.cases
+                .filter(\.enabled)
+                .map { c in
+                    generatedScriptFilename(
+                        familyID: f.id,
+                        caseKey: c.key,
+                        tier: c.resolvedTier(defaults: f.defaults)
+                    )
+                })
     }
 
     // Collapse expanded family-filename subsets back into family: tokens.
@@ -151,7 +152,8 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
         var collapsed: [String] = []
         for (fid, filenames) in familyFilenames {
             if !filenames.isEmpty,
-               Set(remaining).isSuperset(of: filenames) {
+                Set(remaining).isSuperset(of: filenames)
+            {
                 remaining.removeAll { filenames.contains($0) }
                 collapsed.append(familyDepToken(fid))
             }
@@ -167,45 +169,48 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
     // rebuild its grouped view.
     var items: [AssignmentRoutes.SuiteItemDTO] = []
     var emittedFamilyIDs: Set<String> = []
-    var emittedCheckIDs:  Set<String> = []
+    var emittedCheckIDs: Set<String> = []
     for entry in props.testSuites {
         if let fid = entry.generatedBy {
             guard !emittedFamilyIDs.contains(fid), let family = familyByID[fid] else { continue }
             emittedFamilyIDs.insert(fid)
-            items.append(AssignmentRoutes.SuiteItemDTO(
-                kind: "family",
-                script: nil,
-                family: family,
-                check: nil,
-                dependsOn: family.dependsOn,
-                sectionID: entry.sectionID
-            ))
+            items.append(
+                AssignmentRoutes.SuiteItemDTO(
+                    kind: "family",
+                    script: nil,
+                    family: family,
+                    check: nil,
+                    dependsOn: family.dependsOn,
+                    sectionID: entry.sectionID
+                ))
         } else if let cid = entry.generatedByCheck {
             guard !emittedCheckIDs.contains(cid), let check = checkByID[cid] else { continue }
             emittedCheckIDs.insert(cid)
-            items.append(AssignmentRoutes.SuiteItemDTO(
-                kind: "check",
-                script: nil,
-                family: nil,
-                check: check,
-                dependsOn: check.dependsOn,
-                sectionID: entry.sectionID
-            ))
+            items.append(
+                AssignmentRoutes.SuiteItemDTO(
+                    kind: "check",
+                    script: nil,
+                    family: nil,
+                    check: check,
+                    dependsOn: check.dependsOn,
+                    sectionID: entry.sectionID
+                ))
         } else {
-            items.append(AssignmentRoutes.SuiteItemDTO(
-                kind: "script",
-                script: AssignmentRoutes.ScriptDTO(
-                    script:      entry.script,
-                    tier:        entry.tier,
-                    points:      entry.points,
-                    displayName: entry.name,
-                    dependsOn:   collapseDeps(entry.dependsOn)
-                ),
-                family: nil,
-                check: nil,
-                dependsOn: nil,
-                sectionID: entry.sectionID
-            ))
+            items.append(
+                AssignmentRoutes.SuiteItemDTO(
+                    kind: "script",
+                    script: AssignmentRoutes.ScriptDTO(
+                        script: entry.script,
+                        tier: entry.tier,
+                        points: entry.points,
+                        displayName: entry.name,
+                        dependsOn: collapseDeps(entry.dependsOn)
+                    ),
+                    family: nil,
+                    check: nil,
+                    dependsOn: nil,
+                    sectionID: entry.sectionID
+                ))
         }
     }
 
@@ -221,7 +226,7 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     guard let data = try? encoder.encode(payload),
-          let s = String(data: data, encoding: .utf8)
+        let s = String(data: data, encoding: .utf8)
     else { return #"{"items":[]}"# }
     return s
 }
@@ -240,7 +245,8 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
 /// Empty array when the manifest is unparseable or has no inputs.
 func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVariableShellRow] {
     guard let data = manifest.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         return []
     }
     let encoder = JSONEncoder()
@@ -252,10 +258,11 @@ func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVari
     // Slice 2 expressions — leading `=` marks them as expressions when
     // the editor's `classifyValue` parses each row on load.
     for e in props.globalExpressions {
-        rows.append(SuiteSectionVariableShellRow(
-            name: e.name,
-            valueJSON: "= \(e.expression)"
-        ))
+        rows.append(
+            SuiteSectionVariableShellRow(
+                name: e.name,
+                valueJSON: "= \(e.expression)"
+            ))
     }
     return rows
 }
@@ -265,9 +272,13 @@ func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVari
 /// assignments.
 func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellRow] {
     guard let data = manifest.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
-        return [SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
-                                      variables: [], hasVariables: false)]
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
+        return [
+            SuiteSectionShellRow(
+                sectionID: "", name: "", isUngrouped: true,
+                variables: [], hasVariables: false)
+        ]
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -281,15 +292,17 @@ func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellR
         // (`section-inputs-editor.js`) classifies them on load and
         // sends them back as `expressions: [...]` on save.
         for e in section.expressions {
-            vars.append(SuiteSectionVariableShellRow(
-                name: e.name,
-                valueJSON: "= \(e.expression)"
-            ))
+            vars.append(
+                SuiteSectionVariableShellRow(
+                    name: e.name,
+                    valueJSON: "= \(e.expression)"
+                ))
         }
-        return SuiteSectionShellRow(sectionID: section.id, name: section.name,
-                                     isUngrouped: false,
-                                     variables: vars,
-                                     hasVariables: !vars.isEmpty)
+        return SuiteSectionShellRow(
+            sectionID: section.id, name: section.name,
+            isUngrouped: false,
+            variables: vars,
+            hasVariables: !vars.isEmpty)
     }
     let knownSectionIDs = Set(props.sections.map(\.id))
     let anyUngrouped = props.testSuites.contains { entry in
@@ -297,8 +310,10 @@ func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellR
         return !knownSectionIDs.contains(sid)
     }
     if anyUngrouped || props.sections.isEmpty {
-        rows.append(SuiteSectionShellRow(sectionID: "", name: "", isUngrouped: true,
-                                          variables: [], hasVariables: false))
+        rows.append(
+            SuiteSectionShellRow(
+                sectionID: "", name: "", isUngrouped: true,
+                variables: [], hasVariables: false))
     }
     return rows
 }

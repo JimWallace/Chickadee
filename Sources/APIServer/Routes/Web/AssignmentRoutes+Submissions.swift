@@ -3,9 +3,9 @@
 // Submission-related handlers for AssignmentRoutes.
 // Extracted from AssignmentRoutes.swift — no behaviour changes.
 
-import Vapor
 import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -45,18 +45,20 @@ extension AssignmentRoutes {
             assignments = try await APIAssignment.query(on: req.db).all()
         }
         let setupIDs = Set(assignments.map(\.testSetupID))
-        let setups = setupIDs.isEmpty
+        let setups =
+            setupIDs.isEmpty
             ? []
             : try await APITestSetup.query(on: req.db)
                 .filter(\.$id ~~ setupIDs)
                 .all()
-        let setupByID = Dictionary(uniqueKeysWithValues: setups.compactMap { setup in
-            setup.id.map { ($0, setup) }
-        })
+        let setupByID = Dictionary(
+            uniqueKeysWithValues: setups.compactMap { setup in
+                setup.id.map { ($0, setup) }
+            })
 
         let sortedAssignments = assignments.sorted { lhs, rhs in
             switch (lhs.sortOrder, rhs.sortOrder) {
-            case let (l?, r?) where l != r:
+            case (let l?, let r?) where l != r:
                 return l < r
             default:
                 let lhsCreated = setupByID[lhs.testSetupID]?.createdAt ?? .distantPast
@@ -67,7 +69,8 @@ extension AssignmentRoutes {
         }
 
         let studentIDs = Set(students.compactMap(\.id))
-        let submissionRows = (setupIDs.isEmpty || studentIDs.isEmpty)
+        let submissionRows =
+            (setupIDs.isEmpty || studentIDs.isEmpty)
             ? []
             : try await APISubmission.query(on: req.db)
                 .filter(\.$kind == APISubmission.Kind.student)
@@ -80,7 +83,8 @@ extension AssignmentRoutes {
         }
         let submissionIDs = submissions.map(\.id)
 
-        let results = submissionIDs.isEmpty
+        let results =
+            submissionIDs.isEmpty
             ? []
             : try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ submissionIDs)
@@ -104,7 +108,8 @@ extension AssignmentRoutes {
         var bestPointsByUserAndSetup: [String: Double] = [:]
         for submission in submissions {
             guard let result = preferredResultBySubmissionID[submission.id],
-                  let points = gradePointsFromCollectionJSON(result.collectionJSON) else {
+                let points = gradePointsFromCollectionJSON(result.collectionJSON)
+            else {
                 continue
             }
             let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
@@ -115,7 +120,8 @@ extension AssignmentRoutes {
         }
 
         var lines: [String] = []
-        let header = ["OrgDefinedId", "Username"]
+        let header =
+            ["OrgDefinedId", "Username"]
             + sortedAssignments.map { "\($0.title) Points Grade" }
             + ["End-of-Line Indicator"]
         lines.append(header.map(csvEscaped).joined(separator: ","))
@@ -166,7 +172,8 @@ extension AssignmentRoutes {
         // can have submissions in the course; gate only on enrollment, not on
         // role. The dashboard roster table lists all enrolled users, so this
         // mirrors what's clickable there.
-        let isEnrolled = try await APICourseEnrollment.query(on: req.db)
+        let isEnrolled =
+            try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == activeCourseUUID)
             .filter(\.$userID == studentID)
             .count() > 0
@@ -181,7 +188,8 @@ extension AssignmentRoutes {
             .filter(\.$courseID == activeCourseUUID)
             .all()
         let setupIDs = Set(setups.compactMap(\.id))
-        let assignments = setupIDs.isEmpty
+        let assignments =
+            setupIDs.isEmpty
             ? []
             : try await APIAssignment.query(on: req.db)
                 .filter(\.$testSetupID ~~ setupIDs)
@@ -191,7 +199,8 @@ extension AssignmentRoutes {
             uniquingKeysWith: { first, _ in first }
         )
 
-        let submissions = setupIDs.isEmpty
+        let submissions =
+            setupIDs.isEmpty
             ? []
             : try await APISubmission.query(on: req.db)
                 .filter(\.$userID == studentID)
@@ -211,7 +220,8 @@ extension AssignmentRoutes {
             let assignment = assignmentBySetupID[submission.testSetupID]
             let gradeText: String
             if let result = preferredResultBySubmissionID[submissionID],
-               let pct = gradePercentFromCollectionJSON(result.collectionJSON) {
+                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+            {
                 gradeText = "\(pct)%"
             } else {
                 gradeText = "—"
@@ -219,7 +229,8 @@ extension AssignmentRoutes {
             let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
             let nameExt = (submission.filename ?? "").lowercased()
             let canOpenInNotebook = pathExt == "ipynb" || nameExt.hasSuffix(".ipynb")
-            let openInNotebookURL = canOpenInNotebook
+            let openInNotebookURL =
+                canOpenInNotebook
                 ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(submissionID)"
                 : nil
             return CourseStudentSubmissionRow(
@@ -266,7 +277,8 @@ extension AssignmentRoutes {
             .filter(\.$course.$id == assignment.courseID)
             .all()
             .map(\.userID)
-        let students = enrolledUserIDs.isEmpty
+        let students =
+            enrolledUserIDs.isEmpty
             ? []
             : try await APIUser.query(on: req.db)
                 .filter(\.$role == "student")
@@ -275,7 +287,8 @@ extension AssignmentRoutes {
                 .all()
         let studentIDs = Set(students.compactMap(\.id))
 
-        let submissions = (studentIDs.isEmpty)
+        let submissions =
+            (studentIDs.isEmpty)
             ? []
             : try await APISubmission.query(on: req.db)
                 .filter(\.$testSetupID == assignment.testSetupID)
@@ -307,15 +320,17 @@ extension AssignmentRoutes {
                 var best = -1
                 for submission in history {
                     guard let subID = submission.id,
-                          let result = preferredResultBySubmissionID[subID],
-                          let pct = gradePercentFromCollectionJSON(result.collectionJSON) else {
+                        let result = preferredResultBySubmissionID[subID],
+                        let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                    else {
                         continue
                     }
                     if pct > best { best = pct }
                 }
                 return best >= 0 ? best : nil
             }()
-            let inferredName = splitHumanName(student.displayName)
+            let inferredName =
+                splitHumanName(student.displayName)
                 ?? splitHumanName(student.preferredName)
                 ?? inferNameFromStudentID(student.username)
             return AssignmentStudentRow(
@@ -342,8 +357,9 @@ extension AssignmentRoutes {
         }.count
         let pendingLatestCount = rows.reduce(into: 0) { count, row in
             guard row.hasLatestSubmission,
-                  let latest = submissions.first(where: { $0.id == row.latestSubmissionID }),
-                  ["pending", "assigned"].contains(latest.status) else { return }
+                let latest = submissions.first(where: { $0.id == row.latestSubmissionID }),
+                ["pending", "assigned"].contains(latest.status)
+            else { return }
             count += 1
         }
         let gradedRows = rows.compactMap(\.bestGradePercent)
@@ -367,11 +383,12 @@ extension AssignmentRoutes {
         }
         let enrolledStudentRosterCount = try await enrolledStudentCountFetch
         let metrics = [
-            InstructorDashboardMetric(label: "Students Submitted", value: "\(submittedCount)/\(enrolledStudentRosterCount)"),
+            InstructorDashboardMetric(
+                label: "Students Submitted", value: "\(submittedCount)/\(enrolledStudentRosterCount)"),
             InstructorDashboardMetric(label: "Avg Attempts/Student", value: avgAttempts),
             InstructorDashboardMetric(label: "Submissions (24h)", value: "\(submissions24h)"),
             InstructorDashboardMetric(label: "Queued Jobs", value: "\(pendingLatestCount)"),
-            InstructorDashboardMetric(label: "Median Grade", value: medianBestGrade)
+            InstructorDashboardMetric(label: "Median Grade", value: medianBestGrade),
         ]
 
         return try await req.view.render(
@@ -419,7 +436,8 @@ extension AssignmentRoutes {
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-               let pct = gradePercentFromCollectionJSON(result.collectionJSON) {
+                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+            {
                 gradeText = "\(pct)%"
             } else {
                 gradeText = "—"
@@ -468,7 +486,8 @@ extension AssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Submission")
         }
         guard submission.kind == APISubmission.Kind.student else {
-            throw WebAssignmentError.invalidParameter(name: "submissionID", reason: "Only student submissions can be re-tested.")
+            throw WebAssignmentError.invalidParameter(
+                name: "submissionID", reason: "Only student submissions can be re-tested.")
         }
 
         // Prevent duplicate queue entries for in-flight jobs.
@@ -524,7 +543,8 @@ extension AssignmentRoutes {
         setup.lastRetestedManifestHash = manifestHash(setup.manifest)
         try await setup.save(on: req.db)
 
-        req.logger.info("retest_all_triggered assignment=\(assignmentIDRaw) count=\(count) by=\(user.id?.uuidString ?? "nil")")
+        req.logger.info(
+            "retest_all_triggered assignment=\(assignmentIDRaw) count=\(count) by=\(user.id?.uuidString ?? "nil")")
 
         let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
         struct RetestAllBody: Content { var returnTo: String? }
@@ -567,7 +587,7 @@ extension AssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
         guard let studentIDRaw = req.parameters.get("studentID"),
-              let studentID = UUID(uuidString: studentIDRaw)
+            let studentID = UUID(uuidString: studentIDRaw)
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
@@ -575,7 +595,8 @@ extension AssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Test setup")
         }
 
-        let isEnrolled = try await APICourseEnrollment.query(on: req.db)
+        let isEnrolled =
+            try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == assignment.courseID)
             .filter(\.$userID == studentID)
             .count() > 0
@@ -621,7 +642,8 @@ private extension AssignmentRoutes {
         for submissionIDs: [String],
         on db: Database
     ) async throws -> [String: APIResult] {
-        let results = submissionIDs.isEmpty
+        let results =
+            submissionIDs.isEmpty
             ? []
             : try await APIResult.query(on: db)
                 .filter(\.$submissionID ~~ submissionIDs)

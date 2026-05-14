@@ -7,11 +7,12 @@
 //   POST   /instructor/:assignmentID/scripts
 //   DELETE /instructor/:assignmentID/scripts/:filename
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class ScriptEditRoutesTests: XCTestCase {
 
@@ -27,13 +28,15 @@ final class ScriptEditRoutesTests: XCTestCase {
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        return try await loginUser(username: "testinstructor_scripts", password: "testpassword",
-                                   role: "instructor", on: app)
+        return try await loginUser(
+            username: "testinstructor_scripts", password: "testpassword",
+            role: "instructor", on: app)
     }
 
     private func loginAsStudent() async throws -> String {
-        return try await loginUser(username: "teststudent_scripts", password: "testpassword",
-                                   role: "student", on: app)
+        return try await loginUser(
+            username: "teststudent_scripts", password: "testpassword",
+            role: "student", on: app)
     }
 
     // MARK: - DB/fixture helpers
@@ -48,10 +51,12 @@ final class ScriptEditRoutesTests: XCTestCase {
     }
 
     @discardableResult
-    private func insertSetup(id: String, withEntries entries: [(name: String, content: String)] = []) async throws -> APITestSetup {
+    private func insertSetup(
+        id: String, withEntries entries: [(name: String, content: String)] = []
+    ) async throws -> APITestSetup {
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+            """
         let courseID = try await makeTestCourseID()
         let zipPath = app.testSetupsDirectory + "\(id).zip"
         try makeZipAt(zipPath: zipPath, entries: entries)
@@ -63,8 +68,9 @@ final class ScriptEditRoutesTests: XCTestCase {
     @discardableResult
     private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
         let courseID = try await makeTestCourseID()
-        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true,
-                               courseID: courseID)
+        let a = APIAssignment(
+            testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true,
+            courseID: courseID)
         try await a.save(on: app.db)
         return a
     }
@@ -77,22 +83,23 @@ final class ScriptEditRoutesTests: XCTestCase {
         }
         // An empty zip can be made with a dummy entry then deleted, but it's easier
         // to always include a placeholder if no entries are given.
-        let allEntries = entries.isEmpty
+        let allEntries =
+            entries.isEmpty
             ? [("test_runtime.py", "# placeholder\n")]
             : entries
         let entriesCode = allEntries.map { e in
             "z.writestr(\(e.name.debugDescription), \(e.content.debugDescription))"
         }.joined(separator: "\n    ")
         let script = """
-import zipfile
-with zipfile.ZipFile('\(zipPath)', 'w') as z:
-    \(entriesCode)
-"""
+            import zipfile
+            with zipfile.ZipFile('\(zipPath)', 'w') as z:
+                \(entriesCode)
+            """
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         proc.arguments = ["python3", "-c", script]
         proc.standardOutput = Pipe()
-        proc.standardError  = Pipe()
+        proc.standardError = Pipe()
         try proc.run()
         proc.waitUntilExit()
         guard proc.terminationStatus == 0 else {
@@ -104,30 +111,37 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testGetScriptReturnsContentForInstructor() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
-        try await insertSetup(id: "sc_get1", withEntries: [
-            ("test_foo.py", "print('hello')\n")
-        ])
+        try await insertSetup(
+            id: "sc_get1",
+            withEntries: [
+                ("test_foo.py", "print('hello')\n")
+            ])
         let a = try await insertAssignment(testSetupID: "sc_get1", title: "GetTest")
         let id = a.publicID
 
-        try await app.asyncTest(.GET, "/instructor/\(id)/scripts/test_foo.py",
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/scripts/test_foo.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains("print('hello')"),
-                              "Expected script content in response, got: \(res.body.string.prefix(200))")
+                XCTAssertTrue(
+                    res.body.string.contains("print('hello')"),
+                    "Expected script content in response, got: \(res.body.string.prefix(200))")
             }
         )
     }
 
     func testGetScriptReturns404ForUnknownFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -135,10 +149,12 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_get2", title: "GetMissing")
         let id = a.publicID
 
-        try await app.asyncTest(.GET, "/instructor/\(id)/scripts/does_not_exist.py",
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/scripts/does_not_exist.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             }
         )
@@ -146,7 +162,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testGetScriptReturns403ForStudent() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsStudent()
@@ -154,10 +171,12 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_get3", title: "GetStudent")
         let id = a.publicID
 
-        try await app.asyncTest(.GET, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(
+            .GET, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )
@@ -166,10 +185,12 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
     func testGetScriptReturns404ForUnknownAssignment() async throws {
         let cookie = try await loginAsInstructor()
 
-        try await app.asyncTest(.GET, "/instructor/zzzzzzzzz/scripts/test_a.py",
+        try await app.asyncTest(
+            .GET, "/instructor/zzzzzzzzz/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 // Invalid public ID format → 404 (from parameter validation)
                 XCTAssertEqual(res.status, .notFound)
             }
@@ -180,7 +201,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPutScriptUpdatesContent() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -189,13 +211,15 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_put1", title: "PutTest")
         let id = a.publicID
 
-        try await app.asyncTest(.PUT, "/instructor/\(id)/scripts/test_bar.py",
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/scripts/test_bar.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "{\"content\":\"# new content\\n\"}")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
@@ -207,7 +231,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPutScriptReturns404ForMissingFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -216,13 +241,15 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_put2", title: "PutMissing")
         let id = a.publicID
 
-        try await app.asyncTest(.PUT, "/instructor/\(id)/scripts/nonexistent.py",
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/scripts/nonexistent.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "{\"content\":\"# x\\n\"}")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             }
         )
@@ -230,7 +257,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPutScriptReturns403ForStudent() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsStudent()
@@ -238,12 +266,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_put3", title: "PutStudent")
         let id = a.publicID
 
-        try await app.asyncTest(.PUT, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(
+            .PUT, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "{\"content\":\"# x\\n\"}")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )
@@ -253,7 +283,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPostScriptCreatesNewFileInZip() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -262,17 +293,23 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post1", title: "PostTest")
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
-                req.body = ByteBuffer(string: "{\"filename\":\"test_new.py\",\"content\":\"# new script\\n\",\"tier\":\"public\",\"points\":1}")
-            }, afterResponse: { res in
+                req.body = ByteBuffer(
+                    string:
+                        "{\"filename\":\"test_new.py\",\"content\":\"# new script\\n\",\"tier\":\"public\",\"points\":1}"
+                )
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .created)
                 let bodyStr = res.body.string
-                XCTAssertTrue(bodyStr.contains("test_new.py"),
-                              "Response should contain filename, got: \(bodyStr.prefix(200))")
+                XCTAssertTrue(
+                    bodyStr.contains("test_new.py"),
+                    "Response should contain filename, got: \(bodyStr.prefix(200))")
             }
         )
 
@@ -282,7 +319,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPostScriptAddsEntryToManifest() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -291,28 +329,34 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post2", title: "PostManifest")
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
-                req.body = ByteBuffer(string: "{\"filename\":\"test_mani.py\",\"content\":\"pass\\n\",\"tier\":\"release\",\"points\":2}")
-            }, afterResponse: { res in
+                req.body = ByteBuffer(
+                    string: "{\"filename\":\"test_mani.py\",\"content\":\"pass\\n\",\"tier\":\"release\",\"points\":2}")
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .created)
             }
         )
 
         // Reload setup from DB — manifest should now contain the new entry.
         let updated = try await APITestSetup.find("sc_post2", on: app.db)!
-        XCTAssertTrue(updated.manifest.contains("test_mani.py"),
-                      "Manifest should contain new entry, got: \(updated.manifest)")
-        XCTAssertTrue(updated.manifest.contains("\"release\""),
-                      "Manifest should contain tier 'release', got: \(updated.manifest)")
+        XCTAssertTrue(
+            updated.manifest.contains("test_mani.py"),
+            "Manifest should contain new entry, got: \(updated.manifest)")
+        XCTAssertTrue(
+            updated.manifest.contains("\"release\""),
+            "Manifest should contain tier 'release', got: \(updated.manifest)")
     }
 
     func testPostScriptReturns409ForDuplicate() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -321,13 +365,15 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post3", title: "PostDupe")
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "{\"filename\":\"test_existing.py\",\"content\":\"# new\\n\"}")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .conflict)
             }
         )
@@ -335,7 +381,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPostScriptReturns400ForInvalidFilename() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -344,13 +391,15 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post4", title: "PostBadName")
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "{\"filename\":\"../evil.sh\",\"content\":\"rm -rf /\\n\"}")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .badRequest)
             }
         )
@@ -358,7 +407,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testPostScriptReturns403ForStudent() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsStudent()
@@ -366,12 +416,14 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_post5", title: "PostStudent")
         let id = a.publicID
 
-        try await app.asyncTest(.POST, "/instructor/\(id)/scripts",
+        try await app.asyncTest(
+            .POST, "/instructor/\(id)/scripts",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: "{\"filename\":\"test_x.py\",\"content\":\"pass\\n\"}")
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )
@@ -381,23 +433,28 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testDeleteScriptRemovesFileFromZip() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        let setup = try await insertSetup(id: "sc_del1", withEntries: [
-            ("test_del.py", "pass\n"),
-            ("support.py", "# helper\n")
-        ])
+        let setup = try await insertSetup(
+            id: "sc_del1",
+            withEntries: [
+                ("test_del.py", "pass\n"),
+                ("support.py", "# helper\n"),
+            ])
         let a = try await insertAssignment(testSetupID: "sc_del1", title: "DeleteTest")
         let id = a.publicID
 
-        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_del.py",
+        try await app.asyncTest(
+            .DELETE, "/instructor/\(id)/scripts/test_del.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
@@ -411,71 +468,82 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testDeleteScriptRemovesManifestEntry() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         // Include a second file so the zip is not empty after the delete.
-        try await insertSetup(id: "sc_del2", withEntries: [
-            ("test_rm.py", "pass\n"),
-            ("support.py", "# helper\n")
-        ])
+        try await insertSetup(
+            id: "sc_del2",
+            withEntries: [
+                ("test_rm.py", "pass\n"),
+                ("support.py", "# helper\n"),
+            ])
 
         // Manually add a manifest entry for the script.
         let setup = try await APITestSetup.find("sc_del2", on: app.db)!
         setup.manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"script":"test_rm.py","tier":"public","order":1,"dependsOn":[],"points":1}],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"script":"test_rm.py","tier":"public","order":1,"dependsOn":[],"points":1}],"timeLimitSeconds":10,"makefile":null}
+            """
         try await setup.save(on: app.db)
 
         let a = try await insertAssignment(testSetupID: "sc_del2", title: "DeleteManifest")
         let id = a.publicID
 
-        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_rm.py",
+        try await app.asyncTest(
+            .DELETE, "/instructor/\(id)/scripts/test_rm.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .noContent)
             }
         )
 
         let updated = try await APITestSetup.find("sc_del2", on: app.db)!
-        XCTAssertFalse(updated.manifest.contains("test_rm.py"),
-                       "Manifest should no longer contain deleted script, got: \(updated.manifest)")
+        XCTAssertFalse(
+            updated.manifest.contains("test_rm.py"),
+            "Manifest should no longer contain deleted script, got: \(updated.manifest)")
     }
 
     func testDeleteScriptReturns409WhenDependentsExist() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        try await insertSetup(id: "sc_del3", withEntries: [
-            ("test_a.py", "pass\n"),
-            ("test_b.py", "pass\n")
-        ])
+        try await insertSetup(
+            id: "sc_del3",
+            withEntries: [
+                ("test_a.py", "pass\n"),
+                ("test_b.py", "pass\n"),
+            ])
 
         // test_b depends on test_a.
         let setup = try await APITestSetup.find("sc_del3", on: app.db)!
         setup.manifest = """
-        {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[
-          {"script":"test_a.py","tier":"public","order":1,"dependsOn":[],"points":1},
-          {"script":"test_b.py","tier":"public","order":2,"dependsOn":["test_a.py"],"points":1}
-        ],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[
+              {"script":"test_a.py","tier":"public","order":1,"dependsOn":[],"points":1},
+              {"script":"test_b.py","tier":"public","order":2,"dependsOn":["test_a.py"],"points":1}
+            ],"timeLimitSeconds":10,"makefile":null}
+            """
         try await setup.save(on: app.db)
 
         let a = try await insertAssignment(testSetupID: "sc_del3", title: "DeleteConflict")
         let id = a.publicID
 
-        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(
+            .DELETE, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .conflict)
             }
         )
@@ -483,7 +551,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testDeleteScriptReturns404ForMissingFile() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsInstructor()
@@ -492,11 +561,13 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del4", title: "DeleteMissing")
         let id = a.publicID
 
-        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/nonexistent.py",
+        try await app.asyncTest(
+            .DELETE, "/instructor/\(id)/scripts/nonexistent.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .notFound)
             }
         )
@@ -504,7 +575,8 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
 
     func testDeleteScriptReturns403ForStudent() async throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-              FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
+            FileManager.default.fileExists(atPath: "/usr/bin/zip")
+        else {
             throw XCTSkip("zip/unzip not available")
         }
         let cookie = try await loginAsStudent()
@@ -512,10 +584,12 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         let a = try await insertAssignment(testSetupID: "sc_del5", title: "DeleteStudent")
         let id = a.publicID
 
-        try await app.asyncTest(.DELETE, "/instructor/\(id)/scripts/test_a.py",
+        try await app.asyncTest(
+            .DELETE, "/instructor/\(id)/scripts/test_a.py",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )

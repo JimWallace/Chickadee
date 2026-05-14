@@ -4,9 +4,10 @@
 // interpreter is selected for each file extension, shebang line, and
 // Python-heuristic fallback.
 
-import Testing
-@testable import chickadee_runner
 import Foundation
+import Testing
+
+@testable import chickadee_runner
 
 // final class so deinit can remove the per-test temp directory.
 final class ScriptInvocationTests {
@@ -33,10 +34,11 @@ final class ScriptInvocationTests {
 
     // MARK: - Extension-based dispatch: env-wrapper interpreters
 
-    @Test(arguments: zip(
-        ["test.bash", "test.zsh", "test.rb", "test.pl", "test.js"],
-        ["bash",      "zsh",      "ruby",    "perl",    "node"]
-    ))
+    @Test(
+        arguments: zip(
+            ["test.bash", "test.zsh", "test.rb", "test.pl", "test.js"],
+            ["bash", "zsh", "ruby", "perl", "node"]
+        ))
     func extensionUsesEnvWrapper(filename: String, interpreter: String) {
         let inv = scriptInvocation(for: makeScript(name: filename))
         #expect(inv.executableURL.path.hasSuffix("env"))
@@ -63,10 +65,11 @@ final class ScriptInvocationTests {
 
     // MARK: - Shebang dispatch (extensionless files)
 
-    @Test(arguments: zip(
-        ["#!/bin/bash\necho hi",               "#!/usr/bin/env node\nconsole.log('hi')", "#!/usr/bin/env ruby\nputs 'hi'"],
-        ["bash",                               "node",                                    "ruby"]
-    ))
+    @Test(
+        arguments: zip(
+            ["#!/bin/bash\necho hi", "#!/usr/bin/env node\nconsole.log('hi')", "#!/usr/bin/env ruby\nputs 'hi'"],
+            ["bash", "node", "ruby"]
+        ))
     func shebangUsesEnvWrapper(content: String, interpreter: String) {
         let inv = scriptInvocation(for: makeScript(name: "test_script", content: content))
         #expect(inv.arguments.first == interpreter)
@@ -102,7 +105,7 @@ final class ScriptInvocationTests {
 
     @Test(arguments: [
         "import os\nprint(os.getcwd())",
-        "def foo():\n    pass\n\nfoo()"
+        "def foo():\n    pass\n\nfoo()",
     ])
     func pythonHeuristic(content: String) {
         let inv = scriptInvocation(for: makeScript(name: "test_heuristic", content: content))

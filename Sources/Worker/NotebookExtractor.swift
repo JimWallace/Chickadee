@@ -21,8 +21,9 @@ struct NotebookExtractor {
 
     func isNotebookJSONObject(_ notebook: [String: Any]) -> Bool {
         guard notebook["metadata"] != nil,
-              notebook["nbformat"] != nil,
-              notebook["cells"] is [[String: Any]] || notebook["cells"] is [Any] else {
+            notebook["nbformat"] != nil,
+            notebook["cells"] is [[String: Any]] || notebook["cells"] is [Any]
+        else {
             return false
         }
         return true
@@ -126,7 +127,7 @@ struct NotebookExtractor {
         // subsequent indented lines (the block body) inherit that kind.
         // Bracket depth prevents flush-left continuation lines (e.g. a bare `]`)
         // from being mistaken for new top-level statements.
-        var defLines:   [String] = []
+        var defLines: [String] = []
         var usageLines: [String] = []
         var inUsage = false
         var bracketDepth = 0
@@ -167,7 +168,8 @@ struct NotebookExtractor {
         let usageBlock = usageLines.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !usageBlock.isEmpty {
-            let indented = usageBlock
+            let indented =
+                usageBlock
                 .components(separatedBy: "\n")
                 .map { "    " + $0 }
                 .joined(separator: "\n")
@@ -190,8 +192,7 @@ private func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
     }
 
     // Bare string literals are module-level docstrings — safe.
-    if trimmed.hasPrefix("\"\"\"") || trimmed.hasPrefix("'''") ||
-       trimmed.hasPrefix("\"")     || trimmed.hasPrefix("'") {
+    if trimmed.hasPrefix("\"\"\"") || trimmed.hasPrefix("'''") || trimmed.hasPrefix("\"") || trimmed.hasPrefix("'") {
         return true
     }
 
@@ -199,14 +200,15 @@ private func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
     // The `token + "("` branch catches bare calls whose name matches a keyword
     // (e.g. `match(...)` in older code), while preventing false matches on names
     // that merely share a prefix (e.g. `format` vs `for`).
-    for token in ["assert", "raise", "return", "del", "pass", "for", "while",
-                  "if", "with", "try", "except", "match", "finally", "else",
-                  "elif", "break", "continue", "yield", "global", "nonlocal",
-                  "async for", "async with"] {
-        if trimmed == token ||
-           trimmed.hasPrefix(token + " ") ||
-           trimmed.hasPrefix(token + ":") ||
-           trimmed.hasPrefix(token + "(") {
+    for token in [
+        "assert", "raise", "return", "del", "pass", "for", "while",
+        "if", "with", "try", "except", "match", "finally", "else",
+        "elif", "break", "continue", "yield", "global", "nonlocal",
+        "async for", "async with",
+    ] {
+        if trimmed == token || trimmed.hasPrefix(token + " ") || trimmed.hasPrefix(token + ":")
+            || trimmed.hasPrefix(token + "(")
+        {
             return false
         }
     }
@@ -242,9 +244,9 @@ private func findAssignmentRHS(in line: String) -> String.Index? {
                 let nextIdx = line.index(after: idx)
                 let next: Character = nextIdx < line.endIndex ? line[nextIdx] : " "
                 let isComparison = prev == "!" || prev == "<" || prev == ">" || prev == "="
-                let isWalrus     = prev == ":"
-                let isAugmented  = "+-*/%|&^~".contains(prev)
-                let isDoubleEq   = next == "="
+                let isWalrus = prev == ":"
+                let isAugmented = "+-*/%|&^~".contains(prev)
+                let isDoubleEq = next == "="
                 if !isComparison && !isWalrus && !isAugmented && !isDoubleEq {
                     return line.index(after: idx)
                 }
@@ -281,10 +283,11 @@ private func rhsContainsFunctionCall(_ rhs: String) -> Bool {
 ///
 /// Module-level (not private) so WorkerTests can exercise it directly.
 func extractNotebooksToCode(in directory: URL) throws {
-    let items = (try? FileManager.default.contentsOfDirectory(
-        at: directory,
-        includingPropertiesForKeys: nil
-    )) ?? []
+    let items =
+        (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
 
     for item in items where item.pathExtension.lowercased() == "ipynb" {
         // Every .ipynb in the directory is extracted to .py (or .R).  The
@@ -293,26 +296,30 @@ func extractNotebooksToCode(in directory: URL) throws {
         // only notebooks remaining are the student/canonical submission and
         // any instructor-provided helper notebooks that should be converted.
         guard
-            let data     = try? Data(contentsOf: item),
+            let data = try? Data(contentsOf: item),
             let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let cells    = notebook["cells"] as? [[String: Any]]
+            let cells = notebook["cells"] as? [[String: Any]]
         else { continue }
 
         // Detect kernel language: ir/r/webr → R, everything else → Python.
         let language: String = {
             if let meta = notebook["metadata"] as? [String: Any] {
                 if let ks = meta["kernelspec"] as? [String: Any],
-                   let name = (ks["name"] as? String)?.lowercased() {
+                    let name = (ks["name"] as? String)?.lowercased()
+                {
                     if name == "ir" || name == "r" || name == "webr" { return "r" }
                 }
                 if let li = meta["language_info"] as? [String: Any],
-                   (li["name"] as? String)?.lowercased() == "r" { return "r" }
+                    (li["name"] as? String)?.lowercased() == "r"
+                {
+                    return "r"
+                }
             }
             return "python"
         }()
 
-        let ext    = language == "r" ? "R" : "py"
-        let stem   = item.deletingPathExtension().lastPathComponent
+        let ext = language == "r" ? "R" : "py"
+        let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
         var output = "# Generated from \(item.lastPathComponent)\n\n"
@@ -324,7 +331,9 @@ func extractNotebooksToCode(in directory: URL) throws {
                 raw = arr.joined()
             } else if let str = cell["source"] as? String {
                 raw = str
-            } else { continue }
+            } else {
+                continue
+            }
 
             var src = raw
             while src.last?.isWhitespace == true { src.removeLast() }

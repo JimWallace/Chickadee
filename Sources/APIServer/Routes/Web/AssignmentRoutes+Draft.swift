@@ -22,10 +22,10 @@
 //   POST   /instructor/new/draft/scripts?draftID=<id>
 //   DELETE /instructor/new/draft/scripts/:filename?draftID=<id>
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AssignmentRoutes {
 
@@ -51,8 +51,7 @@ extension AssignmentRoutes {
         let setup = try await loadDraftSetup(req)
 
         let body: SuitePayload
-        do { body = try req.content.decode(SuitePayload.self) }
-        catch {
+        do { body = try req.content.decode(SuitePayload.self) } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid suite payload: \(error.localizedDescription)")
@@ -121,10 +120,10 @@ extension AssignmentRoutes {
 
         struct CreateBody: Content {
             var filename: String
-            var content:  String
-            var tier:     String?
-            var points:   Int?
-            var isTest:   Bool?
+            var content: String
+            var tier: String?
+            var points: Int?
+            var isTest: Bool?
         }
         let body = try req.content.decode(CreateBody.self)
 
@@ -142,7 +141,7 @@ extension AssignmentRoutes {
         // sectionID is known).
         let inlinedContent: String = {
             guard let data = setup.manifest.data(using: .utf8),
-                  let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else { return body.content }
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: cleaned,
@@ -152,9 +151,9 @@ extension AssignmentRoutes {
         }()
         try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlinedContent)
 
-        let tier       = normalizeTier(body.tier, isTest: body.isTest)
+        let tier = normalizeTier(body.tier, isTest: body.isTest)
         // v0.4.105: allow 0-mark tests for guards (see AssignmentRoutes+Editor).
-        let points     = max(0, body.points ?? 1)
+        let points = max(0, body.points ?? 1)
         let shouldTest = tier != "support"
 
         if shouldTest {
@@ -191,7 +190,7 @@ extension AssignmentRoutes {
     @Sendable
     func deleteDraftScript(req: Request) async throws -> HTTPStatus {
         try requireInstructor(req)
-        let setup    = try await loadDraftSetup(req)
+        let setup = try await loadDraftSetup(req)
         let filename = try safeScriptFilename(from: req)
 
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
@@ -200,13 +199,16 @@ extension AssignmentRoutes {
 
         if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
             throw WebAssignmentError.conflict(
-                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor.")
+                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor."
+            )
         }
 
         let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
         guard dependents.isEmpty else {
             throw WebAssignmentError.conflict(
-                reason: "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))")
+                reason:
+                    "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
+            )
         }
 
         do {

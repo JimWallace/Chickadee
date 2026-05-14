@@ -11,10 +11,11 @@
 // The heavier integration tests (zip mutation, contiguity enforcement,
 // stale-sectionID rewrite, section delete) live in PatternFamilyTests.
 
-import XCTest
-@testable import chickadee_server
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_server
 
 final class SectionsTests: XCTestCase {
 
@@ -38,7 +39,7 @@ final class SectionsTests: XCTestCase {
         let data = try encoder.encode(props)
         let back = try JSONDecoder().decode(TestProperties.self, from: data)
 
-        XCTAssertEqual(back.sections.map(\.id),   ["sec-x", "sec-y"])
+        XCTAssertEqual(back.sections.map(\.id), ["sec-x", "sec-y"])
         XCTAssertEqual(back.sections.map(\.name), ["Question 1", "Question 2"])
         XCTAssertEqual(back.testSuites.map(\.sectionID), ["sec-x", "sec-y", nil])
     }
@@ -49,26 +50,28 @@ final class SectionsTests: XCTestCase {
         // defaults so the student page and editor behave identically
         // to today's code.
         let legacyJSON = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": [],
-          "testSuites": [
-            { "tier": "public", "script": "a.py" },
-            { "tier": "public", "script": "b.py" }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": null,
-          "patternFamilies": []
-        }
-        """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": [],
+              "testSuites": [
+                { "tier": "public", "script": "a.py" },
+                { "tier": "public", "script": "b.py" }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": null,
+              "patternFamilies": []
+            }
+            """
         let props = try JSONDecoder().decode(
             TestProperties.self, from: Data(legacyJSON.utf8)
         )
-        XCTAssertTrue(props.sections.isEmpty,
+        XCTAssertTrue(
+            props.sections.isEmpty,
             "Legacy manifest (no `sections` field) must decode to an empty sections array.")
         for entry in props.testSuites {
-            XCTAssertNil(entry.sectionID,
+            XCTAssertNil(
+                entry.sectionID,
                 "Legacy entry must decode with sectionID == nil.")
         }
     }
@@ -76,14 +79,15 @@ final class SectionsTests: XCTestCase {
     func testRunnerSanitizedPreservesSectionsAndSectionIDs() {
         let props = TestProperties(
             testSuites: [
-                TestSuiteEntry(tier: .pub, script: "a.py", sectionID: "s1"),
+                TestSuiteEntry(tier: .pub, script: "a.py", sectionID: "s1")
             ],
             sections: [TestSuiteSection(id: "s1", name: "One")]
         )
         let sanitized = props.runnerSanitized()
         XCTAssertEqual(sanitized.sections.map(\.id), ["s1"])
         XCTAssertEqual(sanitized.testSuites.first?.sectionID, "s1")
-        XCTAssertTrue(sanitized.patternFamilies.isEmpty,
+        XCTAssertTrue(
+            sanitized.patternFamilies.isEmpty,
             "runnerSanitized must still strip patternFamilies.")
     }
 
@@ -106,7 +110,7 @@ final class SectionsTests: XCTestCase {
         let manifest = String(data: try encoder.encode(props), encoding: .utf8)!
 
         let payload = buildSuitePayload(fromManifest: manifest)
-        XCTAssertEqual(payload.sections.map(\.id),   ["s1", "s2"])
+        XCTAssertEqual(payload.sections.map(\.id), ["s1", "s2"])
         XCTAssertEqual(payload.sections.map(\.name), ["One", "Two"])
         XCTAssertEqual(payload.items.count, 3)
         XCTAssertEqual(payload.items[0].sectionID, "s1")
@@ -160,11 +164,11 @@ final class SectionsTests: XCTestCase {
 
     func testBuildSuitePayloadLegacyManifestReturnsEmptySections() throws {
         let legacyJSON = """
-        {
-          "schemaVersion": 1,
-          "testSuites": [{ "tier": "public", "script": "a.py" }]
-        }
-        """
+            {
+              "schemaVersion": 1,
+              "testSuites": [{ "tier": "public", "script": "a.py" }]
+            }
+            """
         let payload = buildSuitePayload(fromManifest: legacyJSON)
         XCTAssertTrue(payload.sections.isEmpty)
         XCTAssertEqual(payload.items.count, 1)
@@ -206,8 +210,10 @@ final class SectionsTests: XCTestCase {
         let outcomes = [row("a.py"), row("b.py")]
         let grouped = groupOutcomesBySection(outcomes, sections: [], sectionIDPerOutcome: [nil, nil])
         XCTAssertEqual(grouped.count, 1)
-        XCTAssertNil(grouped[0].sectionName,
-            "Legacy (no sections, no mapping) must render as one unlabelled bucket, identical to the pre-sections page.")
+        XCTAssertNil(
+            grouped[0].sectionName,
+            "Legacy (no sections, no mapping) must render as one unlabelled bucket, identical to the pre-sections page."
+        )
         XCTAssertEqual(grouped[0].outcomes.count, 2)
     }
 
@@ -245,8 +251,8 @@ final class SectionsTests: XCTestCase {
     /// second with age's, even though the displayName is identical.
     func testGroupOutcomesDistinguishesIdenticalDisplayNamesAcrossSections() {
         let sections = [
-            TestSuiteSection(id: "warmup",   name: "Warm Up"),
-            TestSuiteSection(id: "warmup2",  name: "Warm Up II"),
+            TestSuiteSection(id: "warmup", name: "Warm Up"),
+            TestSuiteSection(id: "warmup2", name: "Warm Up II"),
         ]
         let outcomes = [
             row("Test 1"),  // bmi   (Warm Up)
@@ -256,7 +262,8 @@ final class SectionsTests: XCTestCase {
         let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
         XCTAssertEqual(grouped.count, 2)
         XCTAssertEqual(grouped[0].sectionName, "Warm Up")
-        XCTAssertEqual(grouped[0].outcomes.count, 1,
+        XCTAssertEqual(
+            grouped[0].outcomes.count, 1,
             "First 'Test 1' outcome must stay in Warm Up — not silently moved by name collision.")
         XCTAssertEqual(grouped[1].sectionName, "Warm Up II")
         XCTAssertEqual(grouped[1].outcomes.count, 1)

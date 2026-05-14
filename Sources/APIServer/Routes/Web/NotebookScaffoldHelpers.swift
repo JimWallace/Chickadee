@@ -5,10 +5,10 @@
 // of materialized JupyterLite copies.  Extracted from
 // AssignmentHelpers.swift (issue #442) — no behaviour changes.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 func minimalEmptyNotebookData() -> Data {
     Data(#"{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}"#.utf8)
@@ -20,7 +20,8 @@ func notebookFilenameForStorage(uploadedName: String?, fallback: String) -> Stri
         fileName = fallback
     }
     fileName = URL(fileURLWithPath: fileName).lastPathComponent
-    fileName = fileName
+    fileName =
+        fileName
         .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r"))
         .joined(separator: " ")
         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,7 +40,8 @@ func submissionFilenameForStorage(uploadedName: String?, fallback: String) -> St
         fileName = fallback
     }
     fileName = URL(fileURLWithPath: fileName).lastPathComponent
-    fileName = fileName
+    fileName =
+        fileName
         .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r"))
         .joined(separator: " ")
         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -67,7 +69,8 @@ func autoScaffoldFromSolutionNotebook(
 ) async throws -> (sections: Int, functions: Int) {
     // Parse the existing manifest so we know whether to scaffold.
     guard let data = setup.manifest.data(using: .utf8),
-          var dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+        var dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    else {
         return (0, 0)
     }
     let existingSections = (dict["sections"] as? [[String: Any]]) ?? []
@@ -107,9 +110,9 @@ func autoScaffoldFromSolutionNotebook(
         guard writes[filename] == nil else { continue }  // dedup by filename
         writes[filename] = pythonTestScript(type: .exists, functionName: fn)
         var testDict: [String: Any] = [
-            "tier":   "public",
+            "tier": "public",
             "script": filename,
-            "name":   "\(fn) exists",
+            "name": "\(fn) exists",
         ]
         if let sectionName = entry.sectionName, let sid = sectionIDByName[sectionName] {
             testDict["sectionID"] = sid
@@ -138,35 +141,35 @@ func autoScaffoldFromSolutionNotebook(
 func defaultNotebookData(title: String) -> Data {
     let safeTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
     let json = """
-    {
-      "cells": [
         {
-          "cell_type": "markdown",
-          "metadata": {},
-          "source": ["# \(safeTitle)\\n", "\\n", "Write your assignment instructions here.\\n"]
-        },
-        {
-          "cell_type": "code",
-          "execution_count": null,
-          "metadata": {},
-          "outputs": [],
-          "source": ["# Student solution starts here\\n"]
+          "cells": [
+            {
+              "cell_type": "markdown",
+              "metadata": {},
+              "source": ["# \(safeTitle)\\n", "\\n", "Write your assignment instructions here.\\n"]
+            },
+            {
+              "cell_type": "code",
+              "execution_count": null,
+              "metadata": {},
+              "outputs": [],
+              "source": ["# Student solution starts here\\n"]
+            }
+          ],
+          "metadata": {
+            "kernelspec": {
+              "display_name": "Python (Pyodide)",
+              "language": "python",
+              "name": "python"
+            },
+            "language_info": {
+              "name": "python"
+            }
+          },
+          "nbformat": 4,
+          "nbformat_minor": 5
         }
-      ],
-      "metadata": {
-        "kernelspec": {
-          "display_name": "Python (Pyodide)",
-          "language": "python",
-          "name": "python"
-        },
-        "language_info": {
-          "name": "python"
-        }
-      },
-      "nbformat": 4,
-      "nbformat_minor": 5
-    }
-    """
+        """
     return Data(json.utf8)
 }
 
@@ -175,7 +178,7 @@ func removeMaterializedNotebookFiles(req: Request, setupID: String) {
         req.application.directory.publicDirectory + "files/",
         req.application.directory.publicDirectory + "jupyterlite/files/",
         req.application.directory.publicDirectory + "jupyterlite/lab/files/",
-        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
+        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/",
     ]
     for root in roots {
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: root) else { continue }

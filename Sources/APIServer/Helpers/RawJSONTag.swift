@@ -11,8 +11,8 @@
 // Only pass values that are safe to emit verbatim (i.e. values the server
 // itself produced via JSONEncoder).  Do not pass untrusted user input.
 
-import Vapor
 import Leaf
+import Vapor
 
 struct RawJSONTag: UnsafeUnescapedLeafTag {
     func render(_ ctx: LeafContext) throws -> LeafData {

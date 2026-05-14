@@ -5,10 +5,10 @@
 //   GET /health  → 200 OK (all systems operational)
 //              → 503 Service Unavailable (DB unreachable)
 
-import Vapor
+import Core
 import Fluent
 import SQLKit
-import Core
+import Vapor
 
 struct HealthRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -54,9 +54,9 @@ struct HealthRoutes: RouteCollection {
 // MARK: - Response types
 
 private struct HealthResponse: Content {
-    var status: String   // "ok" | "degraded"
+    var status: String  // "ok" | "degraded"
     var version: String
-    var db: String       // "ok" | "error"
+    var db: String  // "ok" | "error"
     var runner: RunnerHealth
 
     struct RunnerHealth: Content {

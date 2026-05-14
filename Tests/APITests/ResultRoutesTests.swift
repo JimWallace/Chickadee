@@ -1,9 +1,10 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-@testable import Core
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import Core
+@testable import chickadee_server
 
 final class ResultRoutesTests: XCTestCase {
 
@@ -69,7 +70,8 @@ final class ResultRoutesTests: XCTestCase {
             let courseID = try course.requireID()
             let setup = APITestSetup(
                 id: testSetupID,
-                manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
                 zipPath: app.resultsDirectory + "\(testSetupID).zip",
                 courseID: courseID
             )
@@ -98,15 +100,19 @@ final class ResultRoutesTests: XCTestCase {
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let response = try res.content.decode(ReportResponse.self)
-            XCTAssertTrue(response.received)
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: body, workerSecret: self.workerSecret)
+                req.body = body
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let response = try res.content.decode(ReportResponse.self)
+                XCTAssertTrue(response.received)
+            })
     }
 
     func testReportResultsWritesFileToDisk() throws {
@@ -114,13 +120,17 @@ final class ResultRoutesTests: XCTestCase {
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: body, workerSecret: self.workerSecret)
+                req.body = body
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
         let resultFile = files.first { $0.hasPrefix("sub_disktest") }
@@ -156,13 +166,17 @@ final class ResultRoutesTests: XCTestCase {
         )
         let body = try bodyData(for: report)
 
-        try await app.asyncTest(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+        try await app.asyncTest(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: body, workerSecret: self.workerSecret)
+                req.body = body
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+            })
 
         let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
         let resultFile = files.first { $0.hasPrefix(collection.submissionID) }
@@ -174,39 +188,51 @@ final class ResultRoutesTests: XCTestCase {
         try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
         let body = try bodyData(for: collection)
 
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let response = try res.content.decode(ReportResponse.self)
-            XCTAssertTrue(response.received)
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: body, workerSecret: self.workerSecret)
+                req.body = body
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                let response = try res.content.decode(ReportResponse.self)
+                XCTAssertTrue(response.received)
+            })
     }
 
     func testReportResultsRejectsMalformedJSON() throws {
         let badBody = ByteBuffer(string: "not valid json")
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: badBody, workerSecret: self.workerSecret)
-            req.body = badBody
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unprocessableEntity)
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: badBody, workerSecret: self.workerSecret)
+                req.body = badBody
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .unprocessableEntity)
+            })
     }
 
     func testReportResultsRejectsEmptyBody() throws {
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            workerSecret: self.workerSecret)
-        }, afterResponse: { res in
-            // Either 400 or 422 is acceptable for empty body
-            XCTAssertTrue(
-                res.status == .badRequest || res.status == .unprocessableEntity,
-                "Expected 400 or 422, got \(res.status)"
-            )
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    workerSecret: self.workerSecret)
+            },
+            afterResponse: { res in
+                // Either 400 or 422 is acceptable for empty body
+                XCTAssertTrue(
+                    res.status == .badRequest || res.status == .unprocessableEntity,
+                    "Expected 400 or 422, got \(res.status)"
+                )
+            })
     }
 
     func testDuplicateResultSubmissionIsIdempotent() throws {
@@ -219,25 +245,33 @@ final class ResultRoutesTests: XCTestCase {
         let body = try bodyData(for: collection)
 
         // First submission
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: body, workerSecret: self.workerSecret)
+                req.body = body
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
+            })
 
         // Second submission (worker retry)
         let body2 = try bodyData(for: collection)
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body2, workerSecret: self.workerSecret)
-            req.body = body2
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok, "Second (retry) POST must also succeed")
-            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
-        })
+        try app.test(
+            .POST, resultsPath,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST, path: self.resultsPath,
+                    body: body2, workerSecret: self.workerSecret)
+                req.body = body2
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok, "Second (retry) POST must also succeed")
+                XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
+            })
 
         // Submission must still be "complete" (not rolled back or errored)
         let submission = try APISubmission.find(collection.submissionID, on: app.db).wait()

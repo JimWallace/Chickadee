@@ -23,7 +23,7 @@ func awardClassBadgesFor100Percent(
     on db: Database
 ) async throws {
     guard let user = try await APIUser.find(userID, on: db),
-          user.role == "student"
+        user.role == "student"
     else { return }
 
     async let _trail = awardImmutableBadge(
@@ -33,7 +33,7 @@ func awardClassBadgesFor100Percent(
         achievementID: "speed_champion",
         testSetupID: testSetupID, userID: userID, submissionID: submissionID,
         newValue: Double(executionTimeMs), on: db)
-    async let _mini  = updateRecordBadge(
+    async let _mini = updateRecordBadge(
         achievementID: "minimalist",
         testSetupID: testSetupID, userID: userID, submissionID: submissionID,
         newValue: Double(attemptNumber), on: db)
@@ -49,7 +49,7 @@ private func awardImmutableBadge(
     on db: Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
-        .filter(\.$testSetupID  == testSetupID)
+        .filter(\.$testSetupID == testSetupID)
         .filter(\.$achievementID == achievementID)
         .first()
     guard existing == nil else { return }
@@ -72,14 +72,14 @@ private func updateRecordBadge(
     on db: Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
-        .filter(\.$testSetupID  == testSetupID)
+        .filter(\.$testSetupID == testSetupID)
         .filter(\.$achievementID == achievementID)
         .first()
     if let record = existing {
         guard let current = record.metricValue, newValue < current else { return }
-        record.userID       = userID
+        record.userID = userID
         record.submissionID = submissionID
-        record.metricValue  = newValue
+        record.metricValue = newValue
         try await record.update(on: db)
     } else {
         let badge = APIClassAchievement(

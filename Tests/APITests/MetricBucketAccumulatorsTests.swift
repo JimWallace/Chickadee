@@ -1,6 +1,7 @@
-import XCTest
-@testable import chickadee_server
 import Foundation
+import XCTest
+
+@testable import chickadee_server
 
 final class MetricBucketAccumulatorsTests: XCTestCase {
 
@@ -238,7 +239,7 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
 
         var runners = Array(repeating: RunnerBucketAccumulator(), count: window.bucketCount)
         runners[0].sampleCount = 2
-        runners[0].activeRunnerTotal = 5    // avg = round(2.5) = 3
+        runners[0].activeRunnerTotal = 5  // avg = round(2.5) = 3
         runners[0].utilizationValues = [40, 60, 80]
 
         var requests = Array(repeating: RequestBucketAccumulator(), count: window.bucketCount)
@@ -264,7 +265,7 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
         XCTAssertEqual(buckets[1].bucketStart, window.windowStart.addingTimeInterval(Double(window.bucketSeconds)))
 
         XCTAssertEqual(buckets[0].avgActiveRunners, 3)
-        XCTAssertEqual(buckets[0].avgRunnerUtilizationPercent, 60)   // average(40, 60, 80) = 60
+        XCTAssertEqual(buckets[0].avgRunnerUtilizationPercent, 60)  // average(40, 60, 80) = 60
         XCTAssertEqual(buckets[0].maxRunnerUtilizationPercent, 80)
         XCTAssertEqual(buckets[0].completedJobs, 4)
         XCTAssertEqual(buckets[0].passedCount, 3)
@@ -274,7 +275,7 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
 
         XCTAssertEqual(buckets[1].requestCount, 1)
         XCTAssertEqual(buckets[1].requestP95Ms, 123)
-        XCTAssertEqual(buckets[1].avgActiveRunners, 0)               // sampleCount == 0
+        XCTAssertEqual(buckets[1].avgActiveRunners, 0)  // sampleCount == 0
         XCTAssertNil(buckets[1].avgRunnerUtilizationPercent)
         XCTAssertNil(buckets[1].queueWaitP95Ms)
     }
@@ -293,7 +294,7 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
     func testAverageReturnsIntegerMeanOrNil() {
         XCTAssertNil(MetricBucketAccumulators.average([]))
         XCTAssertEqual(MetricBucketAccumulators.average([10, 20, 30]), 20)
-        XCTAssertEqual(MetricBucketAccumulators.average([1, 2]), 1)   // integer division
+        XCTAssertEqual(MetricBucketAccumulators.average([1, 2]), 1)  // integer division
     }
 
     // MARK: - End-to-end pinned scenario
@@ -350,7 +351,7 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
         )
 
         XCTAssertEqual(response.count, 2)
-        XCTAssertEqual(response[0].avgActiveRunners, 1)            // 1 sample, total 1
+        XCTAssertEqual(response[0].avgActiveRunners, 1)  // 1 sample, total 1
         XCTAssertEqual(response[0].avgRunnerUtilizationPercent, 50)
         XCTAssertEqual(response[0].requestCount, 1)
         XCTAssertEqual(response[0].requestP95Ms, 100)

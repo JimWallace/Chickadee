@@ -1,6 +1,7 @@
-import XCTest
-@testable import chickadee_runner
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
 
 final class WorkerTests: XCTestCase {
 
@@ -35,11 +36,11 @@ final class WorkerTests: XCTestCase {
     }
 
     private func requireStableLinuxSandboxRunner() throws {
-#if os(Linux)
+        #if os(Linux)
         if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
             throw XCTSkip("Sandboxed runner tests are unstable on GitHub's containerized Linux runners.")
         }
-#endif
+        #endif
     }
 
     // MARK: - UnsandboxedScriptRunner: exit code mapping
@@ -97,11 +98,12 @@ final class WorkerTests: XCTestCase {
     // MARK: - UnsandboxedScriptRunner: env passthrough (Phase 1, issue #461)
 
     func testScriptReceivesEnvVarFromRunner() async throws {
-        let script = try writeScript("""
-        #!/bin/sh
-        echo "seed=$CHICKADEE_ASSIGNMENT_SEED" >&2
-        exit 0
-        """)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            echo "seed=$CHICKADEE_ASSIGNMENT_SEED" >&2
+            exit 0
+            """)
         let runner = UnsandboxedScriptRunner()
         let output = await runner.run(
             script: script,
@@ -119,11 +121,12 @@ final class WorkerTests: XCTestCase {
     func testScriptEnvVarUnsetWhenNoOverride() async throws {
         // Sanity check: empty env override = no var set. The script prints the
         // raw env-var expansion; an unset var expands to an empty string.
-        let script = try writeScript("""
-        #!/bin/sh
-        echo "seed=[$CHICKADEE_ASSIGNMENT_SEED]" >&2
-        exit 0
-        """)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            echo "seed=[$CHICKADEE_ASSIGNMENT_SEED]" >&2
+            exit 0
+            """)
         let runner = UnsandboxedScriptRunner()
         // Ensure parent doesn't have the var set in this test's environment.
         unsetenv("CHICKADEE_ASSIGNMENT_SEED")
@@ -151,13 +154,14 @@ final class WorkerTests: XCTestCase {
         XCTAssertLessThan(output.executionTimeMs, 10_000, "Timed-out script should be reaped promptly")
     }
 
-#if os(Linux)
+    #if os(Linux)
     func testScriptTimeoutReapsBackgroundChildProcess() async throws {
-        let script = try writeScript("""
-        #!/bin/sh
-        sleep 60 &
-        wait
-        """)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            sleep 60 &
+            wait
+            """)
         let runner = UnsandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Timed-out script with a background child should still time out")
@@ -168,7 +172,7 @@ final class WorkerTests: XCTestCase {
             "Timed-out script should reap inherited stdout/stderr handles from background children"
         )
     }
-#endif
+    #endif
 
     // MARK: - UnsandboxedScriptRunner: working directory
 
@@ -226,16 +230,18 @@ final class WorkerTests: XCTestCase {
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         XCTAssertEqual(output.exitCode, -1)
-        XCTAssertLessThan(output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
+        XCTAssertLessThan(
+            output.executionTimeMs, 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
 
-#if os(Linux)
+    #if os(Linux)
     func testSandboxedRunnerTimeoutReapsBackgroundChildProcess() async throws {
-        let script = try writeScript("""
-        #!/bin/sh
-        sleep 60 &
-        wait
-        """)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            sleep 60 &
+            wait
+            """)
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
         XCTAssertTrue(output.timedOut, "Sandboxed script with a background child should still time out")
@@ -246,7 +252,7 @@ final class WorkerTests: XCTestCase {
             "Sandboxed timeout should reap background children without leaving pipes open"
         )
     }
-#endif
+    #endif
 
     func testSandboxedRunnerWorkDir() async throws {
         try requireStableLinuxSandboxRunner()
@@ -267,19 +273,20 @@ final class WorkerTests: XCTestCase {
         // Write a script that tries to reach an external host.
         // In a sandboxed network namespace this should fail (exit non-zero from python).
         // The script exits 0 only if the connection SUCCEEDS — so we assert exit != 0.
-        let script = try writeScript("""
-        #!/bin/sh
-        python3 -c "
-        import socket, sys
-        s = socket.socket()
-        s.settimeout(2)
-        try:
-            s.connect(('8.8.8.8', 53))
-            sys.exit(0)
-        except OSError:
-            sys.exit(1)
-        "
-        """)
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            python3 -c "
+            import socket, sys
+            s = socket.socket()
+            s.settimeout(2)
+            try:
+                s.connect(('8.8.8.8', 53))
+                sys.exit(0)
+            except OSError:
+                sys.exit(1)
+            "
+            """)
         let runner = SandboxedScriptRunner()
         let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
         XCTAssertNotEqual(
@@ -470,49 +477,55 @@ final class WorkerTests: XCTestCase {
 
     func testExtractPythonNotebookProducesPyFile() throws {
         let nb = """
-        {
-          "nbformat": 4,
-          "metadata": {"kernelspec": {"name": "python3"}},
-          "cells": [
-            {"cell_type": "code", "source": ["def add(a, b):\\n", "    return a + b"]},
-            {"cell_type": "markdown", "source": ["# ignored"]},
-            {"cell_type": "code", "source": ["result = add(1, 2)"]}
-          ]
-        }
-        """
+            {
+              "nbformat": 4,
+              "metadata": {"kernelspec": {"name": "python3"}},
+              "cells": [
+                {"cell_type": "code", "source": ["def add(a, b):\\n", "    return a + b"]},
+                {"cell_type": "markdown", "source": ["# ignored"]},
+                {"cell_type": "code", "source": ["result = add(1, 2)"]}
+              ]
+            }
+            """
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
         let pyURL = tmpDir.appendingPathComponent("assignment.py")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: pyURL.path),
-                      "Should produce assignment.py from assignment.ipynb")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: pyURL.path),
+            "Should produce assignment.py from assignment.ipynb")
 
         let content = try String(contentsOf: pyURL, encoding: .utf8)
-        XCTAssertTrue(content.contains("def add(a, b):"),
-                      "Code cell content should be present")
-        XCTAssertTrue(content.contains("result = add(1, 2)"),
-                      "Second code cell should be present")
-        XCTAssertFalse(content.contains("# ignored"),
-                       "Markdown cells must not appear in output")
+        XCTAssertTrue(
+            content.contains("def add(a, b):"),
+            "Code cell content should be present")
+        XCTAssertTrue(
+            content.contains("result = add(1, 2)"),
+            "Second code cell should be present")
+        XCTAssertFalse(
+            content.contains("# ignored"),
+            "Markdown cells must not appear in output")
     }
 
     func testExtractRNotebookWithIRKernelProducesRFile() throws {
         let nb = """
-        {
-          "nbformat": 4,
-          "metadata": {"kernelspec": {"name": "ir"}},
-          "cells": [
-            {"cell_type": "code", "source": ["x <- 42"]}
-          ]
-        }
-        """
+            {
+              "nbformat": 4,
+              "metadata": {"kernelspec": {"name": "ir"}},
+              "cells": [
+                {"cell_type": "code", "source": ["x <- 42"]}
+              ]
+            }
+            """
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
-                      "IR kernel should produce .R file")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path),
-                       "IR kernel must NOT produce .py file")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
+            "IR kernel should produce .R file")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.py").path),
+            "IR kernel must NOT produce .py file")
 
         let content = try String(contentsOf: tmpDir.appendingPathComponent("assignment.R"), encoding: .utf8)
         XCTAssertTrue(content.contains("x <- 42"))
@@ -520,28 +533,29 @@ final class WorkerTests: XCTestCase {
 
     func testExtractRNotebookWithWebRKernelProducesRFile() throws {
         let nb = """
-        {
-          "nbformat": 4,
-          "metadata": {"kernelspec": {"name": "webr"}},
-          "cells": [{"cell_type": "code", "source": ["y <- 1"]}]
-        }
-        """
+            {
+              "nbformat": 4,
+              "metadata": {"kernelspec": {"name": "webr"}},
+              "cells": [{"cell_type": "code", "source": ["y <- 1"]}]
+            }
+            """
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
-                      "WebR kernel should produce .R file")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
+            "WebR kernel should produce .R file")
     }
 
     func testExtractPythonNotebookDetectsViaLanguageInfo() throws {
         // No kernelspec, but language_info says python → should produce .py
         let nb = """
-        {
-          "nbformat": 4,
-          "metadata": {"language_info": {"name": "python"}},
-          "cells": [{"cell_type": "code", "source": ["pass"]}]
-        }
-        """
+            {
+              "nbformat": 4,
+              "metadata": {"language_info": {"name": "python"}},
+              "cells": [{"cell_type": "code", "source": ["pass"]}]
+            }
+            """
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
@@ -550,16 +564,16 @@ final class WorkerTests: XCTestCase {
 
     func testExtractSkipsEmptyCodeCells() throws {
         let nb = """
-        {
-          "nbformat": 4,
-          "metadata": {},
-          "cells": [
-            {"cell_type": "code", "source": [""]},
-            {"cell_type": "code", "source": ["   \\n  "]},
-            {"cell_type": "code", "source": ["x = 1"]}
-          ]
-        }
-        """
+            {
+              "nbformat": 4,
+              "metadata": {},
+              "cells": [
+                {"cell_type": "code", "source": [""]},
+                {"cell_type": "code", "source": ["   \\n  "]},
+                {"cell_type": "code", "source": ["x = 1"]}
+              ]
+            }
+            """
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 
@@ -589,8 +603,8 @@ final class WorkerTests: XCTestCase {
     func testExtractMultipleNotebooks() throws {
         // Two notebooks in the same directory → two output files.
         let nb = """
-        {"nbformat":4,"metadata":{},"cells":[{"cell_type":"code","source":["pass"]}]}
-        """
+            {"nbformat":4,"metadata":{},"cells":[{"cell_type":"code","source":["pass"]}]}
+            """
         try writeNotebook(nb, name: "lab1.ipynb")
         try writeNotebook(nb, name: "lab2.ipynb")
         try extractNotebooksToCode(in: tmpDir)
@@ -602,12 +616,12 @@ final class WorkerTests: XCTestCase {
     func testExtractSourceAsStringNotArray() throws {
         // The Jupyter spec allows source to be a plain string, not just array-of-strings.
         let nb = """
-        {
-          "nbformat": 4,
-          "metadata": {},
-          "cells": [{"cell_type": "code", "source": "x = 99"}]
-        }
-        """
+            {
+              "nbformat": 4,
+              "metadata": {},
+              "cells": [{"cell_type": "code", "source": "x = 99"}]
+            }
+            """
         try writeNotebook(nb)
         try extractNotebooksToCode(in: tmpDir)
 

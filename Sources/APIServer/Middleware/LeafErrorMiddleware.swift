@@ -18,17 +18,18 @@ struct LeafErrorMiddleware: AsyncMiddleware {
             switch error {
             case let abort as AbortError:
                 status = abort.status
-                reason  = abort.reason
+                reason = abort.reason
             default:
                 status = .internalServerError
-                reason  = "Something went wrong."
+                reason = "Something went wrong."
                 request.logger.report(error: error)
             }
 
             // Machine clients (API / runner) get a compact JSON error.
             let path = request.url.path
             if path.hasPrefix("/api/") || path.hasPrefix("/worker/") {
-                let escaped = reason
+                let escaped =
+                    reason
                     .replacingOccurrences(of: "\\", with: "\\\\")
                     .replacingOccurrences(of: "\"", with: "\\\"")
                 var headers = HTTPHeaders()
@@ -43,10 +44,10 @@ struct LeafErrorMiddleware: AsyncMiddleware {
             // Browser routes get a Leaf-rendered error page.
             let ctx = ErrorPageContext(
                 currentUser: request.currentUserContext,
-                status:      Int(status.code),
-                title:       status.reasonPhrase,
-                message:     reason,
-                isNotFound:  status == .notFound
+                status: Int(status.code),
+                title: status.reasonPhrase,
+                message: reason,
+                isNotFound: status == .notFound
             )
 
             do {
@@ -66,8 +67,8 @@ struct LeafErrorMiddleware: AsyncMiddleware {
 
 private struct ErrorPageContext: Encodable {
     let currentUser: CurrentUserContext?
-    let status:      Int
-    let title:       String
-    let message:     String
-    let isNotFound:  Bool
+    let status: Int
+    let title: String
+    let message: String
+    let isNotFound: Bool
 }

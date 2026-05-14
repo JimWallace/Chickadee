@@ -1,8 +1,9 @@
 // Tests/WorkerTests/TestSetupCacheTests.swift
 
-import XCTest
-@testable import chickadee_runner
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
 
 // MARK: - Free helpers (not methods — must not capture `self` in @Sendable closures)
 
@@ -66,7 +67,7 @@ final class TestSetupCacheTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: first) }
 
         let second = try await cache.acquire(testSetupID: "setup-2") {
-            populateCalled.increment()   // must NOT be called on a hit
+            populateCalled.increment()  // must NOT be called on a hit
             return try makeTestStagingDir()
         }
         defer { try? FileManager.default.removeItem(at: second) }

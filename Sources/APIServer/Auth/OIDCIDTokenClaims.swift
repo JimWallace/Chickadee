@@ -15,8 +15,8 @@
 // app.jwt.keys.verify(_:as:) is called. Issuer and audience are checked
 // manually in SSOAuthRoutes.ssoCallback after decoding.
 
-import JWT
 import Foundation
+import JWT
 
 struct OIDCIDTokenClaims: JWTPayload, Sendable {
 
@@ -35,8 +35,8 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
 
     /// Preferred/given first name
     var preferredName: String?  // "preferred_name"
-    var givenName: String?      // "given_name"
-    var familyName: String?     // "family_name"
+    var givenName: String?  // "given_name"
+    var familyName: String?  // "family_name"
 
     var preferredUsername: String?  // "preferred_username" (standard OIDC)
     var email: String?
@@ -54,14 +54,14 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
     /// Covers both declared fields and IdP-specific extras (e.g. "winaccountname").
     func value(for claimName: String) -> String? {
         switch claimName {
-        case "sub":                return sub.value
-        case "email":              return email
-        case "name":               return name
-        case "preferred_name":     return preferredName
-        case "given_name":         return givenName
-        case "family_name":        return familyName
+        case "sub": return sub.value
+        case "email": return email
+        case "name": return name
+        case "preferred_name": return preferredName
+        case "given_name": return givenName
+        case "family_name": return familyName
         case "preferred_username": return preferredUsername
-        default:                   return extraClaims[claimName]
+        default: return extraClaims[claimName]
         }
     }
 
@@ -77,26 +77,26 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
     private enum KnownKey: String, CodingKey, CaseIterable {
         case sub, iss, aud, exp, iat
         case name
-        case preferredName     = "preferred_name"
-        case givenName         = "given_name"
-        case familyName        = "family_name"
+        case preferredName = "preferred_name"
+        case givenName = "given_name"
+        case familyName = "family_name"
         case preferredUsername = "preferred_username"
         case email
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: KnownKey.self)
-        sub              = try c.decode(SubjectClaim.self,    forKey: .sub)
-        iss              = try c.decode(IssuerClaim.self,     forKey: .iss)
-        aud              = try c.decode(AudienceClaim.self,   forKey: .aud)
-        exp              = try c.decode(ExpirationClaim.self, forKey: .exp)
-        iat              = try c.decode(IssuedAtClaim.self,   forKey: .iat)
-        name             = try c.decodeIfPresent(String.self, forKey: .name)
-        preferredName    = try c.decodeIfPresent(String.self, forKey: .preferredName)
-        givenName        = try c.decodeIfPresent(String.self, forKey: .givenName)
-        familyName       = try c.decodeIfPresent(String.self, forKey: .familyName)
+        sub = try c.decode(SubjectClaim.self, forKey: .sub)
+        iss = try c.decode(IssuerClaim.self, forKey: .iss)
+        aud = try c.decode(AudienceClaim.self, forKey: .aud)
+        exp = try c.decode(ExpirationClaim.self, forKey: .exp)
+        iat = try c.decode(IssuedAtClaim.self, forKey: .iat)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        preferredName = try c.decodeIfPresent(String.self, forKey: .preferredName)
+        givenName = try c.decodeIfPresent(String.self, forKey: .givenName)
+        familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
         preferredUsername = try c.decodeIfPresent(String.self, forKey: .preferredUsername)
-        email            = try c.decodeIfPresent(String.self, forKey: .email)
+        email = try c.decodeIfPresent(String.self, forKey: .email)
 
         // Capture remaining string-valued claims into extraClaims.
         let all = try decoder.container(keyedBy: RawStringKey.self)
@@ -112,17 +112,17 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: KnownKey.self)
-        try c.encode(sub,  forKey: .sub)
-        try c.encode(iss,  forKey: .iss)
-        try c.encode(aud,  forKey: .aud)
-        try c.encode(exp,  forKey: .exp)
-        try c.encode(iat,  forKey: .iat)
-        try c.encodeIfPresent(name,              forKey: .name)
-        try c.encodeIfPresent(preferredName,      forKey: .preferredName)
-        try c.encodeIfPresent(givenName,          forKey: .givenName)
-        try c.encodeIfPresent(familyName,         forKey: .familyName)
-        try c.encodeIfPresent(preferredUsername,  forKey: .preferredUsername)
-        try c.encodeIfPresent(email,              forKey: .email)
+        try c.encode(sub, forKey: .sub)
+        try c.encode(iss, forKey: .iss)
+        try c.encode(aud, forKey: .aud)
+        try c.encode(exp, forKey: .exp)
+        try c.encode(iat, forKey: .iat)
+        try c.encodeIfPresent(name, forKey: .name)
+        try c.encodeIfPresent(preferredName, forKey: .preferredName)
+        try c.encodeIfPresent(givenName, forKey: .givenName)
+        try c.encodeIfPresent(familyName, forKey: .familyName)
+        try c.encodeIfPresent(preferredUsername, forKey: .preferredUsername)
+        try c.encodeIfPresent(email, forKey: .email)
         var extras = encoder.container(keyedBy: RawStringKey.self)
         for (key, value) in extraClaims {
             try extras.encode(value, forKey: RawStringKey(key))
@@ -147,18 +147,18 @@ extension OIDCIDTokenClaims {
         email: String? = nil,
         extraClaims: [String: String] = [:]
     ) {
-        self.sub               = sub
-        self.iss               = iss
-        self.aud               = aud
-        self.exp               = exp
-        self.iat               = iat
-        self.name              = name
-        self.preferredName     = preferredName
-        self.givenName         = givenName
-        self.familyName        = familyName
+        self.sub = sub
+        self.iss = iss
+        self.aud = aud
+        self.exp = exp
+        self.iat = iat
+        self.name = name
+        self.preferredName = preferredName
+        self.givenName = givenName
+        self.familyName = familyName
         self.preferredUsername = preferredUsername
-        self.email             = email
-        self.extraClaims       = extraClaims
+        self.email = email
+        self.extraClaims = extraClaims
     }
 }
 

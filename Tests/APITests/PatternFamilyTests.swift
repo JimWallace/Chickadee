@@ -8,13 +8,14 @@
 //   - applyPatternFamilies mutating the zip and manifest, and the runner
 //     cache key (derived from manifest bytes) changing as a result.
 
-import XCTest
-@testable import chickadee_server
 import Core
-import Foundation
 import Crypto
-import Vapor
 import Fluent
+import Foundation
+import Vapor
+import XCTest
+
+@testable import chickadee_server
 
 final class PatternFamilyTests: XCTestCase {
 
@@ -33,12 +34,15 @@ final class PatternFamilyTests: XCTestCase {
             paramNames: ["bmi"],
             defaults: PatternDefaults(tier: tier, points: 1, hint: hint),
             cases: [
-                PatternCase(key: "01", label: "BMI < 18.5 is underweight",
-                            args: [.double(18.49)], expected: .string("underweight")),
-                PatternCase(key: "02", label: "BMI = 18.5 is normal",
-                            args: [.double(18.5)],  expected: .string("normal")),
-                PatternCase(key: "03", label: "BMI >= 30 is obese",
-                            args: [.double(30.0)],  expected: .string("obese")),
+                PatternCase(
+                    key: "01", label: "BMI < 18.5 is underweight",
+                    args: [.double(18.49)], expected: .string("underweight")),
+                PatternCase(
+                    key: "02", label: "BMI = 18.5 is normal",
+                    args: [.double(18.5)], expected: .string("normal")),
+                PatternCase(
+                    key: "03", label: "BMI >= 30 is obese",
+                    args: [.double(30.0)], expected: .string("obese")),
             ]
         )
     }
@@ -92,7 +96,7 @@ final class PatternFamilyTests: XCTestCase {
 
     func testRendererIsDeterministic() {
         let family = bmiFamily()
-        let first  = renderPatternFamily(family)
+        let first = renderPatternFamily(family)
         let second = renderPatternFamily(family)
         XCTAssertEqual(first, second, "Same input must produce byte-identical output")
     }
@@ -127,7 +131,7 @@ final class PatternFamilyTests: XCTestCase {
             functionName: "f", paramNames: ["x"],
             defaults: PatternDefaults(tier: .pub),
             cases: [
-                PatternCase(key: "a", label: "pub",    args: [.int(1)], expected: .int(1)),
+                PatternCase(key: "a", label: "pub", args: [.int(1)], expected: .int(1)),
                 PatternCase(key: "b", label: "secret", args: [.int(2)], expected: .int(2), tier: .secret),
             ]
         )
@@ -162,8 +166,9 @@ final class PatternFamilyTests: XCTestCase {
             defaults: PatternDefaults(hint: "default hint"),
             cases: [
                 PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1)),
-                PatternCase(key: "02", label: "b", args: [.int(2)], expected: .int(2),
-                            hint: "override hint"),
+                PatternCase(
+                    key: "02", label: "b", args: [.int(2)], expected: .int(2),
+                    hint: "override hint"),
             ]
         )
         let rendered = renderPatternFamily(family)
@@ -222,14 +227,18 @@ final class PatternFamilyTests: XCTestCase {
         XCTAssertEqual(rendered.count, 1)
         let src = rendered[0].source
 
-        XCTAssertTrue(src.contains("dob = \"20260422\""),
-                      "Provided arg must be declared: \(src)")
-        XCTAssertFalse(src.contains("currentDate ="),
-                       "Omitted defaulted arg must NOT be declared: \(src)")
-        XCTAssertTrue(src.contains("check_dob(dob)"),
-                      "Call should be positional over the leading run: \(src)")
-        XCTAssertFalse(src.contains("check_dob(dob, currentDate)"),
-                       "Call must not reference an undeclared local: \(src)")
+        XCTAssertTrue(
+            src.contains("dob = \"20260422\""),
+            "Provided arg must be declared: \(src)")
+        XCTAssertFalse(
+            src.contains("currentDate ="),
+            "Omitted defaulted arg must NOT be declared: \(src)")
+        XCTAssertTrue(
+            src.contains("check_dob(dob)"),
+            "Call should be positional over the leading run: \(src)")
+        XCTAssertFalse(
+            src.contains("check_dob(dob, currentDate)"),
+            "Call must not reference an undeclared local: \(src)")
         try assertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
@@ -251,10 +260,12 @@ final class PatternFamilyTests: XCTestCase {
         )
         let rendered = renderPatternFamily(family)
         let src = rendered[0].source
-        XCTAssertTrue(src.contains("three_args(a, c=c)"),
-                      "Expected kwarg form after middle gap: \(src)")
-        XCTAssertFalse(src.contains("b ="),
-                       "Omitted middle arg must not be declared: \(src)")
+        XCTAssertTrue(
+            src.contains("three_args(a, c=c)"),
+            "Expected kwarg form after middle gap: \(src)")
+        XCTAssertFalse(
+            src.contains("b ="),
+            "Omitted middle arg must not be declared: \(src)")
         try assertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
@@ -277,7 +288,7 @@ final class PatternFamilyTests: XCTestCase {
     func testRenderer_familyVariable_prependedAndReferencedInCase() throws {
         let patients: JSONValue = .object([
             "p01": .object(["dob": .string("20000101"), "exempt": .bool(false)]),
-            "p02": .object(["dob": .string("19950515"), "exempt": .bool(true)])
+            "p02": .object(["dob": .string("19950515"), "exempt": .bool(true)]),
         ])
         let family = PatternFamily(
             id: "lookup", name: "Patient lookup", kind: .boundaryEquality,
@@ -289,7 +300,7 @@ final class PatternFamilyTests: XCTestCase {
                     args: [.null, .string("p01")],
                     expected: .string("20000101"),
                     argsProvided: [true, true],
-                    argVarRefs:   ["patients", nil]
+                    argVarRefs: ["patients", nil]
                 )
             ],
             variables: [FamilyVariable(name: "patients", value: patients)]
@@ -298,14 +309,18 @@ final class PatternFamilyTests: XCTestCase {
         XCTAssertEqual(rendered.count, 1)
         let src = rendered[0].source
 
-        XCTAssertTrue(src.contains("patients = {"),
-                      "Family variable must be declared at module scope: \(src)")
-        XCTAssertTrue(src.contains("db = patients"),
-                      "Arg cell $ref must emit a bare identifier assignment: \(src)")
-        XCTAssertTrue(src.contains("pid = \"p01\""),
-                      "Literal arg must still render as a literal: \(src)")
-        XCTAssertTrue(src.contains("lookup(db, pid)"),
-                      "Call site must use the declared param names: \(src)")
+        XCTAssertTrue(
+            src.contains("patients = {"),
+            "Family variable must be declared at module scope: \(src)")
+        XCTAssertTrue(
+            src.contains("db = patients"),
+            "Arg cell $ref must emit a bare identifier assignment: \(src)")
+        XCTAssertTrue(
+            src.contains("pid = \"p01\""),
+            "Literal arg must still render as a literal: \(src)")
+        XCTAssertTrue(
+            src.contains("lookup(db, pid)"),
+            "Call site must use the declared param names: \(src)")
         try assertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
@@ -321,15 +336,16 @@ final class PatternFamilyTests: XCTestCase {
                     key: "01", label: "case",
                     args: [.null], expected: .int(0),
                     argsProvided: [true],
-                    argVarRefs:   ["does_not_exist"]
+                    argVarRefs: ["does_not_exist"]
                 )
             ],
             variables: []
         )
         XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
             let msg = "\(err)"
-            XCTAssertTrue(msg.contains("does_not_exist") && msg.contains("unknown"),
-                          "Expected unknown-var error, got: \(msg)")
+            XCTAssertTrue(
+                msg.contains("does_not_exist") && msg.contains("unknown"),
+                "Expected unknown-var error, got: \(msg)")
         }
     }
 
@@ -346,8 +362,9 @@ final class PatternFamilyTests: XCTestCase {
             variables: [FamilyVariable(name: "x", value: .int(99))]
         )
         XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
-            XCTAssertTrue("\(err)".contains("collides with a parameter name"),
-                          "Expected collision error, got: \(err)")
+            XCTAssertTrue(
+                "\(err)".contains("collides with a parameter name"),
+                "Expected collision error, got: \(err)")
         }
     }
 
@@ -366,8 +383,9 @@ final class PatternFamilyTests: XCTestCase {
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))],
             variables: [FamilyVariable(name: "lookup", value: .object(["k": .int(1)]))]
         )
-        XCTAssertNotEqual(patternFamilySpecHash(base), patternFamilySpecHash(withVar),
-                          "Adding a family variable must bust the spec hash")
+        XCTAssertNotEqual(
+            patternFamilySpecHash(base), patternFamilySpecHash(withVar),
+            "Adding a family variable must bust the spec hash")
     }
 
     // MARK: - Validation
@@ -455,13 +473,17 @@ final class PatternFamilyTests: XCTestCase {
         )
 
         let after = try manifestCacheMaterial(fixture.setup)
-        XCTAssertNotEqual(before, after,
-                          "Adding a family must change the manifest bytes so the runner cache key invalidates")
+        XCTAssertNotEqual(
+            before, after,
+            "Adding a family must change the manifest bytes so the runner cache key invalidates")
 
-        XCTAssertEqual(result.writtenFiles.sorted(),
-                       ["publictest_bmi_category_01.py",
-                        "publictest_bmi_category_02.py",
-                        "publictest_bmi_category_03.py"])
+        XCTAssertEqual(
+            result.writtenFiles.sorted(),
+            [
+                "publictest_bmi_category_01.py",
+                "publictest_bmi_category_02.py",
+                "publictest_bmi_category_03.py",
+            ])
         XCTAssertEqual(result.deletedFiles, [])
 
         // Zip actually contains the generated files.
@@ -541,10 +563,12 @@ final class PatternFamilyTests: XCTestCase {
         // After the simulated save: raw + generated both present, family
         // spec persisted, testSuites entries carry generatedBy tags.
         let afterEntries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
-        XCTAssertTrue(afterEntries.contains("publictest_handmade.py"),
-                      "Raw script must survive")
-        XCTAssertTrue(afterEntries.contains("publictest_bmi_category_01.py"),
-                      "Generated script must be restored by applyPatternFamilies")
+        XCTAssertTrue(
+            afterEntries.contains("publictest_handmade.py"),
+            "Raw script must survive")
+        XCTAssertTrue(
+            afterEntries.contains("publictest_bmi_category_01.py"),
+            "Generated script must be restored by applyPatternFamilies")
         XCTAssertTrue(afterEntries.contains("publictest_bmi_category_02.py"))
         XCTAssertTrue(afterEntries.contains("publictest_bmi_category_03.py"))
 
@@ -624,8 +648,9 @@ final class PatternFamilyTests: XCTestCase {
             to: fixture.setup, nextFamilies: [bmiFamily()], on: fixture.app.db)
 
         let entries = Set(listZipEntries(zipPath: fixture.setup.zipPath))
-        XCTAssertTrue(entries.contains("publictest_handmade.py"),
-                      "Hand-written scripts must survive a family apply")
+        XCTAssertTrue(
+            entries.contains("publictest_handmade.py"),
+            "Hand-written scripts must survive a family apply")
 
         let props = try decodeManifest(fixture.setup.manifest)
         XCTAssertTrue(props.testSuites.contains { $0.script == "publictest_handmade.py" && $0.generatedBy == nil })
@@ -659,10 +684,12 @@ final class PatternFamilyTests: XCTestCase {
         } catch let abort as AbortError {
             XCTAssertTrue("\(abort.reason)".contains("hand-written script"))
         }
-        XCTAssertEqual(fixture.setup.manifest, manifestBefore,
-                       "Failed validation must not mutate the manifest")
-        XCTAssertEqual(Set(listZipEntries(zipPath: fixture.setup.zipPath)), zipEntriesBefore,
-                       "Failed validation must not mutate the zip")
+        XCTAssertEqual(
+            fixture.setup.manifest, manifestBefore,
+            "Failed validation must not mutate the manifest")
+        XCTAssertEqual(
+            Set(listZipEntries(zipPath: fixture.setup.zipPath)), zipEntriesBefore,
+            "Failed validation must not mutate the zip")
     }
 
     // MARK: - family:<id> dependency expansion
@@ -694,16 +721,19 @@ final class PatternFamilyTests: XCTestCase {
 
         let props = try decodeManifest(fixture.setup.manifest)
         let followup = try XCTUnwrap(props.testSuites.first { $0.script == "publictest_followup.py" })
-        XCTAssertEqual(Set(followup.dependsOn), Set([
-            "publictest_bmi_category_01.py",
-            "publictest_bmi_category_02.py",
-            "publictest_bmi_category_03.py",
-        ]), "family:<id> must expand to all enabled generated filenames")
+        XCTAssertEqual(
+            Set(followup.dependsOn),
+            Set([
+                "publictest_bmi_category_01.py",
+                "publictest_bmi_category_02.py",
+                "publictest_bmi_category_03.py",
+            ]), "family:<id> must expand to all enabled generated filenames")
         // No `family:` tokens must survive into the persisted manifest.
         for entry in props.testSuites {
             for dep in entry.dependsOn {
-                XCTAssertFalse(dep.hasPrefix("family:"),
-                               "Persisted dep '\(dep)' must be a filename, not a family ref")
+                XCTAssertFalse(
+                    dep.hasPrefix("family:"),
+                    "Persisted dep '\(dep)' must be a filename, not a family ref")
             }
         }
     }
@@ -743,8 +773,9 @@ final class PatternFamilyTests: XCTestCase {
         let generated = props.testSuites.filter { $0.generatedBy != nil }
         XCTAssertEqual(generated.count, 3)
         for g in generated {
-            XCTAssertEqual(g.dependsOn, ["publictest_prereq.py"],
-                           "Every generated case must inherit the family-level dep")
+            XCTAssertEqual(
+                g.dependsOn, ["publictest_prereq.py"],
+                "Every generated case must inherit the family-level dep")
         }
     }
 
@@ -821,8 +852,9 @@ final class PatternFamilyTests: XCTestCase {
             )
             XCTFail("Expected cycle to be rejected")
         } catch let abort as AbortError {
-            XCTAssertTrue("\(abort.reason)".contains("cycle"),
-                          "Expected cycle error, got: \(abort.reason)")
+            XCTAssertTrue(
+                "\(abort.reason)".contains("cycle"),
+                "Expected cycle error, got: \(abort.reason)")
         }
     }
 
@@ -915,10 +947,12 @@ final class PatternFamilyTests: XCTestCase {
             paramNames: ["mass_kg", "height_m"],
             defaults: PatternDefaults(tier: .pub, points: 1, hint: nil, tolerance: tolerance),
             cases: [
-                PatternCase(key: "01", label: "average adult",
-                            args: [.double(70.0), .double(1.75)], expected: .double(22.857)),
-                PatternCase(key: "02", label: "tall adult",
-                            args: [.double(85.0), .double(1.90)], expected: .double(23.546)),
+                PatternCase(
+                    key: "01", label: "average adult",
+                    args: [.double(70.0), .double(1.75)], expected: .double(22.857)),
+                PatternCase(
+                    key: "02", label: "tall adult",
+                    args: [.double(85.0), .double(1.90)], expected: .double(23.546)),
             ]
         )
     }
@@ -927,12 +961,14 @@ final class PatternFamilyTests: XCTestCase {
         let rendered = renderPatternFamily(approxFamily(tolerance: 0.05))
         XCTAssertEqual(rendered.count, 2)
         let src = rendered[0].source
-        XCTAssertTrue(src.contains("tolerance = 0.05"),
-                      "Expected Python literal for tolerance; got: \(src)")
+        XCTAssertTrue(
+            src.contains("tolerance = 0.05"),
+            "Expected Python literal for tolerance; got: \(src)")
         XCTAssertTrue(src.contains("delta = abs(result - expected)"))
         XCTAssertTrue(src.contains("if delta > tolerance:"))
-        XCTAssertTrue(src.contains("wrong return type"),
-                      "Approx kind must also guard against non-numeric return types")
+        XCTAssertTrue(
+            src.contains("wrong return type"),
+            "Approx kind must also guard against non-numeric return types")
         XCTAssertTrue(src.contains("value outside tolerance"))
     }
 
@@ -941,8 +977,9 @@ final class PatternFamilyTests: XCTestCase {
         let src = rendered[0].source
         // 1e-6 renders as Swift's "1e-06" via String(Double) — either form
         // is acceptable as a Python float literal.
-        XCTAssertTrue(src.contains("tolerance = 1e-06") || src.contains("tolerance = 0.000001"),
-                      "Default tolerance (1e-6) missing from: \(src)")
+        XCTAssertTrue(
+            src.contains("tolerance = 1e-06") || src.contains("tolerance = 0.000001"),
+            "Default tolerance (1e-6) missing from: \(src)")
     }
 
     func testRenderer_approxEquality_isValidPython() throws {
@@ -1006,8 +1043,9 @@ final class PatternFamilyTests: XCTestCase {
         let generated = props.testSuites.filter { $0.generatedBy != nil }
         XCTAssertEqual(generated.count, 3)
         for entry in generated {
-            XCTAssertEqual(entry.points, 5,
-                           "family.defaults.points=5 must propagate to every generated entry")
+            XCTAssertEqual(
+                entry.points, 5,
+                "family.defaults.points=5 must propagate to every generated entry")
         }
     }
 
@@ -1046,13 +1084,15 @@ final class PatternFamilyTests: XCTestCase {
             on: fixture.app.db
         )
         let props = try decodeManifest(fixture.setup.manifest)
-        XCTAssertEqual(props.testSuites.map(\.script), [
-            "publictest_a.py",
-            "publictest_bmi_category_01.py",
-            "publictest_bmi_category_02.py",
-            "publictest_bmi_category_03.py",
-            "publictest_b.py",
-        ])
+        XCTAssertEqual(
+            props.testSuites.map(\.script),
+            [
+                "publictest_a.py",
+                "publictest_bmi_category_01.py",
+                "publictest_bmi_category_02.py",
+                "publictest_bmi_category_03.py",
+                "publictest_b.py",
+            ])
     }
 
     /// Regression guard for the v0.4.95 "family results render at the end
@@ -1098,19 +1138,21 @@ final class PatternFamilyTests: XCTestCase {
             authoredItems: [
                 .script(prereq),
                 .family(id: familyWithDep.id),
-                .script(tail)
+                .script(tail),
             ],
             on: fixture.app.db
         )
 
         let props = try decodeManifest(fixture.setup.manifest)
-        XCTAssertEqual(props.testSuites.map(\.script), [
-            "publictest_prereq.py",
-            "publictest_bmi_category_01.py",
-            "publictest_bmi_category_02.py",
-            "publictest_bmi_category_03.py",
-            "publictest_tail.py",
-        ], "Family-with-dep must render in-line with its prerequisite, not pushed to the end of the suite.")
+        XCTAssertEqual(
+            props.testSuites.map(\.script),
+            [
+                "publictest_prereq.py",
+                "publictest_bmi_category_01.py",
+                "publictest_bmi_category_02.py",
+                "publictest_bmi_category_03.py",
+                "publictest_tail.py",
+            ], "Family-with-dep must render in-line with its prerequisite, not pushed to the end of the suite.")
     }
 
     /// The `PUT /families` path invokes `applyPatternFamilies` with
@@ -1160,8 +1202,9 @@ final class PatternFamilyTests: XCTestCase {
             id: "bmi_category", name: "BMI Category Boundaries",
             kind: .boundaryEquality, functionName: "bmi_category",
             paramNames: ["bmi"],
-            defaults: PatternDefaults(tier: .pub, points: 1,
-                                      hint: "values below 18.5 should be 'underweight'"),
+            defaults: PatternDefaults(
+                tier: .pub, points: 1,
+                hint: "values below 18.5 should be 'underweight'"),
             cases: edited
         )
         _ = try await applyPatternFamilies(
@@ -1172,13 +1215,17 @@ final class PatternFamilyTests: XCTestCase {
         )
 
         let props = try decodeManifest(fixture.setup.manifest)
-        XCTAssertEqual(props.testSuites.map(\.script), [
-            "publictest_a.py",
-            "publictest_bmi_category_01.py",
-            "publictest_bmi_category_02.py",
-            "publictest_bmi_category_03.py",
-            "publictest_b.py",
-        ], "Editing a family's cases via the PUT /families legacy path must keep the family at its original middle position — not push it to the end of the suite.")
+        XCTAssertEqual(
+            props.testSuites.map(\.script),
+            [
+                "publictest_a.py",
+                "publictest_bmi_category_01.py",
+                "publictest_bmi_category_02.py",
+                "publictest_bmi_category_03.py",
+                "publictest_b.py",
+            ],
+            "Editing a family's cases via the PUT /families legacy path must keep the family at its original middle position — not push it to the end of the suite."
+        )
     }
 
     /// The Create-page publish flow (`saveNewAssignment`) rebuilds the
@@ -1222,10 +1269,12 @@ final class PatternFamilyTests: XCTestCase {
         // Simulate `saveNewAssignment`'s manifest rebuild: strip
         // generated entries, keep raw entries only.
         let newRawEntries: [ConfiguredSuiteEntry] = [
-            ConfiguredSuiteEntry(script: "publictest_a.py", tier: "public",
-                                 order: 1, dependsOn: [], points: 1, displayName: nil),
-            ConfiguredSuiteEntry(script: "publictest_b.py", tier: "public",
-                                 order: 2, dependsOn: [], points: 1, displayName: nil),
+            ConfiguredSuiteEntry(
+                script: "publictest_a.py", tier: "public",
+                order: 1, dependsOn: [], points: 1, displayName: nil),
+            ConfiguredSuiteEntry(
+                script: "publictest_b.py", tier: "public",
+                order: 2, dependsOn: [], points: 1, displayName: nil),
         ]
         fixture.setup.manifest = try makeWorkerManifestJSON(
             testSuites: newRawEntries, includeMakefile: false,
@@ -1247,13 +1296,17 @@ final class PatternFamilyTests: XCTestCase {
         )
 
         let props = try decodeManifest(fixture.setup.manifest)
-        XCTAssertEqual(props.testSuites.map(\.script), [
-            "publictest_a.py",
-            "publictest_bmi_category_01.py",
-            "publictest_bmi_category_02.py",
-            "publictest_bmi_category_03.py",
-            "publictest_b.py",
-        ], "Create-publish must preserve the draft's family position; otherwise every published family ends up at the bottom.")
+        XCTAssertEqual(
+            props.testSuites.map(\.script),
+            [
+                "publictest_a.py",
+                "publictest_bmi_category_01.py",
+                "publictest_bmi_category_02.py",
+                "publictest_bmi_category_03.py",
+                "publictest_b.py",
+            ],
+            "Create-publish must preserve the draft's family position; otherwise every published family ends up at the bottom."
+        )
     }
 
     // MARK: - Sections (v0.4.96)
@@ -1275,8 +1328,10 @@ final class PatternFamilyTests: XCTestCase {
         XCTAssertEqual(props.sections.map(\.id), ["sec-a"])
         XCTAssertFalse(props.testSuites.isEmpty)
         for entry in props.testSuites {
-            XCTAssertEqual(entry.sectionID, "sec-a",
-                "Every generated entry must inherit the family's authored sectionID; got \(entry.sectionID ?? "nil") for \(entry.script)")
+            XCTAssertEqual(
+                entry.sectionID, "sec-a",
+                "Every generated entry must inherit the family's authored sectionID; got \(entry.sectionID ?? "nil") for \(entry.script)"
+            )
         }
     }
 
@@ -1286,11 +1341,12 @@ final class PatternFamilyTests: XCTestCase {
 
         let sections = [TestSuiteSection(id: "sec-keep", name: "Kept")]
         let authored: [AuthoredSuiteItem] = [
-            .script(AuthoredRawScript(
-                script: "publictest_a.py", tier: .pub, points: 1,
-                displayName: nil, dependsOn: [],
-                sectionID: "sec-gone"  // not in sections list → must be nil'd
-            )),
+            .script(
+                AuthoredRawScript(
+                    script: "publictest_a.py", tier: .pub, points: 1,
+                    displayName: nil, dependsOn: [],
+                    sectionID: "sec-gone"  // not in sections list → must be nil'd
+                ))
         ]
         // Need the script to exist in the zip first.
         try applyScriptChangesToZip(
@@ -1310,7 +1366,8 @@ final class PatternFamilyTests: XCTestCase {
         let props = try decodeManifest(fixture.setup.manifest)
         XCTAssertEqual(props.sections.map(\.id), ["sec-keep"])
         XCTAssertEqual(props.testSuites.count, 1)
-        XCTAssertNil(props.testSuites.first?.sectionID,
+        XCTAssertNil(
+            props.testSuites.first?.sectionID,
             "A sectionID pointing at a section not in the list must be rewritten to nil.")
     }
 
@@ -1352,16 +1409,18 @@ final class PatternFamilyTests: XCTestCase {
             nextFamilies: [bmiFamily()],
             nextChecks: [check],
             authoredItems: [
-                .script(AuthoredRawScript(
-                    script: "publictest_a.py", tier: .pub, points: 1,
-                    displayName: nil, dependsOn: [], sectionID: sectionID
-                )),
+                .script(
+                    AuthoredRawScript(
+                        script: "publictest_a.py", tier: .pub, points: 1,
+                        displayName: nil, dependsOn: [], sectionID: sectionID
+                    )),
                 .family(id: "bmi_category", sectionID: sectionID),
                 .check(id: "df_shape", sectionID: sectionID),
-                .script(AuthoredRawScript(
-                    script: "publictest_b.py", tier: .pub, points: 1,
-                    displayName: nil, dependsOn: [], sectionID: nil
-                )),
+                .script(
+                    AuthoredRawScript(
+                        script: "publictest_b.py", tier: .pub, points: 1,
+                        displayName: nil, dependsOn: [], sectionID: nil
+                    )),
             ],
             sections: sections,
             on: fixture.app.db
@@ -1378,10 +1437,12 @@ final class PatternFamilyTests: XCTestCase {
         // round-trip here so the test exercises the same path the
         // server takes on publish.
         let lossyRawEntries: [ConfiguredSuiteEntry] = [
-            ConfiguredSuiteEntry(script: "publictest_a.py", tier: "public",
-                                 order: 1, dependsOn: [], points: 1, displayName: nil),
-            ConfiguredSuiteEntry(script: "publictest_b.py", tier: "public",
-                                 order: 2, dependsOn: [], points: 1, displayName: nil),
+            ConfiguredSuiteEntry(
+                script: "publictest_a.py", tier: "public",
+                order: 1, dependsOn: [], points: 1, displayName: nil),
+            ConfiguredSuiteEntry(
+                script: "publictest_b.py", tier: "public",
+                order: 2, dependsOn: [], points: 1, displayName: nil),
         ]
 
         // Step 1 of the publish path: rebuild the manifest with all
@@ -1415,7 +1476,8 @@ final class PatternFamilyTests: XCTestCase {
         let props = try decodeManifest(fixture.setup.manifest)
 
         // Sections survive.
-        XCTAssertEqual(props.sections.map(\.id), [sectionID],
+        XCTAssertEqual(
+            props.sections.map(\.id), [sectionID],
             "Sections must survive the publish-from-create rebuild")
 
         // Pattern family + notebook check survive.
@@ -1428,9 +1490,12 @@ final class PatternFamilyTests: XCTestCase {
         //   - df_shape's generated entry was too
         //   - publictest_b.py was authored ungrouped → sectionID nil
         let bySection = Dictionary(grouping: props.testSuites, by: { $0.sectionID })
-        XCTAssertEqual(bySection[sectionID]?.count ?? 0, 5,
-            "Five entries must keep sectionID=\(sectionID): publictest_a.py + 3 generated bmi_category + 1 generated df_shape; got: \(props.testSuites.map { "\($0.script)→\($0.sectionID ?? "nil")" })")
-        XCTAssertEqual(bySection[nil]?.map(\.script), ["publictest_b.py"],
+        XCTAssertEqual(
+            bySection[sectionID]?.count ?? 0, 5,
+            "Five entries must keep sectionID=\(sectionID): publictest_a.py + 3 generated bmi_category + 1 generated df_shape; got: \(props.testSuites.map { "\($0.script)→\($0.sectionID ?? "nil")" })"
+        )
+        XCTAssertEqual(
+            bySection[nil]?.map(\.script), ["publictest_b.py"],
             "publictest_b.py must remain ungrouped after publish")
     }
 
@@ -1454,12 +1519,18 @@ final class PatternFamilyTests: XCTestCase {
         ]
         // Authored: [A, B, A] — A-items split across the B block.
         let authored: [AuthoredSuiteItem] = [
-            .script(AuthoredRawScript(script: "publictest_a.py", tier: .pub, points: 1,
-                displayName: nil, dependsOn: [], sectionID: "sec-a")),
-            .script(AuthoredRawScript(script: "publictest_b.py", tier: .pub, points: 1,
-                displayName: nil, dependsOn: [], sectionID: "sec-b")),
-            .script(AuthoredRawScript(script: "publictest_c.py", tier: .pub, points: 1,
-                displayName: nil, dependsOn: [], sectionID: "sec-a")),
+            .script(
+                AuthoredRawScript(
+                    script: "publictest_a.py", tier: .pub, points: 1,
+                    displayName: nil, dependsOn: [], sectionID: "sec-a")),
+            .script(
+                AuthoredRawScript(
+                    script: "publictest_b.py", tier: .pub, points: 1,
+                    displayName: nil, dependsOn: [], sectionID: "sec-b")),
+            .script(
+                AuthoredRawScript(
+                    script: "publictest_c.py", tier: .pub, points: 1,
+                    displayName: nil, dependsOn: [], sectionID: "sec-a")),
         ]
 
         do {
@@ -1473,7 +1544,8 @@ final class PatternFamilyTests: XCTestCase {
             XCTFail("Expected non-contiguous section arrangement to throw.")
         } catch let abort as AbortError {
             XCTAssertEqual(abort.status, .unprocessableEntity)
-            XCTAssertTrue(abort.reason.contains("contiguous"),
+            XCTAssertTrue(
+                abort.reason.contains("contiguous"),
                 "Error should mention contiguity; got: \(abort.reason)")
         }
     }
@@ -1491,9 +1563,10 @@ final class PatternFamilyTests: XCTestCase {
         // Save with one section, one item in it.
         let initialSections = [TestSuiteSection(id: "sec-temp", name: "Temp")]
         let authored: [AuthoredSuiteItem] = [
-            .script(AuthoredRawScript(
-                script: "publictest_a.py", tier: .pub, points: 1,
-                displayName: nil, dependsOn: [], sectionID: "sec-temp")),
+            .script(
+                AuthoredRawScript(
+                    script: "publictest_a.py", tier: .pub, points: 1,
+                    displayName: nil, dependsOn: [], sectionID: "sec-temp"))
         ]
         _ = try await applyPatternFamilies(
             to: fixture.setup,
@@ -1517,7 +1590,8 @@ final class PatternFamilyTests: XCTestCase {
         let props = try decodeManifest(fixture.setup.manifest)
         XCTAssertTrue(props.sections.isEmpty)
         XCTAssertEqual(props.testSuites.count, 1)
-        XCTAssertNil(props.testSuites.first?.sectionID,
+        XCTAssertNil(
+            props.testSuites.first?.sectionID,
             "Items whose section was deleted must fall back to nil sectionID.")
     }
 
@@ -1554,10 +1628,12 @@ final class PatternFamilyTests: XCTestCase {
         try await setup.save(on: app.db)
 
         let appBox = app
-        return Fixture(app: app, setup: setup, cleanup: {
-            try? FileManager.default.removeItem(atPath: tmpDir)
-            Task { try? await appBox.asyncShutdown() }
-        })
+        return Fixture(
+            app: app, setup: setup,
+            cleanup: {
+                try? FileManager.default.removeItem(atPath: tmpDir)
+                Task { try? await appBox.asyncShutdown() }
+            })
     }
 
     private func writeEmptyZip(at path: String) throws {
@@ -1604,12 +1680,15 @@ final class PatternFamilyTests: XCTestCase {
             kind: .variableEquality,
             functionName: "_",
             paramNames: ["variable"],
-            defaults: PatternDefaults(tier: .pub, points: 1, hint: "Make sure you assigned the value to the variable with this exact name."),
+            defaults: PatternDefaults(
+                tier: .pub, points: 1, hint: "Make sure you assigned the value to the variable with this exact name."),
             cases: [
-                PatternCase(key: "01", label: "beats equals 5",
-                            args: [.string("beats")], expected: .int(5)),
-                PatternCase(key: "02", label: "note_name equals A",
-                            args: [.string("note_name")], expected: .string("A")),
+                PatternCase(
+                    key: "01", label: "beats equals 5",
+                    args: [.string("beats")], expected: .int(5)),
+                PatternCase(
+                    key: "02", label: "note_name equals A",
+                    args: [.string("note_name")], expected: .string("A")),
             ]
         )
     }
@@ -1650,9 +1729,12 @@ final class PatternFamilyTests: XCTestCase {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
-            cases: [PatternCase(key: "01", label: "two args",
-                                args: [.string("x"), .string("y")],
-                                expected: .int(1))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "two args",
+                    args: [.string("x"), .string("y")],
+                    expected: .int(1))
+            ]
         )
         XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
     }
@@ -1661,8 +1743,11 @@ final class PatternFamilyTests: XCTestCase {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
-            cases: [PatternCase(key: "01", label: "number arg",
-                                args: [.int(42)], expected: .int(1))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "number arg",
+                    args: [.int(42)], expected: .int(1))
+            ]
         )
         XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
     }
@@ -1671,8 +1756,11 @@ final class PatternFamilyTests: XCTestCase {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
-            cases: [PatternCase(key: "01", label: "empty name",
-                                args: [.string("")], expected: .int(1))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "empty name",
+                    args: [.string("")], expected: .int(1))
+            ]
         )
         XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
     }
@@ -1681,8 +1769,11 @@ final class PatternFamilyTests: XCTestCase {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
-            cases: [PatternCase(key: "01", label: "bad name",
-                                args: [.string("not a valid name")], expected: .int(1))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "bad name",
+                    args: [.string("not a valid name")], expected: .int(1))
+            ]
         )
         XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
     }
@@ -1693,10 +1784,13 @@ final class PatternFamilyTests: XCTestCase {
         // empty — the renderer and runtime both ignore it.
         let fam = PatternFamily(
             id: "ok", name: "OK", kind: .variableEquality,
-            functionName: "",           // empty is fine
+            functionName: "",  // empty is fine
             paramNames: ["variable"],
-            cases: [PatternCase(key: "01", label: "a",
-                                args: [.string("x")], expected: .int(1))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "a",
+                    args: [.string("x")], expected: .int(1))
+            ]
         )
         try validatePatternFamilies([fam], testSuites: [])
     }
@@ -1711,8 +1805,9 @@ final class PatternFamilyTests: XCTestCase {
             functionName: "say_hi",
             paramNames: ["name"],
             cases: [
-                PatternCase(key: "01", label: "prints greeting",
-                            args: [.string("world")], expected: .string(expected)),
+                PatternCase(
+                    key: "01", label: "prints greeting",
+                    args: [.string("world")], expected: .string(expected))
             ]
         )
     }
@@ -1755,8 +1850,11 @@ final class PatternFamilyTests: XCTestCase {
         let fam = PatternFamily(
             id: "silent", name: "Silent", kind: .stdoutEquality,
             functionName: "say", paramNames: ["x"],
-            cases: [PatternCase(key: "01", label: "prints nothing",
-                                args: [.int(1)], expected: .string(""))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "prints nothing",
+                    args: [.int(1)], expected: .string(""))
+            ]
         )
         try validatePatternFamilies([fam], testSuites: [])
     }
@@ -1765,8 +1863,11 @@ final class PatternFamilyTests: XCTestCase {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .stdoutEquality,
             functionName: "say", paramNames: ["x"],
-            cases: [PatternCase(key: "01", label: "non-string",
-                                args: [.int(1)], expected: .int(42))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "non-string",
+                    args: [.int(1)], expected: .int(42))
+            ]
         )
         XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
     }
@@ -1775,8 +1876,11 @@ final class PatternFamilyTests: XCTestCase {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .stdoutEquality,
             functionName: "say", paramNames: ["x", "y"],
-            cases: [PatternCase(key: "01", label: "wrong arity",
-                                args: [.int(1)], expected: .string("hi"))]
+            cases: [
+                PatternCase(
+                    key: "01", label: "wrong arity",
+                    args: [.int(1)], expected: .string("hi"))
+            ]
         )
         XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
     }
@@ -1787,9 +1891,11 @@ final class PatternFamilyTests: XCTestCase {
         XCTAssertNotEqual(a, b)
     }
 
-    private func assertValidPythonSyntax(_ source: String, label: String,
-                                         file: StaticString = #filePath,
-                                         line: UInt = #line) throws {
+    private func assertValidPythonSyntax(
+        _ source: String, label: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         p.arguments = ["python3", "-c", "import ast, sys; ast.parse(sys.stdin.read())"]
@@ -1803,8 +1909,9 @@ final class PatternFamilyTests: XCTestCase {
         p.waitUntilExit()
         if p.terminationStatus != 0 {
             let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            XCTFail("Generated source for \(label) is not valid Python:\n\(err)\n--- source ---\n\(source)",
-                    file: file, line: line)
+            XCTFail(
+                "Generated source for \(label) is not valid Python:\n\(err)\n--- source ---\n\(source)",
+                file: file, line: line)
         }
     }
 }

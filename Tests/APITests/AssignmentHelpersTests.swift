@@ -1,8 +1,9 @@
-import XCTest
-@testable import chickadee_server
-import Fluent
 import Core
+import Fluent
 import Vapor
+import XCTest
+
+@testable import chickadee_server
 
 final class AssignmentHelpersTests: XCTestCase {
 
@@ -46,26 +47,26 @@ final class AssignmentHelpersTests: XCTestCase {
 
     private func notebookData(language: String = "python", source: String) -> Data {
         let json = """
-        {
-          "cells": [
             {
-              "cell_type": "code",
-              "source": \(String(data: try! JSONEncoder().encode([source]), encoding: .utf8)!)
+              "cells": [
+                {
+                  "cell_type": "code",
+                  "source": \(String(data: try! JSONEncoder().encode([source]), encoding: .utf8)!)
+                }
+              ],
+              "metadata": {
+                "kernelspec": {
+                  "name": "\(language)",
+                  "language": "\(language)"
+                },
+                "language_info": {
+                  "name": "\(language)"
+                }
+              },
+              "nbformat": 4,
+              "nbformat_minor": 5
             }
-          ],
-          "metadata": {
-            "kernelspec": {
-              "name": "\(language)",
-              "language": "\(language)"
-            },
-            "language_info": {
-              "name": "\(language)"
-            }
-          },
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """
+            """
         return Data(json.utf8)
     }
 
@@ -167,7 +168,7 @@ final class AssignmentHelpersTests: XCTestCase {
                     dependsOn: ["01_public.py"],
                     points: 3,
                     displayName: nil
-                )
+                ),
             ],
             includeMakefile: false
         )
@@ -181,18 +182,18 @@ final class AssignmentHelpersTests: XCTestCase {
 
     func testUpdateManifestAddingScriptPreservesMetadataAndAppendsEntry() throws {
         let original = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "browser",
-          "requiredFiles": [],
-          "testSuites": [
-            {"tier": "public", "script": "01_public.py"}
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": {"target": null},
-          "starterNotebook": "starter.ipynb"
-        }
-        """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "browser",
+              "requiredFiles": [],
+              "testSuites": [
+                {"tier": "public", "script": "01_public.py"}
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": {"target": null},
+              "starterNotebook": "starter.ipynb"
+            }
+            """
 
         let updated = try XCTUnwrap(
             updateManifestAddingScript(
@@ -236,7 +237,7 @@ final class AssignmentHelpersTests: XCTestCase {
                     dependsOn: ["01_public.py"],
                     points: 1,
                     displayName: nil
-                )
+                ),
             ],
             includeMakefile: false
         )
@@ -254,9 +255,11 @@ final class AssignmentHelpersTests: XCTestCase {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
             .path
-        try makeZip(at: zipPath, entries: [
-            (name: "tests/run.sh", content: "#!/bin/bash\necho ok\n")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                (name: "tests/run.sh", content: "#!/bin/bash\necho ok\n")
+            ])
 
         let setup = APITestSetup(
             id: "setup_detect_requirements",
@@ -302,7 +305,7 @@ final class AssignmentHelpersTests: XCTestCase {
                     dependsOn: ["01_public.py"],
                     points: 4,
                     displayName: "Release tests"
-                )
+                ),
             ],
             includeMakefile: true,
             gradingMode: "worker",
@@ -327,23 +330,23 @@ final class AssignmentHelpersTests: XCTestCase {
         let suiteFiles = [
             makeFile(named: "01_public.py", contents: "print('public')"),
             makeFile(named: "notes.txt", contents: "support"),
-            makeFile(named: "02_secret.py", contents: "print('secret')")
+            makeFile(named: "02_secret.py", contents: "print('secret')"),
         ]
 
         let configJSON = """
-        [
-          {"index":2,"isTest":true,"tier":"secret","order":7,"dependsOn":["01_public.py"],"points":3,"displayName":"Secret"},
-          {"index":1,"isTest":false,"tier":"support","order":2},
-          {"index":0,"isTest":true,"tier":"public","order":1}
-        ]
-        """
+            [
+              {"index":2,"isTest":true,"tier":"secret","order":7,"dependsOn":["01_public.py"],"points":3,"displayName":"Secret"},
+              {"index":1,"isTest":false,"tier":"support","order":2},
+              {"index":0,"isTest":true,"tier":"public","order":1}
+            ]
+            """
 
         let entries = try buildSuiteEntries(
             suiteFiles: suiteFiles,
             storedNameByIndex: [
                 0: "01_public.py",
                 1: "notes.txt",
-                2: "02_secret.py"
+                2: "02_secret.py",
             ],
             suiteConfigJSON: configJSON
         )
@@ -359,7 +362,7 @@ final class AssignmentHelpersTests: XCTestCase {
         let suiteFiles = [
             makeFile(named: "20_hidden.py", contents: "print('b')"),
             makeFile(named: "readme.txt", contents: "ignore"),
-            makeFile(named: "01_public.sh", contents: "echo test")
+            makeFile(named: "01_public.sh", contents: "echo test"),
         ]
 
         let entries = try buildSuiteEntries(
@@ -367,7 +370,7 @@ final class AssignmentHelpersTests: XCTestCase {
             storedNameByIndex: [
                 0: "20_hidden.py",
                 1: "readme.txt",
-                2: "01_public.sh"
+                2: "01_public.sh",
             ],
             suiteConfigJSON: nil
         )
@@ -382,7 +385,7 @@ final class AssignmentHelpersTests: XCTestCase {
             makeFile(named: "02_bash", contents: "#!/usr/bin/env bash\necho ok\n"),
             makeFile(named: "03_notes", contents: "echo support but no shebang\n"),
             makeFile(named: "04_python.py", contents: "print('ok')\n"),
-            makeFile(named: "BMI Boundary Cases", contents: "#!/usr/bin/env python3\nprint('ok')\n")
+            makeFile(named: "BMI Boundary Cases", contents: "#!/usr/bin/env python3\nprint('ok')\n"),
         ]
 
         let entries = try buildSuiteEntries(
@@ -392,7 +395,7 @@ final class AssignmentHelpersTests: XCTestCase {
                 1: "02_bash",
                 2: "03_notes",
                 3: "04_python.py",
-                4: "BMI Boundary Cases"
+                4: "BMI Boundary Cases",
             ],
             suiteConfigJSON: nil
         )
@@ -405,23 +408,23 @@ final class AssignmentHelpersTests: XCTestCase {
         let suiteFiles = [
             makeFile(named: "assignment.ipynb", contents: "{}"),
             makeFile(named: "test_q1.py", contents: "print('q1')"),
-            makeFile(named: "notes.txt", contents: "support")
+            makeFile(named: "notes.txt", contents: "support"),
         ]
 
         let configJSON = """
-        [
-          {"index":0,"tier":"support","order":1},
-          {"index":1,"tier":"release","order":2,"points":2},
-          {"index":2,"tier":"support","order":3}
-        ]
-        """
+            [
+              {"index":0,"tier":"support","order":1},
+              {"index":1,"tier":"release","order":2,"points":2},
+              {"index":2,"tier":"support","order":3}
+            ]
+            """
 
         let entries = try buildSuiteEntries(
             suiteFiles: suiteFiles,
             storedNameByIndex: [
                 0: "assignment.ipynb",
                 1: "test_q1.py",
-                2: "notes.txt"
+                2: "notes.txt",
             ],
             suiteConfigJSON: configJSON
         )
@@ -441,15 +444,15 @@ final class AssignmentHelpersTests: XCTestCase {
         let suiteFiles = [
             makeFile(named: "tests.py", contents: "print('one')"),
             makeFile(named: "nested/tests.py", contents: "print('two')"),
-            makeFile(named: "Makefile", contents: "all:\n\t@echo hi\n")
+            makeFile(named: "Makefile", contents: "all:\n\t@echo hi\n"),
         ]
         let configJSON = """
-        [
-          {"index":0,"isTest":true,"tier":"public","order":1},
-          {"index":1,"isTest":true,"tier":"secret","order":2},
-          {"index":2,"isTest":false,"tier":"support","order":3}
-        ]
-        """
+            [
+              {"index":0,"isTest":true,"tier":"public","order":1},
+              {"index":1,"isTest":true,"tier":"secret","order":2},
+              {"index":2,"isTest":false,"tier":"support","order":3}
+            ]
+            """
 
         let package = try createRunnerSetupZip(
             suiteFiles: suiteFiles,
@@ -474,13 +477,15 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(at: zipPath, entries: [
-            ("assignment.ipynb", "{}"),
-            ("solution.ipynb", "{}"),
-            ("tests.py", "print('test')"),
-            ("data/sample.csv", "a,b\n1,2\n"),
-            ("notes.txt", "hello")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                ("assignment.ipynb", "{}"),
+                ("solution.ipynb", "{}"),
+                ("tests.py", "print('test')"),
+                ("data/sample.csv", "a,b\n1,2\n"),
+                ("notes.txt", "hello"),
+            ])
 
         let testSetupsDirectory = tempRoot.appendingPathComponent("testsetups").path + "/"
         let sharedDir = testSetupsDirectory + "shared/setup_123/"
@@ -514,7 +519,7 @@ final class AssignmentHelpersTests: XCTestCase {
             "files/",
             "jupyterlite/files/",
             "jupyterlite/lab/files/",
-            "jupyterlite/notebooks/files/"
+            "jupyterlite/notebooks/files/",
         ]
         for root in roots {
             try FileManager.default.createDirectory(
@@ -643,28 +648,30 @@ final class AssignmentHelpersTests: XCTestCase {
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
         let notebookPath = tempRoot.appendingPathComponent("starter.ipynb").path
         try Data("{}".utf8).write(to: URL(fileURLWithPath: notebookPath))
-        try makeZip(at: zipPath, entries: [
-            ("assignment.ipynb", "{}"),
-            ("02_release.py", "print('release')"),
-            ("notes.txt", "notes"),
-            ("01_public.py", "print('public')")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                ("assignment.ipynb", "{}"),
+                ("02_release.py", "print('release')"),
+                ("notes.txt", "notes"),
+                ("01_public.py", "print('public')"),
+            ])
 
         let setup = APITestSetup(
             id: "setup_1",
             manifest: """
-            {
-              "schemaVersion": 1,
-              "gradingMode": "worker",
-              "requiredFiles": [],
-              "testSuites": [
-                {"tier":"public","script":"01_public.py","name":"Public test"},
-                {"tier":"release","script":"02_release.py","dependsOn":["01_public.py"],"points":3}
-              ],
-              "timeLimitSeconds": 10,
-              "makefile": null
-            }
-            """,
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [
+                    {"tier":"public","script":"01_public.py","name":"Public test"},
+                    {"tier":"release","script":"02_release.py","dependsOn":["01_public.py"],"points":3}
+                  ],
+                  "timeLimitSeconds": 10,
+                  "makefile": null
+                }
+                """,
             zipPath: zipPath,
             notebookPath: notebookPath,
             courseID: UUID()
@@ -694,32 +701,34 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(at: zipPath, entries: [
-            ("assignment.ipynb", "{}"),
-            ("solution.ipynb", "{}"),
-            ("02_release.py", "print('release')"),
-            ("readme.txt", "support")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                ("assignment.ipynb", "{}"),
+                ("solution.ipynb", "{}"),
+                ("02_release.py", "print('release')"),
+                ("readme.txt", "support"),
+            ])
 
         let uploads = [
             makeFile(named: "10_new.py", contents: "print('new')"),
-            makeFile(named: "extra.txt", contents: "extra")
+            makeFile(named: "extra.txt", contents: "extra"),
         ]
 
         let resolved = try resolveEditSuiteFiles(
             setupZipPath: zipPath,
             setupManifestJSON: """
-            {
-              "schemaVersion": 1,
-              "gradingMode": "worker",
-              "requiredFiles": [],
-              "testSuites": [
-                {"tier":"release","script":"02_release.py","points":2}
-              ],
-              "timeLimitSeconds": 10,
-              "makefile": null
-            }
-            """,
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [
+                    {"tier":"release","script":"02_release.py","points":2}
+                  ],
+                  "timeLimitSeconds": 10,
+                  "makefile": null
+                }
+                """,
             uploadedSuiteFiles: uploads,
             suiteConfigJSON: nil
         )
@@ -739,14 +748,16 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(at: zipPath, entries: [
-            ("existing.py", "print('existing')"),
-            ("keep.txt", "keep")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                ("existing.py", "print('existing')"),
+                ("keep.txt", "keep"),
+            ])
 
         let uploads = [
             makeFile(named: "nested/new.py", contents: "print('upload')"),
-            makeFile(named: "", contents: "fallback name")
+            makeFile(named: "", contents: "fallback name"),
         ]
 
         let resolved = try resolveEditSuiteFiles(
@@ -754,14 +765,14 @@ final class AssignmentHelpersTests: XCTestCase {
             setupManifestJSON: "{}",
             uploadedSuiteFiles: uploads,
             suiteConfigJSON: """
-            [
-              {"source":"existing","name":"existing.py","isTest":true,"tier":"SECRET","order":9,"dependsOn":["dep.py"],"points":4,"displayName":"Existing"},
-              {"source":"upload","index":0,"isTest":true,"tier":"release","order":2},
-              {"source":"upload","index":1,"isTest":false,"tier":"support","isIncluded":false},
-              {"source":"existing","name":"../bad.py","isTest":true,"tier":"public"},
-              {"source":"unknown","name":"skip.py","isTest":true}
-            ]
-            """
+                [
+                  {"source":"existing","name":"existing.py","isTest":true,"tier":"SECRET","order":9,"dependsOn":["dep.py"],"points":4,"displayName":"Existing"},
+                  {"source":"upload","index":0,"isTest":true,"tier":"release","order":2},
+                  {"source":"upload","index":1,"isTest":false,"tier":"support","isIncluded":false},
+                  {"source":"existing","name":"../bad.py","isTest":true,"tier":"public"},
+                  {"source":"unknown","name":"skip.py","isTest":true}
+                ]
+                """
         )
 
         XCTAssertEqual(resolved.files.map(\.filename), ["existing.py", "new.py"])
@@ -783,21 +794,23 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(at: zipPath, entries: [
-            ("test_q1.py", "print('q1')"),
-            ("notes.txt", "notes")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                ("test_q1.py", "print('q1')"),
+                ("notes.txt", "notes"),
+            ])
 
         let resolved = try resolveEditSuiteFiles(
             setupZipPath: zipPath,
             setupManifestJSON: "{}",
             uploadedSuiteFiles: [],
             suiteConfigJSON: """
-            [
-              {"source":"existing","name":"test_q1.py","isTest":false,"tier":"public","order":1},
-              {"source":"existing","name":"notes.txt","tier":"support","order":2}
-            ]
-            """
+                [
+                  {"source":"existing","name":"test_q1.py","isTest":false,"tier":"public","order":1},
+                  {"source":"existing","name":"notes.txt","tier":"support","order":2}
+                ]
+                """
         )
 
         let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
@@ -863,14 +876,14 @@ final class AssignmentHelpersTests: XCTestCase {
         _ = try createRunnerSetupZip(
             suiteFiles: [
                 makeFile(named: "keep.py", contents: "print('keep')"),
-                makeFile(named: "remove.py", contents: "print('remove')")
+                makeFile(named: "remove.py", contents: "print('remove')"),
             ],
             suiteConfigJSON: """
-            [
-              {"index":0,"isTest":true,"tier":"public","points":1},
-              {"index":1,"isTest":true,"tier":"public","points":1}
-            ]
-            """,
+                [
+                  {"index":0,"isTest":true,"tier":"public","points":1},
+                  {"index":1,"isTest":true,"tier":"public","points":1}
+                ]
+                """,
             zipPath: zipPath
         )
 
@@ -879,10 +892,10 @@ final class AssignmentHelpersTests: XCTestCase {
                 makeFile(named: "keep.py", contents: "print('keep-updated')")
             ],
             suiteConfigJSON: """
-            [
-              {"index":0,"isTest":true,"tier":"public","points":1}
-            ]
-            """,
+                [
+                  {"index":0,"isTest":true,"tier":"public","points":1}
+                ]
+                """,
             zipPath: zipPath
         )
 
@@ -902,20 +915,22 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("draft.zip").path
-        try makeZip(at: zipPath, entries: [
-            ("test_existing.py", "print('existing')"),
-            ("helper.txt", "support data")
-        ])
+        try makeZip(
+            at: zipPath,
+            entries: [
+                ("test_existing.py", "print('existing')"),
+                ("helper.txt", "support data"),
+            ])
 
         // Config as sent by syncConfig() when user has one 'existing' item and one generated 'upload' item.
         // This is the detect-functions scenario: 'existing' row has no 'index', causing SuiteConfigRow
         // decode to fail and the existing test to be dropped from the manifest.
         let configJSON = """
-        [
-          {"source":"existing","name":"test_existing.py","isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null},
-          {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
-        ]
-        """
+            [
+              {"source":"existing","name":"test_existing.py","isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null},
+              {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
+            ]
+            """
         let uploadedFile = makeFile(named: "test_generated.py", contents: "print('generated')")
 
         let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
@@ -942,8 +957,8 @@ final class AssignmentHelpersTests: XCTestCase {
     func testMergeExistingFilesPassesThroughPureUploadConfig() throws {
         // When no 'existing' rows are present the file list and row count should be unchanged.
         let configJSON = """
-        [{"source":"upload","index":0,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1}]
-        """
+            [{"source":"upload","index":0,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1}]
+            """
         let file = makeFile(named: "test.py", contents: "pass")
 
         let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
@@ -971,19 +986,21 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let draftZipPath = tempRoot.appendingPathComponent("draft.zip").path
-        try makeZip(at: draftZipPath, entries: [
-            ("test_existing.py", "print('existing test')")
-        ])
+        try makeZip(
+            at: draftZipPath,
+            entries: [
+                ("test_existing.py", "print('existing test')")
+            ])
 
         let outputZipPath = tempRoot.appendingPathComponent("output.zip").path
 
         // Simulate the config JSON produced by syncConfig() with one 'existing' and one 'upload' row.
         let configJSON = """
-        [
-          {"source":"existing","name":"test_existing.py","isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null},
-          {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
-        ]
-        """
+            [
+              {"source":"existing","name":"test_existing.py","isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1,"displayName":null},
+              {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
+            ]
+            """
         let generatedFile = makeFile(named: "test_generated.py", contents: "print('generated test')")
 
         let (mergedFiles, mergedConfig) = mergeExistingFilesIntoSuiteFiles(
@@ -1010,35 +1027,37 @@ final class AssignmentHelpersTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let originalZipPath = tempRoot.appendingPathComponent("practice.zip").path
-        try makeZip(at: originalZipPath, entries: [
-            ("assignment.ipynb", "{}"),
-            ("test.properties.json", #"{"gradingMode":"browser"}"#),
-            ("test_q1_bmi.py", "print('q1')"),
-            ("test_q2_bp.py", "print('q2')"),
-            ("test_q3_hr_zone.py", "print('q3')"),
-            ("test_q4_patients.py", "print('q4')"),
-            ("test_q5_dose.py", "print('q5')"),
-            ("test_q6_risk.py", "print('q6')")
-        ])
+        try makeZip(
+            at: originalZipPath,
+            entries: [
+                ("assignment.ipynb", "{}"),
+                ("test.properties.json", #"{"gradingMode":"browser"}"#),
+                ("test_q1_bmi.py", "print('q1')"),
+                ("test_q2_bp.py", "print('q2')"),
+                ("test_q3_hr_zone.py", "print('q3')"),
+                ("test_q4_patients.py", "print('q4')"),
+                ("test_q5_dose.py", "print('q5')"),
+                ("test_q6_risk.py", "print('q6')"),
+            ])
 
         let manifest = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "browser",
-          "requiredFiles": [],
-          "testSuites": [
-            {"tier":"public","script":"test_q1_bmi.py"},
-            {"tier":"public","script":"test_q2_bp.py"},
-            {"tier":"public","script":"test_q3_hr_zone.py"},
-            {"tier":"public","script":"test_q4_patients.py"},
-            {"tier":"release","script":"test_q5_dose.py"},
-            {"tier":"release","script":"test_q6_risk.py"}
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": null,
-          "starterNotebook": "assignment.ipynb"
-        }
-        """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "browser",
+              "requiredFiles": [],
+              "testSuites": [
+                {"tier":"public","script":"test_q1_bmi.py"},
+                {"tier":"public","script":"test_q2_bp.py"},
+                {"tier":"public","script":"test_q3_hr_zone.py"},
+                {"tier":"public","script":"test_q4_patients.py"},
+                {"tier":"release","script":"test_q5_dose.py"},
+                {"tier":"release","script":"test_q6_risk.py"}
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": null,
+              "starterNotebook": "assignment.ipynb"
+            }
+            """
 
         let resolved = try resolveEditSuiteFiles(
             setupZipPath: originalZipPath,
@@ -1056,7 +1075,7 @@ final class AssignmentHelpersTests: XCTestCase {
                 "test_q3_hr_zone.py",
                 "test_q4_patients.py",
                 "test_q5_dose.py",
-                "test_q6_risk.py"
+                "test_q6_risk.py",
             ]
         )
 
@@ -1087,7 +1106,7 @@ final class AssignmentHelpersTests: XCTestCase {
                 "test_q4_patients.py",
                 "test_q5_dose.py",
                 "test_q6_risk.py",
-                "test.properties.json"
+                "test.properties.json",
             ]
         )
         XCTAssertEqual(result.existingSuiteRows.last?.tier, "support")

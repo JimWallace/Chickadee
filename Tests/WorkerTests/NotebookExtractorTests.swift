@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import chickadee_runner
 
 final class NotebookExtractorTests: XCTestCase {
@@ -201,22 +202,22 @@ final class NotebookExtractorTests: XCTestCase {
     func testMixedCellBMIExample() {
         // Mirrors the motivating example from the issue.
         let source = """
-        BMI_UNDERWEIGHT_MAX: float = 18.5
-        BMI_NORMAL_MAX: float = 25.0
-        BMI_OVERWEIGHT_MAX: float = 30.0
+            BMI_UNDERWEIGHT_MAX: float = 18.5
+            BMI_NORMAL_MAX: float = 25.0
+            BMI_OVERWEIGHT_MAX: float = 30.0
 
-        assert BMI_NORMAL_MAX > BMI_UNDERWEIGHT_MAX
+            assert BMI_NORMAL_MAX > BMI_UNDERWEIGHT_MAX
 
-        def bmi_category(b: float) -> str:
-            if b < BMI_UNDERWEIGHT_MAX:
-                return "underweight"
-            elif b < BMI_NORMAL_MAX:
-                return "normal weight"
-            elif b < BMI_OVERWEIGHT_MAX:
-                return "overweight"
-            else:
-                return "obese"
-        """
+            def bmi_category(b: float) -> str:
+                if b < BMI_UNDERWEIGHT_MAX:
+                    return "underweight"
+                elif b < BMI_NORMAL_MAX:
+                    return "normal weight"
+                elif b < BMI_OVERWEIGHT_MAX:
+                    return "overweight"
+                else:
+                    return "obese"
+            """
         let output = extractor.sanitizeCellForModule(source)
         let modLevel = moduleLevel(in: output)
 
@@ -234,12 +235,12 @@ final class NotebookExtractorTests: XCTestCase {
         // Both constants and function at module level: the function can reference
         // the constants when the module is imported by the test runner.
         let source = """
-        MAX_VALUE = 100
-        MIN_VALUE = 0
+            MAX_VALUE = 100
+            MIN_VALUE = 0
 
-        def clamp(x):
-            return max(MIN_VALUE, min(MAX_VALUE, x))
-        """
+            def clamp(x):
+                return max(MIN_VALUE, min(MAX_VALUE, x))
+            """
         let output = extractor.sanitizeCellForModule(source)
         let modLevel = moduleLevel(in: output)
         XCTAssertTrue(modLevel.contains("MAX_VALUE = 100"))
@@ -252,11 +253,11 @@ final class NotebookExtractorTests: XCTestCase {
         // Safe assignments and function defs should remain at module level even
         // when interspersed with quarantined calls.
         let source = """
-        X = 10
-        print(X)
-        Y = 20
-        print(Y)
-        """
+            X = 10
+            print(X)
+            Y = 20
+            print(Y)
+            """
         let output = extractor.sanitizeCellForModule(source)
         let modLevel = moduleLevel(in: output)
         XCTAssertTrue(modLevel.contains("X = 10"))

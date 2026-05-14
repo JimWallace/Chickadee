@@ -16,8 +16,8 @@
 // follows Python's last-assignment-wins).  For Slice 1's combined scope
 // this is `globals + section + family`.
 
-import Foundation
 import Core
+import Foundation
 
 enum TestScriptVariablePrepender {
 
@@ -56,8 +56,10 @@ enum TestScriptVariablePrepender {
     /// returns the body verbatim.  When `variables` is empty AND the
     /// body has an existing block, that block is stripped (cleanup
     /// path for removing all variables).
-    static func prependToRawScript(_ originalBody: String,
-                                   variables: [FamilyVariable]) -> String {
+    static func prependToRawScript(
+        _ originalBody: String,
+        variables: [FamilyVariable]
+    ) -> String {
         let stripped = stripExistingBlock(originalBody)
         guard !variables.isEmpty else { return stripped }
 
@@ -65,21 +67,26 @@ enum TestScriptVariablePrepender {
 
         // Detect a leading shebang so we can keep it on line 1.
         if stripped.hasPrefix("#!") {
-            let lines = stripped.split(separator: "\n",
-                                       maxSplits: 1,
-                                       omittingEmptySubsequences: false)
+            let lines = stripped.split(
+                separator: "\n",
+                maxSplits: 1,
+                omittingEmptySubsequences: false)
             let shebang = String(lines.first ?? "")
-            let rest    = lines.count > 1 ? String(lines[1]) : ""
-            return [shebang,
-                    rawScriptBannerComment,
-                    decls,
-                    "",
-                    rest].joined(separator: "\n")
-        }
-        return [rawScriptBannerComment,
+            let rest = lines.count > 1 ? String(lines[1]) : ""
+            return [
+                shebang,
+                rawScriptBannerComment,
                 decls,
                 "",
-                stripped].joined(separator: "\n")
+                rest,
+            ].joined(separator: "\n")
+        }
+        return [
+            rawScriptBannerComment,
+            decls,
+            "",
+            stripped,
+        ].joined(separator: "\n")
     }
 
     /// Removes a previously-emitted Chickadee inputs block from `body`.
@@ -88,7 +95,8 @@ enum TestScriptVariablePrepender {
     /// no banner is present.
     static func stripExistingBlock(_ body: String) -> String {
         guard body.contains(rawScriptBannerComment) else { return body }
-        var lines = body
+        var lines =
+            body
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
         guard let startIdx = lines.firstIndex(of: rawScriptBannerComment) else {

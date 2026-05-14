@@ -15,10 +15,10 @@
 // here is what causes runners to fetch a fresh copy after an edit — there is
 // no separate bust-the-cache step.
 
-import Foundation
 import Core
-import Vapor
 import Fluent
+import Foundation
+import Vapor
 
 // MARK: - Authored suite model
 
@@ -34,14 +34,16 @@ struct AuthoredRawScript: Equatable {
     let dependsOn: [String]
     let sectionID: String?
 
-    init(script: String, tier: TestTier, points: Int,
-         displayName: String?, dependsOn: [String], sectionID: String? = nil) {
-        self.script      = script
-        self.tier        = tier
-        self.points      = points
+    init(
+        script: String, tier: TestTier, points: Int,
+        displayName: String?, dependsOn: [String], sectionID: String? = nil
+    ) {
+        self.script = script
+        self.tier = tier
+        self.points = points
         self.displayName = displayName
-        self.dependsOn   = dependsOn
-        self.sectionID   = sectionID
+        self.dependsOn = dependsOn
+        self.sectionID = sectionID
     }
 }
 
@@ -91,10 +93,10 @@ func familyDepToken(_ familyID: String) -> String {
 // MARK: - Outcome
 
 struct PatternFamilyApplyResult: Equatable {
-    let writtenFiles:  [String]
-    let deletedFiles:  [String]
+    let writtenFiles: [String]
+    let deletedFiles: [String]
     let manifestBefore: String
-    let manifestAfter:  String
+    let manifestAfter: String
 }
 
 // MARK: - Entry point
@@ -130,7 +132,8 @@ func applyPatternFamilies(
 
     let oldManifest = setup.manifest
     guard let data = oldManifest.data(using: .utf8),
-          let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    else {
         throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
     }
 
@@ -156,7 +159,8 @@ func applyPatternFamilies(
     var seenSectionIDs: Set<String> = []
     for s in resolvedSections {
         guard seenSectionIDs.insert(s.id).inserted else {
-            throw Abort(.unprocessableEntity,
+            throw Abort(
+                .unprocessableEntity,
                 reason: "Duplicate section id '\(s.id)'.")
         }
     }
@@ -191,14 +195,15 @@ func applyPatternFamilies(
         itemsForOrdering = authoredItems.map { item in
             switch item {
             case .script(let s):
-                return .script(AuthoredRawScript(
-                    script: s.script,
-                    tier: s.tier,
-                    points: s.points,
-                    displayName: s.displayName,
-                    dependsOn: s.dependsOn,
-                    sectionID: normaliseSectionID(s.sectionID)
-                ))
+                return .script(
+                    AuthoredRawScript(
+                        script: s.script,
+                        tier: s.tier,
+                        points: s.points,
+                        displayName: s.displayName,
+                        dependsOn: s.dependsOn,
+                        sectionID: normaliseSectionID(s.sectionID)
+                    ))
             case .family(let id, let sid):
                 return .family(id: id, sectionID: normaliseSectionID(sid))
             case .check(let id, let sid):
@@ -229,38 +234,42 @@ func applyPatternFamilies(
         // or check-modal save, which goes through the legacy
         // (authoredItems == nil) path.
         let nextFamilyIDs = Set(nextFamilies.map(\.id))
-        let nextCheckIDs  = Set(resolvedChecks.map(\.id))
+        let nextCheckIDs = Set(resolvedChecks.map(\.id))
         var rebuilt: [AuthoredSuiteItem] = []
         var seenFamilyIDs: Set<String> = []
-        var seenCheckIDs:  Set<String> = []
+        var seenCheckIDs: Set<String> = []
         for entry in props.testSuites {
             if let fid = entry.generatedBy {
                 guard !seenFamilyIDs.contains(fid) else { continue }
                 seenFamilyIDs.insert(fid)
                 if nextFamilyIDs.contains(fid) {
-                    rebuilt.append(.family(
-                        id: fid,
-                        sectionID: normaliseSectionID(entry.sectionID)
-                    ))
+                    rebuilt.append(
+                        .family(
+                            id: fid,
+                            sectionID: normaliseSectionID(entry.sectionID)
+                        ))
                 }
             } else if let cid = entry.generatedByCheck {
                 guard !seenCheckIDs.contains(cid) else { continue }
                 seenCheckIDs.insert(cid)
                 if nextCheckIDs.contains(cid) {
-                    rebuilt.append(.check(
-                        id: cid,
-                        sectionID: normaliseSectionID(entry.sectionID)
-                    ))
+                    rebuilt.append(
+                        .check(
+                            id: cid,
+                            sectionID: normaliseSectionID(entry.sectionID)
+                        ))
                 }
             } else {
-                rebuilt.append(.script(AuthoredRawScript(
-                    script: entry.script,
-                    tier: entry.tier,
-                    points: entry.points,
-                    displayName: entry.name,
-                    dependsOn: entry.dependsOn,
-                    sectionID: normaliseSectionID(entry.sectionID)
-                )))
+                rebuilt.append(
+                    .script(
+                        AuthoredRawScript(
+                            script: entry.script,
+                            tier: entry.tier,
+                            points: entry.points,
+                            displayName: entry.name,
+                            dependsOn: entry.dependsOn,
+                            sectionID: normaliseSectionID(entry.sectionID)
+                        )))
             }
         }
         for f in nextFamilies where !seenFamilyIDs.contains(f.id) {
@@ -284,9 +293,9 @@ func applyPatternFamilies(
         for item in itemsForOrdering {
             let sid: String? = {
                 switch item {
-                case .script(let s):        return s.sectionID
-                case .family(_, let sid):   return sid
-                case .check(_, let sid):    return sid
+                case .script(let s): return s.sectionID
+                case .family(_, let sid): return sid
+                case .check(_, let sid): return sid
                 }
             }()
             if !haveStarted {
@@ -298,9 +307,10 @@ func applyPatternFamilies(
                 seenCompleted.insert(current)
                 if seenCompleted.contains(sid) {
                     let label = sid ?? "<ungrouped>"
-                    throw Abort(.unprocessableEntity,
-                        reason: "Items with sectionID '\(label)' are not contiguous; " +
-                                "group all items of a section together before saving.")
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason: "Items with sectionID '\(label)' are not contiguous; "
+                            + "group all items of a section together before saving.")
                 }
                 current = sid
             }
@@ -338,7 +348,8 @@ func applyPatternFamilies(
     for r in authoredRawEntries {
         for dep in r.dependsOn {
             if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Script '\(r.script)' depends on unknown pattern family '\(fid)'.")
             }
         }
@@ -347,11 +358,13 @@ func applyPatternFamilies(
         for dep in f.dependsOn {
             if let fid = parseFamilyDepToken(dep) {
                 if fid == f.id {
-                    throw Abort(.unprocessableEntity,
+                    throw Abort(
+                        .unprocessableEntity,
                         reason: "Pattern family '\(f.id)' cannot depend on itself.")
                 }
                 guard knownFamilyIDs.contains(fid) else {
-                    throw Abort(.unprocessableEntity,
+                    throw Abort(
+                        .unprocessableEntity,
                         reason: "Pattern family '\(f.id)' depends on unknown family '\(fid)'.")
                 }
             }
@@ -365,7 +378,8 @@ func applyPatternFamilies(
     for c in resolvedChecks {
         for dep in c.dependsOn {
             if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
-                throw Abort(.unprocessableEntity,
+                throw Abort(
+                    .unprocessableEntity,
                     reason: "Notebook check '\(c.id)' depends on unknown pattern family '\(fid)'.")
             }
         }
@@ -412,7 +426,9 @@ func applyPatternFamilies(
 
     var renderedByFilename: [String: GeneratedScript] = [:]
     for family in nextFamilies {
-        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables) {
+        for generated in renderPatternFamily(
+            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables)
+        {
             renderedByFilename[generated.filename] = generated
         }
     }
@@ -461,8 +477,11 @@ func applyPatternFamilies(
         // raw script to clash with a family-generated name), the family
         // version wins — skip the raw-script overlay.
         guard renderedByFilename[filename] == nil else { continue }
-        guard let existing = readScriptFromZip(zipPath: setup.zipPath,
-                                               filename: filename) else { continue }
+        guard
+            let existing = readScriptFromZip(
+                zipPath: setup.zipPath,
+                filename: filename)
+        else { continue }
         let sectionVars: [FamilyVariable] = {
             guard let sid = s.sectionID else { return [] }
             return sectionVarsByID[sid] ?? []
@@ -527,28 +546,31 @@ func applyPatternFamilies(
     var newConfigured: [ConfiguredSuiteEntry] = []
     var order = 0
     var emittedFamilyIDs: Set<String> = []
-    var emittedCheckIDs:  Set<String> = []
+    var emittedCheckIDs: Set<String> = []
 
     for item in itemsForOrdering {
         switch item {
         case .script(let s):
             order += 1
-            newConfigured.append(ConfiguredSuiteEntry(
-                script:      s.script,
-                tier:        s.tier.rawValue,
-                order:       order,
-                dependsOn:   expandDeps(s.dependsOn),
-                points:      s.points,
-                displayName: s.displayName,
-                generatedBy: nil,
-                sectionID:   s.sectionID
-            ))
+            newConfigured.append(
+                ConfiguredSuiteEntry(
+                    script: s.script,
+                    tier: s.tier.rawValue,
+                    order: order,
+                    dependsOn: expandDeps(s.dependsOn),
+                    points: s.points,
+                    displayName: s.displayName,
+                    generatedBy: nil,
+                    sectionID: s.sectionID
+                ))
 
         case .family(let fid, let familySection):
             guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
             emittedFamilyIDs.insert(fid)
             let inherited = expandDeps(family.dependsOn)
-            for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables) {
+            for generated in renderPatternFamily(
+                family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables)
+            {
                 order += 1
                 let prior = oldEntryByScript[generated.filename]
                 let perCase = expandDeps(prior?.dependsOn ?? [])
@@ -558,36 +580,39 @@ func applyPatternFamilies(
                     guard seen.insert(d).inserted else { continue }
                     combined.append(d)
                 }
-                newConfigured.append(ConfiguredSuiteEntry(
-                    script:      generated.filename,
-                    tier:        generated.tier.rawValue,
-                    order:       order,
-                    dependsOn:   combined,
-                    points:      generated.points,
-                    displayName: generated.displayName,
-                    generatedBy: generated.familyID,
-                    sectionID:   familySection
-                ))
+                newConfigured.append(
+                    ConfiguredSuiteEntry(
+                        script: generated.filename,
+                        tier: generated.tier.rawValue,
+                        order: order,
+                        dependsOn: combined,
+                        points: generated.points,
+                        displayName: generated.displayName,
+                        generatedBy: generated.familyID,
+                        sectionID: familySection
+                    ))
             }
 
         case .check(let cid, let checkSection):
             guard let check = checkByID[cid],
-                  let generated = renderedCheckByID[cid],
-                  !emittedCheckIDs.contains(cid) else { continue }
+                let generated = renderedCheckByID[cid],
+                !emittedCheckIDs.contains(cid)
+            else { continue }
             emittedCheckIDs.insert(cid)
             order += 1
             let inherited = expandDeps(check.dependsOn)
-            newConfigured.append(ConfiguredSuiteEntry(
-                script:           generated.filename,
-                tier:             generated.tier.rawValue,
-                order:            order,
-                dependsOn:        inherited,
-                points:           generated.points,
-                displayName:      generated.displayName,
-                generatedBy:      nil,
-                generatedByCheck: check.id,
-                sectionID:        checkSection
-            ))
+            newConfigured.append(
+                ConfiguredSuiteEntry(
+                    script: generated.filename,
+                    tier: generated.tier.rawValue,
+                    order: order,
+                    dependsOn: inherited,
+                    points: generated.points,
+                    displayName: generated.displayName,
+                    generatedBy: nil,
+                    generatedByCheck: check.id,
+                    sectionID: checkSection
+                ))
         }
     }
 
@@ -596,7 +621,9 @@ func applyPatternFamilies(
     // the caller forgot to include a newly added family).
     for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
         let inherited = expandDeps(family.dependsOn)
-        for generated in renderPatternFamily(family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables) {
+        for generated in renderPatternFamily(
+            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables)
+        {
             order += 1
             let prior = oldEntryByScript[generated.filename]
             let perCase = expandDeps(prior?.dependsOn ?? [])
@@ -606,16 +633,17 @@ func applyPatternFamilies(
                 guard seen.insert(d).inserted else { continue }
                 combined.append(d)
             }
-            newConfigured.append(ConfiguredSuiteEntry(
-                script:      generated.filename,
-                tier:        generated.tier.rawValue,
-                order:       order,
-                dependsOn:   combined,
-                points:      generated.points,
-                displayName: generated.displayName,
-                generatedBy: generated.familyID,
-                sectionID:   nil
-            ))
+            newConfigured.append(
+                ConfiguredSuiteEntry(
+                    script: generated.filename,
+                    tier: generated.tier.rawValue,
+                    order: order,
+                    dependsOn: combined,
+                    points: generated.points,
+                    displayName: generated.displayName,
+                    generatedBy: generated.familyID,
+                    sectionID: nil
+                ))
         }
     }
 
@@ -625,27 +653,28 @@ func applyPatternFamilies(
         guard let generated = renderedCheckByID[check.id] else { continue }
         order += 1
         let inherited = expandDeps(check.dependsOn)
-        newConfigured.append(ConfiguredSuiteEntry(
-            script:           generated.filename,
-            tier:             generated.tier.rawValue,
-            order:            order,
-            dependsOn:        inherited,
-            points:           generated.points,
-            displayName:      generated.displayName,
-            generatedBy:      nil,
-            generatedByCheck: check.id,
-            sectionID:        nil
-        ))
+        newConfigured.append(
+            ConfiguredSuiteEntry(
+                script: generated.filename,
+                tier: generated.tier.rawValue,
+                order: order,
+                dependsOn: inherited,
+                points: generated.points,
+                displayName: generated.displayName,
+                generatedBy: nil,
+                generatedByCheck: check.id,
+                sectionID: nil
+            ))
     }
 
     let newManifest = try makeWorkerManifestJSON(
-        testSuites:      newConfigured,
+        testSuites: newConfigured,
         includeMakefile: props.makefile != nil,
-        gradingMode:     props.gradingMode.rawValue,
+        gradingMode: props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
         patternFamilies: nextFamilies,
-        notebookChecks:  resolvedChecks,
-        sections:        resolvedSections,
+        notebookChecks: resolvedChecks,
+        sections: resolvedSections,
         globalVariables: resolvedGlobalVariables,
         globalExpressions: resolvedGlobalExpressions
     )
@@ -654,7 +683,8 @@ func applyPatternFamilies(
     // will actually consume.  It must not contain any `family:<id>` tokens,
     // must reference only existing scripts, and must still be acyclic.
     if let postData = newManifest.data(using: .utf8),
-       let postProps = try? ManifestCodec.decoder.decode(TestProperties.self, from: postData) {
+        let postProps = try? ManifestCodec.decoder.decode(TestProperties.self, from: postData)
+    {
         try validateManifestDependencies(postProps)
     }
 
@@ -662,10 +692,10 @@ func applyPatternFamilies(
     try await setup.save(on: db)
 
     return PatternFamilyApplyResult(
-        writtenFiles:   Array(toWrite.keys).sorted(),
-        deletedFiles:   Array(toDelete).sorted(),
+        writtenFiles: Array(toWrite.keys).sorted(),
+        deletedFiles: Array(toDelete).sorted(),
         manifestBefore: oldManifest,
-        manifestAfter:  newManifest
+        manifestAfter: newManifest
     )
 }
 
@@ -679,7 +709,7 @@ private func detectAuthoredCycles(
     authoredRaw: [AuthoredRawScript],
     families: [PatternFamily]
 ) throws {
-    var prereqs: [String: [String]] = [:]   // node → prerequisites of that node
+    var prereqs: [String: [String]] = [:]  // node → prerequisites of that node
 
     for r in authoredRaw {
         let node = r.script

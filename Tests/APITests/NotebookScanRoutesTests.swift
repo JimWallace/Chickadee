@@ -3,11 +3,12 @@
 // Integration tests for:
 //   POST /instructor/scan-notebook
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class NotebookScanRoutesTests: XCTestCase {
 
@@ -23,61 +24,63 @@ final class NotebookScanRoutesTests: XCTestCase {
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        return try await loginUser(username: "testinstructor_nbscan", password: "testpassword",
-                                   role: "instructor", on: app)
+        return try await loginUser(
+            username: "testinstructor_nbscan", password: "testpassword",
+            role: "instructor", on: app)
     }
 
     private func loginAsStudent() async throws -> String {
-        return try await loginUser(username: "teststudent_nbscan", password: "testpassword",
-                                   role: "student", on: app)
+        return try await loginUser(
+            username: "teststudent_nbscan", password: "testpassword",
+            role: "student", on: app)
     }
 
     // MARK: - Sample notebook fixtures
 
     private let notebookWithTwoFunctions = """
-    {
-      "cells": [
         {
-          "cell_type": "code",
+          "cells": [
+            {
+              "cell_type": "code",
+              "metadata": {},
+              "source": "def add(a, b):\\n    return a + b\\n\\ndef multiply(x, y):\\n    return x * y\\n"
+            }
+          ],
           "metadata": {},
-          "source": "def add(a, b):\\n    return a + b\\n\\ndef multiply(x, y):\\n    return x * y\\n"
+          "nbformat": 4,
+          "nbformat_minor": 5
         }
-      ],
-      "metadata": {},
-      "nbformat": 4,
-      "nbformat_minor": 5
-    }
-    """
+        """
 
     private let notebookWithNoFunctions = """
-    {
-      "cells": [
         {
-          "cell_type": "code",
+          "cells": [
+            {
+              "cell_type": "code",
+              "metadata": {},
+              "source": "x = 1\\ny = 2\\nprint(x + y)\\n"
+            }
+          ],
           "metadata": {},
-          "source": "x = 1\\ny = 2\\nprint(x + y)\\n"
+          "nbformat": 4,
+          "nbformat_minor": 5
         }
-      ],
-      "metadata": {},
-      "nbformat": 4,
-      "nbformat_minor": 5
-    }
-    """
+        """
 
     private let notebookWithTypeHints = """
-    {
-      "cells": [
         {
-          "cell_type": "code",
+          "cells": [
+            {
+              "cell_type": "code",
+              "metadata": {},
+              "source": "def greet(name: str) -> str:\\n    return 'Hello ' + name\\n"
+            }
+          ],
           "metadata": {},
-          "source": "def greet(name: str) -> str:\\n    return 'Hello ' + name\\n"
+          "nbformat": 4,
+          "nbformat_minor": 5
         }
-      ],
-      "metadata": {},
-      "nbformat": 4,
-      "nbformat_minor": 5
-    }
-    """
+        """
 
     // MARK: - POST /instructor/scan-notebook
 
@@ -85,19 +88,23 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithTwoFunctions)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("\"add\""),
-                              "Expected function 'add' in response, got: \(body.prefix(500))")
-                XCTAssertTrue(body.contains("\"multiply\""),
-                              "Expected function 'multiply' in response, got: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"add\""),
+                    "Expected function 'add' in response, got: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"multiply\""),
+                    "Expected function 'multiply' in response, got: \(body.prefix(500))")
             }
         )
     }
@@ -106,16 +113,19 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithNoFunctions)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.body.string.trimmingCharacters(in: .whitespacesAndNewlines), "[]",
-                               "Expected empty array for notebook with no functions")
+                XCTAssertEqual(
+                    res.body.string.trimmingCharacters(in: .whitespacesAndNewlines), "[]",
+                    "Expected empty array for notebook with no functions")
             }
         )
     }
@@ -124,19 +134,23 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithTwoFunctions)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("\"a\"") && body.contains("\"b\""),
-                              "Expected param names 'a', 'b' in response, got: \(body.prefix(500))")
-                XCTAssertTrue(body.contains("\"paramCount\""),
-                              "Expected 'paramCount' field in response")
+                XCTAssertTrue(
+                    body.contains("\"a\"") && body.contains("\"b\""),
+                    "Expected param names 'a', 'b' in response, got: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"paramCount\""),
+                    "Expected 'paramCount' field in response")
             }
         )
     }
@@ -145,19 +159,23 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithTwoFunctions)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("\"templates\""),
-                              "Expected 'templates' array in response, got: \(body.prefix(500))")
-                XCTAssertTrue(body.contains("\"exists\"") || body.contains("Exists"),
-                              "Expected exists template in response")
+                XCTAssertTrue(
+                    body.contains("\"templates\""),
+                    "Expected 'templates' array in response, got: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"exists\"") || body.contains("Exists"),
+                    "Expected exists template in response")
             }
         )
     }
@@ -166,17 +184,20 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithTypeHints)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("\"hasTypeHints\":true") || body.contains("\"hasTypeHints\" : true"),
-                              "Expected hasTypeHints true for typed function, got: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"hasTypeHints\":true") || body.contains("\"hasTypeHints\" : true"),
+                    "Expected hasTypeHints true for typed function, got: \(body.prefix(500))")
             }
         )
     }
@@ -184,12 +205,14 @@ final class NotebookScanRoutesTests: XCTestCase {
     func testScanNotebookReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithTwoFunctions)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .forbidden)
             }
         )
@@ -199,13 +222,15 @@ final class NotebookScanRoutesTests: XCTestCase {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 // No body
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .badRequest)
             }
         )
@@ -223,56 +248,65 @@ final class NotebookScanRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
         let notebook = """
-        {
-          "cells": [
             {
-              "cell_type": "code",
-              "metadata": {},
-              "source": "def check_dob(dob: str, currentDate: str = \\"20260301\\") -> bool:\\n    return dob < currentDate\\n"
+              "cells": [
+                {
+                  "cell_type": "code",
+                  "metadata": {},
+                  "source": "def check_dob(dob: str, currentDate: str = \\"20260301\\") -> bool:\\n    return dob < currentDate\\n"
+                }
+              ],
+              "metadata": {}, "nbformat": 4, "nbformat_minor": 5
             }
-          ],
-          "metadata": {}, "nbformat": 4, "nbformat_minor": 5
-        }
-        """
+            """
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebook)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
 
                 // paramTypes forwarded — the client needs these to pick the
                 // right coercion for each cell.
-                XCTAssertTrue(body.contains("\"paramTypes\""),
-                              "paramTypes missing from DTO: \(body.prefix(500))")
-                XCTAssertTrue(body.contains("\"str\""),
-                              "Expected param type 'str' in forwarded paramTypes: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"paramTypes\""),
+                    "paramTypes missing from DTO: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"str\""),
+                    "Expected param type 'str' in forwarded paramTypes: \(body.prefix(500))")
 
                 // returnType forwarded — drives Expected-column coercion.
-                XCTAssertTrue(body.contains("\"returnType\""),
-                              "returnType missing from DTO: \(body.prefix(500))")
-                XCTAssertTrue(body.contains("\"bool\""),
-                              "Expected returnType 'bool' forwarded: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"returnType\""),
+                    "returnType missing from DTO: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"bool\""),
+                    "Expected returnType 'bool' forwarded: \(body.prefix(500))")
 
                 // paramHasDefault forwarded — the editor uses this to let
                 // the instructor leave that cell empty so Python's default
                 // binds at test time.
-                XCTAssertTrue(body.contains("\"paramHasDefault\""),
-                              "paramHasDefault missing from DTO: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"paramHasDefault\""),
+                    "paramHasDefault missing from DTO: \(body.prefix(500))")
                 // First param has no default, second does — verify the
                 // array is [false,true] (serialization may include
                 // whitespace, so both common forms pass).
-                XCTAssertTrue(body.contains("[false,true]") || body.contains("[ false, true ]") || body.contains("[false, true]"),
-                              "Expected paramHasDefault [false, true]: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("[false,true]") || body.contains("[ false, true ]") || body.contains("[false, true]"),
+                    "Expected paramHasDefault [false, true]: \(body.prefix(500))")
 
                 // isShadowed forwarded — client disables overload options
                 // that Python would silently skip at runtime.
-                XCTAssertTrue(body.contains("\"isShadowed\""),
-                              "isShadowed missing from DTO: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"isShadowed\""),
+                    "isShadowed missing from DTO: \(body.prefix(500))")
             }
         )
     }
@@ -282,33 +316,37 @@ final class NotebookScanRoutesTests: XCTestCase {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
         let notebookWithPrivate = """
-        {
-          "cells": [
             {
-              "cell_type": "code",
+              "cells": [
+                {
+                  "cell_type": "code",
+                  "metadata": {},
+                  "source": "def _helper(x):\\n    pass\\ndef public_fn(x):\\n    pass\\n"
+                }
+              ],
               "metadata": {},
-              "source": "def _helper(x):\\n    pass\\ndef public_fn(x):\\n    pass\\n"
+              "nbformat": 4,
+              "nbformat_minor": 5
             }
-          ],
-          "metadata": {},
-          "nbformat": 4,
-          "nbformat_minor": 5
-        }
-        """
+            """
 
-        try await app.asyncTest(.POST, "/instructor/scan-notebook",
+        try await app.asyncTest(
+            .POST, "/instructor/scan-notebook",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.add(name: "x-csrf-token", value: csrf)
                 req.headers.contentType = .json
                 req.body = ByteBuffer(string: notebookWithPrivate)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 XCTAssertEqual(res.status, .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("\"public_fn\""),
-                              "Expected public_fn in response, got: \(body.prefix(500))")
-                XCTAssertFalse(body.contains("\"_helper\""),
-                               "Private function should be excluded, got: \(body.prefix(500))")
+                XCTAssertTrue(
+                    body.contains("\"public_fn\""),
+                    "Expected public_fn in response, got: \(body.prefix(500))")
+                XCTAssertFalse(
+                    body.contains("\"_helper\""),
+                    "Private function should be excluded, got: \(body.prefix(500))")
             }
         )
     }

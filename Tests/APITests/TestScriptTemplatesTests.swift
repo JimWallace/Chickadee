@@ -3,9 +3,10 @@
 // Unit tests for TestScriptTemplates.
 // These tests import the server module because templates live in APIServer, not Core.
 
-import XCTest
-@testable import chickadee_server
 import Fluent
+import XCTest
+
+@testable import chickadee_server
 
 final class TestScriptTemplatesTests: XCTestCase {
 
@@ -58,8 +59,9 @@ final class TestScriptTemplatesTests: XCTestCase {
         let s = pythonTestScript(type: .correctness, functionName: "get_answer", paramNames: [])
         XCTAssertTrue(s.contains("student_module.get_answer()"))
         XCTAssertTrue(s.contains("(no input)"))
-        XCTAssertFalse(s.contains("= None   # TODO: replace with input value"),
-                       "No input declarations when there are no params")
+        XCTAssertFalse(
+            s.contains("= None   # TODO: replace with input value"),
+            "No input declarations when there are no params")
     }
 
     func testCornerCasesTemplate_containsFunctionName() {
@@ -119,7 +121,7 @@ final class TestScriptTemplatesTests: XCTestCase {
         // each template branch.
         let renderings: [(String, String)] = [
             ("with-params", /* any type with params */ ""),
-            ("no-params",   "")
+            ("no-params", ""),
         ]
         _ = renderings
         for type in PythonTestTemplateType.allCases {
@@ -128,10 +130,10 @@ final class TestScriptTemplatesTests: XCTestCase {
                 for kwarg in kwargsInRequireFunctionCalls(source: s) {
                     XCTAssertTrue(
                         knownKwargs.contains(kwarg),
-                        "Template \(type.rawValue) (params=\(params)) passes unknown kwarg " +
-                        "'\(kwarg)' to require_function(). Add it to the runtime helpers " +
-                        "in TestRuntimeSources.swift + Tools/runner-support/test_runtime.py + " +
-                        "Public/browser-runner.js, or drop it from the template."
+                        "Template \(type.rawValue) (params=\(params)) passes unknown kwarg "
+                            + "'\(kwarg)' to require_function(). Add it to the runtime helpers "
+                            + "in TestRuntimeSources.swift + Tools/runner-support/test_runtime.py + "
+                            + "Public/browser-runner.js, or drop it from the template."
                     )
                 }
             }
@@ -151,7 +153,8 @@ final class TestScriptTemplatesTests: XCTestCase {
             for part in body.split(separator: ",") {
                 let trimmed = part.trimmingCharacters(in: .whitespaces)
                 if let eq = trimmed.firstIndex(of: "="),
-                   !trimmed.contains("==") {
+                    !trimmed.contains("==")
+                {
                     let name = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
                     if !name.isEmpty && !name.hasPrefix("\"") {
                         kwargs.append(name)
@@ -159,7 +162,7 @@ final class TestScriptTemplatesTests: XCTestCase {
                 }
             }
             remaining = remaining[callEnd...]
-            remaining = remaining.dropFirst() // step past the ')'
+            remaining = remaining.dropFirst()  // step past the ')'
         }
         return kwargs
     }
@@ -180,10 +183,12 @@ final class TestScriptTemplatesTests: XCTestCase {
         let s = pythonTestScript(type: .variableEquality)
         // Bare builtins from the injected test runtime — NOT imported from a
         // `chickadee` module (which doesn't exist on the Python path).
-        XCTAssertFalse(s.contains("from chickadee"),
-                       "Template must not import from a `chickadee` module — passed()/failed() are injected as builtins.")
-        XCTAssertFalse(s.contains("import chickadee"),
-                       "Template must not import `chickadee` — builtins only.")
+        XCTAssertFalse(
+            s.contains("from chickadee"),
+            "Template must not import from a `chickadee` module — passed()/failed() are injected as builtins.")
+        XCTAssertFalse(
+            s.contains("import chickadee"),
+            "Template must not import `chickadee` — builtins only.")
         XCTAssertTrue(s.contains("passed"))
         XCTAssertTrue(s.contains("failed"))
         // Reads a module-level attribute off `student_module` with a
@@ -201,7 +206,8 @@ final class TestScriptTemplatesTests: XCTestCase {
     }
 
     func testStructuralCheckTemplate_hasExpectedShape() {
-        let s = pythonTestScript(type: .structuralCheck, functionName: "compute_bmi", paramNames: ["weight_kg", "height_m"])
+        let s = pythonTestScript(
+            type: .structuralCheck, functionName: "compute_bmi", paramNames: ["weight_kg", "height_m"])
         // AST-based template — no function call.
         XCTAssertTrue(s.contains("import ast"))
         XCTAssertTrue(s.contains("inspect.getsource(student_module)"))
@@ -225,8 +231,9 @@ final class TestScriptTemplatesTests: XCTestCase {
     func testAllPythonTemplateTypes_nonEmpty() {
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
-            XCTAssertFalse(s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                           "Template \(type.rawValue) should not be empty")
+            XCTAssertFalse(
+                s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                "Template \(type.rawValue) should not be empty")
         }
     }
 
@@ -238,8 +245,9 @@ final class TestScriptTemplatesTests: XCTestCase {
         // Python runtime regardless of filename.
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
-            XCTAssertTrue(s.hasPrefix("#!/usr/bin/env python3"),
-                          "Template \(type.rawValue) must begin with a `#!/usr/bin/env python3` shebang")
+            XCTAssertTrue(
+                s.hasPrefix("#!/usr/bin/env python3"),
+                "Template \(type.rawValue) must begin with a `#!/usr/bin/env python3` shebang")
         }
     }
 
@@ -250,10 +258,12 @@ final class TestScriptTemplatesTests: XCTestCase {
         // against a future template regressing to `from chickadee import …`.
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
-            XCTAssertFalse(s.contains("from chickadee"),
-                           "Template \(type.rawValue) must not import from a `chickadee` module")
-            XCTAssertFalse(s.contains("import chickadee"),
-                           "Template \(type.rawValue) must not import `chickadee`")
+            XCTAssertFalse(
+                s.contains("from chickadee"),
+                "Template \(type.rawValue) must not import from a `chickadee` module")
+            XCTAssertFalse(
+                s.contains("import chickadee"),
+                "Template \(type.rawValue) must not import `chickadee`")
         }
     }
 
@@ -263,8 +273,9 @@ final class TestScriptTemplatesTests: XCTestCase {
         // relevant.  Every other template should echo the function name.
         for type in PythonTestTemplateType.allCases where type != .variableEquality {
             let s = pythonTestScript(type: type, functionName: "mySpecialFunc", paramNames: ["a"])
-            XCTAssertTrue(s.contains("mySpecialFunc"),
-                          "Template \(type.rawValue) should contain the function name")
+            XCTAssertTrue(
+                s.contains("mySpecialFunc"),
+                "Template \(type.rawValue) should contain the function name")
         }
     }
 
@@ -273,9 +284,11 @@ final class TestScriptTemplatesTests: XCTestCase {
     /// on machines where `python3` isn't on PATH (rare in CI but possible
     /// locally — the test reports a clear skip message rather than failing).
     func testAllPythonTemplateTypes_parseAsValidPython() throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/python3")
-           || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")
-           || FileManager.default.fileExists(atPath: "/usr/local/bin/python3") else {
+        guard
+            FileManager.default.fileExists(atPath: "/usr/bin/python3")
+                || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")
+                || FileManager.default.fileExists(atPath: "/usr/local/bin/python3")
+        else {
             throw XCTSkip("python3 not available on PATH — skipping syntax check.")
         }
         for type in PythonTestTemplateType.allCases {
@@ -332,8 +345,9 @@ final class TestScriptTemplatesTests: XCTestCase {
     func testAllShellTemplateTypes_nonEmpty() {
         for type in ShellTestTemplateType.allCases {
             let s = shellTestScript(type: type)
-            XCTAssertFalse(s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                           "Shell template \(type.rawValue) should not be empty")
+            XCTAssertFalse(
+                s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                "Shell template \(type.rawValue) should not be empty")
         }
     }
 
@@ -348,8 +362,9 @@ final class TestScriptTemplatesTests: XCTestCase {
     func testAllTemplateInfos_eachHasContent() {
         let infos = allTemplateInfos(functionName: "bar", paramNames: [])
         for info in infos {
-            XCTAssertFalse(info.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                           "Template \(info.id) content should not be empty")
+            XCTAssertFalse(
+                info.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                "Template \(info.id) content should not be empty")
         }
     }
 
@@ -359,10 +374,13 @@ final class TestScriptTemplatesTests: XCTestCase {
         // it checks a module-level variable by name, so the function name is
         // never substituted into its body.  Every other Python template
         // should echo it.
-        let pythonInfos = infos.filter { $0.language == "python" && $0.id != PythonTestTemplateType.variableEquality.rawValue }
+        let pythonInfos = infos.filter {
+            $0.language == "python" && $0.id != PythonTestTemplateType.variableEquality.rawValue
+        }
         for info in pythonInfos {
-            XCTAssertTrue(info.content.contains("special_fn"),
-                          "Python template \(info.id) should contain function name")
+            XCTAssertTrue(
+                info.content.contains("special_fn"),
+                "Python template \(info.id) should contain function name")
         }
     }
 }

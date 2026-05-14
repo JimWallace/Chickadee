@@ -1,7 +1,7 @@
 import Fluent
+import Foundation
 import SQLKit
 import Vapor
-import Foundation
 
 struct RuleEvaluation: Sendable {
     let isFiring: Bool
@@ -39,11 +39,12 @@ func evaluateHealthRules(
         depthThreshold: configuration.queueDepthThreshold,
         oldestPendingSeconds: configuration.oldestPendingSeconds
     )
-    results[.errorRateSpike] = (try? await evaluateErrorRateSpike(
-        on: application,
-        configuration: configuration,
-        now: now
-    )) ?? .ok
+    results[.errorRateSpike] =
+        (try? await evaluateErrorRateSpike(
+            on: application,
+            configuration: configuration,
+            now: now
+        )) ?? .ok
 
     return results
 }
@@ -234,7 +235,8 @@ func transitionAlerts(
 
         if evaluation.isFiring {
             let elapsedSinceLastFire = state.lastFiredAt.map { now.timeIntervalSince($0) }
-            let shouldEmit = state.lastFiredAt == nil
+            let shouldEmit =
+                state.lastFiredAt == nil
                 || (elapsedSinceLastFire ?? .infinity) >= cooldown
             if shouldEmit {
                 transitions.append(AlertTransition(rule: rule, evaluation: evaluation, resolved: false))
@@ -394,26 +396,31 @@ actor ServerHealthAlertMonitor {
                 delivered = true
             } catch {
                 deliveryError = String(describing: error)
-                application.logger.warning("alert_delivery_failed", metadata: [
+                application.logger.warning(
+                    "alert_delivery_failed",
+                    metadata: [
+                        "rule": .string(alert.rule),
+                        "resolved": .stringConvertible(alert.resolved),
+                        "error": .string(deliveryError ?? "unknown"),
+                    ])
+            }
+            application.logger.info(
+                "alert_emitted",
+                metadata: [
                     "rule": .string(alert.rule),
                     "resolved": .stringConvertible(alert.resolved),
-                    "error": .string(deliveryError ?? "unknown"),
+                    "summary": .string(alert.summary),
+                    "delivered": .stringConvertible(delivered),
                 ])
-            }
-            application.logger.info("alert_emitted", metadata: [
-                "rule": .string(alert.rule),
-                "resolved": .stringConvertible(alert.resolved),
-                "summary": .string(alert.summary),
-                "delivered": .stringConvertible(delivered),
-            ])
-            appendFiring(AlertFiringRecord(
-                rule: alert.rule,
-                resolved: alert.resolved,
-                summary: alert.summary,
-                firedAt: alert.firedAt,
-                delivered: delivered,
-                deliveryError: deliveryError
-            ))
+            appendFiring(
+                AlertFiringRecord(
+                    rule: alert.rule,
+                    resolved: alert.resolved,
+                    summary: alert.summary,
+                    firedAt: alert.firedAt,
+                    delivered: delivered,
+                    deliveryError: deliveryError
+                ))
         }
     }
 
@@ -455,7 +462,8 @@ actor ServerHealthAlertMonitor {
         firedAt: Date,
         application: Application
     ) -> AlertMessage {
-        let summary = resolved
+        let summary =
+            resolved
             ? "RESOLVED: \(rule.humanReadable)"
             : evaluation.summary
         let serverURL = application.securityConfiguration.publicBaseURL?.absoluteString ?? ""
@@ -482,9 +490,10 @@ private func formatAlertTimestamp(_ date: Date) -> String {
 
 func readAlertWebhookURLFromDisk(filePath: String) -> String? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-          let text = String(data: data, encoding: .utf8)?
+        let text = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
-          !text.isEmpty else {
+        !text.isEmpty
+    else {
         return nil
     }
     return text

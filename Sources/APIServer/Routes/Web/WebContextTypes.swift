@@ -3,8 +3,8 @@
 // View-context structs used as Leaf template data for WebRoutes views.
 // Extracted from WebRoutes.swift — no behaviour changes.
 
-import Foundation
 import Core
+import Foundation
 
 // MARK: - Shared base context
 
@@ -16,17 +16,17 @@ struct BaseContext: Encodable {
 
 struct TestSetupRow: Encodable {
     let id: String
-    let title: String?      // from APIAssignment; nil when instructor sees unpublished setups
+    let title: String?  // from APIAssignment; nil when instructor sees unpublished setups
     let notebookURL: String
     let submitURL: String
     let historyURL: String
     let suiteCount: Int
     let createdAt: String
-    let dueAt: String?      // formatted due date, nil if no assignment or no due date
-    let status: String      // "unpublished" | "open" | "closed"
+    let dueAt: String?  // formatted due date, nil if no assignment or no due date
+    let status: String  // "unpublished" | "open" | "closed"
     let isOpen: Bool
     let gradingMode: String  // "browser" | "worker"
-    let hasNotebook: Bool   // false → hide Edit button (no starter notebook available)
+    let hasNotebook: Bool  // false → hide Edit button (no starter notebook available)
     let submissionCount: Int
     let hasLatestSubmission: Bool
     let latestSubmissionID: String
@@ -48,10 +48,10 @@ struct IndexSectionContext: Encodable {
 }
 
 struct IndexContext: Encodable {
-    let sections: [IndexSectionContext]     // named sections with their visible items
-    let ungroupedSetups: [TestSetupRow]     // items not assigned to any section
-    let hasSections: Bool                   // true if the course has any defined sections
-    let hasUngrouped: Bool                  // true if there are items not in any section
+    let sections: [IndexSectionContext]  // named sections with their visible items
+    let ungroupedSetups: [TestSetupRow]  // items not assigned to any section
+    let hasSections: Bool  // true if the course has any defined sections
+    let hasUngrouped: Bool  // true if there are items not in any section
     let currentUser: CurrentUserContext?
 }
 
@@ -71,7 +71,7 @@ struct NotebookContext: Encodable {
     let notebookURL: String
     let jupyterLiteEditorURL: String
     let downloadURL: String?
-    let gradingMode: String          // "browser" | "worker"
+    let gradingMode: String  // "browser" | "worker"
     let showSubmit: Bool
     /// True when the assignment is closed (deadline passed without an active
     /// override, or explicitly closed by the instructor).  The Leaf template
@@ -115,16 +115,16 @@ struct SubmissionHistoryRow: Encodable {
 struct OutcomeRow: Encodable {
     let testName: String
     let tier: String
-    let status: String           // pass | fail | error | timeout
+    let status: String  // pass | fail | error | timeout
     let shortResult: String
-    let longResult: String?      // full output shown in <details>; nil for passing tests
-    let markLabel: String        // Pass | Fail | Error | Timeout | —
-    let markClass: String        // pass | fail | error | timeout | skipped
-    let isSkipped: Bool          // shortResult matches the dependency-skip pattern
-    let blockerName: String?     // extracted prerequisite name ("test_build"), no extension
-    let deltaImproved: Bool      // was non-pass last attempt, is pass now
-    let deltaRegressed: Bool     // was pass last attempt, is non-pass now
-    let pointsLabel: String?     // e.g. "2 pts" when assignment is weighted; nil otherwise
+    let longResult: String?  // full output shown in <details>; nil for passing tests
+    let markLabel: String  // Pass | Fail | Error | Timeout | —
+    let markClass: String  // pass | fail | error | timeout | skipped
+    let isSkipped: Bool  // shortResult matches the dependency-skip pattern
+    let blockerName: String?  // extracted prerequisite name ("test_build"), no extension
+    let deltaImproved: Bool  // was non-pass last attempt, is pass now
+    let deltaRegressed: Bool  // was pass last attempt, is non-pass now
+    let pointsLabel: String?  // e.g. "2 pts" when assignment is weighted; nil otherwise
 }
 
 /// One section block on the student submission page.  `sectionName == nil`
@@ -220,11 +220,11 @@ struct AchievementBadge: Encodable {
     /// Maps a class-achievement ID string to its badge, returning nil for unknown IDs.
     static func forClassAchievement(_ achievementID: String) -> AchievementBadge? {
         switch achievementID {
-        case "pathfinder":     return .pathfinder
-        case "trailblazer":    return .trailblazer
+        case "pathfinder": return .pathfinder
+        case "trailblazer": return .trailblazer
         case "speed_champion": return .speedChampion
-        case "minimalist":     return .minimalist
-        default:               return nil
+        case "minimalist": return .minimalist
+        default: return nil
         }
     }
 }
@@ -241,10 +241,10 @@ struct TierSummary: Encodable {
     let isRelease: Bool
 
     init(outcomes: [TestOutcome], isRelease: Bool) {
-        total        = outcomes.count
-        passCount    = outcomes.filter { $0.status == .pass }.count
-        failCount    = outcomes.filter { $0.status == .fail }.count
-        errorCount   = outcomes.filter { $0.status == .error }.count
+        total = outcomes.count
+        passCount = outcomes.filter { $0.status == .pass }.count
+        failCount = outcomes.filter { $0.status == .fail }.count
+        errorCount = outcomes.filter { $0.status == .error }.count
         timeoutCount = outcomes.filter { $0.status == .timeout }.count
         self.isRelease = isRelease
     }

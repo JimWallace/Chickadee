@@ -5,10 +5,11 @@
 // `solution.py` from `solution.ipynb`.  Each test spawns a real
 // `python3` subprocess via PersonalizationEvaluator.
 
-import XCTest
-@testable import chickadee_server
 import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_server
 
 final class SupportImportTests: XCTestCase {
 
@@ -32,17 +33,17 @@ final class SupportImportTests: XCTestCase {
                 ["cell_type": "markdown", "source": "# Welcome"],
                 ["cell_type": "code", "source": "def add(a, b):\n    return a + b\n"],
                 ["cell_type": "markdown", "source": "more text"],
-                ["cell_type": "code", "source": ["def mul(a, b):\n", "    return a * b\n"]]
+                ["cell_type": "code", "source": ["def mul(a, b):\n", "    return a * b\n"]],
             ],
             "metadata": [:],
             "nbformat": 4,
-            "nbformat_minor": 5
+            "nbformat_minor": 5,
         ]
         let data = try JSONSerialization.data(withJSONObject: nb)
         let py = try XCTUnwrap(SolutionNotebookExtractor.extractCodeToPython(notebookData: data))
         XCTAssertTrue(py.contains("def add(a, b):"))
         XCTAssertTrue(py.contains("def mul(a, b):"))
-        XCTAssertFalse(py.contains("# Welcome"))      // markdown skipped
+        XCTAssertFalse(py.contains("# Welcome"))  // markdown skipped
         XCTAssertFalse(py.contains("more text"))
     }
 
@@ -50,7 +51,7 @@ final class SupportImportTests: XCTestCase {
         let nb: [String: Any] = [
             "cells": [["cell_type": "code", "source": "def f(x):\n    return x + 1\n"]],
             "metadata": [:],
-            "nbformat": 4, "nbformat_minor": 5
+            "nbformat": 4, "nbformat_minor": 5,
         ]
         let data = try JSONSerialization.data(withJSONObject: nb)
         let shared = tempDir.path + "/"
@@ -77,7 +78,7 @@ final class SupportImportTests: XCTestCase {
     func testExtractor_skipsEmptyNotebook() {
         let nb: [String: Any] = [
             "cells": [["cell_type": "markdown", "source": "Just text"]],
-            "metadata": [:], "nbformat": 4, "nbformat_minor": 5
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
         ]
         let data = try! JSONSerialization.data(withJSONObject: nb)
         let didWrite = SolutionNotebookExtractor.writeSolutionPyIfNeeded(
@@ -93,8 +94,9 @@ final class SupportImportTests: XCTestCase {
         // Upload a helpers.py with a function and verify an expression
         // can call it.
         let helpers = "def double(x):\n    return x * 2\n"
-        try helpers.write(toFile: tempDir.path + "/helpers.py",
-                          atomically: true, encoding: .utf8)
+        try helpers.write(
+            toFile: tempDir.path + "/helpers.py",
+            atomically: true, encoding: .utf8)
 
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "0007",
@@ -113,9 +115,11 @@ final class SupportImportTests: XCTestCase {
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "0001",
             staticVariables: [],
-            expressions: [PersonalizationExpression(
-                name: "pick",
-                expression: "open('quotes.txt').read().splitlines()[seed % 3]")],
+            expressions: [
+                PersonalizationExpression(
+                    name: "pick",
+                    expression: "open('quotes.txt').read().splitlines()[seed % 3]")
+            ],
             supportFilesDirectory: tempDir.path
         )
         // seed = 1; index 1 = "beta".
@@ -147,8 +151,9 @@ final class SupportImportTests: XCTestCase {
             )
             XCTFail("Expected nonZeroExit on broken-module reference")
         } catch PersonalizationEvaluatorError.nonZeroExit(_, let stderr) {
-            XCTAssertTrue(stderr.contains("NameError") || stderr.contains("name 'broken' is not defined"),
-                          "stderr should mention NameError; got: \(stderr)")
+            XCTAssertTrue(
+                stderr.contains("NameError") || stderr.contains("name 'broken' is not defined"),
+                "stderr should mention NameError; got: \(stderr)")
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -163,8 +168,9 @@ final class SupportImportTests: XCTestCase {
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "0001",
             staticVariables: [
-                FamilyVariable(name: "helpers",
-                               value: .array([.int(1), .int(2), .int(3)]))
+                FamilyVariable(
+                    name: "helpers",
+                    value: .array([.int(1), .int(2), .int(3)]))
             ],
             expressions: [PersonalizationExpression(name: "first", expression: "helpers[0]")],
             supportFilesDirectory: tempDir.path
@@ -178,34 +184,38 @@ final class SupportImportTests: XCTestCase {
     func testEvaluator_caesarCipherEndToEnd() async throws {
         // Drop a small Caesar-cipher helper.py in the support dir.
         let py = """
-        def encode(text, shift):
-            out = []
-            for c in text:
-                if c.isalpha():
-                    base = ord('a') if c.islower() else ord('A')
-                    out.append(chr((ord(c) - base + shift) % 26 + base))
-                else:
-                    out.append(c)
-            return ''.join(out)
+            def encode(text, shift):
+                out = []
+                for c in text:
+                    if c.isalpha():
+                        base = ord('a') if c.islower() else ord('A')
+                        out.append(chr((ord(c) - base + shift) % 26 + base))
+                    else:
+                        out.append(c)
+                return ''.join(out)
 
-        def pick_plaintext(seed, quotes):
-            return quotes[seed % len(quotes)]
-        """
+            def pick_plaintext(seed, quotes):
+                return quotes[seed % len(quotes)]
+            """
         try py.write(toFile: tempDir.path + "/cipher.py", atomically: true, encoding: .utf8)
 
         let result = try await PersonalizationEvaluator.evaluate(
             seedHex: "00ff",
             staticVariables: [
-                FamilyVariable(name: "quotes",
-                               value: .array([.string("hello"), .string("world"), .string("foo")]))
+                FamilyVariable(
+                    name: "quotes",
+                    value: .array([.string("hello"), .string("world"), .string("foo")]))
             ],
             expressions: [
-                PersonalizationExpression(name: "plaintext",
-                                          expression: "cipher.pick_plaintext(seed, quotes)"),
-                PersonalizationExpression(name: "shift",
-                                          expression: "seed % 26"),
-                PersonalizationExpression(name: "ciphertext",
-                                          expression: "cipher.encode(plaintext, shift)")
+                PersonalizationExpression(
+                    name: "plaintext",
+                    expression: "cipher.pick_plaintext(seed, quotes)"),
+                PersonalizationExpression(
+                    name: "shift",
+                    expression: "seed % 26"),
+                PersonalizationExpression(
+                    name: "ciphertext",
+                    expression: "cipher.encode(plaintext, shift)"),
             ],
             supportFilesDirectory: tempDir.path
         )

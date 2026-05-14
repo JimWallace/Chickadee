@@ -11,7 +11,7 @@ struct AddJobDiskUsageMetrics: AsyncMigration {
         "free_disk_mb_at_end",
     ]
     private static let bigIntFields: [String] = [
-        "workdir_peak_bytes",
+        "workdir_peak_bytes"
     ]
 
     func prepare(on database: Database) async throws {

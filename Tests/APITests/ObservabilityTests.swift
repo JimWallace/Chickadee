@@ -1,9 +1,10 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-@testable import Core
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import Core
+@testable import chickadee_server
 
 final class ObservabilityTests: XCTestCase {
     private var app: Application!
@@ -195,18 +196,21 @@ final class ObservabilityTests: XCTestCase {
         let body = try encodedBody(payload)
         let path = "/api/v1/worker/heartbeat"
 
-        try await app.asyncTest(.POST, path, beforeRequest: { req in
-            req.headers = workerHMACHeaders(
-                method: .POST,
-                path: path,
-                body: body,
-                workerSecret: self.workerSecret,
-                workerID: payload.workerID
-            )
-            req.body = body
-        }, afterResponse: { response in
-            XCTAssertEqual(response.status, .ok)
-        })
+        try await app.asyncTest(
+            .POST, path,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST,
+                    path: path,
+                    body: body,
+                    workerSecret: self.workerSecret,
+                    workerID: payload.workerID
+                )
+                req.body = body
+            },
+            afterResponse: { response in
+                XCTAssertEqual(response.status, .ok)
+            })
 
         let snapshot = try await RunnerSnapshot.query(on: app.db)
             .filter(\.$runnerID == "runner-heartbeat")
@@ -287,9 +291,11 @@ final class ObservabilityTests: XCTestCase {
             lastHeartbeatAt: Date()
         )
 
-        try await app.asyncTest(.GET, "/admin/metrics", afterResponse: { response in
-            XCTAssertEqual(response.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .GET, "/admin/metrics",
+            afterResponse: { response in
+                XCTAssertEqual(response.status, .seeOther)
+            })
 
         let cookie = try await loginUser(
             username: "admin-observability",
@@ -298,30 +304,38 @@ final class ObservabilityTests: XCTestCase {
             on: app
         )
 
-        try await app.asyncTest(.GET, "/admin/metrics", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { response in
-            XCTAssertEqual(response.status, .ok)
-            let payload = try response.content.decode(InternalMetricsResponse.self)
-            XCTAssertGreaterThanOrEqual(payload.activeRunners, 1)
-            XCTAssertEqual(payload.jobsProcessed24h, 1)
-            XCTAssertNotNil(payload.queueWait.averageMs)
-            XCTAssertEqual(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count, 1)
-            XCTAssertFalse(payload.runnerLoads.isEmpty)
-            XCTAssertEqual(payload.compatibility.compatibleAssignmentAttempts, 0)
-        })
+        try await app.asyncTest(
+            .GET, "/admin/metrics",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { response in
+                XCTAssertEqual(response.status, .ok)
+                let payload = try response.content.decode(InternalMetricsResponse.self)
+                XCTAssertGreaterThanOrEqual(payload.activeRunners, 1)
+                XCTAssertEqual(payload.jobsProcessed24h, 1)
+                XCTAssertNotNil(payload.queueWait.averageMs)
+                XCTAssertEqual(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count, 1)
+                XCTAssertFalse(payload.runnerLoads.isEmpty)
+                XCTAssertEqual(payload.compatibility.compatibleAssignmentAttempts, 0)
+            })
 
-        try await app.asyncTest(.GET, "/admin/metrics/timeseries?hours=24&bucketMinutes=15", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { response in
-            XCTAssertEqual(response.status, .ok)
-            let payload = try response.content.decode(InternalMetricsTimeSeriesResponse.self)
-            XCTAssertEqual(payload.windowHours, 24)
-            XCTAssertEqual(payload.bucketMinutes, 15)
-            XCTAssertFalse(payload.buckets.isEmpty)
-            XCTAssertTrue(payload.buckets.contains(where: { $0.completedJobs == 1 }))
-            XCTAssertTrue(payload.buckets.contains(where: { ($0.requestCount > 0) || ($0.avgRunnerUtilizationPercent != nil) }))
-        })
+        try await app.asyncTest(
+            .GET, "/admin/metrics/timeseries?hours=24&bucketMinutes=15",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { response in
+                XCTAssertEqual(response.status, .ok)
+                let payload = try response.content.decode(InternalMetricsTimeSeriesResponse.self)
+                XCTAssertEqual(payload.windowHours, 24)
+                XCTAssertEqual(payload.bucketMinutes, 15)
+                XCTAssertFalse(payload.buckets.isEmpty)
+                XCTAssertTrue(payload.buckets.contains(where: { $0.completedJobs == 1 }))
+                XCTAssertTrue(
+                    payload.buckets.contains(where: { ($0.requestCount > 0) || ($0.avgRunnerUtilizationPercent != nil) }
+                    ))
+            })
     }
 
     func testQueueDepthExcludesBrowserModePendingJobs() async throws {
@@ -336,13 +350,16 @@ final class ObservabilityTests: XCTestCase {
             on: app
         )
 
-        try await app.asyncTest(.GET, "/admin/metrics", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-        }, afterResponse: { response in
-            XCTAssertEqual(response.status, .ok)
-            let payload = try response.content.decode(InternalMetricsResponse.self)
-            XCTAssertEqual(payload.maxQueueDepth, 1)
-        })
+        try await app.asyncTest(
+            .GET, "/admin/metrics",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { response in
+                XCTAssertEqual(response.status, .ok)
+                let payload = try response.content.decode(InternalMetricsResponse.self)
+                XCTAssertEqual(payload.maxQueueDepth, 1)
+            })
     }
 
     /// Retests reuse the same `JobExecutionMetric` row. Two things must be
@@ -359,17 +376,17 @@ final class ObservabilityTests: XCTestCase {
 
         // --- Attempt 1: submit, assign, complete. ---
         let originallySubmittedAt = Date(timeIntervalSince1970: 1_000)
-        let firstAssignedAt       = Date(timeIntervalSince1970: 1_002)
-        let firstStartedAt        = Date(timeIntervalSince1970: 1_003)
-        let firstCompletedAt      = Date(timeIntervalSince1970: 1_010)
+        let firstAssignedAt = Date(timeIntervalSince1970: 1_002)
+        let firstStartedAt = Date(timeIntervalSince1970: 1_003)
+        let firstCompletedAt = Date(timeIntervalSince1970: 1_010)
 
         submission.submittedAt = originallySubmittedAt
         try await submission.update(on: app.db)
         await app.diagnostics.recordSubmissionCreated(submission: submission, on: app.db, logger: app.logger)
 
-        submission.workerID  = "runner-original"
+        submission.workerID = "runner-original"
         submission.assignedAt = firstAssignedAt
-        submission.status     = "assigned"
+        submission.status = "assigned"
         try await submission.update(on: app.db)
         await app.diagnostics.recordJobAssigned(submission: submission, on: app.db, logger: app.logger)
 
@@ -398,17 +415,17 @@ final class ObservabilityTests: XCTestCase {
             .filter(\.$submissionID == "sub_retest")
             .first()
         XCTAssertEqual(postFirstRun?.totalProcessingMs, 10_000)  // 1_010 − 1_000
-        XCTAssertEqual(postFirstRun?.queueWaitMs, 2_000)         //  1_002 − 1_000
+        XCTAssertEqual(postFirstRun?.queueWaitMs, 2_000)  //  1_002 − 1_000
         XCTAssertNotNil(postFirstRun?.completedAt)
 
         // --- Retest is triggered later, gets re-assigned. ---
-        let retestedAt        = Date(timeIntervalSince1970: 50_000)
-        let retestAssignedAt  = Date(timeIntervalSince1970: 50_004)
+        let retestedAt = Date(timeIntervalSince1970: 50_000)
+        let retestAssignedAt = Date(timeIntervalSince1970: 50_004)
 
         submission.retestedAt = retestedAt
         submission.assignedAt = retestAssignedAt
-        submission.workerID   = "runner-retest"
-        submission.status     = "assigned"
+        submission.workerID = "runner-retest"
+        submission.status = "assigned"
         try await submission.update(on: app.db)
         await app.diagnostics.recordJobAssigned(submission: submission, on: app.db, logger: app.logger)
 
@@ -454,7 +471,8 @@ final class ObservabilityTests: XCTestCase {
         try await course.save(on: app.db)
         let setup = APITestSetup(
             id: id,
-            manifest: #"{"schemaVersion":1,"gradingMode":"\#(gradingMode)","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
+            manifest:
+                #"{"schemaVersion":1,"gradingMode":"\#(gradingMode)","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
             zipPath: "/tmp/\(id).zip",
             courseID: try course.requireID()
         )

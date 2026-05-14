@@ -1,10 +1,12 @@
-import XCTest
+import Core
 import Foundation
+import XCTest
+
+@testable import chickadee_runner
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-import Core
-@testable import chickadee_runner
 
 /// Unit tests for `JobPoller`. Network I/O is intercepted via `MockURLProtocol`
 /// so every status-code branch and error funnel is exercised without sockets.

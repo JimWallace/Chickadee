@@ -3,11 +3,12 @@
 // Integration tests for CSRF token validation on both URL-encoded and
 // multipart form submissions.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class CSRFTests: XCTestCase {
 
@@ -24,27 +25,34 @@ final class CSRFTests: XCTestCase {
     // MARK: - URL-encoded form (login)
 
     func testLoginWithoutCSRFTokenIsForbidden() async throws {
-        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-            try req.content.encode(["username": "anyone", "password": "whatever"],
-                                   as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        try await app.asyncTest(
+            .POST, "/login",
+            beforeRequest: { req in
+                try req.content.encode(
+                    ["username": "anyone", "password": "whatever"],
+                    as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     func testLoginWithInvalidCSRFTokenIsForbidden() async throws {
         // Obtain a real session cookie (so the session exists server-side)
         // but supply a made-up token that doesn't match.
         let (_, sessionCookie) = try await csrfFields(for: "/login", on: app)
-        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["username": "anyone", "password": "whatever", "_csrf": "not-a-real-token"],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+        try await app.asyncTest(
+            .POST, "/login",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["username": "anyone", "password": "whatever", "_csrf": "not-a-real-token"],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
     }
 
     func testLoginWithValidCSRFTokenSucceeds() async throws {
@@ -53,17 +61,20 @@ final class CSRFTests: XCTestCase {
         try await user.save(on: app.db)
 
         let (token, sessionCookie) = try await csrfFields(for: "/login", on: app)
-        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            try req.content.encode(
-                ["username": "csrfuser", "password": "pass1234", "_csrf": token],
-                as: .urlEncodedForm
-            )
-        }, afterResponse: { res in
-            // Successful login redirects; any non-403 means CSRF passed.
-            XCTAssertNotEqual(res.status, .forbidden)
-            XCTAssertEqual(res.status, .seeOther)
-        })
+        try await app.asyncTest(
+            .POST, "/login",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["username": "csrfuser", "password": "pass1234", "_csrf": token],
+                    as: .urlEncodedForm
+                )
+            },
+            afterResponse: { res in
+                // Successful login redirects; any non-403 means CSRF passed.
+                XCTAssertNotEqual(res.status, .forbidden)
+                XCTAssertEqual(res.status, .seeOther)
+            })
     }
 
     // MARK: - Multipart form (file submission)
@@ -78,8 +89,8 @@ final class CSRFTests: XCTestCase {
         try emptyZip.write(to: URL(fileURLWithPath: zipPath))
 
         let manifest = """
-        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
-        """
+            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
+            """
         let setup = APITestSetup(
             id: setupID, manifest: manifest, zipPath: zipPath,
             courseID: try course.requireID()
@@ -111,52 +122,63 @@ final class CSRFTests: XCTestCase {
     func testMultipartSubmitWithoutCSRFTokenIsForbidden() async throws {
         let setupID = "setup_csrf_no_tok"
         try await seedSetup(courseCode: "CS201", setupID: setupID)
-        let cookie = try await loginUser(username: "student_no_tok", password: "pass1234",
-                                        role: "student", on: app)
+        let cookie = try await loginUser(
+            username: "student_no_tok", password: "pass1234",
+            role: "student", on: app)
 
         let boundary = "Boundary-NoToken"
         let buf = multipartBody(boundary: boundary, csrfToken: nil)
 
-        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart", subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = buf
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden,
-                           "Multipart POST without _csrf must be rejected by CSRF middleware")
-        })
+        try await app.asyncTest(
+            .POST, "/testsetups/\(setupID)/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = buf
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .forbidden,
+                    "Multipart POST without _csrf must be rejected by CSRF middleware")
+            })
     }
 
     func testMultipartSubmitWithInvalidCSRFTokenIsForbidden() async throws {
         let setupID = "setup_csrf_bad_tok"
         try await seedSetup(courseCode: "CS202", setupID: setupID)
-        let cookie = try await loginUser(username: "student_bad_tok", password: "pass1234",
-                                        role: "student", on: app)
+        let cookie = try await loginUser(
+            username: "student_bad_tok", password: "pass1234",
+            role: "student", on: app)
 
         let boundary = "Boundary-BadToken"
         let buf = multipartBody(boundary: boundary, csrfToken: "completely-wrong-token")
 
-        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart", subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = buf
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden,
-                           "Multipart POST with wrong _csrf must be rejected by CSRF middleware")
-        })
+        try await app.asyncTest(
+            .POST, "/testsetups/\(setupID)/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = buf
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .forbidden,
+                    "Multipart POST with wrong _csrf must be rejected by CSRF middleware")
+            })
     }
 
     func testMultipartSubmitWithValidCSRFTokenPassesCSRFMiddleware() async throws {
         let setupID = "setup_csrf_ok_tok"
         try await seedSetup(courseCode: "CS203", setupID: setupID)
-        let cookie = try await loginUser(username: "student_ok_tok", password: "pass1234",
-                                        role: "student", on: app)
+        let cookie = try await loginUser(
+            username: "student_ok_tok", password: "pass1234",
+            role: "student", on: app)
 
         // GET the submit page to obtain a session-bound CSRF token.
         let (token, _) = try await csrfFields(
@@ -167,18 +189,22 @@ final class CSRFTests: XCTestCase {
         let boundary = "Boundary-GoodToken"
         let buf = multipartBody(boundary: boundary, csrfToken: token)
 
-        try await app.asyncTest(.POST, "/testsetups/\(setupID)/submit", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart", subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = buf
-        }, afterResponse: { res in
-            // CSRF middleware passed — any response other than 403 is correct here.
-            // (Business logic may redirect or error for other reasons.)
-            XCTAssertNotEqual(res.status, .forbidden,
-                              "Valid multipart CSRF token must not be rejected by CSRF middleware")
-        })
+        try await app.asyncTest(
+            .POST, "/testsetups/\(setupID)/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = buf
+            },
+            afterResponse: { res in
+                // CSRF middleware passed — any response other than 403 is correct here.
+                // (Business logic may redirect or error for other reasons.)
+                XCTAssertNotEqual(
+                    res.status, .forbidden,
+                    "Valid multipart CSRF token must not be rejected by CSRF middleware")
+            })
     }
 }

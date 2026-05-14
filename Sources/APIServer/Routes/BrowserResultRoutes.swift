@@ -11,10 +11,10 @@
 //   notebook    — raw bytes of the student's .ipynb file
 //   testSetupID — ID of the test setup this submission targets
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct BrowserResultRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -55,14 +55,16 @@ struct BrowserResultRoutes: RouteCollection {
         // Merge the student's notebook with the instructor's canonical notebook
         // so that hidden test cells (secret, release) are re-injected before
         // the worker runs the full authoritative test suite.
-        let subsDir        = req.application.submissionsDirectory
-        let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let nbPath         = subsDir + "\(subID).ipynb"
+        let subsDir = req.application.submissionsDirectory
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath = subsDir + "\(subID).ipynb"
         let instructorData: Data
         do {
             instructorData = try notebookData(for: setup)
         } catch {
-            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            req.logger.warning(
+                "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
+            )
             instructorData = body.notebook
         }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
@@ -79,14 +81,14 @@ struct BrowserResultRoutes: RouteCollection {
         // Create the submission record as "complete" immediately — browser
         // results are authoritative and no native worker re-run is queued.
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setup.id!,
-            zipPath:       nbPath,
+            id: subID,
+            testSetupID: setup.id!,
+            zipPath: nbPath,
             attemptNumber: attemptNumber,
-            status:        "complete",
-            filename:      "\(subID).ipynb",
-            userID:        caller.id,
-            kind:          APISubmission.Kind.student
+            status: "complete",
+            filename: "\(subID).ipynb",
+            userID: caller.id,
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
 
@@ -96,10 +98,10 @@ struct BrowserResultRoutes: RouteCollection {
         let collectionJSON = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
 
         let browserResult = APIResult(
-            id:             "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID:   subID,
+            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
+            submissionID: subID,
             collectionJSON: collectionJSON,
-            source:         "browser"
+            source: "browser"
         )
         try await browserResult.save(on: req.db)
 
@@ -141,20 +143,23 @@ struct BrowserResultRoutes: RouteCollection {
 
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
-           manifest.gradingMode == .browser {
+            manifest.gradingMode == .browser
+        {
             throw Abort(.badRequest, reason: "Browser-graded assignments must be submitted through the browser runner.")
         }
 
         let subsDir = req.application.submissionsDirectory
-        let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let nbPath  = subsDir + "\(subID).ipynb"
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath = subsDir + "\(subID).ipynb"
 
         // Always merge with canonical instructor notebook so hidden tests are present.
         let instructorData: Data
         do {
             instructorData = try notebookData(for: setup)
         } catch {
-            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            req.logger.warning(
+                "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
+            )
             instructorData = body.notebook
         }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
@@ -168,21 +173,22 @@ struct BrowserResultRoutes: RouteCollection {
 
         let submittedFilename = normalizedNotebookFilename(body.filename)
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setup.id!,
-            zipPath:       nbPath,
+            id: subID,
+            testSetupID: setup.id!,
+            zipPath: nbPath,
             attemptNumber: priorCount + 1,
-            status:        "pending",
-            filename:      submittedFilename,
-            userID:        caller.id,
-            kind:          APISubmission.Kind.student
+            status: "pending",
+            filename: submittedFilename,
+            userID: caller.id,
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
 
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
         // (WorkerJobRoutes filters out browser-mode submissions).
-        let isWorkerMode = (try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData))
+        let isWorkerMode =
+            (try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData))
             .map { $0.gradingMode == .worker } ?? true
         if isWorkerMode {
             await ensureLocalRunnerForSubmissionIfNeeded(req: req)

@@ -20,10 +20,10 @@
 //   - All DB IDs are regenerated; bundleIDs are internal cross-references only.
 //   - validationStatus is NOT imported; assignments land as "pending" validation.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct CourseBundleRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -40,21 +40,21 @@ struct CourseBundleRoutes: RouteCollection {
         guard caller.isAdmin else { throw Abort(.forbidden) }
 
         guard let courseIDStr = req.parameters.get("courseID"),
-              let courseUUID  = UUID(uuidString: courseIDStr),
-              let course      = try await APICourse.find(courseUUID, on: req.db)
+            let courseUUID = UUID(uuidString: courseIDStr),
+            let course = try await APICourse.find(courseUUID, on: req.db)
         else { throw Abort(.notFound, reason: "Course not found") }
 
         // ── 1. Load all course data ────────────────────────────────────────
 
-        let testSetups   = try await APITestSetup.query(on: req.db)
+        let testSetups = try await APITestSetup.query(on: req.db)
             .filter(\.$courseID == courseUUID)
             .all()
 
-        let assignments  = try await APIAssignment.query(on: req.db)
+        let assignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseUUID)
             .all()
 
-        let enrollments  = try await APICourseEnrollment.query(on: req.db)
+        let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseUUID)
             .all()
 
@@ -100,10 +100,10 @@ struct CourseBundleRoutes: RouteCollection {
 
         // ── 2. Assign bundleIDs ────────────────────────────────────────────
 
-        var userBundleIDByUUID:  [UUID:   String] = [:]
-        var setupBundleIDByID:   [String: String] = [:]
-        var assignBundleIDByID:  [UUID:   String] = [:]
-        var subBundleIDByID:     [String: String] = [:]
+        var userBundleIDByUUID: [UUID: String] = [:]
+        var setupBundleIDByID: [String: String] = [:]
+        var assignBundleIDByID: [UUID: String] = [:]
+        var subBundleIDByID: [String: String] = [:]
 
         for (i, u) in allUsers.enumerated() {
             guard let uid = u.id else { continue }
@@ -126,9 +126,10 @@ struct CourseBundleRoutes: RouteCollection {
 
         let bundledUsers = allUsers.compactMap { u -> BundledUser? in
             guard let uid = u.id, let bid = userBundleIDByUUID[uid] else { return nil }
-            return BundledUser(bundleID: bid, username: u.username,
-                               displayName: u.displayName, email: u.email,
-                               role: u.role)
+            return BundledUser(
+                bundleID: bid, username: u.username,
+                displayName: u.displayName, email: u.email,
+                role: u.role)
         }
 
         let enrolledBundleIDs = enrolledUserIDs.compactMap { userBundleIDByUUID[$0] }
@@ -136,40 +137,40 @@ struct CourseBundleRoutes: RouteCollection {
         let bundledSetups = testSetups.compactMap { s -> BundledTestSetup? in
             guard let sid = s.id, let bid = setupBundleIDByID[sid] else { return nil }
             return BundledTestSetup(
-                bundleID:    bid,
-                originalID:  sid,
-                manifest:    s.manifest,
+                bundleID: bid,
+                originalID: sid,
+                manifest: s.manifest,
                 zipFilename: "testsetups/\(sid).zip"
             )
         }
 
         let bundledAssignments = assignments.compactMap { a -> BundledAssignment? in
             guard let aid = a.id, let bid = assignBundleIDByID[aid],
-                  let setupBid = setupBundleIDByID[a.testSetupID]
+                let setupBid = setupBundleIDByID[a.testSetupID]
             else { return nil }
             return BundledAssignment(
-                bundleID:          bid,
-                title:             a.title,
-                dueAt:             a.dueAt,
-                isOpen:            a.isOpen,
-                sortOrder:         a.sortOrder,
+                bundleID: bid,
+                title: a.title,
+                dueAt: a.dueAt,
+                isOpen: a.isOpen,
+                sortOrder: a.sortOrder,
                 testSetupBundleID: setupBid
             )
         }
 
         let bundledSubmissions = submissions.compactMap { sub -> BundledSubmission? in
             guard let sid = sub.id, let bid = subBundleIDByID[sid],
-                  let setupBid = setupBundleIDByID[sub.testSetupID]
+                let setupBid = setupBundleIDByID[sub.testSetupID]
             else { return nil }
             let userBid = sub.userID.flatMap { userBundleIDByUUID[$0] } ?? "unknown"
             let onDiskName = URL(fileURLWithPath: sub.zipPath).lastPathComponent
             return BundledSubmission(
-                bundleID:           bid,
-                userBundleID:       userBid,
-                testSetupBundleID:  setupBid,
-                attemptNumber:      sub.attemptNumber ?? 1,
-                submittedAt:        sub.submittedAt,
-                filename:           sub.filename,
+                bundleID: bid,
+                userBundleID: userBid,
+                testSetupBundleID: setupBid,
+                attemptNumber: sub.attemptNumber ?? 1,
+                submittedAt: sub.submittedAt,
+                filename: sub.filename,
                 submissionFilename: "submissions/\(onDiskName)"
             )
         }
@@ -178,24 +179,25 @@ struct CourseBundleRoutes: RouteCollection {
             guard let subBid = subBundleIDByID[r.submissionID] else { return nil }
             return BundledResult(
                 submissionBundleID: subBid,
-                collectionJSON:     r.collectionJSON,
-                source:             r.source ?? "worker",
-                receivedAt:         r.receivedAt
+                collectionJSON: r.collectionJSON,
+                source: r.source ?? "worker",
+                receivedAt: r.receivedAt
             )
         }
 
         let manifest = CourseBundleManifest(
-            exportedAt:           Date(),
-            exportedBy:           caller.username,
-            chickadeeVersion:     ChickadeeVersion.current,
-            course:               BundledCourse(code: course.code, name: course.name,
-                                               enrollmentMode: course.enrollmentMode),
-            users:                bundledUsers,
+            exportedAt: Date(),
+            exportedBy: caller.username,
+            chickadeeVersion: ChickadeeVersion.current,
+            course: BundledCourse(
+                code: course.code, name: course.name,
+                enrollmentMode: course.enrollmentMode),
+            users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
-            assignments:          bundledAssignments,
-            testSetups:           bundledSetups,
-            submissions:          bundledSubmissions,
-            results:              bundledResults
+            assignments: bundledAssignments,
+            testSetups: bundledSetups,
+            submissions: bundledSubmissions,
+            results: bundledResults
         )
 
         // ── 4. Write staging directory ─────────────────────────────────────
@@ -265,8 +267,9 @@ struct CourseBundleRoutes: RouteCollection {
 
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/zip")
-        headers.add(name: .contentDisposition,
-                    value: "attachment; filename=\"\(bundleName)\"")
+        headers.add(
+            name: .contentDisposition,
+            value: "attachment; filename=\"\(bundleName)\"")
         headers.add(name: .contentLength, value: "\(zipData.count)")
 
         return Response(status: .ok, headers: headers, body: .init(data: zipData))
@@ -287,7 +290,7 @@ struct CourseBundleRoutes: RouteCollection {
         let upload = try req.content.decode(BundleUpload.self)
         var buffer = upload.file.data
         guard buffer.readableBytes > 0,
-              let fileBytes = buffer.readBytes(length: buffer.readableBytes)
+            let fileBytes = buffer.readBytes(length: buffer.readableBytes)
         else {
             throw Abort(.badRequest, reason: "Empty bundle upload")
         }
@@ -324,8 +327,9 @@ struct CourseBundleRoutes: RouteCollection {
         }
 
         guard manifest.schemaVersion == 1 else {
-            throw Abort(.badRequest,
-                        reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected 1")
+            throw Abort(
+                .badRequest,
+                reason: "Unsupported bundle schemaVersion \(manifest.schemaVersion); expected 1")
         }
 
         // ── 4. Validate all referenced files exist ────────────────────────
@@ -333,22 +337,24 @@ struct CourseBundleRoutes: RouteCollection {
         for setup in manifest.testSetups {
             let path = extractDir.appendingPathComponent(setup.zipFilename)
             guard FileManager.default.fileExists(atPath: path.path) else {
-                throw Abort(.badRequest,
-                            reason: "Bundle is missing test setup file: \(setup.zipFilename)")
+                throw Abort(
+                    .badRequest,
+                    reason: "Bundle is missing test setup file: \(setup.zipFilename)")
             }
         }
         for sub in manifest.submissions {
             let path = extractDir.appendingPathComponent(sub.submissionFilename)
             guard FileManager.default.fileExists(atPath: path.path) else {
-                throw Abort(.badRequest,
-                            reason: "Bundle is missing submission file: \(sub.submissionFilename)")
+                throw Abort(
+                    .badRequest,
+                    reason: "Bundle is missing submission file: \(sub.submissionFilename)")
             }
         }
 
         // ── 5. Collect directories ────────────────────────────────────────
 
         let setupsDir = req.application.testSetupsDirectory
-        let subsDir   = req.application.submissionsDirectory
+        let subsDir = req.application.submissionsDirectory
 
         // ── 6. Transactional import ───────────────────────────────────────
         // The conflict check (formerly step 5) is now the first thing inside the
@@ -367,15 +373,16 @@ struct CourseBundleRoutes: RouteCollection {
                 .filter(\.$code == manifest.course.code)
                 .first()
             if let existing = existingCourse, !existing.isArchived {
-                throw Abort(.conflict,
-                            reason: """
-                            A course with code "\(manifest.course.code)" already exists and is active. \
-                            Archive it first, then re-import.
-                            """)
+                throw Abort(
+                    .conflict,
+                    reason: """
+                        A course with code "\(manifest.course.code)" already exists and is active. \
+                        Archive it first, then re-import.
+                        """)
             }
 
             var t = ImportTally(
-                courseID:   UUID(),
+                courseID: UUID(),
                 courseCode: manifest.course.code,
                 courseName: manifest.course.name
             )
@@ -390,10 +397,11 @@ struct CourseBundleRoutes: RouteCollection {
             } else {
                 importedMode = .open
             }
-            let newCourse = APICourse(code: manifest.course.code, name: manifest.course.name,
-                                      enrollmentMode: importedMode)
+            let newCourse = APICourse(
+                code: manifest.course.code, name: manifest.course.name,
+                enrollmentMode: importedMode)
             try await newCourse.save(on: db)
-            t.courseID   = newCourse.id!
+            t.courseID = newCourse.id!
             t.courseCode = newCourse.code
             t.courseName = newCourse.name
 
@@ -402,18 +410,19 @@ struct CourseBundleRoutes: RouteCollection {
             for bundledUser in manifest.users {
                 if let existing = try await APIUser.query(on: db)
                     .filter(\.$username == bundledUser.username)
-                    .first() {
+                    .first()
+                {
                     userIDMap[bundledUser.bundleID] = existing.id!
                     t.usersMatched += 1
                 } else {
                     // Create placeholder — inert until password reset or SSO login.
                     let newUser = APIUser(
-                        username:     bundledUser.username,
-                        passwordHash: "", // inert placeholder
-                        role:         bundledUser.role,
+                        username: bundledUser.username,
+                        passwordHash: "",  // inert placeholder
+                        role: bundledUser.role,
                         authProvider: nil,
-                        email:        bundledUser.email,
-                        displayName:  bundledUser.displayName
+                        email: bundledUser.email,
+                        displayName: bundledUser.displayName
                     )
                     try await newUser.save(on: db)
                     userIDMap[bundledUser.bundleID] = newUser.id!
@@ -443,8 +452,9 @@ struct CourseBundleRoutes: RouteCollection {
 
                 // Copy zip from bundle into testsetups dir.
                 let srcZip = extractDir.appendingPathComponent(bundledSetup.zipFilename)
-                try FileManager.default.copyItem(at: srcZip,
-                                                 to: URL(fileURLWithPath: newZipPath))
+                try FileManager.default.copyItem(
+                    at: srcZip,
+                    to: URL(fileURLWithPath: newZipPath))
 
                 // Extract .ipynb if present (browser-mode setups).
                 var notebookPath: String? = nil
@@ -455,11 +465,11 @@ struct CourseBundleRoutes: RouteCollection {
                 }
 
                 let setup = APITestSetup(
-                    id:           newSetupID,
-                    manifest:     bundledSetup.manifest,
-                    zipPath:      newZipPath,
+                    id: newSetupID,
+                    manifest: bundledSetup.manifest,
+                    zipPath: newZipPath,
                     notebookPath: notebookPath,
-                    courseID:     t.courseID
+                    courseID: t.courseID
                 )
                 try await setup.save(on: db)
                 setupIDMap[bundledSetup.bundleID] = newSetupID
@@ -470,14 +480,14 @@ struct CourseBundleRoutes: RouteCollection {
             for bundledAssign in manifest.assignments {
                 guard let setupID = setupIDMap[bundledAssign.testSetupBundleID] else { continue }
                 let newAssign = APIAssignment(
-                    testSetupID:      setupID,
-                    title:            bundledAssign.title,
-                    slug:             try await uniqueAssignmentSlug(title: bundledAssign.title, courseID: t.courseID, db: db),
-                    dueAt:            bundledAssign.dueAt,
-                    isOpen:           bundledAssign.isOpen,
-                    sortOrder:        bundledAssign.sortOrder,
-                    validationStatus: nil, // not imported — requires re-validation
-                    courseID:         t.courseID
+                    testSetupID: setupID,
+                    title: bundledAssign.title,
+                    slug: try await uniqueAssignmentSlug(title: bundledAssign.title, courseID: t.courseID, db: db),
+                    dueAt: bundledAssign.dueAt,
+                    isOpen: bundledAssign.isOpen,
+                    sortOrder: bundledAssign.sortOrder,
+                    validationStatus: nil,  // not imported — requires re-validation
+                    courseID: t.courseID
                 )
                 try await newAssign.save(on: db)
                 t.assignmentsImported += 1
@@ -489,23 +499,24 @@ struct CourseBundleRoutes: RouteCollection {
                 guard let setupID = setupIDMap[bundledSub.testSetupBundleID] else { continue }
                 let userID = userIDMap[bundledSub.userBundleID]
 
-                let srcFile  = extractDir.appendingPathComponent(bundledSub.submissionFilename)
-                let ext      = srcFile.pathExtension
+                let srcFile = extractDir.appendingPathComponent(bundledSub.submissionFilename)
+                let ext = srcFile.pathExtension
                 let newSubID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
                 let destName = ext.isEmpty ? "\(newSubID).bin" : "\(newSubID).\(ext)"
                 let newFilePath = subsDir + destName
-                try FileManager.default.copyItem(at: srcFile,
-                                                 to: URL(fileURLWithPath: newFilePath))
+                try FileManager.default.copyItem(
+                    at: srcFile,
+                    to: URL(fileURLWithPath: newFilePath))
 
                 let sub = APISubmission(
-                    id:            newSubID,
-                    testSetupID:   setupID,
-                    zipPath:       newFilePath,
+                    id: newSubID,
+                    testSetupID: setupID,
+                    zipPath: newFilePath,
                     attemptNumber: bundledSub.attemptNumber,
-                    status:        "complete",
-                    filename:      bundledSub.filename,
-                    userID:        userID,
-                    kind:          APISubmission.Kind.student
+                    status: "complete",
+                    filename: bundledSub.filename,
+                    userID: userID,
+                    kind: APISubmission.Kind.student
                 )
                 try await sub.save(on: db)
                 subIDMap[bundledSub.bundleID] = newSubID
@@ -517,10 +528,10 @@ struct CourseBundleRoutes: RouteCollection {
                 guard let subID = subIDMap[bundledResult.submissionBundleID] else { continue }
                 let newResultID = "res_\(UUID().uuidString.lowercased().prefix(8))"
                 let result = APIResult(
-                    id:             newResultID,
-                    submissionID:   subID,
+                    id: newResultID,
+                    submissionID: subID,
                     collectionJSON: bundledResult.collectionJSON,
-                    source:         bundledResult.source
+                    source: bundledResult.source
                 )
                 try await result.save(on: db)
                 t.resultsImported += 1
@@ -532,16 +543,16 @@ struct CourseBundleRoutes: RouteCollection {
         // ── 8. Render result page ─────────────────────────────────────────
 
         let ctx = ImportResultContext(
-            currentUser:         req.currentUserContext,
-            courseID:            tally.courseID.uuidString,
-            courseCode:          tally.courseCode,
-            courseName:          tally.courseName,
-            testSetupsImported:  tally.testSetupsImported,
+            currentUser: req.currentUserContext,
+            courseID: tally.courseID.uuidString,
+            courseCode: tally.courseCode,
+            courseName: tally.courseName,
+            testSetupsImported: tally.testSetupsImported,
             assignmentsImported: tally.assignmentsImported,
-            usersCreated:        tally.usersCreated,
-            usersMatched:        tally.usersMatched,
+            usersCreated: tally.usersCreated,
+            usersMatched: tally.usersMatched,
             submissionsImported: tally.submissionsImported,
-            resultsImported:     tally.resultsImported
+            resultsImported: tally.resultsImported
         )
         return try await req.view.render("admin-import-result", ctx)
     }
@@ -553,15 +564,15 @@ struct CourseBundleRoutes: RouteCollection {
 /// Using a local `var` inside the closure and returning it avoids the Swift 6
 /// "mutation of captured var in concurrently-executing code" error.
 private struct ImportTally: Sendable {
-    var courseID:            UUID
-    var courseCode:          String
-    var courseName:          String
-    var usersCreated:        Int = 0
-    var usersMatched:        Int = 0
-    var testSetupsImported:  Int = 0
+    var courseID: UUID
+    var courseCode: String
+    var courseName: String
+    var usersCreated: Int = 0
+    var usersMatched: Int = 0
+    var testSetupsImported: Int = 0
     var assignmentsImported: Int = 0
     var submissionsImported: Int = 0
-    var resultsImported:     Int = 0
+    var resultsImported: Int = 0
 }
 
 // MARK: - View context

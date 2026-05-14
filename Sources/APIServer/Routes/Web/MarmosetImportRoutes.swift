@@ -19,10 +19,10 @@
 //   - requiredFiles is left empty — instructor fills it in after import.
 //   - All assignments are created closed with validationStatus: nil.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct MarmosetImportRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -53,13 +53,15 @@ struct MarmosetImportRoutes: RouteCollection {
             let error: String?
         }
 
-        return try await req.view.render("marmoset-import", ImportFormContext(
-            currentUser: req.currentUserContext,
-            courseCode:  course.code,
-            courseName:  course.name,
-            sectionID:   sectionIDRaw,
-            error:       req.query[String.self, at: "error"]
-        ))
+        return try await req.view.render(
+            "marmoset-import",
+            ImportFormContext(
+                currentUser: req.currentUserContext,
+                courseCode: course.code,
+                courseName: course.name,
+                sectionID: sectionIDRaw,
+                error: req.query[String.self, at: "error"]
+            ))
     }
 
     // MARK: - POST /instructor/import-marmoset
@@ -71,7 +73,7 @@ struct MarmosetImportRoutes: RouteCollection {
 
         let courseState = try await req.resolveActiveCourse(for: caller)
         guard courseState.active != nil,
-              let courseUUID = courseState.activeCourseUUID
+            let courseUUID = courseState.activeCourseUUID
         else {
             throw Abort(.badRequest, reason: "No active course selected.")
         }
@@ -85,7 +87,7 @@ struct MarmosetImportRoutes: RouteCollection {
         let upload = try req.content.decode(MarmosetUpload.self)
         var buffer = upload.file.data
         guard buffer.readableBytes > 0,
-              let fileBytes = buffer.readBytes(length: buffer.readableBytes)
+            let fileBytes = buffer.readBytes(length: buffer.readableBytes)
         else {
             throw Abort(.badRequest, reason: "Empty file uploaded")
         }
@@ -119,7 +121,9 @@ struct MarmosetImportRoutes: RouteCollection {
         }
 
         guard !projects.isEmpty else {
-            throw Abort(.badRequest, reason: "No projects found in the Marmoset export. Expected files named <n>-test-setup.zip.")
+            throw Abort(
+                .badRequest,
+                reason: "No projects found in the Marmoset export. Expected files named <n>-test-setup.zip.")
         }
 
         // ── 4. Import each project ─────────────────────────────────────
@@ -127,7 +131,7 @@ struct MarmosetImportRoutes: RouteCollection {
         for project in projects {
             let n = project.number
             let setupsDir = req.application.testSetupsDirectory
-            let setupID   = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+            let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
 
             // ── 4a. Build the Chickadee test setup zip ─────────────────
 
@@ -159,7 +163,8 @@ struct MarmosetImportRoutes: RouteCollection {
             var canonicalSolution: (data: Data, originalFilename: String)? = nil
             let canonicalSrcPath = projectsDir.appendingPathComponent("\(n)-canonical.zip").path
             if FileManager.default.fileExists(atPath: canonicalSrcPath),
-               let solution = try? extractSolutionFromCanonicalZip(zipPath: canonicalSrcPath) {
+                let solution = try? extractSolutionFromCanonicalZip(zipPath: canonicalSrcPath)
+            {
                 canonicalSolution = (data: solution.data, originalFilename: solution.originalFilename)
             }
             let hasCanonical = canonicalSolution != nil
@@ -180,14 +185,17 @@ struct MarmosetImportRoutes: RouteCollection {
             let notebookDir = setupsDir + "notebooks/\(setupID)/"
             let starterZipPath = projectsDir.appendingPathComponent("\(n)-project-starter-files.zip").path
             if FileManager.default.fileExists(atPath: starterZipPath),
-               let starterFilename = try? firstNotebookInZip(zipPath: starterZipPath),
-               let starterData = try? extractNotebookFromZip(zipPath: starterZipPath,
-                                                             filename: starterFilename) {
+                let starterFilename = try? firstNotebookInZip(zipPath: starterZipPath),
+                let starterData = try? extractNotebookFromZip(
+                    zipPath: starterZipPath,
+                    filename: starterFilename)
+            {
                 let normalized = normalizeNotebookForJupyterLite(starterData)
                 let storedName = notebookFilenameForStorage(
                     uploadedName: starterFilename, fallback: "assignment.ipynb")
-                try FileManager.default.createDirectory(atPath: notebookDir,
-                                                        withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: notebookDir,
+                    withIntermediateDirectories: true)
                 let nbPath = notebookDir + storedName
                 try normalized.write(to: URL(fileURLWithPath: nbPath))
                 notebookPath = nbPath
@@ -195,8 +203,9 @@ struct MarmosetImportRoutes: RouteCollection {
                 // No starter-files zip — fall back to a minimal blank notebook so
                 // the assignment is openable. Instructor can upload the real starter
                 // via the assignment editor.
-                try FileManager.default.createDirectory(atPath: notebookDir,
-                                                        withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    atPath: notebookDir,
+                    withIntermediateDirectories: true)
                 let nbPath = notebookDir + "assignment.ipynb"
                 try minimalEmptyNotebookData().write(to: URL(fileURLWithPath: nbPath))
                 notebookPath = nbPath
@@ -258,7 +267,8 @@ struct MarmosetImportRoutes: RouteCollection {
                 try await assignment.save(on: req.db)
             }
 
-            req.logger.info("Marmoset import: created assignment '\(title)' (setup \(setupID)) for course \(courseUUID)")
+            req.logger.info(
+                "Marmoset import: created assignment '\(title)' (setup \(setupID)) for course \(courseUUID)")
         }
 
         // ── 5. Kick the runner and redirect ───────────────────────────

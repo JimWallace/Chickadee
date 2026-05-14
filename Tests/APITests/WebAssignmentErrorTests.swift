@@ -9,9 +9,10 @@
 //      sites, locking in the migration so a future copy-paste regression
 //      gets caught at PR time instead of in production traffic.
 
+import Foundation
 import Testing
 import Vapor
-import Foundation
+
 @testable import chickadee_server
 
 @Suite struct WebAssignmentErrorTests {
@@ -23,16 +24,17 @@ import Foundation
     /// mistakes like `case .conflict: return .badRequest` that the
     /// compiler can't.  Sample reasons keep the test tautology-free —
     /// the assertion is on `status`, not `reason`.
-    @Test(arguments: [
-        (WebAssignmentError.notFound(resource: "Assignment 'abc'"),                 HTTPResponseStatus.notFound),
-        (.invalidParameter(name: "draftID", reason: "missing"),                     .badRequest),
-        (.noActiveCourse(action: "creating an assignment"),                         .badRequest),
-        (.forbidden(action: "edit assignments"),                                    .forbidden),
-        (.conflict(reason: "duplicate filename"),                                   .conflict),
-        (.unprocessable(reason: "Section variable name is not a valid Python identifier."), .unprocessableEntity),
-        (.validationRequired(reason: "validation has not passed"),                  .badRequest),
-        (.internalFailure(reason: "Failed to package setup zip"),                   .internalServerError),
-    ] as [(WebAssignmentError, HTTPResponseStatus)])
+    @Test(
+        arguments: [
+            (WebAssignmentError.notFound(resource: "Assignment 'abc'"), HTTPResponseStatus.notFound),
+            (.invalidParameter(name: "draftID", reason: "missing"), .badRequest),
+            (.noActiveCourse(action: "creating an assignment"), .badRequest),
+            (.forbidden(action: "edit assignments"), .forbidden),
+            (.conflict(reason: "duplicate filename"), .conflict),
+            (.unprocessable(reason: "Section variable name is not a valid Python identifier."), .unprocessableEntity),
+            (.validationRequired(reason: "validation has not passed"), .badRequest),
+            (.internalFailure(reason: "Failed to package setup zip"), .internalServerError),
+        ] as [(WebAssignmentError, HTTPResponseStatus)])
     func statusForCase(_ error: WebAssignmentError, _ expected: HTTPResponseStatus) {
         #expect(error.status == expected)
     }
@@ -88,8 +90,10 @@ import Foundation
             }
         }
 
-        #expect(offenders.isEmpty,
-                "These files regressed to `throw Abort(` instead of `WebAssignmentError`: \(offenders.joined(separator: ", "))")
+        #expect(
+            offenders.isEmpty,
+            "These files regressed to `throw Abort(` instead of `WebAssignmentError`: \(offenders.joined(separator: ", "))"
+        )
     }
 
     /// Walks up from this test's `#filePath` to the project root and
@@ -99,9 +103,9 @@ import Foundation
     private func sourceWebRoutesDirectory(file: StaticString = #filePath) -> URL {
         // #filePath is …/Tests/APITests/WebAssignmentErrorTests.swift
         URL(fileURLWithPath: "\(file)")
-            .deletingLastPathComponent()        // .../Tests/APITests
-            .deletingLastPathComponent()        // .../Tests
-            .deletingLastPathComponent()        // project root
+            .deletingLastPathComponent()  // .../Tests/APITests
+            .deletingLastPathComponent()  // .../Tests
+            .deletingLastPathComponent()  // project root
             .appendingPathComponent("Sources/APIServer/Routes/Web", isDirectory: true)
     }
 }

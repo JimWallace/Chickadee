@@ -49,12 +49,14 @@ struct CompatibilityMatcher {
         var reasons: [String] = []
 
         if let requiredPlatform = normalize(requirements.requiredPlatform),
-           normalize(runnerProfile.platform) != requiredPlatform {
+            normalize(runnerProfile.platform) != requiredPlatform
+        {
             reasons.append("platform \(runnerProfile.platform) != required \(requiredPlatform)")
         }
 
         if let requiredArchitecture = normalize(requirements.requiredArchitecture),
-           normalize(runnerProfile.architecture) != requiredArchitecture {
+            normalize(runnerProfile.architecture) != requiredArchitecture
+        {
             reasons.append("architecture \(runnerProfile.architecture) != required \(requiredArchitecture)")
         }
 
@@ -81,7 +83,8 @@ struct CompatibilityMatcher {
 
             if let minimumVersion = normalizedVersion(requirement.minimumVersion) {
                 guard let comparison = versionComparator.compare(runnerVersion, minimumVersion) else {
-                    reasons.append("unable to compare \(language) version \(runnerVersion) to required \(minimumVersion)")
+                    reasons.append(
+                        "unable to compare \(language) version \(runnerVersion) to required \(minimumVersion)")
                     continue
                 }
                 if comparison == .orderedAscending {
@@ -91,7 +94,8 @@ struct CompatibilityMatcher {
         }
 
         let runnerCapabilities = Set(runnerProfile.capabilities.map { normalizedName($0.name) })
-        for capability in requirements.requiredCapabilities.map(\.name).map(normalizedName) where !runnerCapabilities.contains(capability) {
+        for capability in requirements.requiredCapabilities.map(\.name).map(normalizedName)
+        where !runnerCapabilities.contains(capability) {
             reasons.append("missing capability \(capability)")
         }
 

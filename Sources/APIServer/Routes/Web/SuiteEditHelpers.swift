@@ -26,10 +26,10 @@
 // caller to deal with target-specific concerns (validation scheduling,
 // redirect targets).
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 // MARK: - Auth + setup resolution
 
@@ -52,7 +52,7 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
     let idStr = try assignmentPublicIDParameter(from: req)
     guard
         let assignment = try await assignmentByPublicID(idStr, on: req.db),
-        let setup      = try await APITestSetup.find(assignment.testSetupID, on: req.db)
+        let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
     else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
     return (assignment, setup)
 }
@@ -64,7 +64,8 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
 /// `.notFound` if no row matches.
 func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
     guard let draftID = try? req.query.get(String.self, at: "draftID"),
-          !draftID.isEmpty else {
+        !draftID.isEmpty
+    else {
         throw WebAssignmentError.invalidParameter(name: "draftID", reason: "Missing `draftID` query parameter")
     }
     guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
@@ -98,14 +99,16 @@ func applySuiteEdit(
                     name: "items",
                     reason: "Suite item kind=script is missing `script` payload.")
             }
-            authored.append(.script(AuthoredRawScript(
-                script: s.script,
-                tier: s.tier,
-                points: s.points,
-                displayName: s.displayName,
-                dependsOn: s.dependsOn,
-                sectionID: item.sectionID
-            )))
+            authored.append(
+                .script(
+                    AuthoredRawScript(
+                        script: s.script,
+                        tier: s.tier,
+                        points: s.points,
+                        displayName: s.displayName,
+                        dependsOn: s.dependsOn,
+                        sectionID: item.sectionID
+                    )))
         case "family":
             guard var f = item.family else {
                 throw WebAssignmentError.invalidParameter(
@@ -190,7 +193,7 @@ func applyNotebookChecksEdit(
 ) async throws {
     let currentFamilies: [PatternFamily] = {
         guard let data = setup.manifest.data(using: .utf8),
-              let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
         else { return [] }
         return props.patternFamilies
     }()
@@ -212,9 +215,10 @@ func jsonResponse<T: Encodable>(_ value: T, status: HTTPResponseStatus = .ok) th
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(value)
-    return Response(status: status,
-                    headers: ["Content-Type": "application/json"],
-                    body: .init(data: data))
+    return Response(
+        status: status,
+        headers: ["Content-Type": "application/json"],
+        body: .init(data: data))
 }
 
 // MARK: - Manifest dictionary mutation

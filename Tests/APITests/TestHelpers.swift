@@ -2,17 +2,18 @@
 //
 // Shared helpers for integration tests that involve session auth and CSRF.
 
-import XCTest
-import XCTVapor
 import CSRF
 import Crypto
-import Leaf
-import LeafKit
-@testable import chickadee_server
 import Fluent
 import FluentPostgresDriver
 import Foundation
+import Leaf
+import LeafKit
 import SQLKit
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 func configureTestDatabase(_ app: Application) async throws {
     let settings = try testDatabaseSettingsFromEnvironment()
@@ -35,7 +36,8 @@ private func resetPostgresTestSchema(_ app: Application) async throws {
 }
 
 func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
-    let backend = Environment.get("TEST_DATABASE_BACKEND")
+    let backend =
+        Environment.get("TEST_DATABASE_BACKEND")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
         .flatMap(DatabaseBackend.init(rawValue:))
         ?? .sqlite
@@ -143,8 +145,8 @@ func makeTestApp(
     for dir in dirs {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     }
-    app.resultsDirectory     = dirs[0]
-    app.testSetupsDirectory  = dirs[1]
+    app.resultsDirectory = dirs[0]
+    app.testSetupsDirectory = dirs[1]
     app.submissionsDirectory = dirs[2]
     app.storage[TestDataDirectoryKey.self] = tmpDir
 
@@ -284,12 +286,15 @@ func csrfFields(
 ) async throws -> (token: String, cookie: String) {
     var outToken = ""
     var outCookie = cookie
-    try await app.asyncTest(.GET, path, beforeRequest: { req in
-        if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
-    }, afterResponse: { res in
-        if let c = res.headers.first(name: .setCookie) { outCookie = c }
-        outToken = extractCSRFToken(from: res.body.string)
-    })
+    try await app.asyncTest(
+        .GET, path,
+        beforeRequest: { req in
+            if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
+        },
+        afterResponse: { res in
+            if let c = res.headers.first(name: .setCookie) { outCookie = c }
+            outToken = extractCSRFToken(from: res.body.string)
+        })
     return (outToken, outCookie)
 }
 
@@ -316,7 +321,7 @@ func workerHMACHeaders(
         path,
         bodyHash,
         String(timestamp),
-        nonce
+        nonce,
     ].joined(separator: "\n")
 
     let key = SymmetricKey(data: Data(workerSecret.utf8))
@@ -325,10 +330,10 @@ func workerHMACHeaders(
 
     var headers = HTTPHeaders()
     headers.add(name: "X-Worker-Timestamp", value: String(timestamp))
-    headers.add(name: "X-Worker-Nonce",     value: nonce)
+    headers.add(name: "X-Worker-Nonce", value: nonce)
     headers.add(name: "X-Worker-Body-SHA256", value: bodyHash)
     headers.add(name: "X-Worker-Signature", value: signature)
-    headers.add(name: "X-Worker-Id",        value: workerID)
+    headers.add(name: "X-Worker-Id", value: workerID)
     headers.contentType = .json
     return headers
 }
@@ -362,15 +367,18 @@ func loginUser(
 
     // Step 2: POST /login with the CSRF token bound to that session.
     var authCookie = sessionCookie
-    try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-        req.headers.add(name: .cookie, value: sessionCookie)
-        try req.content.encode(
-            ["username": username, "password": password, "_csrf": token],
-            as: .urlEncodedForm
-        )
-    }, afterResponse: { res in
-        // Use the new cookie if the session was rotated, otherwise keep the old one.
-        if let c = res.headers.first(name: .setCookie) { authCookie = c }
-    })
+    try await app.asyncTest(
+        .POST, "/login",
+        beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            try req.content.encode(
+                ["username": username, "password": password, "_csrf": token],
+                as: .urlEncodedForm
+            )
+        },
+        afterResponse: { res in
+            // Use the new cookie if the session was rotated, otherwise keep the old one.
+            if let c = res.headers.first(name: .setCookie) { authCookie = c }
+        })
     return authCookie
 }

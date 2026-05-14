@@ -1,9 +1,10 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-@testable import Core
 import Foundation
+import XCTVapor
+import XCTest
+
+@testable import Core
+@testable import chickadee_server
 
 final class RunnerCompatibilityTests: XCTestCase {
     private var app: Application!
@@ -33,7 +34,7 @@ final class RunnerCompatibilityTests: XCTestCase {
             architecture: "x86_64",
             languageVersions: [
                 LanguageVersion(language: "python", version: "3.9"),
-                LanguageVersion(language: "swift", version: "6.0")
+                LanguageVersion(language: "swift", version: "6.0"),
             ],
             capabilities: [RunnerCapability(name: "numpy")]
         )
@@ -43,11 +44,11 @@ final class RunnerCompatibilityTests: XCTestCase {
             requiredLanguages: [
                 AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10"),
                 AssignmentLanguageRequirement(language: "swift", exactVersion: "6.1"),
-                AssignmentLanguageRequirement(language: "r", minimumVersion: "4.2")
+                AssignmentLanguageRequirement(language: "r", minimumVersion: "4.2"),
             ],
             requiredCapabilities: [
                 RunnerCapability(name: "numpy"),
-                RunnerCapability(name: "pandas")
+                RunnerCapability(name: "pandas"),
             ]
         )
 
@@ -230,18 +231,21 @@ final class RunnerCompatibilityTests: XCTestCase {
     private func sendHeartbeat(_ payload: WorkerActivityPayload) async throws {
         let path = "/api/v1/worker/heartbeat"
         let body = ByteBuffer(data: try JSONEncoder().encode(payload))
-        try await app.asyncTest(.POST, path, beforeRequest: { req in
-            req.headers = workerHMACHeaders(
-                method: .POST,
-                path: path,
-                body: body,
-                workerSecret: self.workerSecret,
-                workerID: payload.workerID
-            )
-            req.body = body
-        }, afterResponse: { response in
-            XCTAssertEqual(response.status, .ok)
-        })
+        try await app.asyncTest(
+            .POST, path,
+            beforeRequest: { req in
+                req.headers = workerHMACHeaders(
+                    method: .POST,
+                    path: path,
+                    body: body,
+                    workerSecret: self.workerSecret,
+                    workerID: payload.workerID
+                )
+                req.body = body
+            },
+            afterResponse: { response in
+                XCTAssertEqual(response.status, .ok)
+            })
     }
 
     private func makeSetup(id: String) async throws -> APITestSetup {
@@ -249,7 +253,8 @@ final class RunnerCompatibilityTests: XCTestCase {
         try await course.save(on: app.db)
         let setup = APITestSetup(
             id: id,
-            manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
+            manifest:
+                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
             zipPath: "/tmp/\(id).zip",
             courseID: try course.requireID()
         )

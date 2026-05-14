@@ -10,12 +10,13 @@
 // new download endpoint here, including the upload-then-download cycle
 // that the create-page UI relies on.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import XCTVapor
+import XCTest
+
+@testable import chickadee_server
 
 final class DraftSupportFilesTests: XCTestCase {
 
@@ -45,12 +46,12 @@ final class DraftSupportFilesTests: XCTestCase {
         }
 
         let manifestDict: [String: Any] = [
-            "schemaVersion":   1,
-            "gradingMode":     "worker",
-            "requiredFiles":   [],
+            "schemaVersion": 1,
+            "gradingMode": "worker",
+            "requiredFiles": [],
             "timeLimitSeconds": 10,
-            "makefile":        NSNull(),
-            "testSuites":      [],
+            "makefile": NSNull(),
+            "testSuites": [],
         ]
         let manifestData = try JSONSerialization.data(withJSONObject: manifestDict, options: [.sortedKeys])
         let manifest = String(data: manifestData, encoding: .utf8)!
@@ -68,12 +69,15 @@ final class DraftSupportFilesTests: XCTestCase {
         let cookie = try await loginUser(username: "dsft_inst1", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=fixtures.csv", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.body.string, payload)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=fixtures.csv",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, payload)
+            })
     }
 
     func testDownloadDraftItem_unknownFileReturns404() async throws {
@@ -81,11 +85,14 @@ final class DraftSupportFilesTests: XCTestCase {
         let cookie = try await loginUser(username: "dsft_inst2", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=missing.csv", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .notFound)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=missing.csv",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
     }
 
     func testDownloadDraftItem_pathTraversalRejected() async throws {
@@ -93,11 +100,14 @@ final class DraftSupportFilesTests: XCTestCase {
         let cookie = try await loginUser(username: "dsft_inst3", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=..%2F..%2Fetc%2Fpasswd", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=..%2F..%2Fetc%2Fpasswd",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     func testDownloadDraftItem_missingDraftIDReturns400() async throws {
@@ -105,11 +115,14 @@ final class DraftSupportFilesTests: XCTestCase {
         let cookie = try await loginUser(username: "dsft_inst4", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(.GET, "/instructor/new/draft/files/item?name=fixtures.csv", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .badRequest)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/files/item?name=fixtures.csv",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .badRequest)
+            })
     }
 
     // MARK: - End-to-end: upload via /draft/scripts, download via /draft/files/item
@@ -122,33 +135,39 @@ final class DraftSupportFilesTests: XCTestCase {
         // Upload via the existing draft-scripts endpoint with tier=support.
         struct UploadBody: Content {
             var filename: String
-            var content:  String
-            var tier:     String
-            var isTest:   Bool
+            var content: String
+            var tier: String
+            var isTest: Bool
         }
         let body = UploadBody(filename: "data.json", content: #"{"k": 1}"#, tier: "support", isTest: false)
-        try await app.asyncTest(.POST, "/instructor/new/draft/scripts?draftID=\(draftID)", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.add(name: .init("x-csrf-token"), value: csrf)
-            try req.content.encode(body, as: .json)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .created)
-        })
+        try await app.asyncTest(
+            .POST, "/instructor/new/draft/scripts?draftID=\(draftID)",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                try req.content.encode(body, as: .json)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .created)
+            })
 
         // Download via the new draft files/item endpoint.
-        try await app.asyncTest(.GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=data.json", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertEqual(res.body.string, #"{"k": 1}"#)
-        })
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=data.json",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(res.body.string, #"{"k": 1}"#)
+            })
 
         // Confirm the support file is NOT in the manifest's testSuites
         // (the create-page handler filters tier=="support" out of the
         // suite editor; manifest entries would mistakenly run it as a test).
         guard let setup = try await APITestSetup.find(draftID, on: app.db),
-              let data = setup.manifest.data(using: .utf8),
-              let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let data = setup.manifest.data(using: .utf8),
+            let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return XCTFail("manifest load failed") }
         let entries = dict["testSuites"] as? [[String: Any]] ?? []
         XCTAssertTrue(entries.isEmpty, "Support file uploads must not add a testSuites entry")
