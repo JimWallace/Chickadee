@@ -45,17 +45,6 @@ final class NotebookDownloadTests: XCTestCase {
         return try await loginUser(username: "teststudent", password: "testpassword", role: "student", on: app)
     }
 
-    // MARK: - Setup helper
-
-    private func makeTestCourseID() async throws -> UUID {
-        if let existing = try await APICourse.query(on: app.db).filter(\.$code == "TEST101").first() {
-            return try existing.requireID()
-        }
-        let course = APICourse(code: "TEST101", name: "Test Course", enrollmentMode: .auto)
-        try await course.save(on: app.db)
-        return try course.requireID()
-    }
-
     /// Saves a notebook JSON directly as a flat .ipynb file and returns the setup ID.
     private func insertSetupWithNotebook(notebookJSON: String) async throws -> String {
         let setupID = "setup_test_\(UUID().uuidString.lowercased().prefix(6))"
@@ -68,7 +57,7 @@ final class NotebookDownloadTests: XCTestCase {
         try Data().write(to: URL(fileURLWithPath: dummyZipPath))
         try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
 
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: dummyZipPath, courseID: courseID)
         setup.notebookPath = notebookPath
         try await setup.save(on: app.db)
@@ -156,7 +145,7 @@ final class NotebookDownloadTests: XCTestCase {
         let cookie = try await loginAsStudent()
 
         // Create an assignment record with a title.
-        let courseID = try await makeTestCourseID()
+        let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let a = APIAssignment(testSetupID: setupID, title: "Lab 1 Warmup", dueAt: nil, isOpen: true, courseID: courseID)
         try await a.save(on: app.db)
 
