@@ -73,6 +73,12 @@ struct NotebookContext: Encodable {
     let downloadURL: String?
     let gradingMode: String          // "browser" | "worker"
     let showSubmit: Bool
+    /// True when the assignment is closed (deadline passed without an active
+    /// override, or explicitly closed by the instructor).  The Leaf template
+    /// surfaces a "view only" notice and `notebook.js` reads this via the
+    /// iframe's `data-read-only` attribute to lock cell editing and run
+    /// shortcuts inside JupyterLite.
+    let isClosed: Bool
     /// Unix-epoch mtime (seconds) of the user's working-copy notebook file
     /// on disk at render time.  Embedded in the iframe as
     /// `data-working-copy-mtime`; `notebook.js` compares it against a

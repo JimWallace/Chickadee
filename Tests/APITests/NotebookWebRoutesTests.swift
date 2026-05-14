@@ -118,12 +118,17 @@ final class NotebookWebRoutesTests: XCTestCase {
     }
 
     @discardableResult
-    private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
+    private func insertAssignment(
+        testSetupID: String,
+        title: String,
+        dueAt: Date? = nil,
+        isOpen: Bool = true
+    ) async throws -> APIAssignment {
         let assignment = APIAssignment(
             testSetupID: testSetupID,
             title: title,
-            dueAt: nil,
-            isOpen: true,
+            dueAt: dueAt,
+            isOpen: isOpen,
             courseID: try await makeCourse().requireID()
         )
         try await assignment.save(on: app.db)
@@ -230,6 +235,63 @@ with zipfile.ZipFile('\(zipPath)', 'w') as z:
         )
         XCTAssertTrue(workingCopy.contains("Notebook seed"))
         XCTAssertTrue(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
+    }
+
+    func testNotebookPageOpenAssignmentRendersSubmitAndEditableIframe() async throws {
+        // Open assignment: data-read-only="false", Submit button rendered,
+        // no "closed" notice.
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enroll(user)
+
+        let setupID = "setup_nb_open"
+        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Open"))
+        _ = try await insertAssignment(testSetupID: setupID, title: "Open Lab", dueAt: nil, isOpen: true)
+
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains(#"data-read-only="false""#),
+                "Open assignment iframe must carry data-read-only=\"false\"")
+            XCTAssertTrue(html.contains(#"id="nb-submit""#),
+                "Open assignment must render the Submit button")
+            XCTAssertFalse(html.contains("This assignment is closed"),
+                "Open assignment must not render the closed-view notice")
+        })
+    }
+
+    func testNotebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
+        // Closed assignment (deadline past, no override): the iframe must
+        // carry data-read-only="true", the Submit button must disappear,
+        // and the closed-view notice must appear.  This is the core
+        // contract for the closed-assignment read-only view.
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enroll(user)
+
+        let setupID = "setup_nb_closed"
+        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Closed"))
+        _ = try await insertAssignment(
+            testSetupID: setupID,
+            title: "Closed Lab",
+            dueAt: Date(timeIntervalSinceNow: -3600),     // due 1h ago
+            isOpen: true                                   // not explicitly closed; deadline carries it
+        )
+
+        try await app.asyncTest(.GET, "/testsetups/\(setupID)/notebook", beforeRequest: { req in
+            req.headers.add(name: .cookie, value: cookie)
+        }, afterResponse: { res in
+            XCTAssertEqual(res.status, .ok)
+            let html = res.body.string
+            XCTAssertTrue(html.contains(#"data-read-only="true""#),
+                "Closed assignment iframe must carry data-read-only=\"true\"")
+            XCTAssertFalse(html.contains(#"id="nb-submit""#),
+                "Closed assignment must NOT render the Submit button")
+            XCTAssertTrue(html.contains("This assignment is closed"),
+                "Closed assignment must render the view-only notice")
+        })
     }
 
     func testNotebookSourceReturnsExistingWorkingCopy() async throws {

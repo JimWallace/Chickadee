@@ -40,6 +40,14 @@ extension WebRoutes {
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
+        // Treat an assignment as closed for read-only display whenever it is
+        // not effectively open.  A bare test setup with no APIAssignment row
+        // (instructor preview / unpublished) is treated as not closed so
+        // authoring flows are unaffected.
+        let isClosed: Bool = {
+            guard let assignment else { return false }
+            return !isAssignmentEffectivelyOpen(assignment)
+        }()
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignmentTitle = {
             if !queryTitle.isEmpty { return queryTitle }
@@ -96,6 +104,7 @@ extension WebRoutes {
                     downloadURL: nil,           // download link lives on the submission page
                     gradingMode: manifestGradingMode,
                     showSubmit: false,          // read-only view
+                    isClosed: isClosed,
                     workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
                     currentUser: req.currentUserContext
                 ))
@@ -157,7 +166,8 @@ extension WebRoutes {
                 jupyterLiteEditorURL: editorURL,
                 downloadURL: downloadURL,
                 gradingMode: manifestGradingMode,
-                showSubmit: fileKind == .assignment,
+                showSubmit: fileKind == .assignment && !isClosed,
+                isClosed: isClosed,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
