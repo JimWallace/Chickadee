@@ -335,7 +335,17 @@ func extractSupportFilesToSharedDirectory(
         if fm.fileExists(atPath: sharedDir) {
             try fm.removeItem(atPath: sharedDir)
         }
-        guard !supportNames.isEmpty else { return }
+
+        // Slice 5 of #461: also extract solution.ipynb's code cells
+        // into `solution.py` so personalization expressions can `import
+        // solution` and call the canonical helpers (e.g.
+        // `solution.caesar_encode(...)`).  An instructor-uploaded
+        // `solution.py` support file wins (writeSolutionPyIfNeeded
+        // checks for existence first).
+        let solutionData = extractZipEntry(zipPath: zipPath, entryName: "solution.ipynb")
+
+        // Skip the dir creation when nothing's going to land in it.
+        guard !supportNames.isEmpty || solutionData != nil else { return }
         try fm.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         for name in supportNames {
             guard let data = extractZipEntry(zipPath: zipPath, entryName: name) else { continue }
@@ -345,6 +355,12 @@ func extractSupportFilesToSharedDirectory(
                 withIntermediateDirectories: true
             )
             try data.write(to: destination)
+        }
+        if let solutionData {
+            SolutionNotebookExtractor.writeSolutionPyIfNeeded(
+                notebookData: solutionData,
+                sharedDirectory: sharedDir
+            )
         }
     } catch {
         // Non-fatal: support files are a convenience; log and continue.

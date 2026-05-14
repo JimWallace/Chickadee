@@ -225,7 +225,8 @@ extension AssignmentRoutes {
                 _ = try await PersonalizationEvaluator.evaluate(
                     seedHex: seedHex,
                     staticVariables: staticVars,
-                    expressions: expressions
+                    expressions: expressions,
+                    supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setup.id!)/"
                 )
             } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
                 let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
