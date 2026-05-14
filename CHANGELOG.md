@@ -6,6 +6,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.162] - 2026-05-13
+
+### Added
+
+- **Personalization expressions can import support files — Slice 5 of
+  issue #461.**  The server-side evaluator now spawns `python3` with
+  `PYTHONPATH` + cwd pointing at `{testSetupsDirectory}/shared/{setupID}/`
+  (the same directory `extractSupportFilesToSharedDirectory` already
+  populates after every test-setup save).  The auto-generated driver
+  script then `importlib.import_module()`s every `.py` file in that
+  directory and binds each as a top-level Python name — so an
+  expression `= helpers.caesar_encode(plaintext, shift)` resolves
+  directly when `helpers.py` is in the support files.
+
+  **The solution notebook also becomes importable.**  Most assignments
+  define their canonical functions (`caesar_encode`, `get_plaintext`,
+  ...) in the instructor's `solution.ipynb`.  A new
+  `SolutionNotebookExtractor` walks every code cell of `solution.ipynb`
+  on save and writes a flat `solution.py` into the shared directory
+  alongside support files — unless the instructor uploaded their own
+  `solution.py`, in which case explicit beats derived.  Personalization
+  expressions then call `solution.caesar_encode(...)` without the
+  instructor needing to duplicate helper code into a separate
+  `helpers.py`.
+
+  Non-`.py` data files (CSVs, txt fixtures) are also reachable —
+  expressions can `open("quotes.txt").read().splitlines()[seed % N]`
+  because the subprocess cwd is the support-files directory.
+
+  Pieces:
+
+  - New `Sources/APIServer/Services/SolutionNotebookExtractor.swift`
+    — walks `solution.ipynb` JSON, concatenates code-cell `source`,
+    writes `solution.py` (skips when the file already exists OR the
+    notebook has no code cells).  Called from
+    `extractSupportFilesToSharedDirectory` so every existing save path
+    picks it up automatically.
+  - `PersonalizationEvaluator.evaluate(...)` gains an optional
+    `supportFilesDirectory: String?` parameter.  When provided: cwd +
+    `PYTHONPATH` are set, every `.py` module under that directory is
+    auto-imported in the driver.  Broken modules silently swallow
+    ImportError at the import call; they surface as `NameError` at
+    expression-eval time if an expression actually references them
+    (caught by the existing save-time eval check as a 400).
+  - All three call sites (`applyNotebookSubstitutionsIfNeeded`,
+    `PUT /global-variables`, `POST /suite-sections/.../variables`)
+    pass `req.application.testSetupsDirectory + "shared/\(setupID)/"`.
+
+  Out of scope:
+
+  - Test-script substitution via runner-side bootstrap binding.
+  - File-shaped personalized inputs (per-student CSVs delivered to
+    the student's workspace).
+  - Server-eval sandbox parity with the worker (`sandbox-exec` /
+    `unshare`); same trust model as the validation-submission path.
+
+  Backwards compatibility: zero runner changes; no manifest field
+  added.  The evaluator's new parameter defaults to `nil`, so the
+  Slice 2 behaviour (isolated temp dir) is preserved for any future
+  caller that doesn't pass a support dir.
+
+  Tests (`Tests/APITests/SupportImportTests.swift`, 8 cases):
+  extractor concatenates code cells / skips markdown / respects
+  instructor-uploaded `solution.py` / skips empty notebooks; evaluator
+  auto-imports a `.py` support module; data files readable via cwd;
+  broken support module is tolerated unless referenced; static global
+  shadows same-named import; end-to-end Caesar cipher with chained
+  expressions producing a known ciphertext for a known seed.
+
 ## [0.4.161] - 2026-05-13
 
 ### Added

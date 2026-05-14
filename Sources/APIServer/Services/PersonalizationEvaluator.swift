@@ -56,6 +56,7 @@ enum PersonalizationEvaluator {
         seedHex: String,
         staticVariables: [FamilyVariable],
         expressions: [PersonalizationExpression],
+        supportFilesDirectory: String? = nil,
         timeoutSeconds: Int = defaultTimeoutSeconds
     ) async throws -> [String: String] {
         guard !expressions.isEmpty else { return [:] }
@@ -66,15 +67,50 @@ enum PersonalizationEvaluator {
         try? fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: tempDir) }
 
+        // Slice 5 of #461: when a support-files directory is provided,
+        // collect every `.py` module name so the driver auto-imports
+        // them.  Module names are filename stems that are valid Python
+        // identifiers (`__init__` excluded — that's a package marker,
+        // not a usable helper).
+        let supportModules: [String] = {
+            guard let dir = supportFilesDirectory,
+                  fm.fileExists(atPath: dir),
+                  let entries = try? fm.contentsOfDirectory(atPath: dir) else {
+                return []
+            }
+            return entries.compactMap { entry -> String? in
+                guard entry.hasSuffix(".py") else { return nil }
+                let stem = String(entry.dropLast(3))
+                guard stem != "__init__", isValidPyIdent(stem) else { return nil }
+                return stem
+            }.sorted()
+        }()
+
         let driverSource = renderDriverScript(
             staticVariables: staticVariables,
-            expressions: expressions
+            expressions: expressions,
+            supportModules: supportModules
         )
         let driverURL = tempDir.appendingPathComponent("personalize_driver.py")
         do {
             try driverSource.write(to: driverURL, atomically: true, encoding: .utf8)
         } catch {
             throw PersonalizationEvaluatorError.driverWriteFailed
+        }
+
+        // Subprocess cwd + PYTHONPATH point at the support-files
+        // directory when supplied, so `open("quotes.txt")` works for
+        // non-`.py` data files and `import helpers` resolves.  Falls
+        // back to the isolated temp dir when no support dir is given
+        // (preserves Slice 2 behaviour for callers that haven't been
+        // updated).
+        var env: [String: String] = ["CHICKADEE_ASSIGNMENT_SEED": seedHex]
+        let spawnCwd: URL
+        if let supportFilesDirectory, fm.fileExists(atPath: supportFilesDirectory) {
+            spawnCwd = URL(fileURLWithPath: supportFilesDirectory, isDirectory: true)
+            env["PYTHONPATH"] = supportFilesDirectory
+        } else {
+            spawnCwd = tempDir
         }
 
         let stdout: String
@@ -84,8 +120,8 @@ enum PersonalizationEvaluator {
             (stdout, stderr, exitCode) = try await spawnAndCapture(
                 executableURL: URL(fileURLWithPath: "/usr/bin/env"),
                 arguments: ["python3", driverURL.path],
-                cwd: tempDir,
-                env: ["CHICKADEE_ASSIGNMENT_SEED": seedHex],
+                cwd: spawnCwd,
+                env: env,
                 timeoutSeconds: timeoutSeconds
             )
         } catch PersonalizationEvaluatorError.timedOut {
@@ -122,17 +158,36 @@ enum PersonalizationEvaluator {
 
     static func renderDriverScript(
         staticVariables: [FamilyVariable],
-        expressions: [PersonalizationExpression]
+        expressions: [PersonalizationExpression],
+        supportModules: [String] = []
     ) -> String {
         var lines: [String] = [
             "# Auto-generated personalization driver.  Do not edit.",
-            "import json, os",
+            "import importlib, json, os",
             "",
             "seed = int(os.environ['CHICKADEE_ASSIGNMENT_SEED'], 16)",
             ""
         ]
+        // Slice 5: auto-import every .py support module Chickadee can
+        // see in the support-files dir.  Bind each module object as a
+        // top-level Python name so expressions can call
+        // `helpers.foo(...)` directly.  Broken modules silently
+        // ImportError here — they surface as NameError at
+        // expression-eval time if anything actually references them.
+        if !supportModules.isEmpty {
+            lines.append("# Auto-imported support modules (instructor-uploaded .py files +")
+            lines.append("# the solution.ipynb code cells extracted into solution.py).")
+            for name in supportModules {
+                lines.append("try:")
+                lines.append("    \(name) = importlib.import_module(\(stringLiteral(name)))")
+                lines.append("except Exception:")
+                lines.append("    pass  # surfaces as NameError at expression eval time if used")
+            }
+            lines.append("")
+        }
         if !staticVariables.isEmpty {
             lines.append("# Static globals + section variables (in scope for expressions).")
+            lines.append("# Explicit assignments shadow same-named auto-imports above.")
             for v in staticVariables {
                 lines.append("\(v.name) = \(v.value.pythonLiteral)")
             }
@@ -150,6 +205,14 @@ enum PersonalizationEvaluator {
         }
         lines.append("print(json.dumps(_out))")
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Same identifier predicate the editor JS uses.  Used to filter
+    /// support-file names down to legal Python module names.
+    private static func isValidPyIdent(_ s: String) -> Bool {
+        guard let first = s.first else { return false }
+        guard first.isLetter || first == "_" else { return false }
+        return s.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
     }
 
     /// Emits a Python-safe single-quoted string literal for an

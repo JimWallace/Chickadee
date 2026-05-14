@@ -317,18 +317,18 @@ func ensureUserNotebookWorkingCopy(
         ).data
     }
 
-    // Slice 1 + Slice 2: substitute `{{name}}` placeholders in the starter
-    // notebook.  Slice 1 sources literals from globalVariables + section
-    // variables.  Slice 2 additionally evaluates `globalExpressions` with
-    // the student's seed and merges the per-student values into the same
-    // substitution map.  Failures (malformed JSON, eval errors, etc.)
-    // fall back to un-substituted seedData; the editor's save-time check
-    // is the primary gate.
+    // Slice 1 + Slice 2 + Slice 4: substitute `{{name}}` placeholders in
+    // the starter notebook.  Slice 5: the evaluator can now import
+    // instructor-uploaded `.py` support files (and the auto-extracted
+    // `solution.py` from solution.ipynb).  Failures fall back to
+    // un-substituted seedData; the editor's save-time check is the
+    // primary gate.
     let processedData = await applyNotebookSubstitutionsIfNeeded(
         seedData: seedData,
         setup: fallbackSetup,
         userID: userID,
         db: req.db,
+        supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/",
         logger: req.logger
     )
 
@@ -357,6 +357,7 @@ private func applyNotebookSubstitutionsIfNeeded(
     setup: APITestSetup,
     userID: UUID,
     db: Database,
+    supportFilesDirectory: String? = nil,
     logger: Logger
 ) async -> Data {
     guard let manifestData = setup.manifest.data(using: .utf8),
@@ -401,7 +402,8 @@ private func applyNotebookSubstitutionsIfNeeded(
             let evaluated = try await PersonalizationEvaluator.evaluate(
                 seedHex: seedHex,
                 staticVariables: staticVars,
-                expressions: allExpressions
+                expressions: allExpressions,
+                supportFilesDirectory: supportFilesDirectory
             )
             // Per-student values override literals on name collision —
             // matches the editor's "expressions shadow same-named

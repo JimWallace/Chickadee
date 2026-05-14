@@ -22,6 +22,18 @@ too (notebook substitution only — same constraint as global
 expressions).  The same auto-import / save-time eval / `seed` binding
 rules apply.
 
+**Slice 5** lets personalization expressions import instructor code:
+
+- Every `.py` file uploaded as a support file becomes a Python module
+  importable by stem (`helpers.py` → `helpers.foo(...)`).
+- The instructor's `solution.ipynb` is auto-extracted to a synthetic
+  `solution.py` after every test-setup save.  Expressions can call
+  `solution.caesar_encode(...)` without the instructor duplicating
+  helpers.  An uploaded `solution.py` support file wins on collision.
+- Non-`.py` data files (CSVs, text) are reachable too — the
+  evaluator's cwd is the support-files directory, so
+  `open("quotes.txt").read().splitlines()[seed % N]` just works.
+
 ## Two row kinds on the Global Inputs panel
 
 **Literal value** — the Value cell holds bare-typed JSON
