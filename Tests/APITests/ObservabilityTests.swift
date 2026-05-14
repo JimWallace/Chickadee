@@ -352,6 +352,90 @@ final class ObservabilityTests: XCTestCase {
         })
     }
 
+    /// Retests reuse the same `JobExecutionMetric` row. Two things must be
+    /// true after the new assignment is recorded:
+    /// 1. `enqueuedAt` is re-baselined to `retestedAt`, so `queueWaitMs`
+    ///    reflects only the retest window — not the time since the original
+    ///    submission was first made.
+    /// 2. Per-attempt fields from the previous run (`completedAt`,
+    ///    `totalProcessingMs`, `executionMs`, stage timings, etc.) are
+    ///    cleared, so an in-flight retest never renders with `Total <
+    ///    Queue Wait` on the admin runner page.
+    func testRetestClearsStalePerAttemptFieldsAndRebaselinesEnqueue() async throws {
+        let (_, submission) = try await makeSubmission(submissionID: "sub_retest")
+
+        // --- Attempt 1: submit, assign, complete. ---
+        let originallySubmittedAt = Date(timeIntervalSince1970: 1_000)
+        let firstAssignedAt       = Date(timeIntervalSince1970: 1_002)
+        let firstStartedAt        = Date(timeIntervalSince1970: 1_003)
+        let firstCompletedAt      = Date(timeIntervalSince1970: 1_010)
+
+        submission.submittedAt = originallySubmittedAt
+        try await submission.update(on: app.db)
+        await app.diagnostics.recordSubmissionCreated(submission: submission, on: app.db, logger: app.logger)
+
+        submission.workerID  = "runner-original"
+        submission.assignedAt = firstAssignedAt
+        submission.status     = "assigned"
+        try await submission.update(on: app.db)
+        await app.diagnostics.recordJobAssigned(submission: submission, on: app.db, logger: app.logger)
+
+        let firstCollection = TestOutcomeCollection(
+            submissionID: try submission.requireID(),
+            testSetupID: submission.testSetupID,
+            attemptNumber: 1,
+            buildStatus: .passed,
+            compilerOutput: nil,
+            outcomes: [],
+            totalTests: 0,
+            passCount: 0, failCount: 0, errorCount: 0, timeoutCount: 0,
+            executionTimeMs: 7_000,
+            jobStartedAt: firstStartedAt,
+            runnerVersion: "runner-test/1.0",
+            timestamp: firstCompletedAt
+        )
+        await app.diagnostics.recordWorkerResult(
+            collection: firstCollection,
+            submission: submission,
+            on: app.db,
+            logger: app.logger
+        )
+
+        let postFirstRun = try await JobExecutionMetric.query(on: app.db)
+            .filter(\.$submissionID == "sub_retest")
+            .first()
+        XCTAssertEqual(postFirstRun?.totalProcessingMs, 10_000)  // 1_010 − 1_000
+        XCTAssertEqual(postFirstRun?.queueWaitMs, 2_000)         //  1_002 − 1_000
+        XCTAssertNotNil(postFirstRun?.completedAt)
+
+        // --- Retest is triggered later, gets re-assigned. ---
+        let retestedAt        = Date(timeIntervalSince1970: 50_000)
+        let retestAssignedAt  = Date(timeIntervalSince1970: 50_004)
+
+        submission.retestedAt = retestedAt
+        submission.assignedAt = retestAssignedAt
+        submission.workerID   = "runner-retest"
+        submission.status     = "assigned"
+        try await submission.update(on: app.db)
+        await app.diagnostics.recordJobAssigned(submission: submission, on: app.db, logger: app.logger)
+
+        let postRetestAssign = try await JobExecutionMetric.query(on: app.db)
+            .filter(\.$submissionID == "sub_retest")
+            .first()
+        // Queue wait reflects the retest window only (4s), not 49,004s since
+        // the original submission.
+        XCTAssertEqual(postRetestAssign?.queueWaitMs, 4_000)
+        // Per-attempt fields from the previous run are cleared.
+        XCTAssertNil(postRetestAssign?.completedAt)
+        XCTAssertNil(postRetestAssign?.startedAt)
+        XCTAssertNil(postRetestAssign?.executionMs)
+        XCTAssertNil(postRetestAssign?.totalProcessingMs)
+        XCTAssertNil(postRetestAssign?.finalStatus)
+        // Specifically: Total < Queue Wait is no longer possible because
+        // totalProcessingMs is nil — the admin page will show "—" until
+        // the retest completes.
+    }
+
     private func makeSubmission(
         submissionID: String,
         gradingMode: String = "worker"

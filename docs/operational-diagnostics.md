@@ -35,12 +35,21 @@ Captured fields include:
 - `tests_errored`
 - `tests_timed_out`
 - `skipped_count`
+- `free_disk_mb_at_start` — free space on the runner's temp filesystem when the
+  job was accepted, in megabytes
+- `free_disk_mb_at_end` — free space at end of execution, before workspace
+  cleanup; worst-case reading for the job
+- `workdir_peak_bytes` — total bytes in the per-job workspace just before
+  cleanup; proxy for peak disk working-set
 
 Definitions:
 
 - `queue_wait_ms = assigned_at - enqueued_at`
 - `execution_ms = completed_at - started_at`
 - `total_processing_ms = completed_at - enqueued_at`
+- Disk readings are best-effort: the runner records them only when it can
+  query the filesystem; missing readings are stored as `NULL`, so any
+  threshold query should `COALESCE`/`IS NOT NULL`-guard.
 
 `final_status` is one of:
 
@@ -130,6 +139,17 @@ Runner-side structured log events include:
 - `local_execution_error`
 - `timeout`
 - `runner_shutdown`
+- `job_stage_timings` — emitted at end-of-job with the wall-clock totals plus
+  per-stage millisecond fields (`workdir_setup_ms`, `submission_download_ms`,
+  …, `test_execution_ms`, `cleanup_ms`)
+- `job_disk_usage` — emitted at end-of-job with `free_disk_mb_at_start`,
+  `free_disk_mb_at_end` (just before workspace cleanup),
+  `free_disk_mb_post_cleanup`, `workdir_peak_bytes`, and `min_free_disk_mb`
+  (the configured floor). Useful for spotting jobs trending near the
+  precheck threshold without a SQL join.
+- `insufficient_disk_space` — emitted instead of `job_accepted` when the
+  precheck (`RUNNER_MIN_FREE_DISK_MB`, default 128) rejects a job. Carries
+  `free_mb` and `required_mb`.
 
 Keys are kept consistent across events where possible:
 

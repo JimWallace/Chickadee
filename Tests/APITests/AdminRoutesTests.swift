@@ -512,6 +512,8 @@ final class AdminRoutesTests: XCTestCase {
         metric.runtimeHelperSetupMs = 15
         metric.makeStepMs = 25
         metric.finalStatus = "passed"
+        // 12 MiB workspace footprint — verifies the new Peak Disk column.
+        metric.workdirPeakBytes = 12 * 1024 * 1024
         try await metric.save(on: app.db)
 
         let snapshot = RunnerSnapshot(
@@ -554,6 +556,11 @@ final class AdminRoutesTests: XCTestCase {
             XCTAssertTrue(body.contains("Utilization %"))
             XCTAssertFalse(body.contains(">Max Jobs<"))
             XCTAssertFalse(body.contains(">Available<"))
+            // Peak Disk column shows the formatted bytes; Setup/Other column
+            // was removed in favour of it.
+            XCTAssertTrue(body.contains("Peak Disk"))
+            XCTAssertTrue(body.contains("12.0 MB"))
+            XCTAssertFalse(body.contains(">Setup/Other<"))
         })
     }
 }

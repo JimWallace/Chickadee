@@ -242,12 +242,12 @@ struct AdminRoutes: RouteCollection {
                 finalStatus: $0.finalStatus ?? "unknown",
                 queueWaitMs: $0.queueWaitMs,
                 executionMs: $0.executionMs,
-                overheadMs: overheadMs(for: $0),
                 queueWaitFormatted: $0.queueWaitMs.map(formatMs),
                 executionFormatted: $0.executionMs.map(formatMs),
-                overheadFormatted: overheadMs(for: $0).map(formatMs),
                 totalProcessingMs: $0.totalProcessingMs,
                 totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
+                workdirPeakBytes: $0.workdirPeakBytes,
+                workdirPeakFormatted: $0.workdirPeakBytes.map(formatBytes),
                 completedAt: $0.completedAt.map(iso8601String)
             )
         }
@@ -600,6 +600,17 @@ private func formatMs(_ ms: Int) -> String {
     }
 
     return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s"
+}
+
+private func formatBytes(_ bytes: Int) -> String {
+    if bytes < 1024 { return "\(bytes) B" }
+    let kb = Double(bytes) / 1024
+    if kb < 1024 { return String(format: "%.0f KB", kb) }
+    let mb = kb / 1024
+    if mb < 100 { return String(format: "%.1f MB", mb) }
+    if mb < 1024 { return String(format: "%.0f MB", mb) }
+    let gb = mb / 1024
+    return String(format: "%.1f GB", gb)
 }
 
 private func overheadMs(for metric: JobExecutionMetric) -> Int? {

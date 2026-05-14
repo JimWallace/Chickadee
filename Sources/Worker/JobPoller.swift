@@ -19,27 +19,30 @@ struct JobPoller: Sendable {
     let maxConcurrentJobs: Int
     let profile: RunnerCapabilityProfile?
     private let signer: WorkerRequestSigner
+    private let session: URLSession
 
     init(
         apiBaseURL: URL,
         workerID: String,
         workerSecret: String,
         maxConcurrentJobs: Int,
-        profile: RunnerCapabilityProfile? = nil
+        profile: RunnerCapabilityProfile? = nil,
+        session: URLSession = JobPoller.defaultSession()
     ) {
         self.apiBaseURL        = apiBaseURL
         self.workerID          = workerID
         self.maxConcurrentJobs = maxConcurrentJobs
         self.profile           = profile
         self.signer            = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+        self.session           = session
     }
 
-    private static let session: URLSession = {
+    static func defaultSession() -> URLSession {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest  = 30
         cfg.timeoutIntervalForResource = 60
         return URLSession(configuration: cfg)
-    }()
+    }
 
     /// POST /api/v1/worker/request → Job, or nil when no work is available.
     func requestJob(activeJobs: Int) async throws(JobPollerError) -> Core.Job? {
@@ -60,7 +63,7 @@ struct JobPoller: Sendable {
         signer.sign(&request)
 
         let (data, response): (Data, URLResponse)
-        do { (data, response) = try await Self.session.data(for: request) } catch { throw .transportError(error) }
+        do { (data, response) = try await session.data(for: request) } catch { throw .transportError(error) }
 
         guard let http = response as? HTTPURLResponse else {
             throw .unexpectedResponse

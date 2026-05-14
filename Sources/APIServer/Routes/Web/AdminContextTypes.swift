@@ -67,12 +67,15 @@ struct AdminRunnerJobRow: Encodable {
     let finalStatus: String
     let queueWaitMs: Int?
     let executionMs: Int?
-    let overheadMs: Int?
     let queueWaitFormatted: String?
     let executionFormatted: String?
-    let overheadFormatted: String?
     let totalProcessingMs: Int?
     let totalProcessingFormatted: String?
+    /// Bytes-on-disk for the per-job workspace, sampled just before
+    /// cleanup. Sortable; the formatted variant carries the rendered
+    /// "12.4 MB" / "850 KB" string.
+    let workdirPeakBytes: Int?
+    let workdirPeakFormatted: String?
     let completedAt: String?
 }
 

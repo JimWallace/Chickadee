@@ -426,6 +426,45 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
                 context: context,
                 on: db
             )
+            // Re-baseline the queue clock on retests so queue-wait reflects
+            // the retest window, not the time since the original submission.
+            // Matches the v0.4.45 fix already applied to APISubmissionDiagnostics
+            // (`effectiveEnqueuedAt`). Non-retests have `retestedAt == nil` so
+            // this is a no-op for them.
+            metric.enqueuedAt = submission.retestedAt ?? submission.submittedAt ?? metric.enqueuedAt
+
+            // If this row already carries data from a finished attempt (the
+            // retest case), clear the per-attempt fields so the in-flight
+            // retest doesn't render with mixed timestamps (which made
+            // `Total < Queue Wait` show up on the admin runner page).
+            // `recordWorkerExecutionReport` will repopulate them when the
+            // retest completes.
+            if metric.completedAt != nil {
+                metric.startedAt = nil
+                metric.completedAt = nil
+                metric.executionMs = nil
+                metric.totalProcessingMs = nil
+                metric.finalStatus = nil
+                metric.testsPassed = nil
+                metric.testsFailed = nil
+                metric.testsErrored = nil
+                metric.testsTimedOut = nil
+                metric.skippedCount = nil
+                metric.workdirSetupMs = nil
+                metric.submissionDirSetupMs = nil
+                metric.submissionDownloadMs = nil
+                metric.testSetupAcquireMs = nil
+                metric.submissionUnpackMs = nil
+                metric.starterCleanupMs = nil
+                metric.submissionPrepareMs = nil
+                metric.makeStepMs = nil
+                metric.runtimeHelperSetupMs = nil
+                metric.testExecutionMs = nil
+                metric.freeDiskMBAtStart = nil
+                metric.freeDiskMBAtEnd = nil
+                metric.workdirPeakBytes = nil
+            }
+
             metric.assignedAt = submission.assignedAt ?? metric.assignedAt
             metric.runnerID = submission.workerID ?? metric.runnerID
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
@@ -500,6 +539,9 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             diagnostics.childProcessCount = workerDiagnostics?.childProcessCount
             diagnostics.stdoutBytes = workerDiagnostics?.stdoutBytes
             diagnostics.stderrBytes = workerDiagnostics?.stderrBytes
+            diagnostics.freeDiskMBAtStart = workerDiagnostics?.freeDiskMBAtStart
+            diagnostics.freeDiskMBAtEnd = workerDiagnostics?.freeDiskMBAtEnd
+            diagnostics.workdirPeakBytes = workerDiagnostics?.workdirPeakBytes
             try await diagnostics.save(on: db)
 
             let metric = try await findOrCreateJobExecutionMetric(
@@ -521,6 +563,9 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
             metric.testsErrored = collection.errorCount
             metric.testsTimedOut = collection.timeoutCount
             metric.skippedCount = skippedCount(in: collection.outcomes)
+            metric.freeDiskMBAtStart = workerDiagnostics?.freeDiskMBAtStart
+            metric.freeDiskMBAtEnd = workerDiagnostics?.freeDiskMBAtEnd
+            metric.workdirPeakBytes = workerDiagnostics?.workdirPeakBytes
             try await metric.save(on: db)
 
             logger.info(

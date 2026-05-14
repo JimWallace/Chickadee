@@ -208,4 +208,5 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddBrightSpaceSyncFields())
     app.migrations.add(CreateClientDiagnostics())
     app.migrations.add(CreateAssignmentPersonalizationSeeds())
+    app.migrations.add(AddJobDiskUsageMetrics())
 }

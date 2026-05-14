@@ -6,6 +6,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.164] - 2026-05-14
+
+### Added
+
+- **Worker unit-test coverage for `JobPoller` and `Reporter`.**  Both
+  files were at near-zero coverage despite being the entry/exit points
+  for the entire grading pipeline.  Coverage now lands at **95.8%** for
+  `JobPoller` and **96.7%** for `Reporter`.  A reusable
+  `MockURLProtocol` test helper intercepts `URLSession` traffic so every
+  status-code branch (200/204/409/500), retry classification
+  (401/403/409/400/429/500/502/503/504), retry exhaustion, and wire
+  format (HMAC headers, JSON body) is exercised deterministically.
+  Source side: the two structs now accept an injected `URLSession`
+  (default unchanged) — a one-line testability change with zero
+  production-behaviour delta.
+- **Runner-side disk-usage telemetry.**  Every job now records
+  `freeDiskMBAtStart`, `freeDiskMBAtEnd`, and `workdirPeakBytes` on
+  `WorkerExecutionDiagnostics`; the server persists them in both
+  `job_execution_metrics` and `submission_diagnostics` via the new
+  `AddJobDiskUsageMetrics` migration.  A dedicated
+  `job_disk_usage` structured log event also lands at end-of-job so ops
+  can answer "are we close to the floor?" without a SQL join.  The
+  admin **Runner detail** page (`/admin/runners/:id`) gets a new
+  sortable **Peak Disk** column (B/KB/MB/GB) in place of
+  **Setup/Other**.
+- **`RUNNER_MIN_FREE_DISK_MB` precheck.**  The runner now refuses to
+  accept a new job when free space on the staging filesystem is below
+  the configured floor (default **128 MB**; set to `0` to disable).
+  Failures emit a structured `insufficient_disk_space` event and a
+  clear `WorkerDaemonError.insufficientDiskSpace` instead of a cryptic
+  mid-job ENOSPC.
+
+### Changed
+
+- **`RunnerProfileDetector` is now async + parallelized + bounded.**
+  Capability probes (`python3 --version`, `R --version`, module imports,
+  `which bash/zsh`) used to run sequentially with no timeout — a hung
+  wrapper could wedge runner startup forever.  Each probe now has a 5 s
+  wall-clock cap (`waitWithTimeout`) and the independent probes run
+  concurrently via `async let` / `TaskGroup`.  Timeouts surface as
+  `capability_detection_timeout` log events.
+- **Test-execution loop extracted from `RunnerDaemon.process()`.**
+  The ~75-line dependency-gate + script-dispatch + outcome-collection
+  block is now `executeTestSuites(manifest:testSetupDir:job:)`; the
+  parent method drops from ~270 lines to ~200 with no behaviour change.
+- **Heartbeat task respects cancellation precisely.**  The per-job
+  heartbeat loop in `RunnerDaemon.process()` now breaks on the
+  `CancellationError` thrown by `Task.sleep` instead of firing one
+  extra heartbeat after cancel.
+- **Conservative disk default per project pattern.**  `minFreeDiskMB`
+  defaults to 128, matching the "err on the small side so tight-VM
+  deploys work unconfigured" pattern used elsewhere in
+  `RunnerDaemonConfig`.
+- **`mergeDirectoryContents` uses URL-component walks instead of
+  string substitution** for computing relative paths — survives
+  `/var` vs `/private/var` aliases and refuses to copy entries that
+  resolve outside the source root.
+- **Server-authoritative `Total` clarified.**  The Total column on the
+  runner detail page is already true round-trip
+  (`completed_at − enqueued_at`); the Setup/Other column it replaced
+  was the residual.  Removed the now-redundant column.
+
+### Fixed
+
+- **`Total < Queue Wait` could show on the runner detail page during
+  in-flight retests.**  `recordJobAssigned` updated `assignedAt` and
+  recomputed `queueWaitMs`, but left `completedAt` /
+  `totalProcessingMs` (and other per-attempt fields) carrying values
+  from the previous attempt — so the row mixed fresh + stale
+  timestamps until the retest completed.  Per-attempt fields are now
+  cleared on re-assignment.
+- **Retest queue-wait was baselined to the original submission time,
+  not the retest click.**  The v0.4.45 fix shipped only to
+  `APISubmissionDiagnostics`; the canonical `JobExecutionMetric`
+  (which drives the admin page) still used `submittedAt`.  Retest
+  queue-wait now uses `retestedAt ?? submittedAt` as the baseline,
+  matching the legacy diagnostics table.
+- **`TestSetupCache` evictions no longer fail silently.**  Disk-delete
+  errors during LRU eviction now emit a
+  `test_setup_cache_evict_failed` event with path + error type instead
+  of being swallowed by `try?`.
+- **Two-registry migration footgun.**  Server migrations are
+  registered in *two* lists (production `registerMigrations` plus the
+  observability-test `registerObservabilityTestMigrations`).  The new
+  `AddJobDiskUsageMetrics` is added to both.
+
 ## [0.4.163] - 2026-05-14
 
 ### Added

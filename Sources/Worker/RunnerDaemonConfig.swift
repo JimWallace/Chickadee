@@ -20,6 +20,12 @@ struct RunnerDaemonConfig: Sendable, Equatable {
     let heartbeatRetryMaxAttempts: Int
     let resultUploadRetryMaxAttempts: Int
     let downloadRetryMaxAttempts: Int
+    /// Minimum free space (megabytes) on the workspace filesystem before a
+    /// job is allowed to stage. Jobs that don't clear this bar are
+    /// rejected with a clear error instead of failing partway through with
+    /// a cryptic ENOSPC. Override via `RUNNER_MIN_FREE_DISK_MB`; set to 0
+    /// to disable the precheck.
+    let minFreeDiskMB: Int
 
     /// Built-in defaults — match the historical fallback values that
     /// `runnerEnvironmentBool` / `runnerEnvironmentInt` used when no
@@ -32,7 +38,8 @@ struct RunnerDaemonConfig: Sendable, Equatable {
         retryMaxDelayMs:               30_000,
         heartbeatRetryMaxAttempts:     4,
         resultUploadRetryMaxAttempts:  8,
-        downloadRetryMaxAttempts:      6
+        downloadRetryMaxAttempts:      6,
+        minFreeDiskMB:                 128
     )
 
     /// Reads every runner-config env var once.  Falls back to the
@@ -48,7 +55,8 @@ struct RunnerDaemonConfig: Sendable, Equatable {
             retryMaxDelayMs:              parseInt(env["RUNNER_RETRY_MAX_DELAY_MS"], default: defaults.retryMaxDelayMs),
             heartbeatRetryMaxAttempts:    parseInt(env["RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS"], default: defaults.heartbeatRetryMaxAttempts),
             resultUploadRetryMaxAttempts: parseInt(env["RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.resultUploadRetryMaxAttempts),
-            downloadRetryMaxAttempts:     parseInt(env["RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.downloadRetryMaxAttempts)
+            downloadRetryMaxAttempts:     parseInt(env["RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.downloadRetryMaxAttempts),
+            minFreeDiskMB:                parseInt(env["RUNNER_MIN_FREE_DISK_MB"], default: defaults.minFreeDiskMB)
         )
     }
 }
