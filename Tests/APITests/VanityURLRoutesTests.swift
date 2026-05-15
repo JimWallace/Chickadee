@@ -51,6 +51,7 @@ final class VanityURLRoutesTests: XCTestCase {
         return course
     }
 
+    @discardableResult
     private func seedSetupAndAssignment(
         courseID: UUID,
         title: String,

@@ -73,8 +73,8 @@ import Vapor
 
     /// Legacy `WORKER_SHARED_SECRET` wins only when `RUNNER_SHARED_SECRET` is
     /// unset, and the loader flags this so `logSummary` can warn.
-    @Test func legacyWorkerSecretAliasIsHonouredButFlagged() throws {
-        try withEnvironment(
+    @Test func legacyWorkerSecretAliasIsHonouredButFlagged() {
+        withEnvironment(
             set: ["WORKER_SHARED_SECRET": "legacy-value"],
             unset: ["RUNNER_SHARED_SECRET"]
         ) {
@@ -83,7 +83,7 @@ import Vapor
             #expect(workers.usedLegacyAlias == true)
         }
 
-        try withEnvironment(set: [
+        withEnvironment(set: [
             "RUNNER_SHARED_SECRET": "primary",
             "WORKER_SHARED_SECRET": "legacy",
         ]) {
@@ -94,8 +94,8 @@ import Vapor
     }
 
     /// SSO mode is forced when non-SSO modes are not explicitly enabled.
-    @Test func authModeDowngradesToSSOWhenNonSSODisabled() throws {
-        try withEnvironment(set: [
+    @Test func authModeDowngradesToSSOWhenNonSSODisabled() {
+        withEnvironment(set: [
             "AUTH_MODE": "local",
             "ENABLE_NON_SSO_AUTH_MODES": "false",
         ]) {
@@ -247,15 +247,7 @@ private struct ClosureLogHandler: LogHandler {
         set { metadata[key] = newValue }
     }
 
-    func log(
-        level: Logger.Level,
-        message: Logger.Message,
-        metadata: Logger.Metadata?,
-        source: String,
-        file: String,
-        function: String,
-        line: UInt
-    ) {
-        onLog("\(level) \(message)")
+    func log(event: LogEvent) {
+        onLog("\(event.level) \(event.message)")
     }
 }
