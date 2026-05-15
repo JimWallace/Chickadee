@@ -76,7 +76,7 @@ public struct BundledCourse: Codable, Sendable {
     // DEPRECATED: remove in v0.6.0 — see CHANGELOG.
     // Present only in `.chickadee` bundles exported before `enrollmentMode` was added.
     // Ignored when `enrollmentMode` is non-nil. Once v0.6.0 is cut, drop the field
-    // and stop honouring it in `bundledCourseEnrollmentMode(...)`.
+    // and the `openEnrollment` branch inside `bundledCourseEnrollmentMode(_:)`.
     public let openEnrollment: Bool?
 
     public init(
@@ -89,6 +89,21 @@ public struct BundledCourse: Codable, Sendable {
         self.enrollmentMode = enrollmentMode
         self.openEnrollment = openEnrollment
     }
+}
+
+/// Resolves the effective `CourseEnrollmentMode` for an imported bundle.
+///
+/// Prefers `enrollmentMode` (the canonical field).  Falls back to the
+/// pre-v0.3.x `openEnrollment` boolean for older bundles: `false → closed`,
+/// any other value → `open`.  Both paths default to `.open` when neither
+/// field is present so import never fails on a missing-field error.
+///
+/// v0.6.0 cleanup site: drop the `openEnrollment` branch and inline the
+/// `enrollmentMode ?? .open` form at the call site.
+public func bundledCourseEnrollmentMode(_ course: BundledCourse) -> CourseEnrollmentMode {
+    if let mode = course.enrollmentMode { return mode }
+    if course.openEnrollment == false { return .closed }
+    return .open
 }
 
 public struct BundledUser: Codable, Sendable {

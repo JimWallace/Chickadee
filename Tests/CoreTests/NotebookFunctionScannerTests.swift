@@ -166,6 +166,38 @@ struct NotebookFunctionScannerTests {
         #expect(fns[0].name == "public_fn")
     }
 
+    // Pre-v0.4.94 browser clients didn't send `isShadowed`. The custom
+    // decoder defaults the missing key to false. Pin both branches so the
+    // v0.6.0 cleanup that removes the fallback only has to delete the
+    // `decodeIfPresent ?? false` line — these tests will fail loudly if
+    // anyone changes the contract.
+    @Test func isShadowedDecodeFallback_legacyJSONWithoutFieldDefaultsToFalse() throws {
+        let json = """
+            {
+              "name": "tax",
+              "paramNames": ["price"],
+              "hasTypeHints": true,
+              "hasDocstring": false
+            }
+            """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
+        #expect(decoded.isShadowed == false)
+    }
+
+    @Test func isShadowedDecodeFallback_modernJSONHonoursExplicitTrue() throws {
+        let json = """
+            {
+              "name": "tax",
+              "paramNames": ["price"],
+              "hasTypeHints": true,
+              "hasDocstring": false,
+              "isShadowed": true
+            }
+            """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
+        #expect(decoded.isShadowed == true)
+    }
+
     @Test func shadowedFunctionMarked() {
         // Pedagogical notebooks often redefine a function to extend it.  Only
         // the LAST definition is callable at runtime; the scanner must mark
