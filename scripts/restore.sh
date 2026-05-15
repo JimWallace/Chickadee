@@ -106,9 +106,21 @@ MANIFEST_DATA_BYTES="$(python3 -c "import json; print(json.load(open('$MANIFEST'
 CURRENT_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]')"
 
 # ----------------------------------------------------------------
-# Load .env so DATABASE_* vars are visible
+# Read DATABASE_* from the live server container.
+# This is authoritative — it covers every place compose looks
+# (.env, docker-compose.override.yml, exported shell env, etc.).
+# Fall back to .env only if the server isn't running yet.
+# Note: this MUST happen before we stop the server below, otherwise
+# the container env is gone.
 # ----------------------------------------------------------------
-if [[ -f "$REPO_ROOT/.env" ]]; then
+DB_VARS_FROM_CONTAINER=0
+while IFS='=' read -r k v; do
+  case "$k" in
+    DATABASE_*) export "$k=$v"; DB_VARS_FROM_CONTAINER=1 ;;
+  esac
+done < <($COMPOSE exec -T server env 2>/dev/null || true)
+
+if [[ $DB_VARS_FROM_CONTAINER -eq 0 && -f "$REPO_ROOT/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "$REPO_ROOT/.env"
@@ -120,8 +132,8 @@ if [[ "$DATABASE_BACKEND" != "postgres" ]]; then
   echo "ERROR: restore.sh only supports DATABASE_BACKEND=postgres (got: $DATABASE_BACKEND)." >&2
   exit 1
 fi
-: "${DATABASE_USER:?DATABASE_USER must be set in .env}"
-: "${DATABASE_NAME:?DATABASE_NAME must be set in .env}"
+: "${DATABASE_USER:?DATABASE_USER must be set (in server container env or .env)}"
+: "${DATABASE_NAME:?DATABASE_NAME must be set (in server container env or .env)}"
 
 # Resolve volume name (same logic as snapshot.sh)
 DATA_VOLUME="$($COMPOSE config --format json 2>/dev/null \

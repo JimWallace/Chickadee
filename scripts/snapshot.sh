@@ -54,9 +54,19 @@ if [[ ! "$LABEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
 fi
 
 # ----------------------------------------------------------------
-# Load .env so DATABASE_* vars are visible
+# Read DATABASE_* from the live server container.
+# This is authoritative — it covers every place compose looks
+# (.env, docker-compose.override.yml, exported shell env, etc.).
+# Fall back to .env only if the server isn't running yet.
 # ----------------------------------------------------------------
-if [[ -f "$REPO_ROOT/.env" ]]; then
+DB_VARS_FROM_CONTAINER=0
+while IFS='=' read -r k v; do
+  case "$k" in
+    DATABASE_*) export "$k=$v"; DB_VARS_FROM_CONTAINER=1 ;;
+  esac
+done < <($COMPOSE exec -T server env 2>/dev/null || true)
+
+if [[ $DB_VARS_FROM_CONTAINER -eq 0 && -f "$REPO_ROOT/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "$REPO_ROOT/.env"
@@ -76,8 +86,8 @@ EOF
   exit 1
 fi
 
-: "${DATABASE_USER:?DATABASE_USER must be set in .env}"
-: "${DATABASE_NAME:?DATABASE_NAME must be set in .env}"
+: "${DATABASE_USER:?DATABASE_USER must be set (in server container env or .env)}"
+: "${DATABASE_NAME:?DATABASE_NAME must be set (in server container env or .env)}"
 
 # ----------------------------------------------------------------
 # Verify db service is healthy
