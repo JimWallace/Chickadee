@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.171] - 2026-05-15
+
+### Added
+
+- **Snapshot/restore scripts for Postgres deployments.**  `scripts/snapshot.sh`
+  bundles a `pg_dump -Fc` of the chickadee database plus a tar of the
+  on-disk artifact paths (`testsetups/`, `submissions/`, `results/`,
+  `.worker-secret`, `.local-runner-autostart`) into
+  `backups/snapshot-<TS>[-<label>]/`, writing `manifest.json` last so
+  partial snapshots are detectable.  `scripts/restore.sh` stops the
+  server+runner, runs `pg_restore --clean --if-exists`, replaces the
+  artifact dirs, and restarts the stack; supports `--yes`,
+  `--regenerate-secrets` (for prod→staging copies — forces fresh worker
+  HMAC secret), and `--scrub-pii` (anonymises identity columns on
+  `users` rows with `role='student'`).  Daily 3am cron + 7-day prune
+  recommended for ongoing rollback insurance.  Driven by the AppScan
+  weekend rollback need.  SQLite deployments stay on `server-deploy.sh`'s
+  existing volume tar.  See `deploy/README.md` ("Snapshots and rollback").
+
 ### Changed (groundwork for v0.5.0 / v0.6.0)
 
 - **#502 step 1+2 — migration consolidation prep.**  All 13 historical
