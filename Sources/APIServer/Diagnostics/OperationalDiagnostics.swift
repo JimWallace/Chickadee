@@ -227,6 +227,15 @@ func millisecondsBetween(_ start: Date?, _ end: Date?) -> Int? {
     return Int((end.timeIntervalSince(start) * 1000).rounded())
 }
 
+/// Sum two single-clock millisecond components into a wall-clock total.
+/// Preferred over `millisecondsBetween(enqueuedAt, completedAt)` when the
+/// two endpoints live on different clocks (server vs. runner) — runner
+/// clock skew otherwise produces `total < queueWait` on the admin page.
+func sumComponentMs(_ a: Int?, _ b: Int?) -> Int? {
+    guard let a, let b else { return nil }
+    return a + b
+}
+
 func iso8601Metadata(_ date: Date) -> Logger.MetadataValue {
     .string(ISO8601DateFormatter().string(from: date))
 }

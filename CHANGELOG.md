@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Admin runner page no longer shows `Total < Queue Wait`.** v0.4.164's
+  retest-clear fix closed one cause (stale per-attempt fields on the
+  `JobExecutionMetric` row across a retest), but the underlying math
+  for `totalProcessingMs` still straddled two clocks:
+  `millisecondsBetween(server enqueuedAt, runner finishedAt)`. Any
+  runner clock skew let totals slip below queue wait — for example
+  Queue Wait 210ms / Execution 101ms / Total 112ms on a runner whose
+  clock was ~200ms behind the server. Now
+  `totalProcessingMs = queueWaitMs + executionMs` (and the parallel
+  `APISubmissionDiagnostics.turnaroundMs` is computed the same way) in
+  both `recordWorkerExecutionReport` and `recordJobFailure`. Each
+  component already lives on a single clock, so the sum is skew-safe.
+  New `sumComponentMs` helper sits next to `millisecondsBetween`. New
+  regression test `testTotalProcessingMsIsResilientToRunnerClockSkew`
+  models the production failure mode. Existing rows in the DB carry
+  their old values until reprocessed (no backfill).
+
 ## [0.4.172] - 2026-05-15
 
 ### Fixed
