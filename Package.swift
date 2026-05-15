@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/leaf.git", from: "4.5.1"),
         .package(url: "https://github.com/vapor/jwt.git", from: "5.1.2"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.7.1"),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.15.1"),
         .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.1.1"),
     ],
     targets: [
