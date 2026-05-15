@@ -19,7 +19,7 @@ func defaultFunctionExistsLabel(_ check: NotebookCheck) -> String {
 func renderFunctionExists(_ check: NotebookCheck, specHash: String) -> String {
     let name = check.variable ?? "function"
     let label = check.name ?? defaultFunctionExistsLabel(check)
-    let nameLiteral = "\"" + escapeForPythonStringLiteralCheck(name) + "\""
+    let nameLiteral = "\"" + escapeForPythonStringLiteral(name) + "\""
 
     let arityCheck: String
     if let arity = check.expectedArity {
@@ -66,7 +66,7 @@ func renderFunctionExists(_ check: NotebookCheck, specHash: String) -> String {
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=function_exists spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=function_exists spec_hash=\(specHash) — edit the check, not this file.
 
         import inspect
 
@@ -138,12 +138,12 @@ func variableExistsTypeCheckExpression(typeName: String, valueExpr: String) -> S
 func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
     let name = check.variable ?? "variable"
     let label = check.name ?? defaultVariableExistsLabel(check)
-    let nameLiteral = "\"" + escapeForPythonStringLiteralCheck(name) + "\""
+    let nameLiteral = "\"" + escapeForPythonStringLiteral(name) + "\""
 
     let typeCheck: String
     let passMessage: String
     if let typeName = check.expectedType, !typeName.isEmpty {
-        let typeNameLiteral = "\"" + escapeForPythonStringLiteralCheck(typeName) + "\""
+        let typeNameLiteral = "\"" + escapeForPythonStringLiteral(typeName) + "\""
         let typeCheckExpr = variableExistsTypeCheckExpression(typeName: typeName, valueExpr: "actual")
         typeCheck = """
             expected_type_name = \(typeNameLiteral)
@@ -162,7 +162,7 @@ func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=variable_exists spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=variable_exists spec_hash=\(specHash) — edit the check, not this file.
 
         name = \(nameLiteral)
 
@@ -197,12 +197,12 @@ func renderASTStructure(_ check: NotebookCheck, specHash: String) -> String {
     let constructsLiteral =
         "["
         + constructs.map { c in
-            "\"" + escapeForPythonStringLiteralCheck(c) + "\""
+            "\"" + escapeForPythonStringLiteral(c) + "\""
         }.joined(separator: ", ") + "]"
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=ast_structure spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=ast_structure spec_hash=\(specHash) — edit the check, not this file.
 
         import ast
         import json
