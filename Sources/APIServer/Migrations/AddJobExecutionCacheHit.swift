@@ -1,20 +1,18 @@
+// APIServer/Migrations/AddJobExecutionCacheHit.swift
+//
+// CONSOLIDATED.  `test_setup_cache_hit` is folded into
+// CreateJobExecutionMetrics as of v0.4.171.  Struct name preserved so
+// existing prod's `_fluent_migrations` tracking is undisturbed; no-op
+// on fresh deploys.
+
 import Fluent
 
-/// Adds `test_setup_cache_hit` to `job_execution_metrics` so the admin
-/// runner detail page can report each runner's TestSetupCache hit rate
-/// per the audit follow-up in #492.  Nullable boolean; existing rows
-/// stay nil, and older runners that don't yet send `testSetupCacheHit`
-/// continue to record nil.
 struct AddJobExecutionCacheHit: AsyncMigration {
     func prepare(on database: Database) async throws {
-        try await database.schema(JobExecutionMetric.schema)
-            .field("test_setup_cache_hit", .bool)
-            .update()
+        // No-op: see CreateJobExecutionMetrics.swift.
     }
 
     func revert(on database: Database) async throws {
-        try await database.schema(JobExecutionMetric.schema)
-            .deleteField("test_setup_cache_hit")
-            .update()
+        // No-op.
     }
 }

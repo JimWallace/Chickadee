@@ -35,6 +35,12 @@ struct CreateSubmissionDiagnostics: AsyncMigration {
             .field("child_process_count", .int)
             .field("stdout_bytes", .int)
             .field("stderr_bytes", .int)
+            // Folded from AddJobDiskUsageMetrics.  Mirrors the same disk-usage
+            // fields on job_execution_metrics; submission_diagnostics is the
+            // 1:1 legacy mirror kept for cross-runner debugging.
+            .field("free_disk_mb_at_start", .int)
+            .field("free_disk_mb_at_end", .int)
+            .field("workdir_peak_bytes", .int64)
             .field("created_at", .datetime)
             .field("updated_at", .datetime)
             .create()

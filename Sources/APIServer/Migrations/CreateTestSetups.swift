@@ -15,6 +15,8 @@ struct CreateTestSetups: AsyncMigration {
                 .required,
                 .references("courses", "id", onDelete: .cascade)
             )
+            // Folded from AddTestSetupLastRetestedManifestHash.
+            .field("last_retested_manifest_hash", .string)
             .field("created_at", .datetime)
             .create()
     }

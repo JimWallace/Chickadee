@@ -130,6 +130,44 @@ struct CourseBundleManifestTests {
         #expect(course.openEnrollment == nil)
     }
 
+    // MARK: - bundledCourseEnrollmentMode resolver
+    //
+    // Pin the resolver so v0.6.0 can drop the `openEnrollment` branch with
+    // confidence — when the deprecation lands, only the legacy-bundle cases
+    // below need updating (or deleting).
+
+    @Test func enrollmentModeResolver_prefersExplicitMode() {
+        let course = BundledCourse(
+            code: "CS101", name: "Intro CS",
+            enrollmentMode: .auto, openEnrollment: false
+        )
+        #expect(bundledCourseEnrollmentMode(course) == .auto)
+    }
+
+    @Test func enrollmentModeResolver_legacyOpenEnrollmentFalseMapsToClosed() {
+        let course = BundledCourse(
+            code: "CS101", name: "Intro CS",
+            enrollmentMode: nil, openEnrollment: false
+        )
+        #expect(bundledCourseEnrollmentMode(course) == .closed)
+    }
+
+    @Test func enrollmentModeResolver_legacyOpenEnrollmentTrueMapsToOpen() {
+        let course = BundledCourse(
+            code: "CS101", name: "Intro CS",
+            enrollmentMode: nil, openEnrollment: true
+        )
+        #expect(bundledCourseEnrollmentMode(course) == .open)
+    }
+
+    @Test func enrollmentModeResolver_bothFieldsMissingDefaultsToOpen() {
+        let course = BundledCourse(
+            code: "CS101", name: "Intro CS",
+            enrollmentMode: nil, openEnrollment: nil
+        )
+        #expect(bundledCourseEnrollmentMode(course) == .open)
+    }
+
     // MARK: - CourseEnrollmentMode raw values
 
     @Test(

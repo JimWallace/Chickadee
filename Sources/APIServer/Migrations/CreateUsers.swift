@@ -21,6 +21,10 @@ struct CreateUsers: AsyncMigration {
             .field("email", .string)
             .field("display_name", .string)
             .field("last_login_at", .datetime)
+            // Folded from AddUserLastSeenAt.
+            .field("last_seen_at", .datetime)
+            // Folded from AddBrightSpaceSyncFields.
+            .field("brightspace_user_id", .string)
             .field("created_at", .datetime)
             .create()
 

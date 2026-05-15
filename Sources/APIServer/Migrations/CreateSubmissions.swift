@@ -25,6 +25,10 @@ struct CreateSubmissions: AsyncMigration {
             )
             .field("submitted_at", .datetime)
             .field("assigned_at", .datetime)
+            // Folded from AddSubmissionRetestedAt.
+            .field("retested_at", .datetime)
+            // Folded from AddSubmissionRetestedByUserID.
+            .field("retested_by_user_id", .uuid)
             .create()
     }
 

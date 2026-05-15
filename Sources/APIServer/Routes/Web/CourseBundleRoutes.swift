@@ -388,15 +388,7 @@ struct CourseBundleRoutes: RouteCollection {
             )
 
             // 6b. Create course
-            // Resolve enrollment mode: prefer the new field; fall back to the legacy bool.
-            let importedMode: CourseEnrollmentMode
-            if let mode = manifest.course.enrollmentMode {
-                importedMode = mode
-            } else if manifest.course.openEnrollment == false {
-                importedMode = .closed
-            } else {
-                importedMode = .open
-            }
+            let importedMode = bundledCourseEnrollmentMode(manifest.course)
             let newCourse = APICourse(
                 code: manifest.course.code, name: manifest.course.name,
                 enrollmentMode: importedMode)

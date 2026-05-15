@@ -1,21 +1,17 @@
 // APIServer/Migrations/AddSubmissionRetestedAt.swift
+//
+// CONSOLIDATED.  `retested_at` is folded into CreateSubmissions as of
+// v0.4.171.  Struct name preserved so existing prod's
+// `_fluent_migrations` tracking is undisturbed; no-op on fresh deploys.
 
 import Fluent
 
-/// Adds `retested_at` to the submissions table.
-/// Set to the timestamp when an instructor triggers a re-test, so wait-time
-/// and turnaround statistics can be measured from the re-test request rather
-/// than the original submission time.
 struct AddSubmissionRetestedAt: AsyncMigration {
     func prepare(on database: Database) async throws {
-        try await database.schema("submissions")
-            .field("retested_at", .datetime)
-            .update()
+        // No-op: see CreateSubmissions.swift.
     }
 
     func revert(on database: Database) async throws {
-        try await database.schema("submissions")
-            .deleteField("retested_at")
-            .update()
+        // No-op.
     }
 }
