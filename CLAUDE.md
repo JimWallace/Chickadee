@@ -362,7 +362,7 @@ updating kernel versions or config.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.112**
+Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.170**
 (`VERSION` file + `ChickadeeVersion.current` in Core).
 
 Release checklist:
@@ -596,10 +596,109 @@ Post-8 work also complete:
   block (hidden when empty).  Legacy manifests with no `sections` key
   decode with `decodeIfPresent` defaults so older runners stay compatible.
 
-**Next work:** Gamification expansion (leaderboards, more badges beyond
-First-Try Perfect); multi-provider SSO testing beyond UWaterloo DUO; pattern
-kinds beyond `.boundaryEquality` / `.approximateEquality` / `.variableEquality`
-(e.g. exception-expected, type-check); refresh token handling.
+### v0.4.97 – v0.4.170 highlights (themed digest)
+
+The per-version log above stops at v0.4.96.  For the ~70 versions that
+followed, the full per-release detail lives in `CHANGELOG.md`; what
+follows is grouped by subsystem so a fresh session can build a mental
+model quickly.
+
+- **Notebook checks (v0.4.149–v0.4.155).**  In-browser editor preflight
+  + watchdog, `JupyterLite 0.7.6` upgrade, browser-error dashboard,
+  kernel-probe inversion to fire on failure evidence only, Safari
+  phase-1 timeout hotfix, JupyterLite SW manager disabled to fix
+  "Kernel Unknown".  IndexedDB cache-bust no longer wipes in-progress
+  work on first post-deploy visit (v0.4.154).  Instructor reset-notebook
+  action on the submissions page (v0.4.153).  `variableExists` check
+  type (defined, optional type) (v0.4.155).
+
+- **Personalization & generalized inputs (issue #461 slices, v0.4.156–v0.4.162).**
+  Per-student assignment seed plumbing (v0.4.156); generalized inputs
+  with a Global panel, raw-script inlining, and notebook substitution
+  (v0.4.157); per-student expressions on Global Inputs (v0.4.158);
+  suite-editor drag-and-drop fix for notebook-check rows (v0.4.159);
+  unified "enrolled students" count and tidied Global Inputs UI plus
+  section variables carrying `=` expressions (v0.4.160); retest queue
+  priority and 404 fix for non-student submission view (v0.4.162a);
+  personalization expressions can import support files, with auto-
+  extracted `solution.py` (v0.4.162b — issue #461 Slice 5).  See
+  [docs/inputs.md](docs/inputs.md) and
+  [docs/personalization-phase1.md](docs/personalization-phase1.md).
+
+- **BrightSpace grade sync (v0.4.145–v0.4.146).**  Debounced per-
+  submission grade push via the D2L REST API, then auth switched to
+  D2L Valence key signing (App+User key model, not OAuth2).  Currently
+  waiting on UWaterloo IST for credentials before enabling in prod.
+
+- **Worker / runner ops (v0.4.147, v0.4.164).**  Health-alert "error
+  rate spike" excludes student-code errors (v0.4.147).  Worker test
+  coverage expanded, disk-usage telemetry added, retest-metric fixes
+  (v0.4.164).  Tests run against real Postgres in parallel with
+  `TestSetupCache` hit-rate telemetry surfacing in CI (v0.4.165-ish,
+  commit `b615235`).
+
+- **Closed-assignment behaviour (v0.4.166).**  Closed assignments now
+  load read-only in the instructor editor instead of editable.
+
+- **AppScan / security hardening (v0.4.167–v0.4.168).**  `SCAN_MODE`
+  env flag, rate-limit middleware, session reaper, CSP, audit log;
+  v0.4.168 hotfix loosened CSP to allow `cdn.jsdelivr.net` (Pyodide)
+  and `esm.sh` (CodeMirror).
+
+- **Test/format/CI tooling.**  `makeTestApp()` helper plus drift fix
+  and Swift session hook (commit `8b88585`).  `swift-format` strict CI
+  gate + bulk format pass (commit `2bbebf9`).  WorkerTests restored to
+  the per-PR gate and the 3-job split collapsed to one (commit
+  `a5a6f61`).
+
+- **AppConfig centralization (v0.4.169).**  Every server env var now
+  flows through a single `AppConfig` struct read once at startup —
+  already documented in detail at lines 92–100 above.
+
+- **v0.4.170 maintenance pass (#495, #496, #497, #499).**  Shared
+  `escapeForPythonStringLiteral` / `tierFilenamePrefix` helpers
+  (`Sources/APIServer/Utilities/PythonScriptHelpers.swift`); submission
+  output-formatting helpers split into
+  `Sources/APIServer/Helpers/SubmissionOutputFormatting.swift`;
+  `APIServerApp.configure(_:)` decomposed into
+  `Sources/APIServer/Bootstrap/AppDirectories.swift`,
+  `AppMiddleware.swift`, and `AppServices.swift`; `makeTestApp()`
+  now seeds the worker secret + autostart paths inside the per-test
+  temp dir.  No behaviour changes; generated test-script bytes
+  unchanged so `spec_hash` / `TestSetupCache` keys stay stable.
+
+- **v0.5.0 / v0.6.0 runway (PR #505).**  Migration consolidation (#502):
+  the 13 historical `Add*` migrations except `AddSessionsCreatedAt`
+  have been folded into the corresponding `Create*` files.  The
+  `Add*` structs and their `registerMigrations(...)` calls are kept
+  as no-ops so existing production DBs (with these migrations already
+  marked applied) see no change at runtime; fresh deploys produce the
+  same final schema in fewer steps.  Actual deletion of the no-op
+  files is deferred to **v0.5.0**.  Separately (#501), the inline
+  enrollment-mode fallback in `CourseBundleRoutes.swift` was extracted
+  to a Core helper `bundledCourseEnrollmentMode(_:)` to give **v0.6.0**
+  a single resolver to update when dropping the `openEnrollment`
+  back-compat field.  The two remaining DEPRECATED back-compat sites
+  ([Sources/Core/NotebookFunctionScanner.swift:80](Sources/Core/NotebookFunctionScanner.swift:80)
+  and [Sources/Core/CourseBundleManifest.swift:76](Sources/Core/CourseBundleManifest.swift:76))
+  are slated for removal in v0.6.0.
+
+**Near-term roadmap:**
+
+- **v0.5.0** — Delete the no-op `Add*` migration files folded in #502
+  once production has been observed tolerant of the consolidation.
+- **v0.6.0** — Drop the two DEPRECATED back-compat shims
+  (`NotebookFunctionScanner` `isShadowed` decode fallback,
+  `CourseBundleManifest` `openEnrollment` field).  Likely
+  Vapor 5 / LeafKit 2.x investigation window — the LeafKit 1.14.1
+  cycle-detection false positive blocking `assignment-{new,edit}.leaf`
+  decomposition is upstream and only fixed in the LeafKit 2 line.
+- **Feature backlog:** continued personalization / notebook-check
+  expansion; pattern kinds beyond
+  `.boundaryEquality` / `.approximateEquality` / `.variableEquality`
+  (e.g. exception-expected, type-check); multi-provider SSO testing
+  beyond UWaterloo DUO; refresh-token handling; gamification
+  expansion (leaderboards, more badges beyond First-Try Perfect).
 
 ---
 

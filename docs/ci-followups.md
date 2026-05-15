@@ -1,5 +1,10 @@
 # CI Follow-Ups
 
+> **Historical.** This note documents the CI containment work done for the
+> `v0.4.6` release push. The 3-job `Swift Tests` split was collapsed back
+> to a single job and `WorkerTests` returned to the per-PR gate as part of
+> the 2026 cleanup (commit `a5a6f61`). Kept here for archaeology.
+
 This note captures the CI changes made during the `0.4.6` release push, why
 they were made, and the cleanup work that should happen next.
 

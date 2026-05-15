@@ -345,7 +345,12 @@ additive (new columns or tables); no migration drops data. Migration names
 follow the pattern `Create<ModelName>` for canonical baseline tables and
 `Add<Feature>` for subsequent additions.
 
-Current migration count: 17 (as of v0.4.36).
+For the current set, see `Sources/APIServer/Migrations/`. Note that PR #502
+(v0.5.0 prep) folded all historical `Add*` migrations except
+`AddSessionsCreatedAt` into their corresponding `Create*` files; the `Add*`
+files remain as registered no-ops for compatibility with production DBs that
+already have them marked applied, and will be deleted in v0.5.0 once that
+behaviour has been observed tolerant in practice.
 
 ---
 
