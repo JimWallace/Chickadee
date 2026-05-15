@@ -17,7 +17,7 @@ func renderNumericArrayClose(_ check: NotebookCheck, specHash: String) -> String
     let label = check.name ?? defaultNumericArrayCloseLabel(check)
     let expected = check.expectedArray ?? []
 
-    let variableLiteral = "\"" + escapeForPythonStringLiteralCheck(variable) + "\""
+    let variableLiteral = "\"" + escapeForPythonStringLiteral(variable) + "\""
     let expectedLiteral = "[" + expected.map { numericArrayLiteral($0) }.joined(separator: ", ") + "]"
 
     var assertKwargs: [String] = []
@@ -30,7 +30,7 @@ func renderNumericArrayClose(_ check: NotebookCheck, specHash: String) -> String
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=numeric_array_close spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=numeric_array_close spec_hash=\(specHash) — edit the check, not this file.
 
         import numpy as np
 
@@ -101,7 +101,7 @@ func renderFigureCount(_ check: NotebookCheck, specHash: String) -> String {
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=figure_count spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=figure_count spec_hash=\(specHash) — edit the check, not this file.
 
         minimum = \(minFigures)
 
@@ -144,10 +144,10 @@ func renderCellContains(_ check: NotebookCheck, specHash: String) -> String {
     let mustDiffer = check.mustDifferFrom
     let label = check.name ?? defaultCellContainsLabel(check)
 
-    let needleLiteral = "\"" + escapeForPythonStringLiteralCheck(needle) + "\""
+    let needleLiteral = "\"" + escapeForPythonStringLiteral(needle) + "\""
     let mustDifferLiteral: String
     if let mustDiffer {
-        mustDifferLiteral = "\"" + escapeForPythonStringLiteralCheck(mustDiffer) + "\""
+        mustDifferLiteral = "\"" + escapeForPythonStringLiteral(mustDiffer) + "\""
     } else {
         mustDifferLiteral = "None"
     }
@@ -159,7 +159,7 @@ func renderCellContains(_ check: NotebookCheck, specHash: String) -> String {
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=cell_contains spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=cell_contains spec_hash=\(specHash) — edit the check, not this file.
 
         import json
         import re

@@ -24,11 +24,11 @@ func renderDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
     let expectedCols = check.expectedCols ?? 0
     let label = check.name ?? defaultDataFrameShapeLabel(check)
 
-    let variableLiteral = "\"" + escapeForPythonStringLiteralCheck(variable) + "\""
+    let variableLiteral = "\"" + escapeForPythonStringLiteral(variable) + "\""
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=data_frame_shape spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=data_frame_shape spec_hash=\(specHash) — edit the check, not this file.
 
         variable_name = \(variableLiteral)
         expected_shape = (\(expectedRows), \(expectedCols))
@@ -86,11 +86,11 @@ func renderDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String 
     let mode = check.columnMatch ?? .exact
     let label = check.name ?? defaultDataFrameColumnsLabel(check)
 
-    let variableLiteral = "\"" + escapeForPythonStringLiteralCheck(variable) + "\""
+    let variableLiteral = "\"" + escapeForPythonStringLiteral(variable) + "\""
     let expectedLiteral =
         "["
         + columns.map { c in
-            "\"" + escapeForPythonStringLiteralCheck(c) + "\""
+            "\"" + escapeForPythonStringLiteral(c) + "\""
         }.joined(separator: ", ") + "]"
 
     let comparisonBlock: String
@@ -123,7 +123,7 @@ func renderDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String 
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=data_frame_columns spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=data_frame_columns spec_hash=\(specHash) — edit the check, not this file.
 
         variable_name = \(variableLiteral)
         expected_columns = \(expectedLiteral)
@@ -163,8 +163,8 @@ func renderDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String
     let checkLike = check.checkLike ?? false
     let ignoreIndex = check.ignoreIndex ?? true
 
-    let variableLiteral = "\"" + escapeForPythonStringLiteralCheck(variable) + "\""
-    let csvFilenameLiteral = "\"" + escapeForPythonStringLiteralCheck(csvFilename) + "\""
+    let variableLiteral = "\"" + escapeForPythonStringLiteral(variable) + "\""
+    let csvFilenameLiteral = "\"" + escapeForPythonStringLiteral(csvFilename) + "\""
 
     // Tolerance kwargs are only emitted when set; pandas' defaults (rtol=1e-5,
     // atol=1e-8) cover the typical case and changing them per-test is rare.
@@ -196,7 +196,7 @@ func renderDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=data_frame_equality spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=data_frame_equality spec_hash=\(specHash) — edit the check, not this file.
 
         import pandas as pd
 
@@ -261,8 +261,8 @@ func renderSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
     let checkDtype = check.checkDtype ?? true
     let ignoreIndex = check.ignoreIndex ?? true
 
-    let variableLiteral = "\"" + escapeForPythonStringLiteralCheck(variable) + "\""
-    let csvFilenameLiteral = "\"" + escapeForPythonStringLiteralCheck(csvFilename) + "\""
+    let variableLiteral = "\"" + escapeForPythonStringLiteral(variable) + "\""
+    let csvFilenameLiteral = "\"" + escapeForPythonStringLiteral(csvFilename) + "\""
 
     var assertKwargs: [String] = [
         "check_dtype=\(checkDtype ? "True" : "False")"
@@ -286,7 +286,7 @@ func renderSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
 
     return """
         # Test: \(label)
-        # Generated from notebook check "\(escapeForPythonStringLiteralCheck(check.id))" kind=series_equality spec_hash=\(specHash) — edit the check, not this file.
+        # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=series_equality spec_hash=\(specHash) — edit the check, not this file.
 
         import pandas as pd
 

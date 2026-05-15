@@ -780,34 +780,6 @@ private func renderStdoutEquality(
 }
 
 // MARK: - Helpers
-
-private func tierFilenamePrefix(_ tier: TestTier) -> String {
-    switch tier {
-    case .pub: return "public"
-    case .release: return "release"
-    case .secret: return "secret"
-    }
-}
-
-/// Escapes a string for embedding inside a Python double-quoted literal in
-/// rendered source.  Handles the characters that appear in family metadata
-/// (backslash, double-quote, newline).
-private func escapeForPythonStringLiteral(_ s: String) -> String {
-    var out = ""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 {
-                out += String(format: "\\x%02x", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out
-}
+//
+// `tierFilenamePrefix(_:)` and `escapeForPythonStringLiteral(_:)` live in
+// PythonScriptHelpers.swift — shared with NotebookCheckRenderer.

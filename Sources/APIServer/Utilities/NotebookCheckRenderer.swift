@@ -15,7 +15,7 @@ import Foundation
 /// pattern-family files ("test_") so a glance at the zip listing tells
 /// you which generator produced the file; the runner doesn't care.
 func generatedCheckFilename(checkID: String, tier: TestTier) -> String {
-    "\(tierFilenamePrefixForCheck(tier))check_\(checkID).py"
+    "\(tierFilenamePrefix(tier))check_\(checkID).py"
 }
 
 /// Stable filename for a check's expected-data sidecar CSV.  Used by
@@ -118,34 +118,6 @@ func notebookCheckSpecHash(_ check: NotebookCheck) -> String {
 }
 
 // MARK: - Helpers
-
-func tierFilenamePrefixForCheck(_ tier: TestTier) -> String {
-    switch tier {
-    case .pub: return "public"
-    case .release: return "release"
-    case .secret: return "secret"
-    }
-}
-
-/// Same semantics as `PatternFamilyRenderer.escapeForPythonStringLiteral`,
-/// duplicated locally so the two renderers stay independent.  Tiny
-/// function, churn-free.
-func escapeForPythonStringLiteralCheck(_ s: String) -> String {
-    var out = ""
-    for ch in s.unicodeScalars {
-        switch ch {
-        case "\\": out += #"\\"#
-        case "\"": out += #"\""#
-        case "\n": out += "\\n"
-        case "\r": out += "\\r"
-        case "\t": out += "\\t"
-        default:
-            if ch.value < 0x20 {
-                out += String(format: "\\x%02x", ch.value)
-            } else {
-                out.unicodeScalars.append(ch)
-            }
-        }
-    }
-    return out
-}
+//
+// `tierFilenamePrefix(_:)` and `escapeForPythonStringLiteral(_:)` live in
+// PythonScriptHelpers.swift — shared with PatternFamilyRenderer.
