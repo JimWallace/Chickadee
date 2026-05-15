@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (groundwork for v0.5.0 / v0.6.0)
+
+- **#502 step 1+2 — migration consolidation prep.**  All 13 historical
+  `Add*` migrations except `AddSessionsCreatedAt` (which targets
+  Fluent's own `_fluent_sessions` table) have been folded into the
+  corresponding canonical `Create*` files.  Each `Add*` struct is
+  preserved in its file and in `registerMigrations(...)` so existing
+  production deploys, which already have these migrations marked
+  applied in `_fluent_migrations`, see no change at runtime — the
+  no-op bodies never run on those databases.  Fresh deploys produce
+  the same final schema in roughly one migration step per table
+  instead of 33 sequential steps.  The actual deletion of the no-op
+  `Add*` files is deferred to v0.5.0 once we've confirmed Fluent
+  tolerates name-disappearance gracefully.
+- **#501 prep — runway for the v0.6.0 DEPRECATED cleanup.**  Extracted
+  the inline 8-line enrollment-mode fallback at
+  `CourseBundleRoutes.swift:395` into a `bundledCourseEnrollmentMode(_:)`
+  helper in Core, so v0.6.0 has a single function to update when
+  dropping the `openEnrollment` back-compat field.  Added four Core
+  tests pinning the resolver branches (explicit mode wins, legacy
+  `openEnrollment: false → .closed`, legacy `openEnrollment: true →
+  .open`, both-missing defaults to `.open`) and two tests pinning the
+  `NotebookFunctionInfo.isShadowed` decode fallback (legacy JSON
+  without the field → false; modern JSON honours explicit true).
+  DEPRECATED-marker audit confirms only the two known sites; no
+  orphans.
+
 ## [0.4.170] - 2026-05-15
 
 ### Changed

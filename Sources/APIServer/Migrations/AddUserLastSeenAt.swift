@@ -1,21 +1,17 @@
 // APIServer/Migrations/AddUserLastSeenAt.swift
+//
+// CONSOLIDATED.  `last_seen_at` is folded into CreateUsers as of
+// v0.4.171.  Struct name preserved so existing prod's
+// `_fluent_migrations` tracking is undisturbed; no-op on fresh deploys.
 
 import Fluent
 
-/// Adds `last_seen_at` to the users table.
-/// Refreshed on every authenticated request (debounced) so the instructor
-/// and admin dashboards show real activity, not a stale `last_login_at`
-/// frozen at the moment the cookie session was first established.
 struct AddUserLastSeenAt: AsyncMigration {
     func prepare(on database: Database) async throws {
-        try await database.schema("users")
-            .field("last_seen_at", .datetime)
-            .update()
+        // No-op: see CreateUsers.swift.
     }
 
     func revert(on database: Database) async throws {
-        try await database.schema("users")
-            .deleteField("last_seen_at")
-            .update()
+        // No-op.
     }
 }

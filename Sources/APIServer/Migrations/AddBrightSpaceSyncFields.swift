@@ -1,69 +1,27 @@
 // APIServer/Migrations/AddBrightSpaceSyncFields.swift
 //
-// Adds BrightSpace grade-sync fields to courses, assignments, users, and results.
+// CONSOLIDATED.  The BrightSpace fields are folded into the appropriate
+// Create* files as of v0.4.171:
 //
-//   courses.brightspace_org_unit_id  — D2L org unit ID for this course
-//   assignments.brightspace_grade_object_id — D2L grade item ID for this assignment
-//   users.brightspace_user_id        — D2L internal user ID (cached after first lookup)
-//   results.brightspace_sync_pending — flag: grade push is waiting for debounce
-//   results.brightspace_pending_since — when the pending flag was set (debounce anchor)
-//   results.brightspace_synced_at    — when the grade was successfully pushed
-//   results.brightspace_sync_error   — last error message if push failed
+//   - courses.brightspace_org_unit_id           → CreateCourses
+//   - assignments.brightspace_grade_object_id   → CreateAssignments
+//   - users.brightspace_user_id                 → CreateUsers
+//   - results.brightspace_sync_pending          → CreateResults
+//   - results.brightspace_pending_since         → CreateResults
+//   - results.brightspace_synced_at             → CreateResults
+//   - results.brightspace_sync_error            → CreateResults
+//
+// Struct name preserved so existing prod's `_fluent_migrations` tracking
+// is undisturbed; no-op on fresh deploys.
 
 import Fluent
 
 struct AddBrightSpaceSyncFields: AsyncMigration {
     func prepare(on database: Database) async throws {
-        try await database.schema("courses")
-            .field("brightspace_org_unit_id", .string)
-            .update()
-
-        try await database.schema("assignments")
-            .field("brightspace_grade_object_id", .string)
-            .update()
-
-        try await database.schema("users")
-            .field("brightspace_user_id", .string)
-            .update()
-
-        try await database.schema("results")
-            .field("brightspace_sync_pending", .bool)
-            .update()
-        try await database.schema("results")
-            .field("brightspace_pending_since", .datetime)
-            .update()
-        try await database.schema("results")
-            .field("brightspace_synced_at", .datetime)
-            .update()
-        try await database.schema("results")
-            .field("brightspace_sync_error", .string)
-            .update()
+        // No-op: see the Create* files listed above.
     }
 
     func revert(on database: Database) async throws {
-        try await database.schema("courses")
-            .deleteField("brightspace_org_unit_id")
-            .update()
-
-        try await database.schema("assignments")
-            .deleteField("brightspace_grade_object_id")
-            .update()
-
-        try await database.schema("users")
-            .deleteField("brightspace_user_id")
-            .update()
-
-        try await database.schema("results")
-            .deleteField("brightspace_sync_pending")
-            .update()
-        try await database.schema("results")
-            .deleteField("brightspace_pending_since")
-            .update()
-        try await database.schema("results")
-            .deleteField("brightspace_synced_at")
-            .update()
-        try await database.schema("results")
-            .deleteField("brightspace_sync_error")
-            .update()
+        // No-op.
     }
 }
