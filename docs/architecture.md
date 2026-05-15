@@ -427,6 +427,20 @@ environment variable reference.
 
 ---
 
+## Configuration
+
+Every server-side environment variable read flows through `AppConfig`
+(`Sources/APIServer/Configuration/`). `configure(_:)` loads the entire tree
+once via `AppConfig.fromEnvironment(workDir:)`, stashes it on
+`Application.appConfig`, and logs a redacted summary. Subsystems read typed
+substructs (`auth`, `security`, `workers`, `oidc`, `database`, `lockout`,
+`diagnostics`, `alerts`, `brightspace`, `scanMode`) — never `Environment.get`
+directly. Tests preload an `AppConfig` via `Application.preloadedAppConfig`
+(checked first by `configure(_:)`) or pass one to `makeTestApp(appConfig:)`.
+
+A grep guardrail (`grep -rn "Environment.get" Sources/APIServer/`) must only
+return hits under `Sources/APIServer/Configuration/`.
+
 ## Key Design Constraints
 
 These are the load-bearing decisions that future work should respect:

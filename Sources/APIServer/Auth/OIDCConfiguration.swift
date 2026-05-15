@@ -64,7 +64,7 @@ struct OIDCTokenResponse: Codable, Sendable {
 // MARK: - Claim configuration
 
 /// Which JWT claim names to use for user identity fields.
-/// Configured via env vars; defaults match standard OIDC claims.
+/// Built from `OIDCEnvConfig`; defaults match standard OIDC claims.
 struct OIDCClaimConfig: Sendable {
     /// JWT claim used as the Chickadee username. Default: `preferred_username`.
     /// UWaterloo DUO: set to `winaccountname`.
@@ -79,17 +79,6 @@ struct OIDCClaimConfig: Sendable {
     ) {
         self.usernameClaim = usernameClaim
         self.emailClaim = emailClaim
-    }
-
-    static func load() -> OIDCClaimConfig {
-        let username = Environment.get("OIDC_USERNAME_CLAIM")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let email = Environment.get("OIDC_EMAIL_CLAIM")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return OIDCClaimConfig(
-            usernameClaim: username?.isEmpty == false ? username! : "preferred_username",
-            emailClaim: email?.isEmpty == false ? email! : "email"
-        )
     }
 }
 
@@ -113,41 +102,33 @@ struct OIDCConfiguration: Sendable {
     /// if either network request fails. Intended to be called once from `main()`
     /// before the server begins serving requests.
     static func load(from app: Application) async throws -> OIDCConfiguration {
-        guard
-            let clientID = Environment.get("OIDC_CLIENT_ID")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !clientID.isEmpty
-        else {
+        let env = app.appConfig.oidc
+        guard let clientID = env.clientID else {
             throw Abort(
                 .internalServerError,
                 reason: "OIDC_CLIENT_ID is required when AUTH_MODE is not 'local'"
             )
         }
 
-        guard
-            let clientSecret = Environment.get("OIDC_CLIENT_SECRET")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !clientSecret.isEmpty
-        else {
+        guard let clientSecret = env.clientSecret else {
             throw Abort(
                 .internalServerError,
                 reason: "OIDC_CLIENT_SECRET is required when AUTH_MODE is not 'local'"
             )
         }
 
+        // Honour `app.securityConfiguration` (legacy accessor with a per-test
+        // override path) before falling back to `appConfig.security`, so tests
+        // that set `app.securityConfiguration = ...` directly still steer the
+        // redirect URI.
         let baseURL =
             app.securityConfiguration.publicBaseURL?.absoluteString
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             ?? "http://localhost:8080"
-        let callbackPath = normalizedCallbackPath(Environment.get("OIDC_CALLBACK"))
-        let redirectURI = baseURL + callbackPath
+        let redirectURI = baseURL + env.callbackPath
 
-        // Fetch discovery document
         let discoveryURL: String = {
-            if let configured = Environment.get("OIDC_AUTH_SERVER")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !configured.isEmpty
-            {
+            if let configured = env.authServerOverride {
                 let trimmed = configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if trimmed.hasSuffix(".well-known/openid-configuration") {
                     return trimmed
@@ -179,7 +160,10 @@ struct OIDCConfiguration: Sendable {
         let jwksJSON = jwksBuffer.readString(length: jwksBuffer.readableBytes) ?? ""
         try await app.jwt.keys.add(jwksJSON: jwksJSON)
 
-        let claimConfig = OIDCClaimConfig.load()
+        let claimConfig = OIDCClaimConfig(
+            usernameClaim: env.usernameClaim,
+            emailClaim: env.emailClaim
+        )
         app.logger.info(
             "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI), usernameClaim=\(claimConfig.usernameClaim), emailClaim=\(claimConfig.emailClaim)"
         )
@@ -192,13 +176,6 @@ struct OIDCConfiguration: Sendable {
             claimConfig: claimConfig
         )
     }
-}
-
-private func normalizedCallbackPath(_ raw: String?) -> String {
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    guard !trimmed.isEmpty else { return "/auth/sso/callback" }
-    let withLeadingSlash = trimmed.hasPrefix("/") ? trimmed : "/" + trimmed
-    return withLeadingSlash
 }
 
 // MARK: - Application Storage

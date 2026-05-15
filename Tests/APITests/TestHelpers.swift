@@ -209,10 +209,16 @@ extension Application {
 /// `Application.make(.testing)` directly.
 func makeTestApp(
     prefix: String = "chickadee-test",
-    authMode: AuthMode = .local
+    authMode: AuthMode = .local,
+    appConfig: AppConfig? = nil
 ) async throws -> Application {
     let app = try await Application.make(.testing)
     app.authMode = authMode
+    // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
+    // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
+    // sane defaults during integration tests. Callers can pass a custom
+    // `appConfig` to exercise specific config branches.
+    app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
 
     let tmpDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")

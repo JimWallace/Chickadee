@@ -32,33 +32,14 @@ struct BrightSpaceSyncConfig: Sendable {
 
     static func fromEnvironment() -> Self? {
         guard
-            let base = Environment.get("BRIGHTSPACE_URL")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !base.isEmpty,
-            let appID = Environment.get("BRIGHTSPACE_APP_ID")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !appID.isEmpty,
-            let appKey = Environment.get("BRIGHTSPACE_APP_KEY")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !appKey.isEmpty,
-            let userID = Environment.get("BRIGHTSPACE_USER_ID")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !userID.isEmpty,
-            let userKey = Environment.get("BRIGHTSPACE_USER_KEY")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !userKey.isEmpty
+            let base = trimmedEnv("BRIGHTSPACE_URL"),
+            let appID = trimmedEnv("BRIGHTSPACE_APP_ID"),
+            let appKey = trimmedEnv("BRIGHTSPACE_APP_KEY"),
+            let userID = trimmedEnv("BRIGHTSPACE_USER_ID"),
+            let userKey = trimmedEnv("BRIGHTSPACE_USER_KEY")
         else { return nil }
 
-        let debounce: TimeInterval
-        if let raw = Environment.get("BRIGHTSPACE_SYNC_DEBOUNCE_SECS"),
-            let secs = TimeInterval(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
-            secs > 0
-        {
-            debounce = secs
-        } else {
-            debounce = 90
-        }
-
+        let debounce = (environmentDouble("BRIGHTSPACE_SYNC_DEBOUNCE_SECS") ?? 90)
         let trimmedBase = base.hasSuffix("/") ? String(base.dropLast()) : base
         return BrightSpaceSyncConfig(
             baseURL: trimmedBase,
@@ -66,7 +47,7 @@ struct BrightSpaceSyncConfig: Sendable {
             appKey: appKey,
             userID: userID,
             userKey: userKey,
-            debounceSecs: debounce
+            debounceSecs: debounce > 0 ? debounce : 90
         )
     }
 }

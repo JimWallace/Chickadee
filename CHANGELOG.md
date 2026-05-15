@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.169] - 2026-05-15
+
+### Changed
+
+- **Server-side env vars now flow through a single `AppConfig`.**  Every
+  `Environment.get(...)` call has been consolidated under a typed
+  `AppConfig` tree at `Sources/APIServer/Configuration/`.  At startup
+  `configure(_:)` loads the entire config once via
+  `AppConfig.fromEnvironment(workDir:)`, stores it on
+  `Application.appConfig`, and emits a redacted summary to the log.
+  Substructs cover auth, OIDC, security, scan mode, database, lockout,
+  workers, BrightSpace, diagnostics, and alerts.  Subsystems read
+  `app.appConfig.<sub>` instead of calling `Environment.get` directly,
+  and tests preload an `AppConfig` via
+  `Application.preloadedAppConfig` or pass one to
+  `makeTestApp(appConfig:)`.
+
+  No behavioural changes for operators — every env var keeps the same
+  name and same defaults.  The CI guardrail
+  `grep -rn "Environment.get" Sources/APIServer/` should only return
+  hits under `Sources/APIServer/Configuration/`.
+
+  The legacy `WORKER_SHARED_SECRET` alias for `RUNNER_SHARED_SECRET`
+  still works but now emits a deprecation warning at startup when it
+  was the active source.
+
+### Deprecated
+
+- `CourseBundleManifest.BundledCourse.openEnrollment` (replaced by
+  `enrollmentMode` in v0.3.x) is now flagged for removal in **v0.6.0**.
+- The `decodeIfPresent ?? false` fallback on
+  `NotebookFunctionScannerResult.isShadowed` (browser clients
+  pre-v0.4.94) is flagged for removal in **v0.6.0**.
+
 ## [0.4.168] - 2026-05-14
 
 ### Fixed

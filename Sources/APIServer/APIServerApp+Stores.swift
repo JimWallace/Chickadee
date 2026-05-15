@@ -12,43 +12,8 @@ import Foundation
 import Leaf
 import Vapor
 
-struct AppSecurityConfiguration: Sendable {
-    let publicBaseURL: URL?
-    let enforceHTTPS: Bool
-    let trustForwardedProto: Bool
-    let sessionCookieSecure: Bool
-
-    static let `default` = AppSecurityConfiguration(
-        publicBaseURL: nil,
-        enforceHTTPS: false,
-        trustForwardedProto: true,
-        sessionCookieSecure: false
-    )
-
-    static func fromEnvironment(authMode: AuthMode) -> Self {
-        let publicBaseURL = Environment.get("PUBLIC_BASE_URL")
-            .flatMap { raw -> URL? in
-                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : URL(string: trimmed)
-            }
-        let publicBaseIsHTTPS = (publicBaseURL?.scheme?.lowercased() == "https")
-
-        let enforceHTTPS =
-            environmentBool("ENFORCE_HTTPS")
-            ?? (authMode != .local && publicBaseIsHTTPS)
-        let trustForwardedProto = environmentBool("TRUST_X_FORWARDED_PROTO") ?? true
-        let sessionCookieSecure =
-            environmentBool("SESSION_COOKIE_SECURE")
-            ?? (publicBaseIsHTTPS || authMode != .local)
-
-        return AppSecurityConfiguration(
-            publicBaseURL: publicBaseURL,
-            enforceHTTPS: enforceHTTPS,
-            trustForwardedProto: trustForwardedProto,
-            sessionCookieSecure: sessionCookieSecure
-        )
-    }
-}
+// `AppSecurityConfiguration` lives in `Configuration/SecurityConfig.swift`
+// alongside the other AppConfig substructs.
 
 actor WorkerSecretStore {
     private var runtimeOverride: String?
@@ -317,47 +282,16 @@ func normalizedHost(_ raw: String) -> String {
     return host
 }
 
+/// Reads the runner ↔ server shared secret from the environment. Kept as a
+/// free function (rather than inlining `app.appConfig.workers.sharedSecret`)
+/// because `WorkerSecretStore` is an actor without an `Application` handle and
+/// needs a fresh read after admin-panel clears so the env fallback still wins.
 func runnerSharedSecretFromEnvironment() -> String? {
-    let primary = Environment.get("RUNNER_SHARED_SECRET")?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    if let primary, !primary.isEmpty { return primary }
-
-    let legacy = Environment.get("WORKER_SHARED_SECRET")?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    if let legacy, !legacy.isEmpty { return legacy }
-
-    return nil
+    trimmedEnv("RUNNER_SHARED_SECRET") ?? trimmedEnv("WORKER_SHARED_SECRET")
 }
 
-func environmentBool(_ key: String) -> Bool? {
-    guard
-        let raw = Environment.get(key)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
-        !raw.isEmpty
-    else {
-        return nil
-    }
-
-    switch raw {
-    case "1", "true", "yes", "on":
-        return true
-    case "0", "false", "no", "off":
-        return false
-    default:
-        return nil
-    }
-}
-
-func parseSSOIdentityAllowlist(_ raw: String?) -> Set<String> {
-    guard let raw else { return [] }
-    let values =
-        raw
-        .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isNewline })
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        .filter { !$0.isEmpty }
-    return Set(values)
-}
+// `environmentBool` and `parseSSOIdentityAllowlist` live in
+// `Configuration/EnvParsing.swift`.
 
 func extractWorkerSecretArgument(from env: inout Environment) -> String? {
     let args = env.arguments

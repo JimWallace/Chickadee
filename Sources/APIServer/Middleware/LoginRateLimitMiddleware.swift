@@ -47,15 +47,9 @@ struct LoginRateLimitConfiguration: Sendable {
     )
 
     static func fromEnvironment(trustForwardedFor: Bool) -> Self {
-        let perMinute =
-            Environment.get("LOGIN_RATE_LIMIT_PER_MIN")
-            .flatMap(Int.init) ?? 10
-        let threshold =
-            Environment.get("LOGIN_LOCKOUT_THRESHOLD")
-            .flatMap(Int.init) ?? 5
-        let windowSeconds =
-            Environment.get("LOGIN_LOCKOUT_WINDOW_SEC")
-            .flatMap(TimeInterval.init) ?? 900
+        let perMinute = environmentInt("LOGIN_RATE_LIMIT_PER_MIN") ?? 10
+        let threshold = environmentInt("LOGIN_LOCKOUT_THRESHOLD") ?? 5
+        let windowSeconds = environmentDouble("LOGIN_LOCKOUT_WINDOW_SEC") ?? 900
         let enabled = environmentBool("LOGIN_RATE_LIMIT_ENABLED") ?? true
         return LoginRateLimitConfiguration(
             enabled: enabled,
