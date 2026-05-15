@@ -61,7 +61,15 @@
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
             </td>
-            <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
+            <td class="due-col">
+                #if(setup.hasActiveExtension):
+                    <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">(extension)</span></span>
+                #elseif(setup.dueAt):
+                    #(setup.dueAt)
+                #else:
+                    —
+                #endif
+            </td>
             <td>
                 #if(setup.bestGradeText):
                     <strong>#(setup.bestGradeText)</strong>
@@ -160,7 +168,15 @@
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
             </td>
-            <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
+            <td class="due-col">
+                #if(setup.hasActiveExtension):
+                    <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">(extension)</span></span>
+                #elseif(setup.dueAt):
+                    #(setup.dueAt)
+                #else:
+                    —
+                #endif
+            </td>
             <td>
                 #if(setup.bestGradeText):
                     <strong>#(setup.bestGradeText)</strong>
@@ -259,7 +275,15 @@
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
             </td>
-            <td class="due-col">#if(setup.dueAt):#(setup.dueAt)#else:—#endif</td>
+            <td class="due-col">
+                #if(setup.hasActiveExtension):
+                    <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">(extension)</span></span>
+                #elseif(setup.dueAt):
+                    #(setup.dueAt)
+                #else:
+                    —
+                #endif
+            </td>
             <td>
                 #if(setup.bestGradeText):
                     <strong>#(setup.bestGradeText)</strong>

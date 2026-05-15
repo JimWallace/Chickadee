@@ -34,11 +34,33 @@ struct AssignmentRoutes: RouteCollection {
         routes.post("courses", ":courseID", "unenroll", ":userID", use: instructorUnenrollUser)
         routes.post("courses", ":courseID", "pre-unenroll", ":preEnrollmentID", use: instructorCancelPreEnrollment)
 
+        // Per-course, per-student grouped submissions view + drilldown.
+        // Lives outside the `/instructor` prefix so the URL carries the
+        // course code; the literal `students` second segment routes ahead
+        // of the vanity catch-all `/:courseCode/:assignmentSlug`.
+        routes.get(":courseCode", "students", ":username", "submissions", use: courseStudentSubmissionsPage)
+        routes.get(
+            ":courseCode", "students", ":username", "assignments", ":assignmentID", "history",
+            use: studentAssignmentHistoryPage
+        )
+        routes.post(
+            ":courseCode", "students", ":username", "assignments", ":assignmentID", "retest",
+            use: retestStudentAssignment
+        )
+        routes.post(
+            ":courseCode", "students", ":username", "assignments", ":assignmentID", "extension",
+            use: saveStudentAssignmentExtension
+        )
+        routes.post(
+            ":courseCode", "students", ":username", "assignments", ":assignmentID", "extension",
+            "delete",
+            use: deleteStudentAssignmentExtension
+        )
+
         let r = routes.grouped("instructor")
         r.get(use: list)
         r.get("grades.csv", use: exportGradesCSV)
         r.get("enroll-csv", use: enrollCSVForm)
-        r.get("students", ":studentID", "submissions", use: courseStudentSubmissionsPage)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
@@ -190,6 +212,7 @@ struct AssignmentRoutes: RouteCollection {
             roster = try await buildCourseRoster(
                 req: req,
                 activeCourseUUID: activeCourseUUID,
+                activeCourseCode: courseState.active?.code ?? "",
                 allSetupIDs: allSetupIDs,
                 fmt: fmt,
                 isoFormatter: isoFormatter

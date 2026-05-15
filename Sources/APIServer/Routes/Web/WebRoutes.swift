@@ -110,6 +110,27 @@ struct WebRoutes: RouteCollection {
         var submissionCountBySetupID: [String: Int] = [:]
         var bestGradePercentBySetupID: [String: Int] = [:]
         var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
+        // Per-user active extensions for the current user, keyed by
+        // testSetupID (since the dashboard works in setup space; we look
+        // up the assignment for each row separately).
+        var extensionDueAtBySetupID: [String: Date] = [:]
+        if let userID = user.id, !allAssignments.isEmpty {
+            let assignmentIDs = allAssignments.compactMap(\.id)
+            let extensions = try await APIAssignmentExtension.query(on: req.db)
+                .filter(\.$assignmentID ~~ Set(assignmentIDs))
+                .filter(\.$userID == userID)
+                .all()
+            let setupIDByAssignmentID = Dictionary(
+                uniqueKeysWithValues: allAssignments.compactMap { a -> (UUID, String)? in
+                    guard let id = a.id else { return nil }
+                    return (id, a.testSetupID)
+                }
+            )
+            for row in extensions {
+                guard let setupID = setupIDByAssignmentID[row.assignmentID] else { continue }
+                extensionDueAtBySetupID[setupID] = row.extendedDueAt
+            }
+        }
         if let userID = user.id {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
@@ -267,6 +288,30 @@ struct WebRoutes: RouteCollection {
                 else { return nil }
                 return VanityURLRoutes.vanityPath(courseCode: courseCode, assignmentSlug: assignment.slug)
             }()
+            // Active extension for this student on this assignment.  Drives
+            // the Submit button and Due column when the assignment-wide
+            // deadline has passed but this user retains submit privileges.
+            let extensionDueAt = extensionDueAtBySetupID[setupID]
+            let baselineDueAt = assignment?.dueAt
+            let hasActiveExtension: Bool = {
+                guard let extDate = extensionDueAt else { return false }
+                if let baseline = baselineDueAt, extDate <= baseline { return false }
+                return Date() < extDate
+            }()
+            let isOpenForThisUser: Bool = {
+                guard let assignment else { return false }
+                if !assignment.isOpen { return false }
+                if let dueAt = assignment.dueAt, dueAt <= Date() {
+                    if assignment.deadlineOverrideActive == true { return true }
+                    return hasActiveExtension
+                }
+                return true
+            }()
+            let effectiveDueAt: Date? = {
+                guard let extDate = extensionDueAt else { return baselineDueAt }
+                guard let baseline = baselineDueAt else { return extDate }
+                return max(extDate, baseline)
+            }()
             return TestSetupRow(
                 id: setupID,
                 title: assignment?.title,
@@ -277,7 +322,7 @@ struct WebRoutes: RouteCollection {
                 createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
                 status: status,
-                isOpen: assignment?.isOpen ?? false,
+                isOpen: isOpenForThisUser,
                 gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,
                 hasNotebook: hasNotebook,
                 submissionCount: submissionCount,
@@ -286,7 +331,9 @@ struct WebRoutes: RouteCollection {
                 latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
                 additionalSubmissionCount: max(submissionCount - 1, 0),
                 bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" },
-                badges: latestBadgesBySetupID[setupID] ?? []
+                badges: latestBadgesBySetupID[setupID] ?? [],
+                hasActiveExtension: hasActiveExtension,
+                effectiveDueAtText: effectiveDueAt.map { fmt.string(from: $0) }
             )
         }
 

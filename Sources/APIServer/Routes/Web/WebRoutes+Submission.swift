@@ -116,7 +116,7 @@ extension WebRoutes {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
         }
 
-        _ = try await requireOpenStudentAssignment(for: setupID, on: req)
+        _ = try await requireOpenStudentAssignment(for: setupID, user: user, on: req)
 
         let body = try req.content.decode(SubmitFormBody.self)
         let subsDir = req.application.submissionsDirectory

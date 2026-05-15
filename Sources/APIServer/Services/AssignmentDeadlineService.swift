@@ -35,6 +35,53 @@ func isAssignmentEffectivelyOpen(_ assignment: APIAssignment, now: Date = Date()
     return assignmentDeadlineOverrideIsActive(assignment)
 }
 
+/// Returns the deadline that actually applies to `user` for `assignment`,
+/// consulting per-student extension rows.  A user with no extension gets
+/// the assignment-wide `dueAt`; with an extension, the later of the two.
+/// Returns nil only when the assignment has no deadline at all.
+func effectiveDueAt(
+    for assignment: APIAssignment,
+    user: APIUser,
+    on db: Database
+) async throws -> Date? {
+    let baseline = assignment.dueAt
+    guard let assignmentID = assignment.id, let userID = user.id else {
+        return baseline
+    }
+    guard
+        let extensionRow = try await APIAssignmentExtension.query(on: db)
+            .filter(\.$assignmentID == assignmentID)
+            .filter(\.$userID == userID)
+            .first()
+    else {
+        return baseline
+    }
+    if let baseline {
+        return max(baseline, extensionRow.extendedDueAt)
+    }
+    return extensionRow.extendedDueAt
+}
+
+/// Per-user variant of `isAssignmentEffectivelyOpen`.  An active extension
+/// keeps submission open for one student even after the assignment-wide
+/// deadline has passed.  The assignment's `isOpen` flag is still respected
+/// — if an instructor manually closed an assignment, an extension does not
+/// reopen it.
+func isAssignmentEffectivelyOpen(
+    _ assignment: APIAssignment,
+    for user: APIUser,
+    on db: Database,
+    now: Date = Date()
+) async throws -> Bool {
+    guard assignment.isOpen else { return false }
+    if !assignmentDeadlineHasPassed(assignment, now: now) { return true }
+    if assignmentDeadlineOverrideIsActive(assignment) { return true }
+    guard let effective = try await effectiveDueAt(for: assignment, user: user, on: db) else {
+        return false
+    }
+    return now < effective
+}
+
 @discardableResult
 func closeAssignmentIfExpired(
     _ assignment: APIAssignment,
@@ -78,6 +125,7 @@ func closeExpiredAssignments(
 
 func requireOpenStudentAssignment(
     for testSetupID: String,
+    user: APIUser,
     on req: Request,
     now: Date = Date()
 ) async throws -> APIAssignment? {
@@ -90,7 +138,8 @@ func requireOpenStudentAssignment(
     }
 
     _ = try await closeAssignmentIfExpired(assignment, on: req.db, logger: req.logger, now: now)
-    guard isAssignmentEffectivelyOpen(assignment, now: now) else {
+    let open = try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db, now: now)
+    guard open else {
         throw AssignmentSubmissionGateError.closed
     }
     return assignment

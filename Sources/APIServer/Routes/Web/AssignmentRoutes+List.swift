@@ -87,6 +87,7 @@ extension AssignmentRoutes {
     func buildCourseRoster(
         req: Request,
         activeCourseUUID: UUID,
+        activeCourseCode: String,
         allSetupIDs: [String],
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
@@ -127,7 +128,10 @@ extension AssignmentRoutes {
                     role: u.role,
                     lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
                     lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
-                    submissionsURL: "/instructor/students/\(id.uuidString)/submissions",
+                    submissionsURL: studentSubmissionsURL(
+                        courseCode: activeCourseCode,
+                        username: u.username
+                    ),
                     unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
                     isPending: false
                 )
