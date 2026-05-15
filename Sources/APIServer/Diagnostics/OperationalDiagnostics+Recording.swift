@@ -374,7 +374,10 @@ extension OperationalDiagnosticsService {
             diagnostics.executionMs =
                 workerDiagnostics?.wallClockMs
                 ?? millisecondsBetween(startedAt, completedAt)
-            diagnostics.turnaroundMs = millisecondsBetween(effectiveEnqueuedAt, completedAt)
+            // Sum the two single-clock components instead of straddling
+            // server `enqueuedAt` and runner `completedAt`: runner clock
+            // skew otherwise lets `turnaroundMs < queueWaitMs` slip through.
+            diagnostics.turnaroundMs = sumComponentMs(diagnostics.queueWaitMs, diagnostics.executionMs)
             diagnostics.finalStatus = finalStatus
             diagnostics.timedOut = finalStatus == JobFinalStatus.timeout.rawValue
             diagnostics.exitCode = workerDiagnostics?.exitCode
@@ -402,7 +405,7 @@ extension OperationalDiagnosticsService {
             metric.completedAt = completedAt
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, metric.assignedAt)
             metric.executionMs = workerDiagnostics?.wallClockMs ?? millisecondsBetween(startedAt, completedAt)
-            metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, completedAt)
+            metric.totalProcessingMs = sumComponentMs(metric.queueWaitMs, metric.executionMs)
             StageTimingAggregator(from: workerDiagnostics?.stageTimings).apply(to: metric)
             metric.finalStatus = finalStatus
             metric.testsPassed = collection.passCount
@@ -545,7 +548,7 @@ extension OperationalDiagnosticsService {
             diagnostics.finishedAt = finishedAt ?? diagnostics.finishedAt
             diagnostics.queueWaitMs = millisecondsBetween(diagnostics.submittedAt, submission.assignedAt)
             diagnostics.executionMs = millisecondsBetween(diagnostics.startedAt, diagnostics.finishedAt)
-            diagnostics.turnaroundMs = millisecondsBetween(diagnostics.submittedAt, diagnostics.finishedAt)
+            diagnostics.turnaroundMs = sumComponentMs(diagnostics.queueWaitMs, diagnostics.executionMs)
             diagnostics.finalStatus =
                 terminationReason == "job_timeout"
                 ? JobFinalStatus.timeout.rawValue
@@ -564,7 +567,7 @@ extension OperationalDiagnosticsService {
             metric.completedAt = finishedAt ?? metric.completedAt
             metric.queueWaitMs = millisecondsBetween(metric.enqueuedAt, submission.assignedAt)
             metric.executionMs = millisecondsBetween(metric.startedAt, metric.completedAt)
-            metric.totalProcessingMs = millisecondsBetween(metric.enqueuedAt, metric.completedAt)
+            metric.totalProcessingMs = sumComponentMs(metric.queueWaitMs, metric.executionMs)
             metric.finalStatus =
                 terminationReason == "job_timeout"
                 ? JobFinalStatus.timeout.rawValue

@@ -98,7 +98,11 @@ final class ObservabilityTests: XCTestCase {
             .filter(\.$submissionID == "sub_exec_metric")
             .first()
         XCTAssertEqual(metric?.executionMs, 3250)
-        XCTAssertEqual(metric?.totalProcessingMs, 6250)
+        // totalProcessingMs is the sum of queueWaitMs (2000) and executionMs
+        // (3250), not `completedAt − enqueuedAt`. Summing avoids mixing
+        // server `enqueuedAt` with runner `completedAt`, which under any
+        // runner clock skew would let `total < queueWait` slip through.
+        XCTAssertEqual(metric?.totalProcessingMs, 5250)
         XCTAssertEqual(metric?.finalStatus, JobFinalStatus.error.rawValue)
     }
 
@@ -362,6 +366,80 @@ final class ObservabilityTests: XCTestCase {
             })
     }
 
+    /// Regression test for the admin runner page showing `Total < Queue
+    /// Wait`. Models the production failure mode: the runner's wall clock
+    /// is offset relative to the server, so the runner-reported
+    /// `finishedAt` lands "before" the server-recorded `assignedAt` in
+    /// absolute time. The old formula
+    /// (`completedAt − enqueuedAt`) straddled the two clocks and produced
+    /// totals smaller than the queue wait. `totalProcessingMs` must now
+    /// be `queueWaitMs + executionMs`, which never inverts.
+    func testTotalProcessingMsIsResilientToRunnerClockSkew() async throws {
+        let (_, submission) = try await makeSubmission(submissionID: "sub_clock_skew")
+
+        // Server clock: submitted at T+0, assigned 210 ms later.
+        let enqueuedAt = Date(timeIntervalSince1970: 10_000.000)
+        let assignedAt = Date(timeIntervalSince1970: 10_000.210)
+
+        submission.submittedAt = enqueuedAt
+        submission.workerID = "runner-skewed"
+        submission.assignedAt = assignedAt
+        submission.status = "assigned"
+        try await submission.update(on: app.db)
+
+        await app.diagnostics.recordSubmissionCreated(submission: submission, on: app.db, logger: app.logger)
+        await app.diagnostics.recordJobAssigned(submission: submission, on: app.db, logger: app.logger)
+
+        // Runner clock runs ~200ms behind the server, so its reported
+        // start/finish timestamps land "before" assignedAt in absolute
+        // time. wallClockMs (a duration on the runner's clock) is correct.
+        let runnerStartedAt = Date(timeIntervalSince1970: 10_000.010)
+        let runnerFinishedAt = Date(timeIntervalSince1970: 10_000.111)
+
+        let collection = TestOutcomeCollection(
+            submissionID: try submission.requireID(),
+            testSetupID: submission.testSetupID,
+            attemptNumber: submission.attemptNumber ?? 1,
+            buildStatus: .passed,
+            compilerOutput: nil,
+            outcomes: [],
+            totalTests: 0,
+            passCount: 0, failCount: 0, errorCount: 0, timeoutCount: 0,
+            executionTimeMs: 101,
+            jobStartedAt: runnerStartedAt,
+            runnerVersion: "runner-test/1.0",
+            timestamp: runnerFinishedAt
+        )
+        await app.diagnostics.recordWorkerResult(
+            collection: collection,
+            submission: submission,
+            on: app.db,
+            logger: app.logger
+        )
+
+        let metric = try await JobExecutionMetric.query(on: app.db)
+            .filter(\.$submissionID == "sub_clock_skew")
+            .first()
+        XCTAssertEqual(metric?.queueWaitMs, 210)
+        XCTAssertEqual(metric?.executionMs, 101)
+        // The invariant: total >= queueWait. The old formula yielded 111ms
+        // (a clock-skewed completedAt − enqueuedAt), inverting against
+        // the 210ms queueWait. The summed formula yields 311ms.
+        XCTAssertEqual(metric?.totalProcessingMs, 311)
+        if let total = metric?.totalProcessingMs, let queue = metric?.queueWaitMs {
+            XCTAssertGreaterThanOrEqual(total, queue)
+        } else {
+            XCTFail("expected queueWaitMs and totalProcessingMs to be populated")
+        }
+
+        // Same invariant on APISubmissionDiagnostics.turnaroundMs.
+        let diag = try await APISubmissionDiagnostics.find("sub_clock_skew", on: app.db)
+        XCTAssertEqual(diag?.turnaroundMs, 311)
+        if let turnaround = diag?.turnaroundMs, let queue = diag?.queueWaitMs {
+            XCTAssertGreaterThanOrEqual(turnaround, queue)
+        }
+    }
+
     /// Retests reuse the same `JobExecutionMetric` row. Two things must be
     /// true after the new assignment is recorded:
     /// 1. `enqueuedAt` is re-baselined to `retestedAt`, so `queueWaitMs`
@@ -414,7 +492,7 @@ final class ObservabilityTests: XCTestCase {
         let postFirstRun = try await JobExecutionMetric.query(on: app.db)
             .filter(\.$submissionID == "sub_retest")
             .first()
-        XCTAssertEqual(postFirstRun?.totalProcessingMs, 10_000)  // 1_010 − 1_000
+        XCTAssertEqual(postFirstRun?.totalProcessingMs, 9_000)  // queueWait 2_000 + execution 7_000
         XCTAssertEqual(postFirstRun?.queueWaitMs, 2_000)  //  1_002 − 1_000
         XCTAssertNotNil(postFirstRun?.completedAt)
 
