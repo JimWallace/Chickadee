@@ -31,6 +31,7 @@ Marmoset/
 results/
 submissions/
 testsetups/
+backups/
 
 # Runtime-generated JupyterLite file namespaces
 Public/files/
