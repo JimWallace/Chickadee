@@ -40,214 +40,57 @@ struct APIServerApp {
 
 func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: AuthMode? = nil) throws {
     let workDir = DirectoryConfiguration.detect().workingDirectory
-    let workerSecretFile = workDir + ".worker-secret"
-    let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
-    let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
-    let alertWebhookURLFile = workDir + ".alert-webhook-url"
 
-    let appConfig: AppConfig
-    if let preloaded = app.preloadedAppConfig {
-        // Test seam: use the caller-supplied config verbatim, with the
-        // requested AuthMode override applied on top if any.
-        appConfig =
-            authModeOverride.map { override in
-                var auth = preloaded.auth
-                auth = AuthConfig(
-                    mode: override,
-                    requestedMode: auth.requestedMode,
-                    nonSSOModesEnabled: auth.nonSSOModesEnabled,
-                    ssoAdminUsers: auth.ssoAdminUsers,
-                    ssoInstructorUsers: auth.ssoInstructorUsers
-                )
-                return AppConfig(
-                    auth: auth,
-                    oidc: preloaded.oidc,
-                    security: preloaded.security,
-                    scanMode: preloaded.scanMode,
-                    database: preloaded.database,
-                    lockout: preloaded.lockout,
-                    workers: preloaded.workers,
-                    brightspace: preloaded.brightspace,
-                    diagnostics: preloaded.diagnostics,
-                    alerts: preloaded.alerts
-                )
-            } ?? preloaded
-    } else {
-        appConfig = try AppConfig.fromEnvironment(workDir: workDir, authModeOverride: authModeOverride)
-        appConfig.logSummary(to: app.logger)
-    }
+    let appConfig = try resolveAppConfig(
+        app: app,
+        workDir: workDir,
+        authModeOverride: authModeOverride
+    )
     app.appConfig = appConfig
 
-    let authMode = appConfig.auth.mode
-    let securityConfiguration = appConfig.security
-    let scanModeConfiguration = appConfig.scanMode
-    let loginRateLimitConfiguration = appConfig.lockout
-    let ssoAdminUsers = appConfig.auth.ssoAdminUsers
-    let ssoInstructorUsers = appConfig.auth.ssoInstructorUsers
-
-    // MARK: - Directories
-
-    let resultsDir = workDir + "results/"
-    let setupsDir = workDir + "testsetups/"
-    let submissionsDir = workDir + "submissions/"
-
-    for dir in [resultsDir, setupsDir, submissionsDir] {
-        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    }
-
-    app.storage[ResultsDirectoryKey.self] = resultsDir
-    app.storage[TestSetupsDirectoryKey.self] = setupsDir
-    app.storage[SubmissionsDirectoryKey.self] = submissionsDir
-    app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
-    app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
-    app.storage[ServerHealthAlertWebhookURLFilePathKey.self] = alertWebhookURLFile
-    let startupWorkerSecret = resolveStartupWorkerSecret(
-        cliWorkerSecret: cliWorkerSecret,
-        workerSecretFilePath: workerSecretFile,
-        workerSecretWordlistPath: workerSecretWordlistFile
-    )
-    let localRunnerAutoStartEnabled =
-        readLocalRunnerAutoStartFromDisk(
-            filePath: localRunnerAutoStartFile
-        ) ?? false
-    app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
-    app.storage[WorkerSecretStoreKey.self] = WorkerSecretStore(initialOverride: startupWorkerSecret)
-    app.storage[WorkerActivityStoreKey.self] = WorkerActivityStore()
-    app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
-        initialEnabled: localRunnerAutoStartEnabled
-    )
-    app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
-    app.storage[AuthModeKey.self] = authMode
-    app.storage[SecurityConfigurationKey.self] = securityConfiguration
-    app.storage[ScanModeConfigurationKey.self] = scanModeConfiguration
-    app.storage[LoginRateLimitConfigurationKey.self] = loginRateLimitConfiguration
-    app.storage[SSOAdminUsersKey.self] = ssoAdminUsers
-    app.storage[SSOInstructorUsersKey.self] = ssoInstructorUsers
-    app.authProvider = LocalAuthProvider()
-
-    // MARK: - Sessions (Fluent-backed; persisted in the database)
-
-    app.sessions.use(.fluent)
-    var sessionConfig = app.sessions.configuration
-    sessionConfig.cookieFactory = { sessionID in
-        HTTPCookies.Value(
-            string: sessionID.string,
-            expires: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7),  // one week
-            maxAge: nil,
-            domain: nil,
-            path: "/",
-            isSecure: securityConfiguration.sessionCookieSecure,
-            isHTTPOnly: true,
-            sameSite: .lax
-        )
-    }
-    app.sessions.configuration = sessionConfig
-    // Error page middleware must be outermost so it catches errors from all
-    // subsequent middleware and route handlers.
-    app.middleware.use(LeafErrorMiddleware())
-    if securityConfiguration.enforceHTTPS {
-        app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
-    }
-    app.middleware.use(app.sessions.middleware)
-    app.middleware.use(UserSessionAuthenticator())
-    app.middleware.use(UserActivityMiddleware(debounceWindow: 60))
-    app.middleware.use(UserFileNamespaceMiddleware())
-    // Scan-mode seatbelt: when SCAN_MODE=true is set in the environment, the
-    // middleware 503s POSTs against destructive routes (submissions, test-setup
-    // uploads, retests, user delete/role) so an in-progress vulnerability scan
-    // can crawl the app without polluting prod data or fanning out work.
-    if scanModeConfiguration.enabled {
-        app.logger.warning(
-            "SCAN_MODE=true — destructive POST endpoints are returning 503. Disable after the scan window."
-        )
-    }
-    app.middleware.use(ScanModeMiddleware(configuration: scanModeConfiguration))
-    // Allow notebook uploads from the assignment-creation flow.
-    app.routes.defaultMaxBodySize = "10mb"
-
-    // MARK: - Views + static files
-
-    app.views.use(.leaf)
-    app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
-    app.leaf.tags["csrfToken"] = CSRFTokenTag()
-    app.leaf.tags["appVersion"] = AppVersionTag()
-    app.leaf.tags["rawJSON"] = RawJSONTag()
-    // FileMiddleware is registered first so static files are served directly.
-    // It short-circuits the responder chain (returns without calling next), so
-    // middleware registered after it only runs for dynamic Leaf-rendered pages.
-    // This is intentional: JupyterLite's static files must NOT receive COEP
-    // require-corp because JupyterLite's service worker produces synthetic
-    // responses (virtual filesystem, contents API) that lack Cross-Origin-
-    // Resource-Policy headers.  COEP on the page would block those responses
-    // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
-    // require SharedArrayBuffer — it uses a service-worker-based synchronisation
-    // fallback — so cross-origin isolation on the iframe document is unnecessary.
-    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.middleware.use(COEPMiddleware())
-    // HSTS is set only when HTTPS enforcement is active. Pinning Strict-
-    // Transport-Security against a dev http://localhost server would brick
-    // local browsers; the enforceHTTPS gate matches HTTPSRedirectMiddleware.
-    let hstsValue: String? =
-        securityConfiguration.enforceHTTPS
-        ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
-        : nil
-    app.middleware.use(SecurityHeadersMiddleware(strictTransportSecurity: hstsValue))
-
-    // MARK: - Database
-
-    try configureDatabase(app, settings: appConfig.database)
-    registerMigrations(on: app)
-
-    try app.autoMigrate().wait()
-    app.lifecycle.use(ObservabilityLifecycleHandler())
-    app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
-    app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
-    app.lifecycle.use(SessionReaperLifecycleHandler())
-    app.lifecycle.use(ServerHealthAlertLifecycleHandler())
-
-    // BrightSpace grade sync (only registered when env vars are present).
-    if let bsConfig = appConfig.brightspace {
-        app.brightSpaceSyncConfig = bsConfig
-        app.brightSpaceClient = BrightSpaceAPIClient(config: bsConfig)
-        app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
-        app.logger.info("BrightSpace grade sync enabled (org unit IDs configured per-course)")
-    }
-
-    if authMode != .local {
-        let nonSSOModesEnabled = appConfig.auth.nonSSOModesEnabled
-        if !nonSSOModesEnabled {
-            app.logger.info(
-                "Default auth mode is SSO. Set ENABLE_NON_SSO_AUTH_MODES=true to allow local/dual AUTH_MODE values."
-            )
-        }
-        if let requestedAuthMode = appConfig.auth.requestedMode,
-            requestedAuthMode != .sso,
-            !nonSSOModesEnabled
-        {
-            app.logger.warning(
-                "AUTH_MODE=\(requestedAuthMode.rawValue) ignored because ENABLE_NON_SSO_AUTH_MODES is not enabled; using sso."
-            )
-        }
-        if securityConfiguration.publicBaseURL == nil {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not set.")
-        } else if securityConfiguration.publicBaseURL?.scheme?.lowercased() != "https" {
-            let configured = securityConfiguration.publicBaseURL?.absoluteString ?? "(unset)"
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not https: \(configured)")
-        }
-        if !securityConfiguration.sessionCookieSecure {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but session cookies are not marked Secure.")
-        }
-        if appConfig.oidc.clientID == nil {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_ID is not set.")
-        }
-        if appConfig.oidc.clientSecret == nil {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_SECRET is not set.")
-        }
-    }
-
-    // MARK: - Routes
+    try bootstrapAppDirectories(app, workDir: workDir, cliWorkerSecret: cliWorkerSecret)
+    bootstrapAppMiddleware(app, appConfig: appConfig)
+    try bootstrapAppServices(app, appConfig: appConfig)
 
     try routes(app)
+}
+
+/// Either resolves the env-derived `AppConfig`, or, if a test has preloaded
+/// one via `app.preloadedAppConfig`, uses that verbatim (applying the
+/// `authModeOverride` on top if any).  Both paths return a fully-formed
+/// config ready to be stored on `app.appConfig`.
+private func resolveAppConfig(
+    app: Application,
+    workDir: String,
+    authModeOverride: AuthMode?
+) throws -> AppConfig {
+    if let preloaded = app.preloadedAppConfig {
+        return authModeOverride.map { override in
+            var auth = preloaded.auth
+            auth = AuthConfig(
+                mode: override,
+                requestedMode: auth.requestedMode,
+                nonSSOModesEnabled: auth.nonSSOModesEnabled,
+                ssoAdminUsers: auth.ssoAdminUsers,
+                ssoInstructorUsers: auth.ssoInstructorUsers
+            )
+            return AppConfig(
+                auth: auth,
+                oidc: preloaded.oidc,
+                security: preloaded.security,
+                scanMode: preloaded.scanMode,
+                database: preloaded.database,
+                lockout: preloaded.lockout,
+                workers: preloaded.workers,
+                brightspace: preloaded.brightspace,
+                diagnostics: preloaded.diagnostics,
+                alerts: preloaded.alerts
+            )
+        } ?? preloaded
+    }
+    let appConfig = try AppConfig.fromEnvironment(workDir: workDir, authModeOverride: authModeOverride)
+    appConfig.logSummary(to: app.logger)
+    return appConfig
 }
 
 // MARK: - Storage keys
