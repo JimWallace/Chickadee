@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.172] - 2026-05-15
+
+### Fixed
+
+- **snapshot.sh / restore.sh read DATABASE_* from the live server container.**
+  The v0.4.171 scripts sourced `.env` to detect `DATABASE_BACKEND`, which
+  failed for deployments where compose resolves those vars from a
+  `docker-compose.override.yml`, exported shell env, or any other source
+  outside `.env` — the scripts incorrectly reported "Current value: sqlite"
+  on a Postgres deployment.  Both scripts now run
+  `docker compose exec -T server env` and pick up `DATABASE_*` from the
+  authoritative container env, falling back to `.env` only when the server
+  isn't running.  No interface changes.
+
 ## [0.4.171] - 2026-05-15
 
 ### Added
