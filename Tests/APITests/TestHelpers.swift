@@ -230,6 +230,11 @@ func makeTestApp(
     app.resultsDirectory = dirs[0]
     app.testSetupsDirectory = dirs[1]
     app.submissionsDirectory = dirs[2]
+    // Seed the worker-secret and local-runner-autostart paths into the
+    // per-test temp directory so admin/worker-management tests don't
+    // collide with each other or with the dev .worker-secret on disk.
+    app.workerSecretFilePath = tmpDir + ".worker-secret"
+    app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
     app.storage[TestDataDirectoryKey.self] = tmpDir
 
     app.sessions.use(.memory)

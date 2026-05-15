@@ -12,8 +12,6 @@ final class AdminRoutesTests: XCTestCase {
 
     override func setUp() async throws {
         app = try await makeTestApp(prefix: "chickadee-admin")
-        app.workerSecretFilePath = app.testDataDirectory! + ".worker-secret"
-        app.localRunnerAutoStartFilePath = app.testDataDirectory! + ".local-runner-autostart"
     }
 
     override func tearDown() async throws {
