@@ -23,11 +23,7 @@ struct DatabaseSettings: Sendable {
 
     static func fromEnvironment(defaultSQLitePath: String) throws -> Self {
         let backend: DatabaseBackend
-        if let configuredBackend = Environment.get("DATABASE_BACKEND")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
-            !configuredBackend.isEmpty
-        {
+        if let configuredBackend = trimmedEnv("DATABASE_BACKEND")?.lowercased() {
             guard let parsed = DatabaseBackend(rawValue: configuredBackend) else {
                 throw DatabaseConfigurationError.invalidSettings(
                     "DATABASE_BACKEND must be one of: sqlite, postgres"
@@ -40,26 +36,19 @@ struct DatabaseSettings: Sendable {
 
         switch backend {
         case .sqlite:
-            let sqlitePath =
-                Environment.get("SQLITE_PATH")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-                ?? defaultSQLitePath
-            return .sqlite(path: sqlitePath)
+            return .sqlite(path: trimmedEnv("SQLITE_PATH") ?? defaultSQLitePath)
         case .postgres:
-            let host = Environment.get("DATABASE_HOST")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let database = Environment.get("DATABASE_NAME")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let username = Environment.get("DATABASE_USER")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let password = Environment.get("DATABASE_PASSWORD")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let port = Environment.get("DATABASE_PORT")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .flatMap { $0.isEmpty ? nil : Int($0) }
+            let host = trimmedEnv("DATABASE_HOST")
+            let database = trimmedEnv("DATABASE_NAME")
+            let username = trimmedEnv("DATABASE_USER")
+            let password = trimmedEnv("DATABASE_PASSWORD")
+            let port = environmentInt("DATABASE_PORT")
 
             var missing: [String] = []
-            if host?.isEmpty != false { missing.append("DATABASE_HOST") }
-            if database?.isEmpty != false { missing.append("DATABASE_NAME") }
-            if username?.isEmpty != false { missing.append("DATABASE_USER") }
-            if password?.isEmpty != false { missing.append("DATABASE_PASSWORD") }
+            if host == nil { missing.append("DATABASE_HOST") }
+            if database == nil { missing.append("DATABASE_NAME") }
+            if username == nil { missing.append("DATABASE_USER") }
+            if password == nil { missing.append("DATABASE_PASSWORD") }
             if port == nil { missing.append("DATABASE_PORT") }
 
             guard missing.isEmpty else {

@@ -15,7 +15,9 @@ func routes(_ app: Application) throws {
     )
     try app.grouped(csrf, loginRateLimit).register(collection: AuthRoutes())
     if app.authMode != .local {
-        try app.register(collection: SSOAuthRoutes())
+        try app.register(
+            collection: SSOAuthRoutes(configuredCallbackPath: app.appConfig.oidc.callbackPath)
+        )
     }
     // Worker routes — authenticated by per-request HMAC signatures.
     // WorkerHMACAuthMiddleware validates X-Worker-Timestamp / X-Worker-Nonce /

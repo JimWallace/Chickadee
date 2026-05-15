@@ -73,8 +73,10 @@ public struct BundledCourse: Codable, Sendable {
     /// Enrollment mode; nil in bundles exported before this field was added.
     /// When nil, fall back to `openEnrollment` for backward compatibility.
     public let enrollmentMode: CourseEnrollmentMode?
-    /// Deprecated. Present only in bundles exported before `enrollmentMode` was added.
-    /// Ignored when `enrollmentMode` is non-nil.
+    // DEPRECATED: remove in v0.6.0 — see CHANGELOG.
+    // Present only in `.chickadee` bundles exported before `enrollmentMode` was added.
+    // Ignored when `enrollmentMode` is non-nil. Once v0.6.0 is cut, drop the field
+    // and stop honouring it in `bundledCourseEnrollmentMode(...)`.
     public let openEnrollment: Bool?
 
     public init(

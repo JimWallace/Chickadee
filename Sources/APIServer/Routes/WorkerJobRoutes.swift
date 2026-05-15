@@ -310,11 +310,8 @@ struct WorkerJobRoutes: RouteCollection {
 }
 
 private func resolvedWorkerBaseURL(req: Request) -> String {
-    if let explicit = Environment.get("WORKER_PUBLIC_BASE_URL")?
-        .trimmingCharacters(in: .whitespacesAndNewlines),
-        !explicit.isEmpty
-    {
-        return explicit.hasSuffix("/") ? String(explicit.dropLast()) : explicit
+    if let explicit = req.application.appConfig.workers.publicBaseURL {
+        return explicit
     }
 
     // Prefer forwarded headers (proxy/LB), then Host from the runner request.

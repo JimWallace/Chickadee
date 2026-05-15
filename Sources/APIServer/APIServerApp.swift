@@ -44,21 +44,46 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
     let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
     let alertWebhookURLFile = workDir + ".alert-webhook-url"
-    let requestedAuthMode = AuthMode.fromEnvironment()
-    let nonSSOModesEnabled = environmentBool("ENABLE_NON_SSO_AUTH_MODES") ?? false
-    let authMode =
-        authModeOverride
-        ?? resolvedAuthMode(
-            requestedMode: requestedAuthMode,
-            nonSSOModesEnabled: nonSSOModesEnabled
-        )
-    let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
-    let scanModeConfiguration = ScanModeConfiguration.fromEnvironment()
-    let loginRateLimitConfiguration = LoginRateLimitConfiguration.fromEnvironment(
-        trustForwardedFor: securityConfiguration.trustForwardedProto
-    )
-    let ssoAdminUsers = parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
-    let ssoInstructorUsers = parseSSOIdentityAllowlist(Environment.get("SSO_INSTRUCTOR_USERS"))
+
+    let appConfig: AppConfig
+    if let preloaded = app.preloadedAppConfig {
+        // Test seam: use the caller-supplied config verbatim, with the
+        // requested AuthMode override applied on top if any.
+        appConfig =
+            authModeOverride.map { override in
+                var auth = preloaded.auth
+                auth = AuthConfig(
+                    mode: override,
+                    requestedMode: auth.requestedMode,
+                    nonSSOModesEnabled: auth.nonSSOModesEnabled,
+                    ssoAdminUsers: auth.ssoAdminUsers,
+                    ssoInstructorUsers: auth.ssoInstructorUsers
+                )
+                return AppConfig(
+                    auth: auth,
+                    oidc: preloaded.oidc,
+                    security: preloaded.security,
+                    scanMode: preloaded.scanMode,
+                    database: preloaded.database,
+                    lockout: preloaded.lockout,
+                    workers: preloaded.workers,
+                    brightspace: preloaded.brightspace,
+                    diagnostics: preloaded.diagnostics,
+                    alerts: preloaded.alerts
+                )
+            } ?? preloaded
+    } else {
+        appConfig = try AppConfig.fromEnvironment(workDir: workDir, authModeOverride: authModeOverride)
+        appConfig.logSummary(to: app.logger)
+    }
+    app.appConfig = appConfig
+
+    let authMode = appConfig.auth.mode
+    let securityConfiguration = appConfig.security
+    let scanModeConfiguration = appConfig.scanMode
+    let loginRateLimitConfiguration = appConfig.lockout
+    let ssoAdminUsers = appConfig.auth.ssoAdminUsers
+    let ssoInstructorUsers = appConfig.auth.ssoInstructorUsers
 
     // MARK: - Directories
 
@@ -76,7 +101,6 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
     app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
     app.storage[ServerHealthAlertWebhookURLFilePathKey.self] = alertWebhookURLFile
-    app.storage[ServerHealthAlertConfigurationKey.self] = ServerHealthAlertConfiguration.fromEnvironment()
     let startupWorkerSecret = resolveStartupWorkerSecret(
         cliWorkerSecret: cliWorkerSecret,
         workerSecretFilePath: workerSecretFile,
@@ -171,10 +195,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
 
     // MARK: - Database
 
-    let databaseSettings = try DatabaseSettings.fromEnvironment(
-        defaultSQLitePath: workDir + "chickadee.sqlite"
-    )
-    try configureDatabase(app, settings: databaseSettings)
+    try configureDatabase(app, settings: appConfig.database)
     registerMigrations(on: app)
 
     try app.autoMigrate().wait()
@@ -185,7 +206,7 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // BrightSpace grade sync (only registered when env vars are present).
-    if let bsConfig = BrightSpaceSyncConfig.fromEnvironment() {
+    if let bsConfig = appConfig.brightspace {
         app.brightSpaceSyncConfig = bsConfig
         app.brightSpaceClient = BrightSpaceAPIClient(config: bsConfig)
         app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
@@ -193,12 +214,13 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     }
 
     if authMode != .local {
+        let nonSSOModesEnabled = appConfig.auth.nonSSOModesEnabled
         if !nonSSOModesEnabled {
             app.logger.info(
                 "Default auth mode is SSO. Set ENABLE_NON_SSO_AUTH_MODES=true to allow local/dual AUTH_MODE values."
             )
         }
-        if let requestedAuthMode,
+        if let requestedAuthMode = appConfig.auth.requestedMode,
             requestedAuthMode != .sso,
             !nonSSOModesEnabled
         {
@@ -215,10 +237,10 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
         if !securityConfiguration.sessionCookieSecure {
             app.logger.warning("AUTH_MODE is \(authMode.rawValue), but session cookies are not marked Secure.")
         }
-        if Environment.get("OIDC_CLIENT_ID")?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+        if appConfig.oidc.clientID == nil {
             app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_ID is not set.")
         }
-        if Environment.get("OIDC_CLIENT_SECRET")?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+        if appConfig.oidc.clientSecret == nil {
             app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_SECRET is not set.")
         }
     }
@@ -269,33 +291,6 @@ struct SSOAdminUsersKey: StorageKey {
 }
 struct SSOInstructorUsersKey: StorageKey {
     typealias Value = Set<String>
-}
-
-enum AuthMode: String, Sendable {
-    case local
-    case sso
-    case dual
-
-    static func fromEnvironment() -> Self? {
-        guard
-            let raw = Environment.get("AUTH_MODE")?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased(),
-            !raw.isEmpty
-        else {
-            return nil
-        }
-        return Self(rawValue: raw)
-    }
-}
-
-func resolvedAuthMode(
-    requestedMode: AuthMode?,
-    nonSSOModesEnabled: Bool
-) -> AuthMode {
-    let requested = requestedMode ?? .sso
-    guard requested != .sso else { return .sso }
-    return nonSSOModesEnabled ? requested : .sso
 }
 
 extension Application {

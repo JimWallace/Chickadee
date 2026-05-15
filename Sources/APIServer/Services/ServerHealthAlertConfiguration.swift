@@ -29,33 +29,17 @@ struct ServerHealthAlertConfiguration: Sendable {
     static func fromEnvironment() -> Self {
         Self(
             enabled: environmentBool("ALERT_ENABLED") ?? false,
-            checkIntervalSeconds: TimeInterval(alertEnvironmentInt("ALERT_CHECK_INTERVAL_SECONDS") ?? 60),
-            cooldownSeconds: TimeInterval(alertEnvironmentInt("ALERT_COOLDOWN_SECONDS") ?? 1800),
-            runnerOfflineSeconds: TimeInterval(alertEnvironmentInt("ALERT_RUNNER_OFFLINE_SECONDS") ?? 300),
-            queueDepthThreshold: alertEnvironmentInt("ALERT_QUEUE_DEPTH_THRESHOLD") ?? 25,
-            oldestPendingSeconds: TimeInterval(alertEnvironmentInt("ALERT_OLDEST_PENDING_SECONDS") ?? 600),
-            errorRateThreshold: alertEnvironmentDouble("ALERT_ERROR_RATE_THRESHOLD") ?? 0.30,
-            errorRateWindowSize: alertEnvironmentInt("ALERT_ERROR_RATE_WINDOW") ?? 50,
-            errorRateMinimumSamples: alertEnvironmentInt("ALERT_ERROR_RATE_MIN_SAMPLES") ?? 10,
+            checkIntervalSeconds: TimeInterval(environmentInt("ALERT_CHECK_INTERVAL_SECONDS") ?? 60),
+            cooldownSeconds: TimeInterval(environmentInt("ALERT_COOLDOWN_SECONDS") ?? 1800),
+            runnerOfflineSeconds: TimeInterval(environmentInt("ALERT_RUNNER_OFFLINE_SECONDS") ?? 300),
+            queueDepthThreshold: environmentInt("ALERT_QUEUE_DEPTH_THRESHOLD") ?? 25,
+            oldestPendingSeconds: TimeInterval(environmentInt("ALERT_OLDEST_PENDING_SECONDS") ?? 600),
+            errorRateThreshold: environmentDouble("ALERT_ERROR_RATE_THRESHOLD") ?? 0.30,
+            errorRateWindowSize: environmentInt("ALERT_ERROR_RATE_WINDOW") ?? 50,
+            errorRateMinimumSamples: environmentInt("ALERT_ERROR_RATE_MIN_SAMPLES") ?? 10,
             webhookURLFromEnvironment: trimmedEnv("ALERT_WEBHOOK_URL")
         )
     }
-}
-
-private func alertEnvironmentInt(_ key: String) -> Int? {
-    guard let raw = trimmedEnv(key), let value = Int(raw) else { return nil }
-    return value
-}
-
-private func alertEnvironmentDouble(_ key: String) -> Double? {
-    guard let raw = trimmedEnv(key), let value = Double(raw) else { return nil }
-    return value
-}
-
-private func trimmedEnv(_ key: String) -> String? {
-    let raw = Environment.get(key)?.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let raw, !raw.isEmpty else { return nil }
-    return raw
 }
 
 struct ServerHealthAlertConfigurationKey: StorageKey {
@@ -64,12 +48,7 @@ struct ServerHealthAlertConfigurationKey: StorageKey {
 
 extension Application {
     var serverHealthAlertConfiguration: ServerHealthAlertConfiguration {
-        get {
-            if let existing = storage[ServerHealthAlertConfigurationKey.self] { return existing }
-            let created = ServerHealthAlertConfiguration.fromEnvironment()
-            storage[ServerHealthAlertConfigurationKey.self] = created
-            return created
-        }
+        get { storage[ServerHealthAlertConfigurationKey.self] ?? appConfig.alerts }
         set { storage[ServerHealthAlertConfigurationKey.self] = newValue }
     }
 }

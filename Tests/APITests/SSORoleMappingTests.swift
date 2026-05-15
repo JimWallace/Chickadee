@@ -5,7 +5,7 @@ import XCTest
 
 final class SSORoleMappingTests: XCTestCase {
 
-    private let routes = SSOAuthRoutes()
+    private let routes = SSOAuthRoutes(configuredCallbackPath: "/auth/sso/callback")
 
     func testNoAllowlistsReturnsNil() {
         let role = routes.mappedSSORole(

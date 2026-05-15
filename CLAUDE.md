@@ -89,6 +89,16 @@ reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
 `SESSION_COOKIE_SECURE`. `HTTPSRedirectMiddleware` handles the enforcement and
 respects `X-Forwarded-Proto` from reverse proxies.
 
+**Environment configuration is centralized (v0.4.168+).** Every env var read
+by the server flows through `AppConfig` (`Sources/APIServer/Configuration/`).
+At startup `configure(_:)` calls `AppConfig.fromEnvironment(workDir:)` once,
+stashes the result on `Application.appConfig`, and emits a redacted summary
+to the log. Subsystems read typed substructs (`appConfig.auth`, `.security`,
+`.workers`, `.oidc`, `.database`, `.lockout`, `.diagnostics`, `.alerts`,
+`.brightspace`, `.scanMode`) rather than calling `Environment.get` directly.
+Tests can preload an `AppConfig` via `Application.preloadedAppConfig` (the
+seam `configure(_:)` checks first) or pass one to `makeTestApp(appConfig:)`.
+
 **Worker secret is auto-generated.** If no secret is provided at startup, a
 random three-word diceware passphrase is generated from the EFF wordlist and
 persisted to `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET`.

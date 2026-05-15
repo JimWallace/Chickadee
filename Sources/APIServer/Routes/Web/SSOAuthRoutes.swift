@@ -16,6 +16,12 @@ import JWT
 import Vapor
 
 struct SSOAuthRoutes: RouteCollection {
+    /// Override callback path read from `AppConfig.oidc.callbackPath`. When
+    /// non-empty and not equal to `/auth/sso/callback`, the same handler is
+    /// registered at this path too so an IdP configured with a custom redirect
+    /// URI still reaches the callback handler.
+    let configuredCallbackPath: String
+
     func boot(routes: RoutesBuilder) throws {
         routes.get("auth", "sso", "start", use: ssoStart)
         routes.get("auth", "sso", "callback", use: ssoCallback)
@@ -361,16 +367,8 @@ extension SSOAuthRoutes {
     }
 
     func registerConfiguredCallbackRoute(on routes: RoutesBuilder) {
-        guard
-            let raw = Environment.get("OIDC_CALLBACK")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !raw.isEmpty
-        else {
-            return
-        }
-
         let components =
-            raw
+            configuredCallbackPath
             .split(separator: "/")
             .map(String.init)
             .filter { !$0.isEmpty }

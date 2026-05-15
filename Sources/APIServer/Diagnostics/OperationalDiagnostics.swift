@@ -231,17 +231,6 @@ func iso8601Metadata(_ date: Date) -> Logger.MetadataValue {
     .string(ISO8601DateFormatter().string(from: date))
 }
 
-private func environmentInt(_ key: String) -> Int? {
-    guard
-        let raw = Environment.get(key)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-        let value = Int(raw)
-    else {
-        return nil
-    }
-    return value
-}
-
 struct DiagnosticsConfigurationKey: StorageKey {
     typealias Value = DiagnosticsConfiguration
 }
@@ -260,12 +249,7 @@ struct ObservabilityLifecycleHandler: LifecycleHandler {
 
 extension Application {
     var diagnosticsConfiguration: DiagnosticsConfiguration {
-        get {
-            if let existing = storage[DiagnosticsConfigurationKey.self] { return existing }
-            let created = DiagnosticsConfiguration.fromEnvironment()
-            storage[DiagnosticsConfigurationKey.self] = created
-            return created
-        }
+        get { storage[DiagnosticsConfigurationKey.self] ?? appConfig.diagnostics }
         set { storage[DiagnosticsConfigurationKey.self] = newValue }
     }
 
