@@ -619,6 +619,6 @@ kinds beyond `.boundaryEquality` / `.approximateEquality` / `.variableEquality`
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
-- `docs/ci-followups.md` — CI reshaping notes from v0.4.6; WorkerTests gate status
+- `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history
