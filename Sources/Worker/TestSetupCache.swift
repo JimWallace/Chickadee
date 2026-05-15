@@ -50,10 +50,20 @@ actor TestSetupCache {
     ///               into a staging directory and returns that directory URL.
     ///               Called at most once per key; concurrent callers await the
     ///               same in-flight task.
+    /// Result of an `acquire` call.  `directory` is the per-job scratch copy
+    /// the caller owns; `didHit` distinguishes a fresh-from-disk hit (true)
+    /// from a miss that triggered a populate or an await-in-progress (false),
+    /// so the worker can persist the cache effectiveness alongside the
+    /// existing `testSetupAcquireMs` stage timing.
+    struct AcquireResult: Sendable {
+        let directory: URL
+        let didHit: Bool
+    }
+
     func acquire(
         testSetupID: String,
         populate: @escaping @Sendable () async throws -> URL
-    ) async throws -> URL {
+    ) async throws -> AcquireResult {
 
         let preparedDir = entryPreparedDir(for: testSetupID)
 
@@ -65,7 +75,8 @@ actor TestSetupCache {
                 fields: [
                     "test_setup_id": testSetupID
                 ])
-            return try copyToScratch(source: preparedDir, label: testSetupID)
+            let scratch = try copyToScratch(source: preparedDir, label: testSetupID)
+            return AcquireResult(directory: scratch, didHit: true)
         }
 
         // ── Already populating — await in-flight task ─────────────────────
@@ -79,7 +90,10 @@ actor TestSetupCache {
             // Another caller may have already registered this key in lruKeys;
             // touchLRU is idempotent and safe to call from any code path.
             touchLRU(key: testSetupID)
-            return try copyToScratch(source: populated, label: testSetupID)
+            let scratch = try copyToScratch(source: populated, label: testSetupID)
+            // Awaiting an in-flight populate is a miss from the caller's
+            // perspective — work was still being done on their behalf.
+            return AcquireResult(directory: scratch, didHit: false)
         }
 
         // ── Cache miss — start population ────────────────────────────────────
@@ -109,7 +123,8 @@ actor TestSetupCache {
                 fields: [
                     "test_setup_id": testSetupID
                 ])
-            return try copyToScratch(source: populated, label: testSetupID)
+            let scratch = try copyToScratch(source: populated, label: testSetupID)
+            return AcquireResult(directory: scratch, didHit: false)
         } catch {
             inProgress.removeValue(forKey: testSetupID)
             cleanupPartialEntry(testSetupID: testSetupID)

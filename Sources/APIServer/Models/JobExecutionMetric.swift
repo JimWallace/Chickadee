@@ -85,6 +85,12 @@ final class JobExecutionMetric: Model, Content, @unchecked Sendable {
     @OptionalField(key: "test_execution_ms")
     var testExecutionMs: Int?
 
+    /// Whether the runner-side TestSetupCache hit (true) for this job's
+    /// test setup, or had to populate from a fresh download (false).
+    /// Nil for jobs reported by runners that predate this field.
+    @OptionalField(key: "test_setup_cache_hit")
+    var testSetupCacheHit: Bool?
+
     @OptionalField(key: "final_status")
     var finalStatus: String?
 

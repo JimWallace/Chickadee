@@ -124,7 +124,7 @@ jobs:
           done
 
       - name: Run APITests against PostgreSQL
-        run: swift test --filter APITests
+        run: swift test --parallel --filter APITests
 
   browser-runner-tests:
     runs-on: ubuntu-latest

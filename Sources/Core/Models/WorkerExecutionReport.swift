@@ -11,6 +11,10 @@ public struct WorkerExecutionStageTimings: Codable, Sendable, Equatable {
     public let makeStepMs: Int?
     public let runtimeHelperSetupMs: Int?
     public let testExecutionMs: Int?
+    /// Whether the runner-side `TestSetupCache` hit (true) or had to populate
+    /// from a fresh download (false) when staging this job's test setup.
+    /// Nil when older runners that predate this field report results.
+    public let testSetupCacheHit: Bool?
 
     public init(
         workdirSetupMs: Int? = nil,
@@ -22,7 +26,8 @@ public struct WorkerExecutionStageTimings: Codable, Sendable, Equatable {
         submissionPrepareMs: Int? = nil,
         makeStepMs: Int? = nil,
         runtimeHelperSetupMs: Int? = nil,
-        testExecutionMs: Int? = nil
+        testExecutionMs: Int? = nil,
+        testSetupCacheHit: Bool? = nil
     ) {
         self.workdirSetupMs = workdirSetupMs
         self.submissionDirSetupMs = submissionDirSetupMs
@@ -34,6 +39,7 @@ public struct WorkerExecutionStageTimings: Codable, Sendable, Equatable {
         self.makeStepMs = makeStepMs
         self.runtimeHelperSetupMs = runtimeHelperSetupMs
         self.testExecutionMs = testExecutionMs
+        self.testSetupCacheHit = testSetupCacheHit
     }
 }
 

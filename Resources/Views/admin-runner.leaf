@@ -29,6 +29,7 @@ Runner #(runner.workerID)
             <div><strong>Avg wait:</strong> #if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</div>
             <div><strong>Avg setup/other:</strong> #if(summary.avgOverheadFormatted):#(summary.avgOverheadFormatted)#else:—#endif</div>
             <div><strong>Avg cache acquire:</strong> #if(summary.avgCacheAcquireFormatted):#(summary.avgCacheAcquireFormatted)#else:—#endif</div>
+            <div><strong>Cache hit rate:</strong> #if(summary.cacheHitRateFormatted):#(summary.cacheHitRateFormatted)#else:—#endif</div>
             <div><strong>Avg download:</strong> #if(summary.avgDownloadFormatted):#(summary.avgDownloadFormatted)#else:—#endif</div>
             <div><strong>Avg prep:</strong> #if(summary.avgPrepFormatted):#(summary.avgPrepFormatted)#else:—#endif</div>
         </div>

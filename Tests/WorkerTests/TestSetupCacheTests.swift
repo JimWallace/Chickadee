@@ -43,13 +43,14 @@ final class TestSetupCacheTests: XCTestCase {
             populateCalled.increment()
             return try makeTestStagingDir()
         }
-        defer { try? FileManager.default.removeItem(at: result) }
+        defer { try? FileManager.default.removeItem(at: result.directory) }
 
         XCTAssertEqual(populateCalled.value, 1)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: result.path))
+        XCTAssertFalse(result.didHit, "first acquire must report a miss")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.directory.path))
         XCTAssertTrue(
             FileManager.default.fileExists(
-                atPath: result.appendingPathComponent("test_script.sh").path
+                atPath: result.directory.appendingPathComponent("test_script.sh").path
             )
         )
     }
@@ -64,18 +65,20 @@ final class TestSetupCacheTests: XCTestCase {
             populateCalled.increment()
             return try makeTestStagingDir()
         }
-        defer { try? FileManager.default.removeItem(at: first) }
+        defer { try? FileManager.default.removeItem(at: first.directory) }
 
         let second = try await cache.acquire(testSetupID: "setup-2") {
             populateCalled.increment()  // must NOT be called on a hit
             return try makeTestStagingDir()
         }
-        defer { try? FileManager.default.removeItem(at: second) }
+        defer { try? FileManager.default.removeItem(at: second.directory) }
 
         XCTAssertEqual(
             populateCalled.value, 1,
             "populate must be called exactly once; second call should be a cache hit"
         )
+        XCTAssertFalse(first.didHit, "first acquire is a miss")
+        XCTAssertTrue(second.didHit, "second acquire on the same key is a hit")
     }
 
     // MARK: - Jobs receive isolated copies
@@ -86,38 +89,38 @@ final class TestSetupCacheTests: XCTestCase {
         let first = try await cache.acquire(testSetupID: "setup-3") {
             return try makeTestStagingDir(name: "sentinel.sh")
         }
-        defer { try? FileManager.default.removeItem(at: first) }
+        defer { try? FileManager.default.removeItem(at: first.directory) }
 
         let second = try await cache.acquire(testSetupID: "setup-3") {
             XCTFail("populate must not be called on cache hit")
             return try makeTestStagingDir()
         }
-        defer { try? FileManager.default.removeItem(at: second) }
+        defer { try? FileManager.default.removeItem(at: second.directory) }
 
         // Both copies contain the sentinel file.
         XCTAssertTrue(
             FileManager.default.fileExists(
-                atPath: first.appendingPathComponent("sentinel.sh").path
+                atPath: first.directory.appendingPathComponent("sentinel.sh").path
             )
         )
         XCTAssertTrue(
             FileManager.default.fileExists(
-                atPath: second.appendingPathComponent("sentinel.sh").path
+                atPath: second.directory.appendingPathComponent("sentinel.sh").path
             )
         )
 
         // The two scratch directories are distinct paths.
-        XCTAssertNotEqual(first.path, second.path)
+        XCTAssertNotEqual(first.directory.path, second.directory.path)
 
         // Mutating one copy does not affect the other.
         try "mutated".write(
-            to: first.appendingPathComponent("mutation.txt"),
+            to: first.directory.appendingPathComponent("mutation.txt"),
             atomically: true,
             encoding: .utf8
         )
         XCTAssertFalse(
             FileManager.default.fileExists(
-                atPath: second.appendingPathComponent("mutation.txt").path
+                atPath: second.directory.appendingPathComponent("mutation.txt").path
             )
         )
     }
@@ -136,7 +139,7 @@ final class TestSetupCacheTests: XCTestCase {
                         // Small delay to let other tasks pile up.
                         try await Task.sleep(for: .milliseconds(20))
                         return try makeTestStagingDir()
-                    }
+                    }.directory
                 }
             }
             var urls: [URL] = []
@@ -194,7 +197,7 @@ final class TestSetupCacheTests: XCTestCase {
             retryCount.increment()
             return try makeTestStagingDir()
         }
-        defer { try? FileManager.default.removeItem(at: result) }
+        defer { try? FileManager.default.removeItem(at: result.directory) }
         XCTAssertEqual(retryCount.value, 1, "after a failed population the next acquire must re-populate")
     }
 
@@ -208,7 +211,7 @@ final class TestSetupCacheTests: XCTestCase {
             let result = try await cache.acquire(testSetupID: "setup-evict-\(i)") {
                 try makeTestStagingDir(name: "script-\(i).sh")
             }
-            try? FileManager.default.removeItem(at: result)
+            try? FileManager.default.removeItem(at: result.directory)
         }
 
         // Count immediate subdirectory entries under cacheRoot.
@@ -237,20 +240,20 @@ final class TestSetupCacheTests: XCTestCase {
 
         // Insert A then B (cache full; A is LRU).
         let a1 = try await cache.acquire(testSetupID: "A") { try makeTestStagingDir(name: "a.sh") }
-        defer { try? FileManager.default.removeItem(at: a1) }
+        defer { try? FileManager.default.removeItem(at: a1.directory) }
 
         let b1 = try await cache.acquire(testSetupID: "B") { try makeTestStagingDir(name: "b.sh") }
-        defer { try? FileManager.default.removeItem(at: b1) }
+        defer { try? FileManager.default.removeItem(at: b1.directory) }
 
         // Re-access A so LRU order becomes [B, A] (B is now LRU).
         let a2 = try await cache.acquire(testSetupID: "A") {
             XCTFail("A should still be cached"); return try makeTestStagingDir()
         }
-        defer { try? FileManager.default.removeItem(at: a2) }
+        defer { try? FileManager.default.removeItem(at: a2.directory) }
 
         // Insert C — B (LRU) must be evicted.
         let c1 = try await cache.acquire(testSetupID: "C") { try makeTestStagingDir(name: "c.sh") }
-        defer { try? FileManager.default.removeItem(at: c1) }
+        defer { try? FileManager.default.removeItem(at: c1.directory) }
 
         XCTAssertTrue(
             FileManager.default.fileExists(

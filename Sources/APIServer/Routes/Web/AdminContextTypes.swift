@@ -54,6 +54,12 @@ struct AdminRunnerSummary: Encodable {
     let avgCacheAcquireFormatted: String?
     let avgDownloadFormatted: String?
     let avgPrepFormatted: String?
+    /// "<pct>% (<hits>/<total>)" over recent jobs with a recorded cache flag.
+    /// `nil` when no recent job reported a `testSetupCacheHit` (e.g. runner is
+    /// pre-v0.4.169 or only ran validation submissions).  When non-nil, this
+    /// is the only direct signal that the LRU cache is actually paying off
+    /// — compare hit-rate against `avgCacheAcquireFormatted` to confirm.
+    let cacheHitRateFormatted: String?
     let passedCount: Int
     let failedCount: Int
     let errorCount: Int
