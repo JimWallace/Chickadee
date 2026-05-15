@@ -17,6 +17,7 @@ enum RunnerJobStatus: String {
 
 struct JobStageTimings {
     private var values: [String: Int] = [:]
+    var testSetupCacheHit: Bool?
 
     mutating func measureSync<T>(_ stage: String, operation: () throws -> T) rethrows -> T {
         let start = Date()
@@ -33,6 +34,9 @@ struct JobStageTimings {
         var result: [String: Any] = [:]
         for (key, value) in values {
             result["\(key)_ms"] = value
+        }
+        if let testSetupCacheHit {
+            result["test_setup_cache_hit"] = testSetupCacheHit
         }
         return result
     }
@@ -52,7 +56,8 @@ struct JobStageTimings {
             submissionPrepareMs: value(for: "submission_prepare"),
             makeStepMs: value(for: "make_step"),
             runtimeHelperSetupMs: value(for: "runtime_helper_setup"),
-            testExecutionMs: value(for: "test_execution")
+            testExecutionMs: value(for: "test_execution"),
+            testSetupCacheHit: testSetupCacheHit
         )
     }
 

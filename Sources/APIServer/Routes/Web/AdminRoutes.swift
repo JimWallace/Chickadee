@@ -241,6 +241,13 @@ struct AdminRoutes: RouteCollection {
 
         let overheadSamples = recentJobs.compactMap { overheadMs(for: $0) }
         let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
+        let cacheFlagged = recentJobs.compactMap { $0.testSetupCacheHit }
+        let cacheHitRateFormatted: String? = {
+            guard !cacheFlagged.isEmpty else { return nil }
+            let hits = cacheFlagged.filter { $0 }.count
+            let pct = Int((Double(hits) / Double(cacheFlagged.count) * 100).rounded())
+            return "\(pct)% (\(hits)/\(cacheFlagged.count))"
+        }()
         let jobRows = recentJobs.map {
             AdminRunnerJobRow(
                 submissionID: $0.submissionID,
@@ -269,6 +276,7 @@ struct AdminRoutes: RouteCollection {
             avgCacheAcquireFormatted: average(stageBreakdowns.compactMap { $0?.cacheAcquireMs }).map(formatMs),
             avgDownloadFormatted: average(stageBreakdowns.compactMap { $0?.downloadMs }).map(formatMs),
             avgPrepFormatted: average(stageBreakdowns.compactMap { $0?.prepMs }).map(formatMs),
+            cacheHitRateFormatted: cacheHitRateFormatted,
             passedCount: statusCounts["passed", default: 0],
             failedCount: statusCounts["failed", default: 0],
             errorCount: statusCounts["error", default: 0],

@@ -156,7 +156,7 @@ extension WorkerDaemon {
 
         let testSetupAcquireStartedAt = Date()
         let testSetupCacheKey = testSetupCacheKey(for: job)
-        let testSetupDir = try await testSetupCache.acquire(testSetupID: testSetupCacheKey) {
+        let acquireResult = try await testSetupCache.acquire(testSetupID: testSetupCacheKey) {
             let stagingZip = workDir.appendingPathComponent("testsetup.zip")
             let stagingDir = workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
             try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
@@ -164,8 +164,10 @@ extension WorkerDaemon {
             try self.unzip(stagingZip, to: stagingDir)
             return stagingDir
         }
+        let testSetupDir = acquireResult.directory
         stageTimings.record(
             "test_setup_acquire", milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000))
+        stageTimings.testSetupCacheHit = acquireResult.didHit
         defer { try? FileManager.default.removeItem(at: testSetupDir) }
 
         try await submissionDownload

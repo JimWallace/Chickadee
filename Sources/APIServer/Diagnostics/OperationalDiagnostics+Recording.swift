@@ -298,6 +298,7 @@ extension OperationalDiagnosticsService {
                 metric.makeStepMs = nil
                 metric.runtimeHelperSetupMs = nil
                 metric.testExecutionMs = nil
+                metric.testSetupCacheHit = nil
                 metric.freeDiskMBAtStart = nil
                 metric.freeDiskMBAtEnd = nil
                 metric.workdirPeakBytes = nil

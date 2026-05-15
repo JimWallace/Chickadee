@@ -226,4 +226,5 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddJobDiskUsageMetrics())
     app.migrations.add(AddSessionsCreatedAt())
     app.migrations.add(CreateAuditLog())
+    app.migrations.add(AddJobExecutionCacheHit())
 }

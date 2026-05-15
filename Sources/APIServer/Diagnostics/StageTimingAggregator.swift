@@ -18,6 +18,7 @@ struct StageTimingAggregator: Sendable, Equatable {
     let makeStepMs: Int?
     let runtimeHelperSetupMs: Int?
     let testExecutionMs: Int?
+    let testSetupCacheHit: Bool?
 
     init(from timings: WorkerExecutionStageTimings?) {
         self.workdirSetupMs = timings?.workdirSetupMs
@@ -30,6 +31,7 @@ struct StageTimingAggregator: Sendable, Equatable {
         self.makeStepMs = timings?.makeStepMs
         self.runtimeHelperSetupMs = timings?.runtimeHelperSetupMs
         self.testExecutionMs = timings?.testExecutionMs
+        self.testSetupCacheHit = timings?.testSetupCacheHit
     }
 
     func apply(to metric: JobExecutionMetric) {
@@ -43,6 +45,7 @@ struct StageTimingAggregator: Sendable, Equatable {
         metric.makeStepMs = makeStepMs
         metric.runtimeHelperSetupMs = runtimeHelperSetupMs
         metric.testExecutionMs = testExecutionMs
+        metric.testSetupCacheHit = testSetupCacheHit
     }
 
     /// Sum of every populated stage timing. `nil` when every stage is `nil`.
