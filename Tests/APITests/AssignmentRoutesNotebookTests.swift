@@ -178,12 +178,13 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
             }
         )
     }
-    // MARK: - GET /instructor/students/:studentID/submissions
+    // MARK: - GET /:courseCode/students/:username/submissions
 
     /// The dashboard roster lists every enrolled user (students, plus
     /// instructors/admins enrolled for testing).  Clicking any of them used
     /// to 404 unless the target had role == "student".  Now any enrolled
-    /// user's course-scoped submissions are viewable.
+    /// user's course-scoped submissions are viewable, and the row appears
+    /// once-per-assignment with a link to the latest submission.
     func testCourseStudentSubmissionsPageWorksForEnrolledInstructor() async throws {
         _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
@@ -212,7 +213,7 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
             userID: try otherInstructor.requireID()
         )
 
-        let url = "/instructor/students/\(try otherInstructor.requireID().uuidString)/submissions"
+        let url = "/TEST101/students/other_instructor/submissions"
         try await app.asyncTest(
             .GET, url,
             beforeRequest: { req in
@@ -223,8 +224,11 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
                     res.status, .ok,
                     "Course-scoped submissions page must render for an enrolled non-student")
                 XCTAssertTrue(
+                    res.body.string.contains("Visible Assignment"),
+                    "Grouped page must show the assignment title row for this student")
+                XCTAssertTrue(
                     res.body.string.contains("instr_view_sub"),
-                    "Submission row for the instructor user must appear on the page")
+                    "Latest-submission link should include the submission ID")
             })
     }
 
@@ -234,13 +238,13 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
         _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
-        let stranger = try await insertUser(
+        _ = try await insertUser(
             username: "stranger_user",
             role: "student",
             displayName: "Stranger"
         )
 
-        let url = "/instructor/students/\(try stranger.requireID().uuidString)/submissions"
+        let url = "/TEST101/students/stranger_user/submissions"
         try await app.asyncTest(
             .GET, url,
             beforeRequest: { req in

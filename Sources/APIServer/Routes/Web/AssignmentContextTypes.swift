@@ -361,24 +361,62 @@ struct AssignmentSubmissionHistoryRow: Encodable {
     let gradeText: String
 }
 
+/// View context for the per-student, grouped-by-assignment view at
+/// `/:courseCode/students/:username/submissions`.  Each `StudentAssignmentRow`
+/// mirrors `TestSetupRow` from the student dashboard so the same per-row
+/// chrome (status / due / grade / latest submission / badges) renders the
+/// same way, with an extra Actions column carrying instructor-only
+/// affordances (Retest, inline extension form).
 struct CourseStudentSubmissionsContext: Encodable {
     let currentUser: CurrentUserContext?
     let studentName: String
     let studentUsername: String
+    let courseCode: String
     let courseName: String
     let backURL: String
-    let rows: [CourseStudentSubmissionRow]
+    let sections: [StudentAssignmentSectionContext]
+    let ungroupedRows: [StudentAssignmentRow]
+    let hasSections: Bool
+    let hasUngrouped: Bool
 }
 
-struct CourseStudentSubmissionRow: Encodable {
+struct StudentAssignmentSectionContext: Encodable {
+    let sectionID: String
+    let name: String
+    let rows: [StudentAssignmentRow]
+}
+
+struct StudentAssignmentRow: Encodable {
+    let assignmentID: String
+    let title: String
+    let status: String  // "open" | "closed"
+    let isOpen: Bool
+    let dueAtText: String?
+    let effectiveDueAtText: String?  // shown when an extension is active
+    let hasExtension: Bool
+    let extensionFormInput: String  // datetime-local prefill (extension or dueAt)
+    let extensionSavePath: String
+    let extensionDeletePath: String
+    let retestPath: String
+    let historyURL: String
+    let submissionCount: Int
+    let hasLatestSubmission: Bool
+    let latestSubmissionID: String
+    let latestSubmittedAtText: String
+    let additionalSubmissionCount: Int
+    let bestGradeText: String?
+    let badges: [AchievementBadge]
+}
+
+/// Per-student, per-assignment full submission history page.
+struct StudentAssignmentHistoryContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let studentName: String
+    let studentUsername: String
+    let courseCode: String
+    let assignmentID: String
     let assignmentTitle: String
-    let assignmentSubmissionsURL: String?
-    let submissionID: String
-    let attemptNumber: Int
-    let status: String
-    let submittedAt: String
-    let gradeText: String
-    let submissionFilename: String?
-    let canOpenInNotebook: Bool
-    let openInNotebookURL: String?
+    let backURL: String
+    let historyPath: String
+    let rows: [AssignmentSubmissionHistoryRow]
 }

@@ -34,6 +34,15 @@ struct TestSetupRow: Encodable {
     let additionalSubmissionCount: Int
     let bestGradeText: String?
     let badges: [AchievementBadge]
+    /// True when this student has an active deadline extension on this
+    /// assignment.  Used by the template to show the Submit button and
+    /// surface the effective deadline even when the assignment-wide
+    /// deadline has passed.
+    let hasActiveExtension: Bool
+    /// Formatted deadline that actually applies to this user (assignment
+    /// `dueAt` or the extension's `extendedDueAt`, whichever is later).
+    /// nil when there's no deadline and no extension.
+    let effectiveDueAtText: String?
 }
 
 struct LatestSubmissionItem: Encodable {

@@ -89,6 +89,9 @@ enum AuditAction: String, Sendable {
     case runnerSecretRotated = "runner.secret_rotated"
     case runnerAutostartChanged = "runner.autostart_changed"
     case submissionRetestAll = "submission.retest_all"
+    case submissionRetestForStudent = "submission.retest_for_student"
+    case extensionGranted = "extension.granted"
+    case extensionRevoked = "extension.revoked"
     case loginSuccess = "auth.login_success"
     case loginFailure = "auth.login_failure"
     case loginLocked = "auth.login_locked"
@@ -99,4 +102,5 @@ enum AuditTargetType: String, Sendable {
     case runner
     case testSetup = "test_setup"
     case auth
+    case assignment
 }

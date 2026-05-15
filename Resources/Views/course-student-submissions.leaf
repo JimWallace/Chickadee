@@ -13,45 +13,220 @@
     <a class="btn action-btn" href="#(backURL)">Back to Instructor Dashboard</a>
 </div>
 
-#if(rows.isEmpty):
-<p class="empty">No submissions yet for this student in the active course.</p>
+#if(!hasSections && !hasUngrouped):
+<p class="empty">No published assignments in this course yet.</p>
 #else:
-<table class="results-table">
+
+#if(hasSections):
+#for(section in sections):
+#if(!section.rows.isEmpty):
+<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">#(section.name)</h2>
+<table class="results-table" style="margin-bottom:.5rem">
     <thead>
         <tr>
-            <th>Assignment</th>
-            <th>Attempt</th>
-            <th>Submitted</th>
+            <th>Name</th>
             <th>Status</th>
+            <th class="due-col">Due</th>
             <th>Grade</th>
+            <th>History</th>
             <th>Actions</th>
         </tr>
     </thead>
     <tbody>
-    #for(row in rows):
+    #for(row in section.rows):
         <tr>
             <td>
-                #if(row.assignmentSubmissionsURL):
-                <strong><a href="#(row.assignmentSubmissionsURL)">#(row.assignmentTitle)</a></strong>
+                <div class="assignment-title-cell">
+                    <strong>#(row.title)</strong>
+                    #if(!row.badges.isEmpty):
+                    <span class="achievement-badges achievement-badges-compact">
+                        #for(badge in row.badges):
+                        <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                        #endfor
+                    </span>
+                    #endif
+                </div>
+            </td>
+            <td>
+                <span class="tier
+                    #if(row.status == "open"):tier-open
+                    #elseif(row.status == "closed"):tier-closed
+                    #endif">#(row.status)</span>
+            </td>
+            <td class="due-col">
+                #if(row.effectiveDueAtText):
+                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">+ extension</span></span>
+                #elseif(row.dueAtText):
+                    #(row.dueAtText)
                 #else:
-                <strong>#(row.assignmentTitle)</strong>
+                    —
                 #endif
             </td>
-            <td>#(row.attemptNumber)</td>
-            <td>#(row.submittedAt)</td>
-            <td><span class="tier">#(row.status)</span></td>
-            <td><strong>#(row.gradeText)</strong></td>
-            <td style="white-space:nowrap">
-                <a class="btn action-btn" href="/submissions/#(row.submissionID)">View results</a>
-                <a class="btn action-btn" href="/api/v1/submissions/#(row.submissionID)/download">Download</a>
-                #if(row.canOpenInNotebook):
-                <a class="btn action-btn" href="#(row.openInNotebookURL)">Open</a>
+            <td>
+                #if(row.bestGradeText):
+                    <strong>#(row.bestGradeText)</strong>
+                #else:
+                    <span class="empty">—</span>
                 #endif
+            </td>
+            <td>
+                #if(row.submissionCount > 0):
+                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                        #if(row.hasLatestSubmission):
+                            <a href="/submissions/#(row.latestSubmissionID)" style="font-size:.82rem">#(row.latestSubmittedAtText)</a>
+                        #endif
+                        #if(row.additionalSubmissionCount > 0):
+                            <a href="#(row.historyURL)" style="font-size:.78rem;color:var(--gray-600)">+#(row.additionalSubmissionCount) more</a>
+                        #endif
+                    </div>
+                #else:
+                    <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+            <td>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                    #if(row.submissionCount > 0):
+                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn" type="submit" title="Re-test every submission this student has on this assignment">Retest</button>
+                    </form>
+                    #endif
+                    <details style="margin:0">
+                        <summary class="btn action-btn" style="cursor:pointer">
+                            #if(row.hasExtension):Edit extension#else:Grant extension#endif
+                        </summary>
+                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                            #csrfFormField()
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                New deadline for this student
+                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required style="width:100%;margin-top:.2rem">
+                            </label>
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for extension" style="width:100%;margin-top:.2rem">
+                            </label>
+                            <div style="display:flex;gap:.3rem">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.hasExtension):
+                                <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
+                </div>
             </td>
         </tr>
     #endfor
     </tbody>
 </table>
+#endif
+#endfor
+#endif
+
+#if(hasUngrouped):
+#if(hasSections):
+<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">Ungrouped</h2>
+#endif
+<table class="results-table" style="margin-bottom:.5rem">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th class="due-col">Due</th>
+            <th>Grade</th>
+            <th>History</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(row in ungroupedRows):
+        <tr>
+            <td>
+                <div class="assignment-title-cell">
+                    <strong>#(row.title)</strong>
+                    #if(!row.badges.isEmpty):
+                    <span class="achievement-badges achievement-badges-compact">
+                        #for(badge in row.badges):
+                        <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                        #endfor
+                    </span>
+                    #endif
+                </div>
+            </td>
+            <td>
+                <span class="tier
+                    #if(row.status == "open"):tier-open
+                    #elseif(row.status == "closed"):tier-closed
+                    #endif">#(row.status)</span>
+            </td>
+            <td class="due-col">
+                #if(row.effectiveDueAtText):
+                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">+ extension</span></span>
+                #elseif(row.dueAtText):
+                    #(row.dueAtText)
+                #else:
+                    —
+                #endif
+            </td>
+            <td>
+                #if(row.bestGradeText):
+                    <strong>#(row.bestGradeText)</strong>
+                #else:
+                    <span class="empty">—</span>
+                #endif
+            </td>
+            <td>
+                #if(row.submissionCount > 0):
+                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                        #if(row.hasLatestSubmission):
+                            <a href="/submissions/#(row.latestSubmissionID)" style="font-size:.82rem">#(row.latestSubmittedAtText)</a>
+                        #endif
+                        #if(row.additionalSubmissionCount > 0):
+                            <a href="#(row.historyURL)" style="font-size:.78rem;color:var(--gray-600)">+#(row.additionalSubmissionCount) more</a>
+                        #endif
+                    </div>
+                #else:
+                    <span class="empty">No submissions yet</span>
+                #endif
+            </td>
+            <td>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                    #if(row.submissionCount > 0):
+                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn" type="submit" title="Re-test every submission this student has on this assignment">Retest</button>
+                    </form>
+                    #endif
+                    <details style="margin:0">
+                        <summary class="btn action-btn" style="cursor:pointer">
+                            #if(row.hasExtension):Edit extension#else:Grant extension#endif
+                        </summary>
+                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                            #csrfFormField()
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                New deadline for this student
+                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required style="width:100%;margin-top:.2rem">
+                            </label>
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for extension" style="width:100%;margin-top:.2rem">
+                            </label>
+                            <div style="display:flex;gap:.3rem">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.hasExtension):
+                                <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
+                </div>
+            </td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+
 #endif
 #endexport
 #endextend

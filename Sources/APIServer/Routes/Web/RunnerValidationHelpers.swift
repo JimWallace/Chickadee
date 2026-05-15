@@ -159,18 +159,78 @@ func retestAllSubmissionsForSetup(
     let now = Date()
     var touched = 0
     for submission in submissions {
-        if !force && (submission.status == "pending" || submission.status == "assigned") {
-            continue
+        if try await flipSubmissionToPending(
+            submission,
+            triggeredBy: userID,
+            on: db,
+            force: force,
+            now: now
+        ) {
+            touched += 1
         }
-        submission.status = "pending"
-        submission.workerID = nil
-        submission.assignedAt = nil
-        submission.retestedAt = now
-        submission.retestedByUserID = userID
-        try await submission.save(on: db)
-        touched += 1
     }
     return touched
+}
+
+/// Retests every `kind == .student` submission on `setupID` for one user
+/// only (used by the per-student × per-assignment Retest button).  Skips
+/// `kind == .validation` and other students' submissions.  Honours the
+/// same "already in flight" skip rule as `retestAllSubmissionsForSetup`
+/// unless `force = true`.
+///
+/// Returns the number of submissions whose status was flipped to pending.
+@discardableResult
+func retestStudentSubmissionsForSetup(
+    setupID: String,
+    studentUserID: UUID,
+    triggeredBy userID: UUID?,
+    on db: Database,
+    force: Bool = false
+) async throws -> Int {
+    let submissions = try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == setupID)
+        .filter(\.$userID == studentUserID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+
+    let now = Date()
+    var touched = 0
+    for submission in submissions {
+        if try await flipSubmissionToPending(
+            submission,
+            triggeredBy: userID,
+            on: db,
+            force: force,
+            now: now
+        ) {
+            touched += 1
+        }
+    }
+    return touched
+}
+
+/// Flips one submission back to `pending` for the worker queue.  Returns
+/// true when the row was actually mutated; false when `force == false`
+/// and the row was already in flight (`pending`/`assigned`).  Stamps
+/// `retested_at` and `retested_by_user_id` for traceability.
+@discardableResult
+func flipSubmissionToPending(
+    _ submission: APISubmission,
+    triggeredBy userID: UUID?,
+    on db: Database,
+    force: Bool = false,
+    now: Date = Date()
+) async throws -> Bool {
+    if !force && (submission.status == "pending" || submission.status == "assigned") {
+        return false
+    }
+    submission.status = "pending"
+    submission.workerID = nil
+    submission.assignedAt = nil
+    submission.retestedAt = now
+    submission.retestedByUserID = userID
+    try await submission.save(on: db)
+    return true
 }
 
 func waitForRunnerValidation(
