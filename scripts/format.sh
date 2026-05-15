@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# swift-format: applies the formatting rules in .swift-format in place.
+# Companion: scripts/swiftlint.sh runs the SwiftLint quality-rule layer.
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 

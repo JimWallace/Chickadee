@@ -1,0 +1,94 @@
+# SwiftLint configuration for Chickadee.
+#
+# Style/formatting is owned by swift-format (.swift-format at repo root).
+# SwiftLint covers the quality / correctness layer that swift-format does not:
+# force unwraps, dead bindings, .isEmpty vs count == 0, first(where:), unused
+# imports, function complexity, etc.
+#
+# Run locally:  scripts/swiftlint.sh
+# Run formatter: scripts/format.sh   (swift-format, separate concern)
+
+disabled_rules:
+  # Rules below are owned by swift-format. Disabled here to keep one source of
+  # truth for formatting; SwiftLint would otherwise either duplicate or fight
+  # with swift-format.
+  - trailing_whitespace
+  - trailing_newline
+  - leading_whitespace
+  - vertical_whitespace
+  - opening_brace
+  - statement_position
+  - colon
+  - comma
+  - operator_whitespace
+  - return_arrow_whitespace
+  - line_length        # swift-format owns the 120-char limit
+  - todo               # repo has legitimate TODO/FIXME comments we keep
+  - file_length        # sub-rules below cap function/type size, which is what matters
+  - trailing_comma     # project convention uses multi-line trailing commas; formatting concern
+
+opt_in_rules:
+  - force_unwrapping
+  - explicit_init
+  - first_where
+  - last_where
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - contains_over_range_nil_comparison
+  - empty_count
+  - empty_string
+  - empty_collection_literal
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - toggle_bool
+  - unused_import
+  - joined_default_parameter
+  - sorted_first_last
+  - static_operator
+  - yoda_condition
+  - prefer_zero_over_explicit_init
+  - override_in_extension
+  - prohibited_super_call
+  - discouraged_optional_boolean
+  - discouraged_optional_collection
+
+excluded:
+  - .build
+  - .swiftpm
+  - Packages
+  - Public          # generated JupyterLite assets
+  - reference       # original Java code, kept for behavioural reference
+  - Tools           # JupyterLite build config
+
+force_unwrapping:
+  excluded:
+    - Tests         # CLAUDE.md exempts test code from the no-force-unwrap rule
+
+identifier_name:
+  # Single-letter locals/closure params are common in this codebase
+  # (e.g. `s` for substring, `e` for element, `c` for character). Keeping
+  # min_length at 1 avoids ~390 violations on idiomatic short closures while
+  # still flagging unnamed-looking identifiers like empty strings.
+  min_length: 1
+  max_length:
+    warning: 50
+    error: 60
+
+type_name:
+  min_length: 3
+
+cyclomatic_complexity:
+  warning: 12
+  error: 20
+
+function_body_length:
+  warning: 80
+  error: 150
+
+type_body_length:
+  warning: 400
+  error: 600
+
+nesting:
+  type_level: 2

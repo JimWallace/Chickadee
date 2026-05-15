@@ -357,6 +357,15 @@ updating kernel versions or config.
 - Formatting is enforced by `swift-format` in CI (`.swift-format` at repo root).
   Run `scripts/format.sh` before committing, or `scripts/lint.sh` to check
   without modifying.
+- Quality rules (force unwraps, `.filter{}.first` antipatterns, oversized
+  functions, etc.) are enforced by SwiftLint (`.swiftlint.yml` at repo root,
+  delivered via the `SwiftLintPlugins` SwiftPM dependency — no separate
+  install). Run `scripts/swiftlint.sh` to check. The two tools are
+  complementary: swift-format owns formatting, SwiftLint owns correctness;
+  overlapping rules are disabled in `.swiftlint.yml`. CI enforcement of
+  SwiftLint is staged — adoption PR adds the config, follow-up PRs clear
+  the violation backlog, then the `Run SwiftLint` step is wired into the
+  `format-lint` job.
 
 ---
 

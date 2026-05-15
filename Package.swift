@@ -18,6 +18,11 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.7.1"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.15.1"),
         .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.1.1"),
+        // SwiftLint via SimplyDanny's plugin distribution: ships a pre-built
+        // binary so CI / fresh checkouts don't pay a SwiftLint-from-source build.
+        // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
+        // any target, so `swift build` / `swift test` are unaffected.
+        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.63.0"),
     ],
     targets: [
         // MARK: - Core library
