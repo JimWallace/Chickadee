@@ -39,7 +39,7 @@ final class DraftSupportFilesTests: XCTestCase {
         let setupID = "dsft_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
         // Empty zip first; updateScriptInZip handles the create-from-empty case.
-        FileManager.default.createFile(atPath: zipPath, contents: Data())
+        _ = FileManager.default.createFile(atPath: zipPath, contents: Data())
 
         if let f = withSupportFile {
             try updateScriptInZip(zipPath: zipPath, filename: f.name, content: f.contents)

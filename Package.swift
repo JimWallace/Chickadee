@@ -1,6 +1,8 @@
 // swift-tools-version:6.3
 import PackageDescription
 
+let strictWarnings: [SwiftSetting] = [.treatAllWarnings(as: .error)]
+
 let package = Package(
     name: "Chickadee",
     platforms: [
@@ -25,7 +27,8 @@ let package = Package(
                 .product(name: "Crypto", package: "swift-crypto")
             ],
             path: "Sources/Core",
-            exclude: ["README.md"]
+            exclude: ["README.md"],
+            swiftSettings: strictWarnings
         ),
 
         // MARK: - API Server executable
@@ -42,7 +45,8 @@ let package = Package(
                 .product(name: "CSRF", package: "CSRF"),
             ],
             path: "Sources/APIServer",
-            exclude: ["README.md"]
+            exclude: ["README.md"],
+            swiftSettings: strictWarnings
         ),
 
         // MARK: - Worker executable
@@ -54,7 +58,8 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/Worker",
-            exclude: ["README.md"]
+            exclude: ["README.md"],
+            swiftSettings: strictWarnings
         ),
 
         // MARK: - Tests
@@ -63,7 +68,8 @@ let package = Package(
             dependencies: [
                 .target(name: "Core")
             ],
-            path: "Tests/CoreTests"
+            path: "Tests/CoreTests",
+            swiftSettings: strictWarnings
         ),
         .testTarget(
             name: "APITests",
@@ -75,14 +81,16 @@ let package = Package(
                 .product(name: "CSRF", package: "CSRF"),
                 .product(name: "Leaf", package: "leaf"),
             ],
-            path: "Tests/APITests"
+            path: "Tests/APITests",
+            swiftSettings: strictWarnings
         ),
         .testTarget(
             name: "WorkerTests",
             dependencies: [
                 .target(name: "chickadee-runner")
             ],
-            path: "Tests/WorkerTests"
+            path: "Tests/WorkerTests",
+            swiftSettings: strictWarnings
         ),
     ]
 )

@@ -16,13 +16,12 @@ import Foundation
 /// encoding (`PatternFamilyRenderer`, `NotebookCheckRenderer`) need
 /// `outputFormatting = [.sortedKeys]` and also stay on a local encoder.
 ///
-/// `nonisolated(unsafe)`: `JSONDecoder` and `JSONEncoder` are not
-/// `Sendable` in current Swift Foundation, but their thread-safety
-/// contract permits concurrent `decode` / `encode` calls as long as the
-/// instance is not reconfigured.  These two are configured once at
-/// startup with default settings and never mutated, so concurrent use
-/// from request handlers is safe.
+/// `JSONDecoder` and `JSONEncoder` are `Sendable` in current Foundation,
+/// so sharing these instances across request handlers is safe as long
+/// as they are not reconfigured after initialization (we never do).
+/// The shared instances exist for allocation reuse on hot paths, not
+/// for concurrency-safety reasons.
 public enum ManifestCodec {
-    nonisolated(unsafe) public static let decoder: JSONDecoder = JSONDecoder()
-    nonisolated(unsafe) public static let encoder: JSONEncoder = JSONEncoder()
+    public static let decoder: JSONDecoder = JSONDecoder()
+    public static let encoder: JSONEncoder = JSONEncoder()
 }

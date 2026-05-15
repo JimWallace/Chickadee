@@ -36,7 +36,7 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
 
         let setupID = "dnct_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        FileManager.default.createFile(atPath: zipPath, contents: Data())
+        _ = FileManager.default.createFile(atPath: zipPath, contents: Data())
         // Seed the zip with a placeholder entry so the apply path's
         // zip-rewrite step has something to read; an empty stub file
         // would fail with ScriptZipError.zipFailed on the first PUT.
