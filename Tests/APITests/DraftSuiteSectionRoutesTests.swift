@@ -46,7 +46,7 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
 
         let setupID = "dssrt_\(UUID().uuidString.prefix(8))"
         let zipPath = app.testSetupsDirectory + setupID + ".zip"
-        FileManager.default.createFile(atPath: zipPath, contents: Data())
+        _ = FileManager.default.createFile(atPath: zipPath, contents: Data())
 
         var manifestDict: [String: Any] = [
             "schemaVersion": 1,
