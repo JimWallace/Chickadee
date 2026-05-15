@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.170] - 2026-05-15
+
+### Changed
+
+- **Maintenance pass — extracted shared helpers and split overgrown
+  bootstrap.**  No behaviour changes.
+
+  - **#497** Extracted `escapeForPythonStringLiteral` and
+    `tierFilenamePrefix` into
+    `Sources/APIServer/Utilities/PythonScriptHelpers.swift`.  Both
+    `PatternFamilyRenderer` and `NotebookCheckRenderer` (plus its
+    `+Code` / `+DataFrame` / `+Plots` extensions) now read from the
+    shared module; the byte-identical duplicates and the
+    `*ForCheck` / `*Check` suffix smell are gone.  Generated test
+    script bytes are unchanged, so `spec_hash` values and the
+    `TestSetupCache` invalidation key remain stable.
+  - **#495 (partial)** Moved ~290 lines of submission output-formatting
+    helpers (stdout/stderr parsing, chickadee.py JSON-envelope
+    extraction, `SubmitFormBody`) out of `WebRoutes+Submission.swift`
+    into `Sources/APIServer/Helpers/SubmissionOutputFormatting.swift`.
+    Route file goes 854 → 568 LOC.  The issue also called for splits
+    of `AssignmentRoutes+NewAssignment.swift` and `AdminRoutes.swift`,
+    but both have tight clusters of `private` extension helpers
+    shared across adjacent route handlers — splitting would force a
+    visibility regression to `internal` purely for LOC reduction, so
+    deferred.
+  - **#496** Split `APIServerApp.configure(_:)` (210 lines) into three
+    bootstrap units under `Sources/APIServer/Bootstrap/`:
+    `AppDirectories.swift` (on-disk dirs + worker secret + autostart
+    + service stores), `AppMiddleware.swift` (order-sensitive
+    middleware chain + sessions + Leaf tags + static-file middleware),
+    `AppServices.swift` (database + migrations + lifecycle handlers +
+    BrightSpace + SSO config-validation warnings).  `configure(_:)`
+    now orchestrates the three.  `APIServerApp.swift` goes 399 → 242
+    LOC.  Middleware ordering and storage-seeding semantics preserved
+    exactly; the `Application.preloadedAppConfig` test seam keeps
+    working.
+  - **#499 (partial)** `makeTestApp()` now seeds
+    `app.workerSecretFilePath` and `app.localRunnerAutoStartFilePath`
+    inside the per-test temp dir.  `AdminRoutesTests` no longer has
+    to wire them by hand.  The issue's broader "migrate ~56 tests"
+    framing didn't survive code review — the bare-app tests have
+    legitimate isolation reasons (single-middleware tests, custom
+    workingDirectory layouts, DB-only suites) and would lose intent
+    if forced onto `makeTestApp`, so those stay on
+    `Application.make(.testing)`.
+
+### Deferred
+
+- **#500** (decompose `assignment-{new,edit}.leaf` into partials) is
+  blocked by a LeafKit 1.14.1 cycle-detection false positive — the
+  team already hit it at v0.4.91 and the workaround comment lives at
+  `Resources/Views/assignment-new.leaf:691`.  A real fix requires an
+  upstream LeafKit change or a major upgrade to LeafKit 2.x (Vapor 5
+  beta), neither of which belongs in a maintenance PR.
+- **#498** (replace `user.role == "student"` string compares with an
+  enum/helper) skipped this round.  The five sites are stable, tests
+  cover them, and the literal can't be renamed (DB-stored) — the
+  compiler-safety argument doesn't earn its keep here.
+
 ## [0.4.169] - 2026-05-15
 
 ### Changed
