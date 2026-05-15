@@ -17,11 +17,30 @@ import XCTest
 @testable import chickadee_server
 
 func configureTestDatabase(_ app: Application) async throws {
-    let settings = try testDatabaseSettingsFromEnvironment()
+    var settings = try testDatabaseSettingsFromEnvironment()
+
+    // Per-test isolated schema for Postgres so `swift test --parallel` can
+    // run XCTestCase subclasses concurrently against one shared database.
+    // Each `Application` gets its own schema + `search_path`, so migrations
+    // and queries on one app can't trample another.  Replaces the old
+    // `DROP SCHEMA public CASCADE; CREATE SCHEMA public` reset.
+    if settings.backend == .postgres {
+        let schemaName = "test_\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(12))"
+        settings = .postgres(
+            host: settings.postgresHost!,
+            port: settings.postgresPort!,
+            database: settings.postgresDatabase!,
+            username: settings.postgresUsername!,
+            password: settings.postgresPassword!,
+            searchPath: [schemaName]
+        )
+        app.storage[TestPostgresSchemaKey.self] = schemaName
+    }
+
     try configureDatabase(app, settings: settings)
 
-    if settings.backend == .postgres {
-        try await resetPostgresTestSchema(app)
+    if let schemaName = app.storage[TestPostgresSchemaKey.self] {
+        try await createPostgresTestSchema(app, schemaName: schemaName)
     }
 
     registerMigrations(on: app)
@@ -29,11 +48,31 @@ func configureTestDatabase(_ app: Application) async throws {
     try await app.autoMigrate()
 }
 
-private func resetPostgresTestSchema(_ app: Application) async throws {
-    guard let sql = app.db as? SQLDatabase else { return }
+struct TestPostgresSchemaKey: StorageKey {
+    typealias Value = String
+}
 
-    try await sql.raw("DROP SCHEMA IF EXISTS public CASCADE").run()
-    try await sql.raw("CREATE SCHEMA public").run()
+/// Quotes an identifier for safe interpolation into raw SQL.  Test schema
+/// names are generated from a UUID so they shouldn't contain `"` themselves,
+/// but escape anyway — defense in depth, no perf cost.
+private func quotedIdentifier(_ raw: String) -> String {
+    "\"" + raw.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+}
+
+private func createPostgresTestSchema(_ app: Application, schemaName: String) async throws {
+    guard let sql = app.db as? SQLDatabase else { return }
+    // CREATE SCHEMA is global and doesn't depend on search_path, so this
+    // runs cleanly even though the freshly-configured connection has its
+    // search_path pointing at the not-yet-existent schema.
+    let quoted = quotedIdentifier(schemaName)
+    try await sql.raw("CREATE SCHEMA \(unsafeRaw: quoted)").run()
+}
+
+func dropPostgresTestSchema(_ app: Application) async throws {
+    guard let schemaName = app.storage[TestPostgresSchemaKey.self] else { return }
+    guard let sql = app.db as? SQLDatabase else { return }
+    let quoted = quotedIdentifier(schemaName)
+    try await sql.raw("DROP SCHEMA IF EXISTS \(unsafeRaw: quoted) CASCADE").run()
 }
 
 func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
@@ -151,6 +190,7 @@ extension Application {
     /// `makeTestApp`.
     func tearDownTestApp() async throws {
         let dir = storage[TestDataDirectoryKey.self]
+        try? await dropPostgresTestSchema(self)
         try await asyncShutdown()
         if let dir {
             try? FileManager.default.removeItem(atPath: dir)

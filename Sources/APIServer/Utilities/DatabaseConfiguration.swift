@@ -19,6 +19,7 @@ struct DatabaseSettings: Sendable {
     let postgresDatabase: String?
     let postgresUsername: String?
     let postgresPassword: String?
+    let postgresSearchPath: [String]?
 
     static func fromEnvironment(defaultSQLitePath: String) throws -> Self {
         let backend: DatabaseBackend
@@ -86,7 +87,8 @@ struct DatabaseSettings: Sendable {
             postgresPort: nil,
             postgresDatabase: nil,
             postgresUsername: nil,
-            postgresPassword: nil
+            postgresPassword: nil,
+            postgresSearchPath: nil
         )
     }
 
@@ -99,7 +101,8 @@ struct DatabaseSettings: Sendable {
             postgresPort: nil,
             postgresDatabase: nil,
             postgresUsername: nil,
-            postgresPassword: nil
+            postgresPassword: nil,
+            postgresSearchPath: nil
         )
     }
 
@@ -108,7 +111,8 @@ struct DatabaseSettings: Sendable {
         port: Int,
         database: String,
         username: String,
-        password: String
+        password: String,
+        searchPath: [String]? = nil
     ) -> Self {
         .init(
             backend: .postgres,
@@ -118,7 +122,8 @@ struct DatabaseSettings: Sendable {
             postgresPort: port,
             postgresDatabase: database,
             postgresUsername: username,
-            postgresPassword: password
+            postgresPassword: password,
+            postgresSearchPath: searchPath
         )
     }
 }
@@ -163,7 +168,7 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             )
         }
 
-        let configuration = SQLPostgresConfiguration(
+        var configuration = SQLPostgresConfiguration(
             hostname: host,
             port: port,
             username: username,
@@ -171,6 +176,14 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             database: database,
             tls: .disable
         )
+        // Per-connection `SET search_path TO ...` so tests can isolate themselves
+        // by schema and run in parallel against a single shared Postgres
+        // database.  Postgres tolerates a non-existent name in search_path until
+        // an unqualified reference resolves to it, so the bootstrap path can
+        // configure first, then `CREATE SCHEMA`, then run migrations.
+        if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
+            configuration.searchPath = searchPath
+        }
         app.databases.use(
             .postgres(configuration: configuration),
             as: .chickadee,
