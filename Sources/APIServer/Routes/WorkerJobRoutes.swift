@@ -78,13 +78,19 @@ struct WorkerJobRoutes: RouteCollection {
         let assignmentRequirements = req.application.assignmentRequirements
         let runnerProfile = profileUpsert.profile?.capabilityProfile
 
-        typealias ClaimedJob = (
-            submission: APISubmission,
-            setup: APITestSetup,
-            manifest: TestProperties,
-            assignmentID: UUID?,
-            requirementSpec: AssignmentRequirementSpec?
-        )
+        struct ClaimedJob {
+            let submission: APISubmission
+            let setup: APITestSetup
+            let manifest: TestProperties
+            let assignmentID: UUID?
+            let requirementSpec: AssignmentRequirementSpec?
+        }
+        struct BlockedCandidate {
+            let submission: APISubmission
+            let assignmentID: UUID?
+            let requirements: AssignmentRequirementSpec?
+            let result: CompatibilityResult
+        }
         let claimed: ClaimedJob? = try await req.application.workerClaimQueue.run {
             try await retrySQLiteBusyClaim {
                 try await req.db.transaction { db -> ClaimedJob? in
@@ -134,13 +140,7 @@ struct WorkerJobRoutes: RouteCollection {
                         candidates.append((validation, valSetup, valManifest))
                     }
 
-                    var blockedCandidate:
-                        (
-                            submission: APISubmission,
-                            assignmentID: UUID?,
-                            requirements: AssignmentRequirementSpec?,
-                            result: CompatibilityResult
-                        )?
+                    var blockedCandidate: BlockedCandidate?
 
                     for (submission, setup, manifest) in candidates {
                         let loadedRequirements = try await assignmentRequirements.loadRequirement(
@@ -169,7 +169,7 @@ struct WorkerJobRoutes: RouteCollection {
 
                         guard compatibilityResult.isCompatible else {
                             if blockedCandidate == nil {
-                                blockedCandidate = (
+                                blockedCandidate = BlockedCandidate(
                                     submission: submission,
                                     assignmentID: loadedRequirements.assignmentID,
                                     requirements: requirementSpec,
@@ -185,7 +185,7 @@ struct WorkerJobRoutes: RouteCollection {
                         submission.assignedAt = Date()
                         try await submission.save(on: db)
 
-                        return (
+                        return ClaimedJob(
                             submission: submission,
                             setup: setup,
                             manifest: manifest,
@@ -209,9 +209,14 @@ struct WorkerJobRoutes: RouteCollection {
             }  // end retrySQLiteBusyClaim
         }  // end workerClaimQueue.run
 
-        guard let (submission, setup, manifest, assignmentID, requirementSpec) = claimed else {
+        guard let claimed else {
             return Response(status: .noContent)
         }
+        let submission = claimed.submission
+        let setup = claimed.setup
+        let manifest = claimed.manifest
+        let assignmentID = claimed.assignmentID
+        let requirementSpec = claimed.requirementSpec
 
         await req.application.workerActivityStore.incrementAssignedJobs(for: body.workerID)
 

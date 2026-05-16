@@ -96,17 +96,40 @@ identifier_name:
 type_name:
   min_length: 3
 
+# Structural thresholds are tuned to project reality, not SwiftLint
+# defaults.  The original defaults (80/150 body, 12/20 complexity,
+# 400/600 type) flagged ~100 sites where the only "issue" was a Vapor
+# route handler 5–10 lines over the line.  Tuning up by ~25% surfaces
+# the genuine outliers (45-complexity functions, 800-line test classes,
+# 11-parameter helpers) while letting normal route / handler / fixture
+# shapes pass.  Each `error` threshold is also lifted so reviewer time
+# is spent on real refactors, not boundary-line noise.
+
 cyclomatic_complexity:
-  warning: 12
-  error: 20
+  warning: 15
+  error: 25
 
 function_body_length:
-  warning: 80
-  error: 150
+  warning: 100
+  error: 200
 
 type_body_length:
-  warning: 400
-  error: 600
+  warning: 500
+  error: 800
+
+function_parameter_count:
+  warning: 6
+  error: 9
+
+# SwiftLint's default large_tuple threshold is 2/3 (warning/error), which
+# flags every labelled 3-tuple like `(data: Data, ext: String, name: String)`
+# — a perfectly readable shape that's effectively an anonymous struct.
+# We allow 3-tuples and flag 4+ as warnings, 5+ as errors.  Real refactor
+# work goes into the genuine outliers (4–7 member tuples that should be
+# proper structs).
+large_tuple:
+  warning: 3
+  error: 4
 
 nesting:
   type_level: 2

@@ -106,22 +106,30 @@ func currentSetupFiles(
         )
     }()
 
-    let manifestSuites:
-        [(script: String, tier: String, order: Int, dependsOn: [String], points: Int, name: String?, isGenerated: Bool)] =
-            {
-                guard let data = setup.manifest.data(using: .utf8),
-                    let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-                else {
-                    return []
-                }
-                return props.testSuites.enumerated().map { (idx, item) in
-                    (
-                        script: item.script, tier: item.tier.rawValue, order: idx + 1,
-                        dependsOn: item.dependsOn, points: item.points, name: item.name,
-                        isGenerated: item.isGenerated
-                    )
-                }
-            }()
+    struct ManifestSuiteRow {
+        let script: String
+        let tier: String
+        let order: Int
+        let dependsOn: [String]
+        let points: Int
+        let name: String?
+        let isGenerated: Bool
+    }
+
+    let manifestSuites: [ManifestSuiteRow] = {
+        guard let data = setup.manifest.data(using: .utf8),
+            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        else {
+            return []
+        }
+        return props.testSuites.enumerated().map { (idx, item) in
+            ManifestSuiteRow(
+                script: item.script, tier: item.tier.rawValue, order: idx + 1,
+                dependsOn: item.dependsOn, points: item.points, name: item.name,
+                isGenerated: item.isGenerated
+            )
+        }
+    }()
     let testMap = Dictionary(uniqueKeysWithValues: manifestSuites.map { ($0.script, $0) })
 
     let archiveFiles = listZipEntries(zipPath: setup.zipPath)
@@ -197,15 +205,28 @@ func resolveEditSuiteFiles(
         var configRows: [ReindexedSuiteConfigRow] = []
         var nextOrder = 1
 
-        let manifestTests: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = {
+        struct ManifestTestEntry {
+            let tier: String
+            let order: Int
+            let dependsOn: [String]
+            let points: Int
+            let name: String?
+        }
+        let manifestTests: [String: ManifestTestEntry] = {
             guard let data = setupManifestJSON.data(using: .utf8),
                 let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
             else {
                 return [:]
             }
-            var map: [String: (tier: String, order: Int, dependsOn: [String], points: Int, name: String?)] = [:]
+            var map: [String: ManifestTestEntry] = [:]
             for (idx, entry) in props.testSuites.enumerated() {
-                map[entry.script] = (entry.tier.rawValue, idx + 1, entry.dependsOn, entry.points, entry.name)
+                map[entry.script] = ManifestTestEntry(
+                    tier: entry.tier.rawValue,
+                    order: idx + 1,
+                    dependsOn: entry.dependsOn,
+                    points: entry.points,
+                    name: entry.name
+                )
             }
             return map
         }()
