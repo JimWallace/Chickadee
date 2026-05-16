@@ -160,7 +160,7 @@ struct MarmosetImportRoutes: RouteCollection {
             // when the runner also places the validation submission in the same directory,
             // causing "Multiple definitions of '<func>' found" errors.
 
-            var canonicalSolution: (data: Data, originalFilename: String)? = nil
+            var canonicalSolution: (data: Data, originalFilename: String)?
             let canonicalSrcPath = projectsDir.appendingPathComponent("\(n)-canonical.zip").path
             if FileManager.default.fileExists(atPath: canonicalSrcPath),
                 let solution = try? extractSolutionFromCanonicalZip(zipPath: canonicalSrcPath)
@@ -181,7 +181,7 @@ struct MarmosetImportRoutes: RouteCollection {
             // we create a minimal blank notebook so students can always open the
             // assignment. The instructor can replace it via the assignment editor.
 
-            var notebookPath: String? = nil
+            var notebookPath: String?
             let notebookDir = setupsDir + "notebooks/\(setupID)/"
             let starterZipPath = projectsDir.appendingPathComponent("\(n)-project-starter-files.zip").path
             if FileManager.default.fileExists(atPath: starterZipPath),

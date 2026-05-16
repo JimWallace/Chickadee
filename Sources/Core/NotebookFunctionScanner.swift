@@ -142,7 +142,7 @@ public func scanNotebookForSectionsAndFunctions(_ notebookData: Data) -> Noteboo
 
     var sectionsInOrder: [String] = []
     var seenSections: Set<String> = []
-    var currentSection: String? = nil
+    var currentSection: String?
     var entries: [NotebookFunctionScanEntry] = []
     var rawEntriesByName: [String: Int] = [:]  // for shadowing pass below
 
@@ -339,7 +339,7 @@ private func parseParams(from raw: String) -> [ParsedParam] {
             }
             // Split name / type at first `:`.
             var paramName = chunk
-            var paramType: String? = nil
+            var paramType: String?
             if let colonIdx = chunk.firstIndex(of: ":") {
                 paramName = String(chunk[..<colonIdx]).trimmingCharacters(in: .whitespaces)
                 let t = String(chunk[chunk.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
