@@ -1,0 +1,62 @@
+name: ZAP Baseline
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  baseline:
+    name: ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Write CI .env
+        run: printf 'AUTH_MODE=local\nENABLE_NON_SSO_AUTH_MODES=true\n' > .env
+
+      - name: Start application
+        run: docker compose up -d --build
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "Server is healthy"
+              exit 0
+            fi
+            echo "Waiting for server... ($i/12)"
+            sleep 5
+          done
+          echo "Server did not become healthy within 60s"
+          exit 1
+
+      - name: Run ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          cmd_options: '-a'
+          fail_action: false
+          allow_issue_writing: true
+
+      - name: Collect server logs
+        if: always()
+        run: docker compose logs server > server.log 2>&1 || true
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs
+          path: server.log
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
