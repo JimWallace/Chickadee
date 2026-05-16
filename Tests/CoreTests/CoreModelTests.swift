@@ -152,7 +152,7 @@ struct CoreModelTests {
     @Test func testSuiteEntryDefaultsEmptyDependsOn() throws {
         let json = #"{ "tier": "public", "script": "test_foo.sh" }"#.data(using: .utf8)!
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
-        #expect(entry.dependsOn == [])
+        #expect(entry.dependsOn.isEmpty)
     }
 
     @Test func testSuiteEntryWithDependsOnRoundTrip() throws {
@@ -183,7 +183,7 @@ struct CoreModelTests {
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.testSuites.count == 3)
-        #expect(manifest.testSuites[0].dependsOn == [])
+        #expect(manifest.testSuites[0].dependsOn.isEmpty)
         #expect(manifest.testSuites[1].dependsOn == ["test_build.sh"])
         #expect(manifest.testSuites[2].dependsOn == ["test_build.sh"])
 

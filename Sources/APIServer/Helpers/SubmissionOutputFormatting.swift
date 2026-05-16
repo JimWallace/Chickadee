@@ -172,15 +172,11 @@ private func bestDetailedSection(stderr: String?, stdout: String?) -> String? {
         .filter { !$0.isEmpty }
     guard !candidates.isEmpty else { return nil }
 
-    for candidate in candidates {
-        if extractStructuredErrorText(from: candidate) != nil {
-            return candidate
-        }
+    for candidate in candidates where extractStructuredErrorText(from: candidate) != nil {
+        return candidate
     }
-    for candidate in candidates {
-        if extractTraceback(in: candidate) != nil {
-            return candidate
-        }
+    for candidate in candidates where extractTraceback(in: candidate) != nil {
+        return candidate
     }
     return stderr ?? stdout
 }

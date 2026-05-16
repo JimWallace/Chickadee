@@ -115,10 +115,9 @@ func closeExpiredAssignments(
         .all()
 
     var closedCount = 0
-    for assignment in assignments {
-        if try await closeAssignmentIfExpired(assignment, on: db, logger: logger, now: now) {
-            closedCount += 1
-        }
+    for assignment in assignments
+    where try await closeAssignmentIfExpired(assignment, on: db, logger: logger, now: now) {
+        closedCount += 1
     }
     return closedCount
 }

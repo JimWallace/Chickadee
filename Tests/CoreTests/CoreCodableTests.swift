@@ -125,7 +125,7 @@ struct CoreCodableTests {
         let col = try decoder.decode(TestOutcomeCollection.self, from: json)
         #expect(col.totalPoints == 5)  // falls back to totalTests
         #expect(col.earnedPoints == 3)  // falls back to passCount
-        #expect(col.warnings == [])  // defaults to empty
+        #expect(col.warnings.isEmpty)  // defaults to empty
         #expect(col.jobStartedAt == nil)  // optional, absent
     }
 

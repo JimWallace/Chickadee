@@ -114,16 +114,17 @@ struct Reporter: Sendable {
                             "retryable": context.retryable,
                             "error_message_summary": context.message,
                         ])
+                },
+                operation: {
+                    let result = await Self.attemptReport(session: session, request: request, expectedStatus: 200)
+                    switch result {
+                    case .success:
+                        return ()
+                    case .failure(let error):
+                        throw error
+                    }
                 }
-            ) {
-                let result = await Self.attemptReport(session: session, request: request, expectedStatus: 200)
-                switch result {
-                case .success:
-                    return ()
-                case .failure(let error):
-                    throw error
-                }
-            }
+            )
         } catch let reporterError as ReporterError {
             throw reporterError
         } catch {

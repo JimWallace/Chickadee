@@ -654,7 +654,8 @@ func isLikelyTestSuiteFile(_ file: File, storedName: String) -> Bool {
 }
 
 func hasRecognizedScriptShebang(_ file: File) -> Bool {
-    let prefix = String(decoding: Data(file.data.readableBytesView.prefix(256)), as: UTF8.self)
+    let head = Data(file.data.readableBytesView.prefix(256))
+    guard let prefix = String(bytes: head, encoding: .utf8) else { return false }
     let firstLine = prefix.split(whereSeparator: \.isNewline).first.map(String.init) ?? prefix
     let normalized = firstLine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard normalized.hasPrefix("#!") else { return false }

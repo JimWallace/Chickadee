@@ -517,26 +517,27 @@ actor WorkerDaemon {
                         "retryable": context.retryable,
                         "error_message_summary": context.message,
                     ])
+            },
+            operation: {
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+                request.timeoutInterval = 5
+                self.signer.sign(&request)
+                let (tmpURL, response) = try await Self.downloadSession.download(for: request)
+                guard let http = response as? HTTPURLResponse else {
+                    throw WorkerDaemonError.downloadFailed(url)
+                }
+                guard http.statusCode == 200 else {
+                    throw WorkerDaemonError.httpDownloadFailure(
+                        statusCode: http.statusCode,
+                        body: "<download body unavailable>"
+                    )
+                }
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: tmpURL, to: destination)
+                await self.recordConnectionRestoredIfNeeded(stage: stage)
             }
-        ) {
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.timeoutInterval = 5
-            self.signer.sign(&request)
-            let (tmpURL, response) = try await Self.downloadSession.download(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw WorkerDaemonError.downloadFailed(url)
-            }
-            guard http.statusCode == 200 else {
-                throw WorkerDaemonError.httpDownloadFailure(
-                    statusCode: http.statusCode,
-                    body: "<download body unavailable>"
-                )
-            }
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.moveItem(at: tmpURL, to: destination)
-            await self.recordConnectionRestoredIfNeeded(stage: stage)
-        }
+        )
     }
 
     nonisolated func unzip(_ zipFile: URL, to directory: URL) throws {

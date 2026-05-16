@@ -41,7 +41,12 @@ opt_in_rules:
   - last_where
   - contains_over_filter_count
   - contains_over_filter_is_empty
-  - contains_over_first_not_nil
+  # contains_over_first_not_nil disabled for the same reason as
+  # first_where above: structural matching can't distinguish Fluent's
+  # `QueryBuilder.first()` (issues SQL LIMIT 1) from
+  # `Sequence.first(where:)`.  All three violations were Fluent calls
+  # like `try await X.query(on:).filter(...).first() != nil` — the
+  # rule's suggested `.contains(where:)` doesn't exist on QueryBuilder.
   - contains_over_range_nil_comparison
   - empty_count
   - empty_string

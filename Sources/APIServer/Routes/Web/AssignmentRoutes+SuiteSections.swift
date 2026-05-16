@@ -105,10 +105,8 @@ extension AssignmentRoutes {
             // into the trailing Ungrouped block — same semantics as the
             // dashboard's onDelete: .setNull on course_sections.
             if var testSuites = dict["testSuites"] as? [[String: Any]] {
-                for i in testSuites.indices {
-                    if (testSuites[i]["sectionID"] as? String) == sectionID {
-                        testSuites[i].removeValue(forKey: "sectionID")
-                    }
+                for i in testSuites.indices where (testSuites[i]["sectionID"] as? String) == sectionID {
+                    testSuites[i].removeValue(forKey: "sectionID")
                 }
                 dict["testSuites"] = testSuites
             }
