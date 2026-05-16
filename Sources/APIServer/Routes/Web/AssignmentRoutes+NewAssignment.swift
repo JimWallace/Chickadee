@@ -793,7 +793,7 @@ extension AssignmentRoutes {
         let courseState = try await req.resolveActiveCourse(for: publishUser)
         let body = try req.content.decode(PublishBody.self)
 
-        guard let _ = try await APITestSetup.find(body.testSetupID, on: req.db) else {
+        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
             throw WebAssignmentError.invalidParameter(
                 name: "testSetupID",
                 reason: "unknown test setup '\(body.testSetupID)'"

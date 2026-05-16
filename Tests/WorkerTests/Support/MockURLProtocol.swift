@@ -82,7 +82,12 @@ final class MockURLProtocol: URLProtocol {
 
     // MARK: URLProtocol
 
+    // Must remain `class func` (not `static`) to override URLProtocol's
+    // base-class `class func` declarations.  `static` would not satisfy
+    // the override contract.
+    // swiftlint:disable:next static_over_final_class
     override class func canInit(with request: URLRequest) -> Bool { true }
+    // swiftlint:disable:next static_over_final_class
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {

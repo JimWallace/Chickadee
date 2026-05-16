@@ -130,10 +130,14 @@ actor BrightSpaceAPIClient {
         let url = signed(url: rawURL, method: "PUT")
 
         struct NumericGradeValue: Content {
-            let GradeObjectType: Int
-            let PointsNumerator: Double
+            let gradeObjectType: Int
+            let pointsNumerator: Double
+            enum CodingKeys: String, CodingKey {
+                case gradeObjectType = "GradeObjectType"
+                case pointsNumerator = "PointsNumerator"
+            }
         }
-        let body = NumericGradeValue(GradeObjectType: 1, PointsNumerator: earnedPoints)
+        let body = NumericGradeValue(gradeObjectType: 1, pointsNumerator: earnedPoints)
 
         let response = try await application.client.put(URI(string: url)) { req in
             req.headers.contentType = .json
@@ -171,13 +175,15 @@ actor BrightSpaceAPIClient {
         // D2L returns { "Items": [{ "UserId": 12345, ... }], "PagingInfo": {...} }
         struct UserListResponse: Decodable {
             struct UserItem: Decodable {
-                let UserId: Int
+                let userId: Int
+                enum CodingKeys: String, CodingKey { case userId = "UserId" }
             }
-            let Items: [UserItem]
+            let items: [UserItem]
+            enum CodingKeys: String, CodingKey { case items = "Items" }
         }
         let decoded = try response.content.decode(UserListResponse.self)
-        guard let first = decoded.Items.first else { return nil }
-        return String(first.UserId)
+        guard let first = decoded.items.first else { return nil }
+        return String(first.userId)
     }
 }
 

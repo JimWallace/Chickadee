@@ -158,16 +158,15 @@ func retestAllSubmissionsForSetup(
 
     let now = Date()
     var touched = 0
-    for submission in submissions {
-        if try await flipSubmissionToPending(
-            submission,
-            triggeredBy: userID,
-            on: db,
-            force: force,
-            now: now
-        ) {
-            touched += 1
-        }
+    for submission in submissions
+    where try await flipSubmissionToPending(
+        submission,
+        triggeredBy: userID,
+        on: db,
+        force: force,
+        now: now
+    ) {
+        touched += 1
     }
     return touched
 }
@@ -195,16 +194,15 @@ func retestStudentSubmissionsForSetup(
 
     let now = Date()
     var touched = 0
-    for submission in submissions {
-        if try await flipSubmissionToPending(
-            submission,
-            triggeredBy: userID,
-            on: db,
-            force: force,
-            now: now
-        ) {
-            touched += 1
-        }
+    for submission in submissions
+    where try await flipSubmissionToPending(
+        submission,
+        triggeredBy: userID,
+        on: db,
+        force: force,
+        now: now
+    ) {
+        touched += 1
     }
     return touched
 }

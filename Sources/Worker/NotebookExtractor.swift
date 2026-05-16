@@ -187,8 +187,9 @@ struct NotebookExtractor {
 /// than executing side-effectful or control-flow code.
 private func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
     // Definitions and structural annotations are always safe.
-    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@", "#"] {
-        if trimmed.hasPrefix(prefix) { return true }
+    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@", "#"]
+    where trimmed.hasPrefix(prefix) {
+        return true
     }
 
     // Bare string literals are module-level docstrings — safe.

@@ -194,7 +194,7 @@ extension WebRoutes {
         guard let userID = user.id else { throw Abort(.unauthorized) }
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let _ = try await APITestSetup.find(setupID, on: req.db)
+            try await APITestSetup.find(setupID, on: req.db) != nil
         else {
             throw Abort(.notFound)
         }

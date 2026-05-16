@@ -41,7 +41,12 @@ opt_in_rules:
   - last_where
   - contains_over_filter_count
   - contains_over_filter_is_empty
-  - contains_over_first_not_nil
+  # contains_over_first_not_nil disabled for the same reason as
+  # first_where above: structural matching can't distinguish Fluent's
+  # `QueryBuilder.first()` (issues SQL LIMIT 1) from
+  # `Sequence.first(where:)`.  All three violations were Fluent calls
+  # like `try await X.query(on:).filter(...).first() != nil` — the
+  # rule's suggested `.contains(where:)` doesn't exist on QueryBuilder.
   - contains_over_range_nil_comparison
   - empty_count
   - empty_string
@@ -57,8 +62,18 @@ opt_in_rules:
   - prefer_zero_over_explicit_init
   - override_in_extension
   - prohibited_super_call
-  - discouraged_optional_boolean
-  - discouraged_optional_collection
+  # NOTE: discouraged_optional_boolean and discouraged_optional_collection
+  # are intentionally NOT enabled.  They conflict with two well-established
+  # patterns in this codebase:
+  #   1. Codable JSON models where `nil` (key absent) is semantically
+  #      distinct from `false` / `[]` (key present, explicitly false /
+  #      explicitly empty).  NotebookCheck, CourseBundleManifest, and
+  #      most Fluent models rely on this distinction at decode time.
+  #   2. Functions / env parsers that return `Bool?` or `[T]?` where
+  #      `nil` means "input absent or unparseable" — a meaning that
+  #      collapses to false / [] if the rule's advice were followed.
+  # Re-enable only after auditing every Codable schema for absence-vs-
+  # default-value semantics.
 
 excluded:
   - .build

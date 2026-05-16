@@ -392,7 +392,7 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("userID"),
             let userID = UUID(uuidString: idString),
-            let _ = try await APIUser.find(userID, on: req.db)
+            try await APIUser.find(userID, on: req.db) != nil
         else {
             throw Abort(.notFound)
         }

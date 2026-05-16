@@ -26,18 +26,18 @@ func awardClassBadgesFor100Percent(
         user.role == "student"
     else { return }
 
-    async let _trail = awardImmutableBadge(
+    async let trail: Void = awardImmutableBadge(
         achievementID: "trailblazer",
         testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
-    async let _speed = updateRecordBadge(
+    async let speed: Void = updateRecordBadge(
         achievementID: "speed_champion",
         testSetupID: testSetupID, userID: userID, submissionID: submissionID,
         newValue: Double(executionTimeMs), on: db)
-    async let _mini = updateRecordBadge(
+    async let mini: Void = updateRecordBadge(
         achievementID: "minimalist",
         testSetupID: testSetupID, userID: userID, submissionID: submissionID,
         newValue: Double(attemptNumber), on: db)
-    _ = try await (_trail, _speed, _mini)
+    _ = try await (trail, speed, mini)
 }
 
 /// Inserts the badge record only if no holder exists yet (first-to wins).

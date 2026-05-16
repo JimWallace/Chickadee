@@ -140,7 +140,7 @@ struct NotebookFunctionScannerTests {
     @Test func paramHasDefaultEmptyWhenNoParams() {
         let nb = notebook(code: "def nothing():\n    return 1\n")
         let fns = scanNotebookForFunctions(nb)
-        #expect(fns[0].paramHasDefault == [])
+        #expect(fns[0].paramHasDefault.isEmpty)
     }
 
     @Test func functionWithoutAnyAnnotations() {
@@ -229,7 +229,7 @@ struct NotebookFunctionScannerTests {
         let nb = notebook(code: "def get_count():\n    return 0\n")
         let fns = scanNotebookForFunctions(nb)
         #expect(fns.count == 1)
-        #expect(fns[0].paramNames == [])
+        #expect(fns[0].paramNames.isEmpty)
     }
 
     @Test func varargsExcluded() {

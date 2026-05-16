@@ -582,7 +582,7 @@ final class WorkerTests: XCTestCase {
         XCTAssertTrue(content.contains("x = 1"))
         // The file should not have multiple blank-line groups from empty cells.
         let codeLines = content.split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { $0.trimmingCharacters(in: .whitespaces) == "" }
+            .filter { $0.trimmingCharacters(in: .whitespaces).isEmpty }
         // Allow at most a few blank lines (one between cells + header gap).
         XCTAssertLessThan(codeLines.count, 5, "Excess blank lines from empty cells")
     }

@@ -120,7 +120,7 @@ import Testing
             #174667.teststudent2,#174667.teststudent2,#
             #174667.alice,#174667.alice,#
             """
-        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == [])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)).isEmpty)
     }
 
     @Test func brightspacePrefersUsernameColumnWhenDifferent() {
@@ -141,7 +141,7 @@ import Testing
         // Same test-account filter applies even without a header, for
         // instructors who paste a column of dotted-form values.
         let csv = "#174667.alice\n#174667.bob\n"
-        #expect(parseUsernamesFromCSV(Data(csv.utf8)) == [])
+        #expect(parseUsernamesFromCSV(Data(csv.utf8)).isEmpty)
     }
 
     @Test func stripsBareHashPrefix() {

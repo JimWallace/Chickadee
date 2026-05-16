@@ -180,7 +180,7 @@ final class PatternFamilyApplyTests: PatternFamilyTestCase {
 
         let props = try decodeManifest(fixture.setup.manifest)
         XCTAssertEqual(props.patternFamilies, [])
-        XCTAssertTrue(props.testSuites.filter { $0.generatedBy != nil }.isEmpty)
+        XCTAssertFalse(props.testSuites.contains { $0.generatedBy != nil })
     }
 
     func testApply_preservesHandWrittenScripts() async throws {

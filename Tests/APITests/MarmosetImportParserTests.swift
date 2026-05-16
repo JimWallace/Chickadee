@@ -96,7 +96,7 @@ import Testing
     @Test func parseEmptyValue() {
         let input = "key1=\nkey2=value\n"
         let result = parseJavaProperties(Data(input.utf8))
-        #expect(result["key1"] == "")
+        #expect(result["key1"]?.isEmpty == true)
         #expect(result["key2"] == "value")
     }
 

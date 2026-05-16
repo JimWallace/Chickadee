@@ -349,14 +349,12 @@ func validatePatternFamilies(
     //    generator set (mirrors `TestSuiteEntry.isGenerated`).
     let rawScripts = Set(testSuites.filter { !$0.isGenerated }.map(\.script))
     for family in families {
-        for filename in patternFamilyAllGeneratedFilenames(family) {
-            if rawScripts.contains(filename) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason:
-                        "Pattern family '\(family.id)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key."
-                )
-            }
+        for filename in patternFamilyAllGeneratedFilenames(family) where rawScripts.contains(filename) {
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Pattern family '\(family.id)' would generate '\(filename)', but a hand-written script with that name already exists. Rename the raw script or change the family id/case key."
+            )
         }
     }
 }
