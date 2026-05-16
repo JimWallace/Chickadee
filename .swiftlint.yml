@@ -30,7 +30,14 @@ disabled_rules:
 opt_in_rules:
   - force_unwrapping
   - explicit_init
-  - first_where
+  # NOTE: first_where is intentionally NOT enabled.  It's a structural
+  # rule (no type info) that flags Fluent's
+  # `QueryBuilder.filter(_:).first()` chains as if they were
+  # `Sequence.filter { }.first`.  They are not: Fluent's .filter builds
+  # a SQL WHERE clause and .first() issues `LIMIT 1`.  QueryBuilder
+  # has no `.first(where:)` method, so the suggested rewrite would not
+  # compile.  Re-enable only if SwiftLint gains type-aware matching or
+  # we stop using Fluent.
   - last_where
   - contains_over_filter_count
   - contains_over_filter_is_empty
