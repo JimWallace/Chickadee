@@ -1,8 +1,13 @@
 name: CodeQL (Swift)
 
 # CodeQL Swift analysis is macOS-only (CodeQL 2.25 constraint).
-# To keep macOS-runner minutes modest, this workflow is narrowed to PRs
-# that actually touch Swift sources, plus a weekly cron.
+# Uses buildless extraction (build-mode: none) — required because the
+# project depends on swift-foundation APIs (e.g. `Data.bytes`) that are
+# not present in Apple's Darwin Foundation, so `swift build` cannot
+# succeed on macOS even with the right toolchain. Buildless extraction
+# is marked experimental by CodeQL and may produce less complete
+# results than tracing extraction, but it dodges the toolchain gap and
+# completes in a couple of minutes.
 on:
   push:
     branches: [main]
@@ -32,25 +37,18 @@ jobs:
   analyze:
     name: Analyze (swift)
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Swift 6.3
-        uses: SwiftyLab/setup-swift@v1
-        with:
-          swift-version: "6.3"
-
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: swift
-
-      - name: Build Swift
-        run: swift build
+          build-mode: none
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:swift"
