@@ -1,0 +1,56 @@
+name: CodeQL (Swift)
+
+# CodeQL Swift analysis is macOS-only (CodeQL 2.25 constraint).
+# To keep macOS-runner minutes modest, this workflow is narrowed to PRs
+# that actually touch Swift sources, plus a weekly cron.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '.github/workflows/codeql-swift.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '.github/workflows/codeql-swift.yml'
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  security-events: write
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (swift)
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Swift 6.3
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.3"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: swift
+
+      - name: Build Swift
+        run: swift build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:swift"

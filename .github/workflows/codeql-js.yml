@@ -1,4 +1,4 @@
-name: CodeQL
+name: CodeQL (JS/TS)
 
 on:
   push:
@@ -15,15 +15,9 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    container: ${{ matrix.language == 'swift' && 'swift:6.3-jammy' || null }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [swift, javascript-typescript]
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v6
@@ -31,15 +25,11 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
+          languages: javascript-typescript
           paths-ignore: |
             Public/jupyterlite/**
-
-      - name: Build Swift
-        if: matrix.language == 'swift'
-        run: swift build
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:javascript-typescript"
