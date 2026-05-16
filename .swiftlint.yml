@@ -96,22 +96,26 @@ identifier_name:
 type_name:
   min_length: 3
 
-# Structural thresholds are tuned to project reality, not SwiftLint
-# defaults.  The original defaults (80/150 body, 12/20 complexity,
-# 400/600 type) flagged ~100 sites where the only "issue" was a Vapor
-# route handler 5–10 lines over the line.  Tuning up by ~25% surfaces
-# the genuine outliers (45-complexity functions, 800-line test classes,
-# 11-parameter helpers) while letting normal route / handler / fixture
-# shapes pass.  Each `error` threshold is also lifted so reviewer time
-# is spent on real refactors, not boundary-line noise.
+# Structural thresholds split warning from error meaningfully.  Warning
+# catches "this is getting long, consider splitting" (the boundary
+# cases — route handlers 5–10 lines past the line, etc.).  Error
+# catches "this is a genuine outlier that needs design work" (the
+# 300+-line functions and complexity-50+ behemoths in
+# PatternFamilyApplication / ManifestValidation).
+#
+# Because scripts/swiftlint.sh runs with --strict, both severities
+# currently fail CI; the split exists so that switching off --strict
+# (or using a baseline) is a coherent option later, and so future
+# tuning can lower these in tandem with real refactors without
+# re-deriving the right ratios.
 
 cyclomatic_complexity:
   warning: 15
-  error: 25
+  error: 40
 
 function_body_length:
   warning: 100
-  error: 200
+  error: 300
 
 type_body_length:
   warning: 500

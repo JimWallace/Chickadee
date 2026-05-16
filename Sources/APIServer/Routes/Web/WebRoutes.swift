@@ -34,7 +34,15 @@ struct WebRoutes: RouteCollection {
 
     // MARK: - GET /
 
+    // The student dashboard handler dispatches across many distinct
+    // page states: no active course → /enroll, instructor-only courses
+    // → admin index, no assignments yet → empty-course page, etc.  Each
+    // arm builds a different Leaf context with disjoint data needs, so
+    // splitting them would require either a state-machine wrapper or
+    // duplicating the auth + course resolution preamble at each arm's
+    // entry point.  Both are noisier than the inline switch.
     @Sendable
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     func index(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 

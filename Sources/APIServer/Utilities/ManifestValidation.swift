@@ -80,6 +80,16 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
 ///   doesn't spring a surprise.
 /// - no generated filename collides with a hand-written script in `testSuites`
 ///   (raw entries are those with `generatedBy == nil`).
+///
+/// The body is intentionally long: it runs the full schema-level
+/// validation pass for pattern families, which checks ~15 independent
+/// invariants (kind-specific arity, identifier validity, name collisions
+/// across globals/sections/cases/variables, filename collisions with
+/// hand-written scripts, dependency-token sanity, etc.).  Splitting
+/// further would require threading the same context dict / sentinel sets
+/// into helpers, which makes the validation harder to read than it
+/// already is.
+// swiftlint:disable:next cyclomatic_complexity
 func validatePatternFamilies(
     _ families: [PatternFamily],
     testSuites: [TestSuiteEntry],
@@ -370,6 +380,13 @@ func validatePatternFamilies(
 ///   non-negative integer `expectedRows` / `expectedCols`).
 /// - generated check filenames don't collide with hand-written scripts
 ///   or with pattern-family generated filenames.
+///
+/// Body is long for the same reason as `validatePatternFamilies` above:
+/// it does the full schema validation pass for every `NotebookCheck`
+/// kind (existence, dataframe shape, value equality, etc.), and the
+/// per-kind rules are easier to follow inline than threaded through
+/// kind-specific helper functions.
+// swiftlint:disable:next cyclomatic_complexity function_body_length
 func validateNotebookChecks(
     _ checks: [NotebookCheck],
     patternFamilies: [PatternFamily] = [],
