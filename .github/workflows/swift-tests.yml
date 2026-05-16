@@ -142,7 +142,7 @@ jobs:
 
   worker-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     container:
       image: swift:6.3-jammy
       options: --privileged
@@ -165,4 +165,4 @@ jobs:
         run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run WorkerTests
-        run: swift test --filter WorkerTests
+        run: swift test --parallel --filter WorkerTests
