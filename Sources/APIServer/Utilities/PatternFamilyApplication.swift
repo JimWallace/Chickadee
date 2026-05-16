@@ -118,7 +118,20 @@ struct PatternFamilyApplyResult: Equatable {
 ///   position.  Families referenced by `authoredItems` must appear in
 ///   `nextFamilies`; families in `nextFamilies` not referenced by
 ///   `authoredItems` are appended at the end (defensive).
+// `applyPatternFamilies` is the single save-path for pattern families,
+// notebook checks, sections, and global variables/expressions on a test
+// setup.  Its 450+-line body is a step-by-step orchestration: resolve
+// inputs (caller-wins with manifest fallback), normalise stale
+// references, build the authored ordering, expand families and checks
+// into generated `TestSuiteEntry`s with deterministic filenames + spec
+// hashes, write rendered scripts into the setup zip, drop scripts whose
+// families/checks are gone, then persist the rebuilt manifest.  Each
+// phase reads inputs computed by the previous one — splitting into
+// helpers would push the same names through a context struct without
+// reducing the branching.  See the `── N. <phase>` comment markers
+// inside the body for the structure.
 @discardableResult
+// swiftlint:disable:next function_body_length cyclomatic_complexity function_parameter_count
 func applyPatternFamilies(
     to setup: APITestSetup,
     nextFamilies: [PatternFamily],

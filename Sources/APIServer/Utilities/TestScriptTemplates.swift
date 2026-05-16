@@ -119,6 +119,12 @@ enum ShellTestTemplateType: String, CaseIterable {
 
 /// Returns a Python test script for the given template type.
 /// `functionName` and `paramNames` are used to personalise the template.
+///
+/// Body length is driven by the switch over every supported
+/// `PythonTestTemplateType` case (one per template kind, each holding
+/// a multi-line Python `"""…"""` literal).  Extracting per-kind helpers
+/// just renames the same templates without removing any.
+// swiftlint:disable:next function_body_length
 func pythonTestScript(
     type: PythonTestTemplateType,
     functionName: String = "my_function",

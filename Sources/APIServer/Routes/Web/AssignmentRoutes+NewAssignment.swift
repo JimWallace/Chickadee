@@ -92,7 +92,18 @@ extension AssignmentRoutes {
         return try await req.view.render("assignment-new", ctx)
     }
 
+    // updateNewAssignmentDraft is the dispatcher for the new-assignment
+    // form's "Save draft" partial actions — its body is one big
+    // `switch action` over ~10 distinct verbs (create / upload / clear
+    // assignment & solution notebooks, replace / clear suite files,
+    // etc.).  Each case touches file I/O, draft state, and zip
+    // rebuilding in slightly different ways; the per-case branches
+    // share enough local state (setup, formState, userID, paths) that
+    // splitting them into per-action helpers would require passing the
+    // same five locals through each helper.  Inline switch reads more
+    // straightforwardly than the threaded-helper version.
     @Sendable
+    // swiftlint:disable:next function_body_length
     func updateNewAssignmentDraft(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
