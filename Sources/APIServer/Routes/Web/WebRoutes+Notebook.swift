@@ -410,13 +410,17 @@ private func applyNotebookSubstitutionsIfNeeded(
     }
     if !allExpressions.isEmpty {
         do {
+            guard let setupID = setup.id else {
+                logger.warning("Setup has no id; skipping expression eval.")
+                return try applySubstitutions(seedData, substitutions: substitutions, setup: setup, logger: logger)
+            }
             guard
                 let assignment = try await APIAssignment.query(on: db)
-                    .filter(\.$testSetupID == setup.id!)
+                    .filter(\.$testSetupID == setupID)
                     .first(),
                 let assignmentID = assignment.id
             else {
-                logger.warning("No assignment found for setup \(setup.id ?? "<nil>"); skipping expression eval.")
+                logger.warning("No assignment found for setup \(setupID); skipping expression eval.")
                 return try applySubstitutions(seedData, substitutions: substitutions, setup: setup, logger: logger)
             }
             let seedHex = try await AssignmentSeedStore.ensureSeed(

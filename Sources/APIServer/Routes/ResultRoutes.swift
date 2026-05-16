@@ -65,13 +65,14 @@ struct ResultRoutes: RouteCollection {
                 let status = passed ? "passed" : "failed"
 
                 if let assignment = try await APIAssignment.query(on: req.db)
-                    .filter(\.$validationSubmissionID == submission.id!)
+                    .filter(\.$validationSubmissionID == collection.submissionID)
                     .first()
                 {
                     assignment.validationStatus = status
                     try await assignment.save(on: req.db)
                     req.logger.info(
-                        "Validation \(status) for assignment '\(assignment.title)' (submission \(submission.id!))")
+                        "Validation \(status) for assignment '\(assignment.title)' (submission \(collection.submissionID))"
+                    )
                 }
             }
 

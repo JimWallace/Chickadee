@@ -23,14 +23,14 @@ extension AssignmentRoutes {
         setup: APITestSetup?,
         storedState: NewAssignmentDraftFormState
     ) -> NewAssignmentNotebookContext? {
-        guard let setup, let notebookPath = setup.notebookPath else { return nil }
+        guard let setup, let setupID = setup.id, let notebookPath = setup.notebookPath else { return nil }
         let name =
             storedState.assignmentNotebookName
             ?? URL(fileURLWithPath: notebookPath).lastPathComponent
         let titleParam = storedState.assignmentName.isEmpty ? "Assignment Notebook" : storedState.assignmentName
         return NewAssignmentNotebookContext(
             name: name,
-            editURL: "/testsetups/\(setup.id!)/notebook?title=\(urlEncode(titleParam))"
+            editURL: "/testsetups/\(setupID)/notebook?title=\(urlEncode(titleParam))"
         )
     }
 
@@ -43,14 +43,14 @@ extension AssignmentRoutes {
         setup: APITestSetup?,
         storedState: NewAssignmentDraftFormState
     ) -> NewAssignmentNotebookContext? {
-        guard let setup else { return nil }
+        guard let setup, let setupID = setup.id else { return nil }
         let draftPath = draftSolutionNotebookPath(
             testSetupsDirectory: req.application.testSetupsDirectory,
-            setupID: setup.id!
+            setupID: setupID
         )
         let fallbackData = draftNotebookData(
             req: req,
-            setupID: setup.id!,
+            setupID: setupID,
             userID: userID,
             fileKind: .solution,
             fallbackPath: draftPath
@@ -61,7 +61,7 @@ extension AssignmentRoutes {
             ?? URL(fileURLWithPath: draftPath).lastPathComponent
         return NewAssignmentNotebookContext(
             name: name,
-            editURL: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+            editURL: "/testsetups/\(setupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
         )
     }
 
@@ -101,24 +101,24 @@ extension AssignmentRoutes {
         userID: UUID,
         setup: APITestSetup?
     ) -> DraftRequirementSuggestions {
-        guard let setup else {
+        guard let setup, let setupID = setup.id else {
             return DraftRequirementSuggestions(languages: [], capabilities: [])
         }
         let assignmentData = draftNotebookData(
             req: req,
-            setupID: setup.id!,
+            setupID: setupID,
             userID: userID,
             fileKind: .assignment,
             fallbackPath: setup.notebookPath
         )
         let solutionData = draftNotebookData(
             req: req,
-            setupID: setup.id!,
+            setupID: setupID,
             userID: userID,
             fileKind: .solution,
             fallbackPath: draftSolutionNotebookPath(
                 testSetupsDirectory: req.application.testSetupsDirectory,
-                setupID: setup.id!
+                setupID: setupID
             )
         )
         return detectRequirementSuggestions(

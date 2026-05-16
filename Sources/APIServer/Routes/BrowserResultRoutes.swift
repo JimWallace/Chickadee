@@ -72,7 +72,7 @@ struct BrowserResultRoutes: RouteCollection {
 
         // Count prior submissions to derive the attempt number.
         let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setup.id!)
+            .filter(\.$testSetupID == body.testSetupID)
             .filter(\.$userID == caller.id)
             .filter(\.$kind == APISubmission.Kind.student)
             .count()
@@ -82,7 +82,7 @@ struct BrowserResultRoutes: RouteCollection {
         // results are authoritative and no native worker re-run is queued.
         let submission = APISubmission(
             id: subID,
-            testSetupID: setup.id!,
+            testSetupID: body.testSetupID,
             zipPath: nbPath,
             attemptNumber: attemptNumber,
             status: "complete",
@@ -117,7 +117,7 @@ struct BrowserResultRoutes: RouteCollection {
         if let userID = caller.id {
             _ = try? await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: body.testSetupID,
                 userID: userID,
                 fallbackSetup: setup,
                 overwriteWith: body.notebook
@@ -166,7 +166,7 @@ struct BrowserResultRoutes: RouteCollection {
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
         let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setup.id!)
+            .filter(\.$testSetupID == body.testSetupID)
             .filter(\.$userID == caller.id)
             .filter(\.$kind == APISubmission.Kind.student)
             .count()
@@ -174,7 +174,7 @@ struct BrowserResultRoutes: RouteCollection {
         let submittedFilename = normalizedNotebookFilename(body.filename)
         let submission = APISubmission(
             id: subID,
-            testSetupID: setup.id!,
+            testSetupID: body.testSetupID,
             zipPath: nbPath,
             attemptNumber: priorCount + 1,
             status: "pending",

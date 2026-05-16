@@ -51,18 +51,18 @@ struct DatabaseSettings: Sendable {
             if password == nil { missing.append("DATABASE_PASSWORD") }
             if port == nil { missing.append("DATABASE_PORT") }
 
-            guard missing.isEmpty else {
+            guard let host, let database, let username, let password, let port else {
                 throw DatabaseConfigurationError.invalidSettings(
                     "DATABASE_BACKEND=postgres requires: \(missing.joined(separator: ", "))"
                 )
             }
 
             return .postgres(
-                host: host!,
-                port: port!,
-                database: database!,
-                username: username!,
-                password: password!
+                host: host,
+                port: port,
+                database: database,
+                username: username,
+                password: password
             )
         }
     }

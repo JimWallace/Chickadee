@@ -61,10 +61,6 @@ excluded:
   - reference       # original Java code, kept for behavioural reference
   - Tools           # JupyterLite build config
 
-force_unwrapping:
-  excluded:
-    - Tests         # CLAUDE.md exempts test code from the no-force-unwrap rule
-
 identifier_name:
   # Single-letter locals/closure params are common in this codebase
   # (e.g. `s` for substring, `e` for element, `c` for character). Keeping

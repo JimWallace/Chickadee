@@ -425,7 +425,7 @@ extension AssignmentRoutes {
         }
 
         let count = try await retestAllSubmissionsForSetup(
-            setupID: setup.id!,
+            setupID: assignment.testSetupID,
             triggeredBy: user.id,
             on: req.db,
             force: true
