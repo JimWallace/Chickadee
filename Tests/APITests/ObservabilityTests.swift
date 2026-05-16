@@ -231,6 +231,7 @@ final class ObservabilityTests: XCTestCase {
         XCTAssertEqual(runnerProfile?.platform, "linux")
     }
 
+    // swiftlint:disable:next function_body_length
     func testAdminMetricsAuthorizationAndResponseShape() async throws {
         let (setup, submission) = try await makeSubmission(submissionID: "sub_metrics")
         let recentMetric = JobExecutionMetric(

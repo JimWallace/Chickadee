@@ -134,6 +134,107 @@ extension AssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
+        let form = try parseSaveEditedAssignmentForm(req: req)
+
+        let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let due = parseDueDate(form.dueAtRaw)
+
+        guard !title.isEmpty else {
+            let q = "assignmentName=&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+        }
+
+        // As of v0.4.79, the assignment Save button is for notebook +
+        // metadata + (re-)validation only.  The test suite itself is
+        // edited live via the per-script and PUT /suite endpoints, so we
+        // intentionally ignore `suiteFiles`/`suiteConfig` if they arrive
+        // and refuse to rebuild the zip from them.  That lets legacy
+        // clients roundtrip safely while clients built against the new
+        // endpoint skip the fields entirely.
+
+        let hasUploadedAssignmentNotebook = form.assignmentNotebookFile?.data.readableBytes ?? 0 > 0
+        let assignmentNotebookRaw = resolvedAssignmentNotebookRaw(
+            uploaded: form.assignmentNotebookFile,
+            hasUpload: hasUploadedAssignmentNotebook,
+            setup: setup
+        )
+        guard !assignmentNotebookRaw.isEmpty,
+            (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil
+        else {
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+        }
+
+        let resolved = try await resolveSolutionForEditedAssignment(
+            req: req,
+            user: user,
+            assignment: assignment,
+            setup: setup,
+            uploadedSolution: form.solutionNotebookFile
+        )
+        guard !resolved.data.isEmpty else {
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+        }
+
+        guard try setupHasAnyTestEntries(manifestJSON: setup.manifest) else {
+            let q =
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
+            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+        }
+
+        try persistAssignmentNotebook(
+            req: req,
+            assignment: assignment,
+            setup: setup,
+            assignmentNotebookRaw: assignmentNotebookRaw,
+            uploadedFile: form.assignmentNotebookFile,
+            hasUpload: hasUploadedAssignmentNotebook
+        )
+        try await setup.save(on: req.db)
+
+        extractSupportFilesForActiveSuite(
+            req: req,
+            setup: setup,
+            assignmentTestSetupID: assignment.testSetupID
+        )
+
+        assignment.title = title
+        assignment.dueAt = due
+        assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
+            dueAt: due,
+            existingOverride: assignment.deadlineOverrideActive ?? false
+        )
+        assignment.isOpen = false
+
+        return try await enqueueValidationForEditedAssignment(
+            req: req,
+            assignment: assignment,
+            solution: resolved
+        )
+    }
+
+    // MARK: - saveEditedAssignment helpers
+
+    /// Parsed form payload for `POST /instructor/:assignmentID/edit/save`.
+    /// Resolves both the array-typed (`suiteFiles[]`) and single-typed
+    /// (`suiteFiles`) Vapor decode paths into one shape.
+    fileprivate struct SaveEditedAssignmentForm {
+        let assignmentName: String?
+        let dueAtRaw: String?
+        let assignmentNotebookFile: File?
+        let solutionNotebookFile: File?
+    }
+
+    fileprivate struct ResolvedSolution {
+        let data: Data
+        let filename: String
+        let isNotebook: Bool
+    }
+
+    fileprivate func parseSaveEditedAssignmentForm(req: Request) throws -> SaveEditedAssignmentForm {
         struct SaveBodyMany: Content {
             var assignmentName: String?
             var dueAt: String?
@@ -167,54 +268,46 @@ extension AssignmentRoutes {
             ?? bodySingle?.dueAt
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFilesRaw =
-            try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? bodyMany?.suiteFiles
-            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
-        let suiteConfigRaw =
-            try multipartTextField(named: ["suiteConfig"], from: req)
-            ?? bodyMany?.suiteConfig
-            ?? bodySingle?.suiteConfig
 
-        let title = (assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let due = parseDueDate(dueAtRaw)
+        return SaveEditedAssignmentForm(
+            assignmentName: assignmentName,
+            dueAtRaw: dueAtRaw,
+            assignmentNotebookFile: assignmentNotebookFile,
+            solutionNotebookFile: solutionNotebookFile
+        )
+    }
 
-        guard !title.isEmpty else {
-            let q = "assignmentName=&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
+    /// Marmoset-style worker-mode imports often have no starter .ipynb.
+    /// Falls back to an empty notebook so the edit can proceed without
+    /// requiring the instructor to upload one on every save.
+    fileprivate func resolvedAssignmentNotebookRaw(
+        uploaded: File?,
+        hasUpload: Bool,
+        setup: APITestSetup
+    ) -> Data {
+        guard let uploaded, hasUpload else {
+            return (try? notebookData(for: setup)) ?? minimalEmptyNotebookData()
         }
+        return Data(uploaded.data.readableBytesView)
+    }
 
-        let uploadedSuiteFiles = suiteFilesRaw.filter { $0.data.readableBytes > 0 }
-
-        let hasUploadedAssignmentNotebook = assignmentNotebookFile?.data.readableBytes ?? 0 > 0
-        // Marmoset-style worker-mode imports often have no starter .ipynb.
-        // Fall back to an empty notebook so the edit can proceed without
-        // requiring the instructor to upload one on every save.
-        // The empty notebook produces no .py code when extractNotebooksToCode
-        // runs, so it doesn't conflict with the student submission.
-        let assignmentNotebookRaw: Data = {
-            guard let assignmentNotebookFile, hasUploadedAssignmentNotebook else {
-                return (try? notebookData(for: setup)) ?? minimalEmptyNotebookData()
-            }
-            return Data(assignmentNotebookFile.data.readableBytesView)
-        }()
-        guard !assignmentNotebookRaw.isEmpty,
-            (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil
-        else {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-
-        // Resolve solution data + filename. Prefer newly uploaded file, then zip entry, then prior submission.
+    /// Resolves solution data + filename: prefer uploaded file, then zip
+    /// entry, then prior validation submission, then draft notebook.
+    fileprivate func resolveSolutionForEditedAssignment(
+        req: Request,
+        user: APIUser,
+        assignment: APIAssignment,
+        setup: APITestSetup,
+        uploadedSolution: File?
+    ) async throws -> ResolvedSolution {
         var solutionFilename = "solution.ipynb"
         let solutionNotebookRaw: Data = {
-            if let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 {
+            if let uploadedSolution, uploadedSolution.data.readableBytes > 0 {
                 solutionFilename = submissionFilenameForStorage(
-                    uploadedName: solutionNotebookFile.filename,
+                    uploadedName: uploadedSolution.filename,
                     fallback: "solution.ipynb"
                 )
-                return Data(solutionNotebookFile.data.readableBytesView)
+                return Data(uploadedSolution.data.readableBytesView)
             }
             let archiveFiles = listZipEntries(zipPath: setup.zipPath)
             if let solutionEntry = archiveFiles.first(where: { $0.hasPrefix("solution.") }),
@@ -240,38 +333,33 @@ extension AssignmentRoutes {
         {
             resolvedSolutionNotebookRaw = draftData
         }
-        guard !resolvedSolutionNotebookRaw.isEmpty else {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-        let solutionIsNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
+        let isNotebook = (try? JSONSerialization.jsonObject(with: resolvedSolutionNotebookRaw)) != nil
+        return ResolvedSolution(
+            data: resolvedSolutionNotebookRaw,
+            filename: solutionFilename,
+            isNotebook: isNotebook
+        )
+    }
 
-        // As of v0.4.79, the assignment Save button is for notebook +
-        // metadata + (re-)validation only.  The test suite itself is
-        // edited live via the per-script and PUT /suite endpoints, so we
-        // intentionally ignore `suiteFiles`/`suiteConfig` if they arrive
-        // and refuse to rebuild the zip from them.  That lets legacy
-        // clients roundtrip safely while clients built against the new
-        // endpoint skip the fields entirely.
-        _ = uploadedSuiteFiles
-        _ = suiteConfigRaw
-
-        guard try setupHasAnyTestEntries(manifestJSON: setup.manifest) else {
-            let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(dueAtRaw ?? ""))&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
-            return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
-        }
-
+    /// Normalises the assignment notebook bytes and writes them to disk,
+    /// updating `setup.notebookPath` to point at the new location.
+    fileprivate func persistAssignmentNotebook(
+        req: Request,
+        assignment: APIAssignment,
+        setup: APITestSetup,
+        assignmentNotebookRaw: Data,
+        uploadedFile: File?,
+        hasUpload: Bool
+    ) throws {
         let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
         let notebookPath: String = {
-            if hasUploadedAssignmentNotebook {
+            if hasUpload {
                 let fallbackName =
                     setup.notebookPath
                     .map { URL(fileURLWithPath: $0).lastPathComponent }
                     .flatMap { $0.isEmpty ? nil : $0 }
                     ?? "assignment.ipynb"
-                let uploadedName = assignmentNotebookFile?.filename
+                let uploadedName = uploadedFile?.filename
                 let filename = notebookFilenameForStorage(uploadedName: uploadedName, fallback: fallbackName)
                 let dir = req.application.testSetupsDirectory + "notebooks/\(assignment.testSetupID)/"
                 try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -280,10 +368,16 @@ extension AssignmentRoutes {
             return setup.notebookPath ?? (req.application.testSetupsDirectory + "\(assignment.testSetupID).ipynb")
         }()
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
-
         setup.notebookPath = notebookPath
-        try await setup.save(on: req.db)
+    }
 
+    /// Refreshes the shared support-files directory after an assignment
+    /// save so student JupyterLite working copies pick up changes.
+    fileprivate func extractSupportFilesForActiveSuite(
+        req: Request,
+        setup: APITestSetup,
+        assignmentTestSetupID: String
+    ) {
         let activeTestSuiteScripts: Set<String> = {
             guard let data = setup.manifest.data(using: .utf8),
                 let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
@@ -292,27 +386,25 @@ extension AssignmentRoutes {
         }()
         extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
-            setupID: assignment.testSetupID,
+            setupID: assignmentTestSetupID,
             testSuiteScripts: activeTestSuiteScripts,
             testSetupsDirectory: req.application.testSetupsDirectory
         )
+    }
 
-        assignment.title = title
-        assignment.dueAt = due
-        assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
-            dueAt: due,
-            existingOverride: assignment.deadlineOverrideActive ?? false
-        )
-        assignment.isOpen = false
-
+    /// Pre-checks runner availability, enqueues the validation submission
+    /// (or marks `no-runner` if no compatible runner is up), persists the
+    /// assignment, and returns the redirect.
+    fileprivate func enqueueValidationForEditedAssignment(
+        req: Request,
+        assignment: APIAssignment,
+        solution: ResolvedSolution
+    ) async throws -> Response {
         // Pre-check that a compatible runner is up before enqueueing the
         // validation submission.  Without this, the save flips
         // `validationStatus = "pending"` and the validation row sits in
         // queue indefinitely if no runner can grade it (no compatible
-        // language, runner stopped, autostart disabled).  Mirrors the
-        // create-assignment path's behaviour at AssignmentRoutes.swift,
-        // but allows the save itself to proceed since the instructor's
-        // notebook + metadata edits should still persist.
+        // language, runner stopped, autostart disabled).
         let requirementSpec = try await loadAssignmentRequirementSpec(
             assignment: assignment,
             on: req.db
@@ -330,14 +422,14 @@ extension AssignmentRoutes {
 
         assignment.validationStatus = "pending"
         let solutionDataToSubmit =
-            solutionIsNotebook
-            ? normalizeNotebookForJupyterLite(resolvedSolutionNotebookRaw)
-            : resolvedSolutionNotebookRaw
+            solution.isNotebook
+            ? normalizeNotebookForJupyterLite(solution.data)
+            : solution.data
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
             req: req,
             setupID: assignment.testSetupID,
             solutionNotebookData: solutionDataToSubmit,
-            filename: solutionFilename
+            filename: solution.filename
         )
         assignment.validationSubmissionID = validationSubmissionID
         try await assignment.save(on: req.db)

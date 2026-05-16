@@ -36,6 +36,16 @@ enum SubmissionNormalizationError: LocalizedError {
     }
 }
 
+/// Mutable accumulator threaded through the per-file normalisation phases.
+/// Keeps the parent function focused on flow control while helpers update
+/// the three running lists / hints they each contribute to.
+private struct NormalizationProgress {
+    var warnings: [String] = []
+    var producedPythonFiles: [URL] = []
+    var preferredStudentModule: String?
+    var unsupportedOnlyFilename: String?
+}
+
 struct SubmissionNormalizer {
     private let mimeTypeDetector = MimeTypeDetector()
     private let notebookExtractor = NotebookExtractor()
@@ -47,10 +57,7 @@ struct SubmissionNormalizer {
         submissionFilename: String?
     ) throws -> NormalizationResult {
         let submissionFiles = regularFiles(in: submissionDirectory)
-        var warnings: [String] = []
-        var producedPythonFiles: [URL] = []
-        var preferredStudentModule: String?
-        var unsupportedOnlyFilename: String?
+        var progress = NormalizationProgress()
 
         writeStructuredRunnerLog(
             event: "submission_normalization_start",
@@ -62,156 +69,244 @@ struct SubmissionNormalizer {
             ])
 
         for fileURL in submissionFiles {
-            let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
-            let mimeType = try mimeTypeDetector.detectMimeType(for: fileURL)
-            writeStructuredRunnerLog(
-                event: "submission_file_mime_detected",
-                fields: [
-                    "file": fileRelativePath,
-                    "mime_type": mimeType,
-                ])
-
-            let classification = try classify(fileURL: fileURL, mimeType: mimeType)
-            switch classification {
-            case .pythonScript:
-                let destinationURL = workspaceDirectory.appendingPathComponent(fileRelativePath)
-                try FileManager.default.createDirectory(
-                    at: destinationURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try? FileManager.default.removeItem(at: destinationURL)
-                try FileManager.default.copyItem(at: fileURL, to: destinationURL)
-                producedPythonFiles.append(destinationURL)
-                preferredStudentModule = preferredStudentModule ?? preferredModuleIfRootLevel(fileRelativePath)
-                writeStructuredRunnerLog(
-                    event: "submission_file_classified",
-                    fields: [
-                        "file": fileRelativePath,
-                        "classification": "python_script",
-                        "generated_file": fileRelativePath,
-                    ])
-
-            case .jupyterNotebook:
-                let data = try Data(contentsOf: fileURL)
-                let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
-                let extracted = try notebookExtractor.extractPythonSource(
-                    from: notebook,
-                    filename: fileURL.lastPathComponent
-                )
-                let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)
-                let destinationURL = uniqueDestination(
-                    preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)
-                )
-                try FileManager.default.createDirectory(
-                    at: destinationURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)
-                producedPythonFiles.append(destinationURL)
-                preferredStudentModule =
-                    preferredStudentModule
-                    ?? preferredModuleIfRootLevel(
-                        relativePath(of: destinationURL, under: workspaceDirectory)
-                    )
-
-                // v0.4.114: also preserve the original notebook bytes
-                // alongside the flattened .py so source-level checks
-                // (`.cellContains`, future `.markdownPresent`) can read
-                // the cell-by-cell structure that flattening discards.
-                // Stable filename so generated tests can `Path("_submission.ipynb")`
-                // without knowing the original upload name.
-                let preservedNotebookURL = workspaceDirectory.appendingPathComponent("_submission.ipynb")
-                if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {
-                    try data.write(to: preservedNotebookURL, options: .atomic)
-                }
-
-                let ext = fileURL.pathExtension.lowercased()
-                if ext == "py" {
-                    warnings.append(
-                        "File \(fileURL.lastPathComponent) appears to be a Jupyter notebook. It was treated as a notebook and code cells were extracted before grading."
-                    )
-                } else if ext != "ipynb" {
-                    warnings.append(
-                        "File \(fileURL.lastPathComponent) appears to be a Jupyter notebook even though its extension is .\(ext.isEmpty ? "unknown" : ext). Code cells were extracted before grading."
-                    )
-                }
-                writeStructuredRunnerLog(
-                    event: "submission_file_classified",
-                    fields: [
-                        "file": fileRelativePath,
-                        "classification": "jupyter_notebook",
-                        "generated_file": relativePath(of: destinationURL, under: workspaceDirectory),
-                        "code_cell_count": extracted.codeCellCount,
-                    ])
-
-            case .unsupported(let reason):
-                if unsupportedOnlyFilename == nil {
-                    unsupportedOnlyFilename = fileURL.lastPathComponent
-                }
-                warnings.append("Ignoring unsupported file \(fileURL.lastPathComponent): \(reason)")
-                writeStructuredRunnerLog(
-                    event: "submission_file_classified",
-                    fields: [
-                        "file": fileRelativePath,
-                        "classification": "unsupported",
-                        "reason": reason,
-                    ])
-            }
-        }
-
-        guard !producedPythonFiles.isEmpty else {
-            if submissionFiles.count == 1, let unsupportedOnlyFilename {
-                throw SubmissionNormalizationError.invalidPythonSubmission(unsupportedOnlyFilename)
-            }
-            writeStructuredRunnerLog(
-                event: "submission_normalization_failed",
-                fields: [
-                    "workspace_directory": workspaceDirectory.path,
-                    "error": SubmissionNormalizationError.noPythonSourcesFound.localizedDescription,
-                ])
-            throw SubmissionNormalizationError.noPythonSourcesFound
-        }
-
-        if let expectedFilename = singleExpectedPythonFilename(from: manifest),
-            !workspaceContains(relativePath: expectedFilename, in: workspaceDirectory),
-            producedPythonFiles.count == 1,
-            let sourceURL = producedPythonFiles.first
-        {
-            let compatibilityURL = workspaceDirectory.appendingPathComponent(expectedFilename)
-            try FileManager.default.createDirectory(
-                at: compatibilityURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
+            try processSubmissionFile(
+                fileURL: fileURL,
+                submissionDirectory: submissionDirectory,
+                workspaceDirectory: workspaceDirectory,
+                progress: &progress
             )
-            try? FileManager.default.removeItem(at: compatibilityURL)
-            try FileManager.default.copyItem(at: sourceURL, to: compatibilityURL)
-            producedPythonFiles.append(compatibilityURL)
-            if preferredStudentModule == nil {
-                preferredStudentModule = preferredModuleIfRootLevel(expectedFilename)
-            }
-            warnings.append(
-                "Expected file \(expectedFilename) was not present. Chickadee created a compatibility copy from the single detected Python source file."
-            )
-            writeStructuredRunnerLog(
-                event: "submission_compatibility_copy_created",
-                fields: [
-                    "expected_file": expectedFilename,
-                    "source_file": relativePath(of: sourceURL, under: workspaceDirectory),
-                ])
         }
+
+        try ensureProducedPythonFiles(
+            progress: progress,
+            submissionFiles: submissionFiles,
+            workspaceDirectory: workspaceDirectory
+        )
+
+        try applyCompatibilityCopyIfNeeded(
+            manifest: manifest,
+            workspaceDirectory: workspaceDirectory,
+            progress: &progress
+        )
 
         writeStructuredRunnerLog(
             event: "submission_normalization_completed",
             fields: [
                 "workspace_directory": workspaceDirectory.path,
-                "produced_python_files": producedPythonFiles.map { relativePath(of: $0, under: workspaceDirectory) },
-                "warning_count": warnings.count,
+                "produced_python_files": progress.producedPythonFiles.map {
+                    relativePath(of: $0, under: workspaceDirectory)
+                },
+                "warning_count": progress.warnings.count,
             ])
 
         return NormalizationResult(
-            warnings: warnings,
-            producedPythonFiles: producedPythonFiles,
-            preferredStudentModule: preferredStudentModule
+            warnings: progress.warnings,
+            producedPythonFiles: progress.producedPythonFiles,
+            preferredStudentModule: progress.preferredStudentModule
         )
+    }
+
+    private func processSubmissionFile(
+        fileURL: URL,
+        submissionDirectory: URL,
+        workspaceDirectory: URL,
+        progress: inout NormalizationProgress
+    ) throws {
+        let fileRelativePath = relativePath(of: fileURL, under: submissionDirectory)
+        let mimeType = try mimeTypeDetector.detectMimeType(for: fileURL)
+        writeStructuredRunnerLog(
+            event: "submission_file_mime_detected",
+            fields: [
+                "file": fileRelativePath,
+                "mime_type": mimeType,
+            ])
+
+        let classification = try classify(fileURL: fileURL, mimeType: mimeType)
+        switch classification {
+        case .pythonScript:
+            try handlePythonScript(
+                fileURL: fileURL,
+                fileRelativePath: fileRelativePath,
+                workspaceDirectory: workspaceDirectory,
+                progress: &progress
+            )
+        case .jupyterNotebook:
+            try handleJupyterNotebook(
+                fileURL: fileURL,
+                fileRelativePath: fileRelativePath,
+                workspaceDirectory: workspaceDirectory,
+                progress: &progress
+            )
+        case .unsupported(let reason):
+            handleUnsupported(
+                fileURL: fileURL,
+                fileRelativePath: fileRelativePath,
+                reason: reason,
+                progress: &progress
+            )
+        }
+    }
+
+    private func handlePythonScript(
+        fileURL: URL,
+        fileRelativePath: String,
+        workspaceDirectory: URL,
+        progress: inout NormalizationProgress
+    ) throws {
+        let destinationURL = workspaceDirectory.appendingPathComponent(fileRelativePath)
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: destinationURL)
+        try FileManager.default.copyItem(at: fileURL, to: destinationURL)
+        progress.producedPythonFiles.append(destinationURL)
+        progress.preferredStudentModule =
+            progress.preferredStudentModule ?? preferredModuleIfRootLevel(fileRelativePath)
+        writeStructuredRunnerLog(
+            event: "submission_file_classified",
+            fields: [
+                "file": fileRelativePath,
+                "classification": "python_script",
+                "generated_file": fileRelativePath,
+            ])
+    }
+
+    private func handleJupyterNotebook(
+        fileURL: URL,
+        fileRelativePath: String,
+        workspaceDirectory: URL,
+        progress: inout NormalizationProgress
+    ) throws {
+        let data = try Data(contentsOf: fileURL)
+        let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
+        let extracted = try notebookExtractor.extractPythonSource(
+            from: notebook,
+            filename: fileURL.lastPathComponent
+        )
+        let outputRelativePath = normalizedNotebookOutputRelativePath(relativePath: fileRelativePath)
+        let destinationURL = uniqueDestination(
+            preferred: workspaceDirectory.appendingPathComponent(outputRelativePath)
+        )
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)
+        progress.producedPythonFiles.append(destinationURL)
+        progress.preferredStudentModule =
+            progress.preferredStudentModule
+            ?? preferredModuleIfRootLevel(
+                relativePath(of: destinationURL, under: workspaceDirectory)
+            )
+
+        // v0.4.114: also preserve the original notebook bytes
+        // alongside the flattened .py so source-level checks
+        // (`.cellContains`, future `.markdownPresent`) can read
+        // the cell-by-cell structure that flattening discards.
+        // Stable filename so generated tests can `Path("_submission.ipynb")`
+        // without knowing the original upload name.
+        let preservedNotebookURL = workspaceDirectory.appendingPathComponent("_submission.ipynb")
+        if !FileManager.default.fileExists(atPath: preservedNotebookURL.path) {
+            try data.write(to: preservedNotebookURL, options: .atomic)
+        }
+
+        appendNotebookExtensionWarningIfNeeded(fileURL: fileURL, progress: &progress)
+
+        writeStructuredRunnerLog(
+            event: "submission_file_classified",
+            fields: [
+                "file": fileRelativePath,
+                "classification": "jupyter_notebook",
+                "generated_file": relativePath(of: destinationURL, under: workspaceDirectory),
+                "code_cell_count": extracted.codeCellCount,
+            ])
+    }
+
+    private func appendNotebookExtensionWarningIfNeeded(
+        fileURL: URL,
+        progress: inout NormalizationProgress
+    ) {
+        let ext = fileURL.pathExtension.lowercased()
+        if ext == "py" {
+            progress.warnings.append(
+                "File \(fileURL.lastPathComponent) appears to be a Jupyter notebook. It was treated as a notebook and code cells were extracted before grading."
+            )
+        } else if ext != "ipynb" {
+            progress.warnings.append(
+                "File \(fileURL.lastPathComponent) appears to be a Jupyter notebook even though its extension is .\(ext.isEmpty ? "unknown" : ext). Code cells were extracted before grading."
+            )
+        }
+    }
+
+    private func handleUnsupported(
+        fileURL: URL,
+        fileRelativePath: String,
+        reason: String,
+        progress: inout NormalizationProgress
+    ) {
+        if progress.unsupportedOnlyFilename == nil {
+            progress.unsupportedOnlyFilename = fileURL.lastPathComponent
+        }
+        progress.warnings.append("Ignoring unsupported file \(fileURL.lastPathComponent): \(reason)")
+        writeStructuredRunnerLog(
+            event: "submission_file_classified",
+            fields: [
+                "file": fileRelativePath,
+                "classification": "unsupported",
+                "reason": reason,
+            ])
+    }
+
+    private func ensureProducedPythonFiles(
+        progress: NormalizationProgress,
+        submissionFiles: [URL],
+        workspaceDirectory: URL
+    ) throws {
+        guard progress.producedPythonFiles.isEmpty else { return }
+        if submissionFiles.count == 1, let unsupportedOnlyFilename = progress.unsupportedOnlyFilename {
+            throw SubmissionNormalizationError.invalidPythonSubmission(unsupportedOnlyFilename)
+        }
+        writeStructuredRunnerLog(
+            event: "submission_normalization_failed",
+            fields: [
+                "workspace_directory": workspaceDirectory.path,
+                "error": SubmissionNormalizationError.noPythonSourcesFound.localizedDescription,
+            ])
+        throw SubmissionNormalizationError.noPythonSourcesFound
+    }
+
+    private func applyCompatibilityCopyIfNeeded(
+        manifest: TestProperties,
+        workspaceDirectory: URL,
+        progress: inout NormalizationProgress
+    ) throws {
+        guard let expectedFilename = singleExpectedPythonFilename(from: manifest),
+            !workspaceContains(relativePath: expectedFilename, in: workspaceDirectory),
+            progress.producedPythonFiles.count == 1,
+            let sourceURL = progress.producedPythonFiles.first
+        else { return }
+
+        let compatibilityURL = workspaceDirectory.appendingPathComponent(expectedFilename)
+        try FileManager.default.createDirectory(
+            at: compatibilityURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: compatibilityURL)
+        try FileManager.default.copyItem(at: sourceURL, to: compatibilityURL)
+        progress.producedPythonFiles.append(compatibilityURL)
+        if progress.preferredStudentModule == nil {
+            progress.preferredStudentModule = preferredModuleIfRootLevel(expectedFilename)
+        }
+        progress.warnings.append(
+            "Expected file \(expectedFilename) was not present. Chickadee created a compatibility copy from the single detected Python source file."
+        )
+        writeStructuredRunnerLog(
+            event: "submission_compatibility_copy_created",
+            fields: [
+                "expected_file": expectedFilename,
+                "source_file": relativePath(of: sourceURL, under: workspaceDirectory),
+            ])
     }
 
     private func classify(fileURL: URL, mimeType: String) throws -> DetectedSubmissionKind {

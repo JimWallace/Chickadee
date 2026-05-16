@@ -37,81 +37,22 @@ extension AssignmentRoutes {
             .all()
 
         let setupIDs = assignments.map(\.testSetupID)
-        let setupsByID: [String: APITestSetup]
-        if setupIDs.isEmpty {
-            setupsByID = [:]
-        } else {
-            let setups = try await APITestSetup.query(on: req.db)
-                .filter(\.$id ~~ Set(setupIDs))
-                .all()
-            setupsByID = Dictionary(
-                setups.compactMap { setup in setup.id.map { ($0, setup) } },
-                uniquingKeysWith: { first, _ in first }
-            )
-        }
+        let setupsByID = try await loadStudentCourseSetupsByID(req: req, setupIDs: setupIDs)
 
-        // Submissions for this student across all published setups.
-        let submissions: [APISubmission]
-        if let studentUUID = student.id, !setupIDs.isEmpty {
-            submissions = try await APISubmission.query(on: req.db)
-                .filter(\.$userID == studentUUID)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$testSetupID ~~ Set(setupIDs))
-                .sort(\.$submittedAt, .descending)
-                .all()
-        } else {
-            submissions = []
-        }
-        var submissionsBySetupID: [String: [APISubmission]] = [:]
-        for submission in submissions {
-            submissionsBySetupID[submission.testSetupID, default: []].append(submission)
-        }
-
+        let submissions = try await loadStudentCourseSubmissions(
+            req: req, student: student, setupIDs: setupIDs)
+        let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
         )
-
-        // Active extensions for this student in this course.
-        var extensionByAssignmentID: [UUID: APIAssignmentExtension] = [:]
-        if let studentUUID = student.id, !assignments.isEmpty {
-            let assignmentUUIDs = assignments.compactMap(\.id)
-            let extensions = try await APIAssignmentExtension.query(on: req.db)
-                .filter(\.$assignmentID ~~ Set(assignmentUUIDs))
-                .filter(\.$userID == studentUUID)
-                .all()
-            for row in extensions {
-                extensionByAssignmentID[row.assignmentID] = row
-            }
-        }
-
-        // Class-wide achievements held by this student across the course's setups.
-        var classBadgesBySetupID: [String: [AchievementBadge]] = [:]
-        if let studentUUID = student.id, !setupIDs.isEmpty {
-            let classAchievements = try await APIClassAchievement.query(on: req.db)
-                .filter(\.$userID == studentUUID)
-                .filter(\.$testSetupID ~~ Set(setupIDs))
-                .all()
-            for achievement in classAchievements {
-                if let badge = AchievementBadge.forClassAchievement(achievement.achievementID) {
-                    classBadgesBySetupID[achievement.testSetupID, default: []].append(badge)
-                }
-            }
-        }
+        let extensionByAssignmentID = try await loadStudentCourseExtensions(
+            req: req, student: student, assignments: assignments)
+        let classBadgesBySetupID = try await loadStudentCourseClassBadges(
+            req: req, student: student, setupIDs: setupIDs)
 
         let fmt = waterlooDateTimeFormatter()
-
-        // Sort comparator matches the student dashboard (`WebRoutes.swift`):
-        // sortOrder → createdAt → id.
-        let sortedAssignments = assignments.sorted { lhs, rhs in
-            let lhsOrder = lhs.sortOrder
-            let rhsOrder = rhs.sortOrder
-            if let l = lhsOrder, let r = rhsOrder, l != r { return l < r }
-            let lhsCreated = setupsByID[lhs.testSetupID]?.createdAt ?? .distantPast
-            let rhsCreated = setupsByID[rhs.testSetupID]?.createdAt ?? .distantPast
-            if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-            return lhs.testSetupID < rhs.testSetupID
-        }
+        let sortedAssignments = sortedStudentCourseAssignments(assignments, setupsByID: setupsByID)
 
         let rowContext = StudentAssignmentRowContext(
             courseCode: course.code,
@@ -135,6 +76,121 @@ extension AssignmentRoutes {
             .filter(\.$courseID == courseID)
             .sort(\.$sortOrder, .ascending)
             .all()
+        let (sectionContexts, ungroupedRows) = groupStudentCourseRowsBySection(
+            rows: rows,
+            assignments: assignments,
+            allSections: allSections
+        )
+
+        return try await req.view.render(
+            "course-student-submissions",
+            CourseStudentSubmissionsContext(
+                currentUser: req.currentUserContext,
+                studentName: student.displayName ?? student.username,
+                studentUsername: student.username,
+                courseCode: course.code,
+                courseName: "\(course.code) — \(course.name)",
+                backURL: "/instructor",
+                sections: sectionContexts,
+                ungroupedRows: ungroupedRows,
+                hasSections: !allSections.isEmpty,
+                hasUngrouped: !ungroupedRows.isEmpty
+            )
+        )
+    }
+
+    // MARK: - courseStudentSubmissionsPage helpers
+
+    fileprivate func loadStudentCourseSetupsByID(
+        req: Request, setupIDs: [String]
+    ) async throws -> [String: APITestSetup] {
+        guard !setupIDs.isEmpty else { return [:] }
+        let setups = try await APITestSetup.query(on: req.db)
+            .filter(\.$id ~~ Set(setupIDs))
+            .all()
+        return Dictionary(
+            setups.compactMap { setup in setup.id.map { ($0, setup) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    fileprivate func loadStudentCourseSubmissions(
+        req: Request, student: APIUser, setupIDs: [String]
+    ) async throws -> [APISubmission] {
+        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [] }
+        return try await APISubmission.query(on: req.db)
+            .filter(\.$userID == studentUUID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$testSetupID ~~ Set(setupIDs))
+            .sort(\.$submittedAt, .descending)
+            .all()
+    }
+
+    fileprivate func submissionsGroupedBySetupID(
+        _ submissions: [APISubmission]
+    ) -> [String: [APISubmission]] {
+        var submissionsBySetupID: [String: [APISubmission]] = [:]
+        for submission in submissions {
+            submissionsBySetupID[submission.testSetupID, default: []].append(submission)
+        }
+        return submissionsBySetupID
+    }
+
+    fileprivate func loadStudentCourseExtensions(
+        req: Request, student: APIUser, assignments: [APIAssignment]
+    ) async throws -> [UUID: APIAssignmentExtension] {
+        guard let studentUUID = student.id, !assignments.isEmpty else { return [:] }
+        let assignmentUUIDs = assignments.compactMap(\.id)
+        let extensions = try await APIAssignmentExtension.query(on: req.db)
+            .filter(\.$assignmentID ~~ Set(assignmentUUIDs))
+            .filter(\.$userID == studentUUID)
+            .all()
+        var extensionByAssignmentID: [UUID: APIAssignmentExtension] = [:]
+        for row in extensions {
+            extensionByAssignmentID[row.assignmentID] = row
+        }
+        return extensionByAssignmentID
+    }
+
+    fileprivate func loadStudentCourseClassBadges(
+        req: Request, student: APIUser, setupIDs: [String]
+    ) async throws -> [String: [AchievementBadge]] {
+        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [:] }
+        let classAchievements = try await APIClassAchievement.query(on: req.db)
+            .filter(\.$userID == studentUUID)
+            .filter(\.$testSetupID ~~ Set(setupIDs))
+            .all()
+        var classBadgesBySetupID: [String: [AchievementBadge]] = [:]
+        for achievement in classAchievements {
+            if let badge = AchievementBadge.forClassAchievement(achievement.achievementID) {
+                classBadgesBySetupID[achievement.testSetupID, default: []].append(badge)
+            }
+        }
+        return classBadgesBySetupID
+    }
+
+    /// Sort comparator matches the student dashboard (`WebRoutes.swift`):
+    /// sortOrder → createdAt → id.
+    fileprivate func sortedStudentCourseAssignments(
+        _ assignments: [APIAssignment],
+        setupsByID: [String: APITestSetup]
+    ) -> [APIAssignment] {
+        assignments.sorted { lhs, rhs in
+            let lhsOrder = lhs.sortOrder
+            let rhsOrder = rhs.sortOrder
+            if let l = lhsOrder, let r = rhsOrder, l != r { return l < r }
+            let lhsCreated = setupsByID[lhs.testSetupID]?.createdAt ?? .distantPast
+            let rhsCreated = setupsByID[rhs.testSetupID]?.createdAt ?? .distantPast
+            if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
+            return lhs.testSetupID < rhs.testSetupID
+        }
+    }
+
+    fileprivate func groupStudentCourseRowsBySection(
+        rows: [StudentAssignmentRow],
+        assignments: [APIAssignment],
+        allSections: [APICourseSection]
+    ) -> (sections: [StudentAssignmentSectionContext], ungrouped: [StudentAssignmentRow]) {
         let sectionByAssignmentID: [String: UUID] = Dictionary(
             assignments.compactMap { a -> (String, UUID)? in
                 guard let sid = a.sectionID else { return nil }
@@ -161,22 +217,7 @@ extension AssignmentRoutes {
                 rows: sectionRows
             )
         }
-
-        return try await req.view.render(
-            "course-student-submissions",
-            CourseStudentSubmissionsContext(
-                currentUser: req.currentUserContext,
-                studentName: student.displayName ?? student.username,
-                studentUsername: student.username,
-                courseCode: course.code,
-                courseName: "\(course.code) — \(course.name)",
-                backURL: "/instructor",
-                sections: sectionContexts,
-                ungroupedRows: ungroupedRows,
-                hasSections: !allSections.isEmpty,
-                hasUngrouped: !ungroupedRows.isEmpty
-            )
-        )
+        return (sectionContexts, ungroupedRows)
     }
 
     // MARK: - GET /:courseCode/students/:username/assignments/:assignmentID/history

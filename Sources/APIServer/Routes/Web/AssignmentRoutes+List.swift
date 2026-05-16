@@ -92,51 +92,14 @@ extension AssignmentRoutes {
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> CourseRosterData {
-        let enrollments = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == activeCourseUUID)
-            .all()
-        let enrolledUserIDs = enrollments.map(\.userID)
-
-        let enrolledUsers: [APIUser]
-        var enrolledStudents: [EnrolledStudentRow]
-        if enrolledUserIDs.isEmpty {
-            enrolledUsers = []
-            enrolledStudents = []
-        } else {
-            enrolledUsers = try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ enrolledUserIDs)
-                .all()
-                .sorted { lhs, rhs in
-                    switch (lhs.lastSeenAt, rhs.lastSeenAt) {
-                    case (let l?, let r?):
-                        if l != r { return l > r }
-                    case (.some, nil):
-                        return true
-                    case (nil, .some):
-                        return false
-                    case (nil, nil):
-                        break
-                    }
-                    return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
-                }
-            enrolledStudents = enrolledUsers.compactMap { u in
-                guard let id = u.id else { return nil }
-                return EnrolledStudentRow(
-                    id: id.uuidString,
-                    username: u.username,
-                    displayName: u.displayName ?? u.username,
-                    role: u.role,
-                    lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
-                    lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
-                    submissionsURL: studentSubmissionsURL(
-                        courseCode: activeCourseCode,
-                        username: u.username
-                    ),
-                    unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
-                    isPending: false
-                )
-            }
-        }
+        let enrolledUsers = try await loadEnrolledUsersForRoster(req: req, activeCourseUUID: activeCourseUUID)
+        var enrolledStudents = buildEnrolledStudentRows(
+            enrolledUsers: enrolledUsers,
+            activeCourseUUID: activeCourseUUID,
+            activeCourseCode: activeCourseCode,
+            fmt: fmt,
+            isoFormatter: isoFormatter
+        )
 
         // Pre-enrolled (pending) — bulk-CSV entries that haven't been
         // claimed by a first SSO/local login yet.  Showing them keeps the
@@ -145,7 +108,99 @@ extension AssignmentRoutes {
             .filter(\.$course.$id == activeCourseUUID)
             .sort(\.$username)
             .all()
-        let pendingRows = pendingPreEnrollments.compactMap { p -> EnrolledStudentRow? in
+        enrolledStudents.append(
+            contentsOf: buildPendingPreEnrollmentRows(
+                pendingPreEnrollments: pendingPreEnrollments,
+                activeCourseUUID: activeCourseUUID
+            )
+        )
+
+        let activeStudentIDs = Set(
+            enrolledUsers
+                .filter { $0.role == "student" }
+                .compactMap(\.id)
+        )
+        // Pending pre-enrollments are CSV-uploaded students who haven't
+        // logged in yet — count them toward the "Y students enrolled"
+        // denominator so the badge reflects the instructor's roster intent,
+        // not just who's logged in.
+        let enrolledStudentCount = activeStudentIDs.count + pendingPreEnrollments.count
+
+        let metrics = try await buildCourseRosterMetrics(
+            req: req,
+            allSetupIDs: allSetupIDs,
+            enrolledUsers: enrolledUsers,
+            activeStudentIDs: activeStudentIDs
+        )
+
+        return CourseRosterData(
+            enrolledStudents: enrolledStudents,
+            enrolledStudentIDs: activeStudentIDs,
+            enrolledStudentCount: enrolledStudentCount,
+            metrics: metrics
+        )
+    }
+
+    /// Loads the enrolled users for the course, sorted last-seen-desc then
+    /// username-asc.  Returns an empty array if no enrollments exist.
+    private func loadEnrolledUsersForRoster(
+        req: Request,
+        activeCourseUUID: UUID
+    ) async throws -> [APIUser] {
+        let enrollments = try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == activeCourseUUID)
+            .all()
+        let enrolledUserIDs = enrollments.map(\.userID)
+        guard !enrolledUserIDs.isEmpty else { return [] }
+        return try await APIUser.query(on: req.db)
+            .filter(\.$id ~~ enrolledUserIDs)
+            .all()
+            .sorted { lhs, rhs in
+                switch (lhs.lastSeenAt, rhs.lastSeenAt) {
+                case (let l?, let r?):
+                    if l != r { return l > r }
+                case (.some, nil):
+                    return true
+                case (nil, .some):
+                    return false
+                case (nil, nil):
+                    break
+                }
+                return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
+            }
+    }
+
+    private func buildEnrolledStudentRows(
+        enrolledUsers: [APIUser],
+        activeCourseUUID: UUID,
+        activeCourseCode: String,
+        fmt: DateFormatter,
+        isoFormatter: ISO8601DateFormatter
+    ) -> [EnrolledStudentRow] {
+        enrolledUsers.compactMap { u in
+            guard let id = u.id else { return nil }
+            return EnrolledStudentRow(
+                id: id.uuidString,
+                username: u.username,
+                displayName: u.displayName ?? u.username,
+                role: u.role,
+                lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
+                lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
+                submissionsURL: studentSubmissionsURL(
+                    courseCode: activeCourseCode,
+                    username: u.username
+                ),
+                unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
+                isPending: false
+            )
+        }
+    }
+
+    private func buildPendingPreEnrollmentRows(
+        pendingPreEnrollments: [APIPreEnrollment],
+        activeCourseUUID: UUID
+    ) -> [EnrolledStudentRow] {
+        pendingPreEnrollments.compactMap { p -> EnrolledStudentRow? in
             guard let preID = p.id else { return nil }
             return EnrolledStudentRow(
                 id: preID.uuidString,
@@ -159,8 +214,16 @@ extension AssignmentRoutes {
                 isPending: true
             )
         }
-        enrolledStudents.append(contentsOf: pendingRows)
+    }
 
+    /// Computes the five dashboard metric cards from recent submissions,
+    /// queue depth, and client diagnostics.
+    private func buildCourseRosterMetrics(
+        req: Request,
+        allSetupIDs: [String],
+        enrolledUsers: [APIUser],
+        activeStudentIDs: Set<UUID>
+    ) async throws -> [InstructorDashboardMetric] {
         let now = Date()
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
         let recentSubmissions =
@@ -183,16 +246,6 @@ extension AssignmentRoutes {
             on: req.db
         )
 
-        let activeStudentIDs = Set(
-            enrolledUsers
-                .filter { $0.role == "student" }
-                .compactMap(\.id)
-        )
-        // Pending pre-enrollments are CSV-uploaded students who haven't
-        // logged in yet — count them toward the "Y students enrolled"
-        // denominator so the badge reflects the instructor's roster intent,
-        // not just who's logged in.
-        let enrolledStudentCount = activeStudentIDs.count + pendingPreEnrollments.count
         let active24h = enrolledUsers.reduce(into: 0) { count, user in
             guard user.role == "student" else { return }
             if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
@@ -211,14 +264,36 @@ extension AssignmentRoutes {
                 && workerModeSetupIDs.contains(submission.testSetupID)
                 && ["pending", "assigned"].contains(submission.status)
         }.count
-        // Students With Browser Errors: distinct students who posted a
-        // client-side diagnostic (preflight_fail or watchdog_timeout) for
-        // one of this course's test setups within the 24h window.  Captures
-        // the in-browser editor failing to start — JupyterLite / Pyodide
-        // blocked by browser policy, IndexedDB disabled, service worker
-        // blocked, etc. — before the student can even open the assignment.
-        // Diagnostics with a null test_setup_id (the supplied setup ID didn't
-        // resolve) are excluded since they can't be attributed to a course.
+        let studentsWithBrowserErrors = try await countStudentsWithBrowserErrors(
+            req: req,
+            allSetupIDs: allSetupIDs,
+            activeStudentIDs: activeStudentIDs,
+            windowStart: windowStart
+        )
+
+        return [
+            InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
+            InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
+            InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
+            InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
+            InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)"),
+        ]
+    }
+
+    /// Students With Browser Errors: distinct students who posted a
+    /// client-side diagnostic (preflight_fail or watchdog_timeout) for
+    /// one of this course's test setups within the 24h window.  Captures
+    /// the in-browser editor failing to start — JupyterLite / Pyodide
+    /// blocked by browser policy, IndexedDB disabled, service worker
+    /// blocked, etc. — before the student can even open the assignment.
+    /// Diagnostics with a null test_setup_id (the supplied setup ID didn't
+    /// resolve) are excluded since they can't be attributed to a course.
+    private func countStudentsWithBrowserErrors(
+        req: Request,
+        allSetupIDs: [String],
+        activeStudentIDs: Set<UUID>,
+        windowStart: Date
+    ) async throws -> Int {
         let setupIDSet = Set(allSetupIDs)
         let recentClientDiagnostics =
             allSetupIDs.isEmpty
@@ -226,7 +301,7 @@ extension AssignmentRoutes {
             : try await APIClientDiagnostic.query(on: req.db)
                 .filter(\.$createdAt >= windowStart)
                 .all()
-        let studentsWithBrowserErrors = Set(
+        return Set(
             recentClientDiagnostics.compactMap { record -> UUID? in
                 guard let setupID = record.testSetupID,
                     setupIDSet.contains(setupID),
@@ -235,21 +310,6 @@ extension AssignmentRoutes {
                 return record.userID
             }
         ).count
-
-        let metrics = [
-            InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
-            InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
-            InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
-            InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
-            InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)"),
-        ]
-
-        return CourseRosterData(
-            enrolledStudents: enrolledStudents,
-            enrolledStudentIDs: activeStudentIDs,
-            enrolledStudentCount: enrolledStudentCount,
-            metrics: metrics
-        )
     }
 
     /// Five "—" placeholder cards for use when no course is active.

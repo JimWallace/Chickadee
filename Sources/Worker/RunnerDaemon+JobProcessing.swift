@@ -12,6 +12,37 @@ import Foundation
 import FoundationNetworking
 #endif
 
+/// URLs derived from the job's per-run workdir.  Built once at the top of
+/// `process(_:)` and passed through every phase helper so callers don't have
+/// to thread half a dozen `URL`s individually.
+struct JobWorkspacePaths {
+    let tempRoot: URL
+    let workDir: URL
+    let submissionZip: URL
+    let submissionDir: URL
+}
+
+/// Output of the prepare phase (submission staged into the workspace,
+/// normalisation run, runtime helpers installed).  Carries everything the
+/// later phases need to assemble the result collection.
+struct JobPreparedWorkspace {
+    let testSetupDir: URL
+    let manifest: TestProperties
+    let normalizationWarnings: [String]
+    let preferredStudentModule: String?
+    let testSetupCacheHit: Bool
+}
+
+/// Disk-space samples taken across the lifetime of a job.  The "at start"
+/// reading is captured up-front; the "at end" reading is filled in either
+/// just before the report is sent (happy path) or by the cleanup defer
+/// (error path), so it represents the worst-case free-disk reading.
+struct JobDiskReadings {
+    var freeMBAtStart: Int?
+    var freeMBAtEnd: Int?
+    var workdirPeakBytes: Int?
+}
+
 extension WorkerDaemon {
 
     // MARK: - Job processing
@@ -22,6 +53,79 @@ extension WorkerDaemon {
         defer { activeJobs = max(0, activeJobs - 1) }
         var stageTimings = JobStageTimings()
 
+        logJobAccepted(job)
+        try? await sendHeartbeat()
+
+        let heartbeatTask = startHeartbeatLoop()
+        defer {
+            heartbeatTask.cancel()
+            // Fire-and-forget end-of-job heartbeat so the server's
+            // last-seen timestamp advances even if this job took >30s.
+            Task { try? await self.sendHeartbeat() }
+        }
+
+        let tempRoot = FileManager.default.temporaryDirectory
+        var disk = JobDiskReadings(freeMBAtStart: freeSpaceMB(at: tempRoot))
+        try ensureSufficientDiskSpace(tempRoot: tempRoot, freeDiskMBAtStart: disk.freeMBAtStart, job: job)
+
+        let paths = try setupJobWorkspace(tempRoot: tempRoot, job: job, stageTimings: &stageTimings)
+
+        defer {
+            finalizeJobWorkspace(
+                job: job,
+                paths: paths,
+                tempRoot: tempRoot,
+                jobStartedAt: jobStartedAt,
+                stageTimings: &stageTimings,
+                disk: &disk
+            )
+        }
+
+        let prepared = try await prepareJobWorkspace(
+            job: job,
+            paths: paths,
+            stageTimings: &stageTimings
+        )
+        defer { try? FileManager.default.removeItem(at: prepared.testSetupDir) }
+
+        let testExecutionStartedAt = Date()
+        let outcomes = await executeTestSuites(
+            manifest: prepared.manifest,
+            testSetupDir: prepared.testSetupDir,
+            job: job
+        )
+        stageTimings.record(
+            "test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
+
+        // Sample disk usage at end-of-execution, before the report is sent,
+        // so the persisted diagnostics reflect this job's actual footprint.
+        // The defer will re-use these readings instead of walking again.
+        disk.workdirPeakBytes = directorySizeBytes(at: paths.workDir)
+        disk.freeMBAtEnd = freeSpaceMB(at: tempRoot)
+
+        let collection = makeCollection(
+            outcomes: outcomes,
+            warnings: prepared.normalizationWarnings,
+            job: job,
+            startedAt: jobStartedAt
+        )
+        let diagnostics = makeExecutionDiagnostics(
+            collection: collection,
+            jobStartedAt: jobStartedAt,
+            stageTimings: stageTimings,
+            disk: disk
+        )
+        try await reportJobResult(
+            job: job,
+            collection: collection,
+            diagnostics: diagnostics,
+            stageTimings: &stageTimings
+        )
+    }
+
+    // MARK: - Per-job setup helpers
+
+    private func logJobAccepted(_ job: Job) {
         writeStructuredRunnerLog(
             event: "job_accepted",
             fields: [
@@ -33,19 +137,20 @@ extension WorkerDaemon {
                 "runner_active_jobs": activeJobs,
                 "max_jobs": maxConcurrentJobs,
             ])
-        try? await sendHeartbeat()
+    }
 
-        // Heartbeat loop scoped to the lifetime of this job. We use a manual
-        // Task + defer-cancel rather than a `withTaskGroup` because the
-        // remainder of `process()` is straight-line code with many local
-        // bindings; wrapping it in a group closure would balloon nesting
-        // without changing behaviour.
-        //
-        // Cancellation flow: when the outer worker loop is cancelled, the
-        // current `await` in `process()` throws, control runs to the defer,
-        // we cancel the heartbeat task explicitly, and `Task.sleep`'s
-        // `CancellationError` short-circuits the loop on its next wake.
-        let heartbeatTask = Task {
+    /// Heartbeat loop scoped to the lifetime of one job. We use a manual
+    /// Task + defer-cancel rather than a `withTaskGroup` because the body
+    /// of `process()` is straight-line code with many local bindings;
+    /// wrapping it in a group closure would balloon nesting without changing
+    /// behaviour.
+    ///
+    /// Cancellation flow: when the outer worker loop is cancelled, the
+    /// current `await` in `process()` throws, control runs to the defer,
+    /// we cancel this task explicitly, and `Task.sleep`'s `CancellationError`
+    /// short-circuits the loop on its next wake.
+    private func startHeartbeatLoop() -> Task<Void, Never> {
+        Task {
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(for: .seconds(30))
@@ -55,110 +160,157 @@ extension WorkerDaemon {
                 try? await self.sendHeartbeat()
             }
         }
-        defer {
-            heartbeatTask.cancel()
-            // Fire-and-forget end-of-job heartbeat so the server's
-            // last-seen timestamp advances even if this job took >30s.
-            Task { try? await self.sendHeartbeat() }
+    }
+
+    /// Runs the workspace teardown that has to fire whether or not the job
+    /// reached the happy path: lazily samples the disk readings the body
+    /// skipped, removes the workdir, records the `cleanup` stage timing,
+    /// and emits the two structured log events ops uses for capacity
+    /// dashboards.
+    private func finalizeJobWorkspace(
+        job: Job,
+        paths: JobWorkspacePaths,
+        tempRoot: URL,
+        jobStartedAt: Date,
+        stageTimings: inout JobStageTimings,
+        disk: inout JobDiskReadings
+    ) {
+        // If the happy path already measured these (right before the
+        // report), don't double-walk the directory.
+        if disk.workdirPeakBytes == nil {
+            disk.workdirPeakBytes = directorySizeBytes(at: paths.workDir)
+        }
+        if disk.freeMBAtEnd == nil {
+            disk.freeMBAtEnd = freeSpaceMB(at: tempRoot)
         }
 
-        let tempRoot = FileManager.default.temporaryDirectory
-        let freeDiskMBAtStart = freeSpaceMB(at: tempRoot)
-        if config.minFreeDiskMB > 0,
+        let cleanupStartedAt = Date()
+        try? FileManager.default.removeItem(at: paths.workDir)
+        stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
+
+        let freeDiskMBPostCleanup = freeSpaceMB(at: tempRoot)
+        let totalWallClockMs = Int(Date().timeIntervalSince(jobStartedAt) * 1000)
+        emitJobStageTimingsLog(
+            stageTimings: stageTimings,
+            job: job,
+            totalWallClockMs: totalWallClockMs
+        )
+        emitJobDiskUsageLog(
+            tempRoot: tempRoot,
+            job: job,
+            disk: disk,
+            freeDiskMBPostCleanup: freeDiskMBPostCleanup
+        )
+    }
+
+    private func makeExecutionDiagnostics(
+        collection: TestOutcomeCollection,
+        jobStartedAt: Date,
+        stageTimings: JobStageTimings,
+        disk: JobDiskReadings
+    ) -> WorkerExecutionDiagnostics {
+        WorkerExecutionDiagnostics(
+            runnerID: workerID,
+            startedAt: jobStartedAt,
+            finishedAt: collection.timestamp,
+            finalStatus: inferredCollectionStatus(collection).rawValue,
+            timedOut: collection.timeoutCount > 0,
+            exitCode: nil,
+            terminationReason: nil,
+            peakRSSBytes: nil,
+            wallClockMs: collection.executionTimeMs,
+            childProcessCount: nil,
+            stdoutBytes: nil,
+            stderrBytes: nil,
+            stageTimings: stageTimings.asWorkerExecutionStageTimings(),
+            freeDiskMBAtStart: disk.freeMBAtStart,
+            freeDiskMBAtEnd: disk.freeMBAtEnd,
+            workdirPeakBytes: disk.workdirPeakBytes
+        )
+    }
+
+    // MARK: - Per-job phases
+
+    /// Throws `insufficientDiskSpace` if the workspace partition is below
+    /// the configured floor — early exit so the runner can decline the job
+    /// before downloading anything.
+    private func ensureSufficientDiskSpace(
+        tempRoot: URL,
+        freeDiskMBAtStart: Int?,
+        job: Job
+    ) throws {
+        guard config.minFreeDiskMB > 0,
             let freeMB = freeDiskMBAtStart,
             freeMB < config.minFreeDiskMB
-        {
-            writeStructuredRunnerLog(
-                event: "insufficient_disk_space",
-                fields: [
-                    "runner_id": workerID,
-                    "submission_id": job.submissionID,
-                    "path": tempRoot.path,
-                    "free_mb": freeMB,
-                    "required_mb": config.minFreeDiskMB,
-                ])
-            throw WorkerDaemonError.insufficientDiskSpace(
-                path: tempRoot.path,
-                freeMB: freeMB,
-                requiredMB: config.minFreeDiskMB
-            )
-        }
+        else { return }
 
+        writeStructuredRunnerLog(
+            event: "insufficient_disk_space",
+            fields: [
+                "runner_id": workerID,
+                "submission_id": job.submissionID,
+                "path": tempRoot.path,
+                "free_mb": freeMB,
+                "required_mb": config.minFreeDiskMB,
+            ])
+        throw WorkerDaemonError.insufficientDiskSpace(
+            path: tempRoot.path,
+            freeMB: freeMB,
+            requiredMB: config.minFreeDiskMB
+        )
+    }
+
+    /// Creates the per-job workspace (workdir + submission subdir) and
+    /// records the `workdir_setup` / `submission_dir_setup` stage timings.
+    private func setupJobWorkspace(
+        tempRoot: URL,
+        job: Job,
+        stageTimings: inout JobStageTimings
+    ) throws -> JobWorkspacePaths {
         let workDir =
             tempRoot
             .appendingPathComponent("chickadee_\(job.submissionID)_\(UUID().uuidString)", isDirectory: true)
         let workDirSetupStartedAt = Date()
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        stageTimings.record("workdir_setup", milliseconds: Int(Date().timeIntervalSince(workDirSetupStartedAt) * 1000))
+        stageTimings.record(
+            "workdir_setup",
+            milliseconds: Int(Date().timeIntervalSince(workDirSetupStartedAt) * 1000)
+        )
 
-        // Mutable so the body can populate them before building the
-        // diagnostics report (and so the defer can emit a structured event
-        // even on error paths where the body didn't reach the report).
-        // `freeDiskMBAtEnd` is sampled just before cleanup, so it represents
-        // the worst-case free-disk reading for this job.
-        var workdirPeakBytes: Int?
-        var freeDiskMBAtEnd: Int?
-        defer {
-            // If the happy path already measured these (right before the
-            // report), don't double-walk the directory.
-            if workdirPeakBytes == nil {
-                workdirPeakBytes = directorySizeBytes(at: workDir)
-            }
-            if freeDiskMBAtEnd == nil {
-                freeDiskMBAtEnd = freeSpaceMB(at: tempRoot)
-            }
-
-            let cleanupStartedAt = Date()
-            try? FileManager.default.removeItem(at: workDir)
-            stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
-
-            let freeDiskMBPostCleanup = freeSpaceMB(at: tempRoot)
-            let totalWallClockMs = Int(Date().timeIntervalSince(jobStartedAt) * 1000)
-            var fields: [String: Any] = [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "job_id": job.submissionID,
-                "total_wall_clock_ms": totalWallClockMs,
-            ]
-            for (key, value) in stageTimings.fields() {
-                fields[key] = value
-            }
-            writeStructuredRunnerLog(event: "job_stage_timings", fields: fields)
-
-            // Emit a dedicated disk-usage event so ops can answer "are we
-            // close to the floor?" without having to join across log events.
-            var diskFields: [String: Any] = [
-                "runner_id": workerID,
-                "submission_id": job.submissionID,
-                "job_id": job.submissionID,
-                "path": tempRoot.path,
-                "min_free_disk_mb": config.minFreeDiskMB,
-            ]
-            if let v = freeDiskMBAtStart { diskFields["free_disk_mb_at_start"] = v }
-            if let v = freeDiskMBAtEnd { diskFields["free_disk_mb_at_end"] = v }
-            if let v = freeDiskMBPostCleanup { diskFields["free_disk_mb_post_cleanup"] = v }
-            if let v = workdirPeakBytes { diskFields["workdir_peak_bytes"] = v }
-            writeStructuredRunnerLog(event: "job_disk_usage", fields: diskFields)
-        }
-
-        // Download submission and acquire the prepared test setup concurrently.
-        // The test setup is served from the LRU cache: on a hit the cached
-        // directory is copied into a fresh scratch location; on a miss it is
-        // downloaded, unzipped, committed to cache, then copied.
         let submissionZip = workDir.appendingPathComponent("submission.zip")
         let submissionDir = workDir.appendingPathComponent("submission", isDirectory: true)
         try stageTimings.measureSync("submission_dir_setup") {
             try FileManager.default.createDirectory(at: submissionDir, withIntermediateDirectories: true)
         }
+        return JobWorkspacePaths(
+            tempRoot: tempRoot,
+            workDir: workDir,
+            submissionZip: submissionZip,
+            submissionDir: submissionDir
+        )
+    }
 
+    /// Downloads + unzips the submission and test setup, stages the
+    /// submission into the test workspace, runs the optional `make` step,
+    /// and installs the runtime helpers.  Returns a `JobPreparedWorkspace`
+    /// that the caller hands to `executeTestSuites`.
+    private func prepareJobWorkspace(
+        job: Job,
+        paths: JobWorkspacePaths,
+        stageTimings: inout JobStageTimings
+    ) async throws -> JobPreparedWorkspace {
+        // Download submission and acquire the prepared test setup concurrently.
+        // The test setup is served from the LRU cache: on a hit the cached
+        // directory is copied into a fresh scratch location; on a miss it is
+        // downloaded, unzipped, committed to cache, then copied.
         let submissionDownloadStartedAt = Date()
-        async let submissionDownload: Void = download(url: job.submissionURL, to: submissionZip)
+        async let submissionDownload: Void = download(url: job.submissionURL, to: paths.submissionZip)
 
         let testSetupAcquireStartedAt = Date()
-        let testSetupCacheKey = testSetupCacheKey(for: job)
-        let acquireResult = try await testSetupCache.acquire(testSetupID: testSetupCacheKey) {
-            let stagingZip = workDir.appendingPathComponent("testsetup.zip")
-            let stagingDir = workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
+        let cacheKey = testSetupCacheKey(for: job)
+        let acquireResult = try await testSetupCache.acquire(testSetupID: cacheKey) {
+            let stagingZip = paths.workDir.appendingPathComponent("testsetup.zip")
+            let stagingDir = paths.workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
             try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
             try await self.download(url: job.testSetupURL, to: stagingZip)
             try self.unzip(stagingZip, to: stagingDir)
@@ -166,74 +318,39 @@ extension WorkerDaemon {
         }
         let testSetupDir = acquireResult.directory
         stageTimings.record(
-            "test_setup_acquire", milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000))
+            "test_setup_acquire",
+            milliseconds: Int(Date().timeIntervalSince(testSetupAcquireStartedAt) * 1000)
+        )
         stageTimings.testSetupCacheHit = acquireResult.didHit
-        defer { try? FileManager.default.removeItem(at: testSetupDir) }
 
         try await submissionDownload
         stageTimings.record(
-            "submission_download", milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000))
+            "submission_download",
+            milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000)
+        )
 
         let manifest = job.manifest
 
-        // Stage the submission independently from the grading workspace so the
-        // worker can normalize it without mutating the raw artifact.
-        try stageTimings.measureSync("submission_unpack") {
-            if let filename = job.submissionFilename {
-                let dest = stagedSubmissionDestination(
-                    submissionDirectory: submissionDir,
-                    submittedFilename: filename
-                )
-                try FileManager.default.createDirectory(
-                    at: dest.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try? FileManager.default.removeItem(at: dest)
-                try FileManager.default.copyItem(at: submissionZip, to: dest)
-            } else {
-                try unzip(submissionZip, to: submissionDir)
-            }
-        }
+        try stageSubmissionIntoWorkspace(
+            job: job,
+            paths: paths,
+            stageTimings: &stageTimings
+        )
 
-        // Remove the starter notebook template from the test directory so
-        // grading scripts that scan for *.ipynb don't see both the template
-        // and the student/canonical submission.  Older manifests lack
-        // starterNotebook — fall back to "assignment.ipynb" since that is
-        // the conventional name used by every existing assignment.
-        try stageTimings.measureSync("starter_cleanup") {
-            let starterName = manifest.starterNotebook ?? "assignment.ipynb"
-            do {
-                let starterPath = testSetupDir.appendingPathComponent(starterName)
-                if FileManager.default.fileExists(atPath: starterPath.path),
-                    job.submissionFilename != starterName
-                {
-                    try FileManager.default.removeItem(at: starterPath)
-                }
-            }
-        }
+        try removeStarterNotebookIfPresent(
+            manifest: manifest,
+            testSetupDir: testSetupDir,
+            submissionFilename: job.submissionFilename,
+            stageTimings: &stageTimings
+        )
 
-        let normalizationWarnings: [String]
-        let preferredStudentModule: String?
-        (normalizationWarnings, preferredStudentModule) = try stageTimings.measureSync("submission_prepare") {
-            if shouldNormalizePythonSubmission(
-                manifest: manifest,
-                submissionFilename: job.submissionFilename,
-                submissionDirectory: submissionDir
-            ) {
-                let normalizer = SubmissionNormalizer()
-                let normalization = try normalizer.normalizePythonSubmission(
-                    manifest: manifest,
-                    submissionDirectory: submissionDir,
-                    workspaceDirectory: testSetupDir,
-                    submissionFilename: job.submissionFilename
-                )
-                return (normalization.warnings, normalization.preferredStudentModule)
-            } else {
-                try mergeDirectoryContents(from: submissionDir, into: testSetupDir)
-                try extractNotebooksToCode(in: testSetupDir)
-                return ([], legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename))
-            }
-        }
+        let (normalizationWarnings, preferredStudentModule) = try normalizeSubmission(
+            job: job,
+            manifest: manifest,
+            paths: paths,
+            testSetupDir: testSetupDir,
+            stageTimings: &stageTimings
+        )
 
         // Optional make step.
         try stageTimings.measureSync("make_step") {
@@ -249,50 +366,104 @@ extension WorkerDaemon {
             try writeRRuntimeHelper(in: testSetupDir)
         }
 
-        let testExecutionStartedAt = Date()
-        let outcomes = await executeTestSuites(
-            manifest: manifest,
+        return JobPreparedWorkspace(
             testSetupDir: testSetupDir,
-            job: job
+            manifest: manifest,
+            normalizationWarnings: normalizationWarnings,
+            preferredStudentModule: preferredStudentModule,
+            testSetupCacheHit: acquireResult.didHit
         )
-        stageTimings.record(
-            "test_execution", milliseconds: Int(Date().timeIntervalSince(testExecutionStartedAt) * 1000))
+    }
 
-        // Sample disk usage at end-of-execution, before the report is sent,
-        // so the persisted diagnostics reflect this job's actual footprint.
-        // The defer will re-use these readings instead of walking again.
-        workdirPeakBytes = directorySizeBytes(at: workDir)
-        freeDiskMBAtEnd = freeSpaceMB(at: tempRoot)
+    /// Stage the submission independently from the grading workspace so the
+    /// worker can normalize it without mutating the raw artifact.
+    private func stageSubmissionIntoWorkspace(
+        job: Job,
+        paths: JobWorkspacePaths,
+        stageTimings: inout JobStageTimings
+    ) throws {
+        try stageTimings.measureSync("submission_unpack") {
+            if let filename = job.submissionFilename {
+                let dest = stagedSubmissionDestination(
+                    submissionDirectory: paths.submissionDir,
+                    submittedFilename: filename
+                )
+                try FileManager.default.createDirectory(
+                    at: dest.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? FileManager.default.removeItem(at: dest)
+                try FileManager.default.copyItem(at: paths.submissionZip, to: dest)
+            } else {
+                try unzip(paths.submissionZip, to: paths.submissionDir)
+            }
+        }
+    }
 
-        let collection = makeCollection(
-            outcomes: outcomes,
-            warnings: normalizationWarnings,
-            job: job,
-            startedAt: jobStartedAt
-        )
-        let diagnostics = WorkerExecutionDiagnostics(
-            runnerID: workerID,
-            startedAt: jobStartedAt,
-            finishedAt: collection.timestamp,
-            finalStatus: inferredCollectionStatus(collection).rawValue,
-            timedOut: collection.timeoutCount > 0,
-            exitCode: nil,
-            terminationReason: nil,
-            peakRSSBytes: nil,
-            wallClockMs: collection.executionTimeMs,
-            childProcessCount: nil,
-            stdoutBytes: nil,
-            stderrBytes: nil,
-            stageTimings: stageTimings.asWorkerExecutionStageTimings(),
-            freeDiskMBAtStart: freeDiskMBAtStart,
-            freeDiskMBAtEnd: freeDiskMBAtEnd,
-            workdirPeakBytes: workdirPeakBytes
-        )
+    /// Remove the starter notebook template from the test directory so
+    /// grading scripts that scan for *.ipynb don't see both the template
+    /// and the student/canonical submission.  Older manifests lack
+    /// starterNotebook — fall back to "assignment.ipynb" since that is
+    /// the conventional name used by every existing assignment.
+    private func removeStarterNotebookIfPresent(
+        manifest: TestProperties,
+        testSetupDir: URL,
+        submissionFilename: String?,
+        stageTimings: inout JobStageTimings
+    ) throws {
+        try stageTimings.measureSync("starter_cleanup") {
+            let starterName = manifest.starterNotebook ?? "assignment.ipynb"
+            let starterPath = testSetupDir.appendingPathComponent(starterName)
+            if FileManager.default.fileExists(atPath: starterPath.path),
+                submissionFilename != starterName
+            {
+                try FileManager.default.removeItem(at: starterPath)
+            }
+        }
+    }
+
+    private func normalizeSubmission(
+        job: Job,
+        manifest: TestProperties,
+        paths: JobWorkspacePaths,
+        testSetupDir: URL,
+        stageTimings: inout JobStageTimings
+    ) throws -> ([String], String?) {
+        try stageTimings.measureSync("submission_prepare") {
+            if shouldNormalizePythonSubmission(
+                manifest: manifest,
+                submissionFilename: job.submissionFilename,
+                submissionDirectory: paths.submissionDir
+            ) {
+                let normalizer = SubmissionNormalizer()
+                let normalization = try normalizer.normalizePythonSubmission(
+                    manifest: manifest,
+                    submissionDirectory: paths.submissionDir,
+                    workspaceDirectory: testSetupDir,
+                    submissionFilename: job.submissionFilename
+                )
+                return (normalization.warnings, normalization.preferredStudentModule)
+            } else {
+                try mergeDirectoryContents(from: paths.submissionDir, into: testSetupDir)
+                try extractNotebooksToCode(in: testSetupDir)
+                return ([], legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename))
+            }
+        }
+    }
+
+    private func reportJobResult(
+        job: Job,
+        collection: TestOutcomeCollection,
+        diagnostics: WorkerExecutionDiagnostics,
+        stageTimings: inout JobStageTimings
+    ) async throws {
         do {
             let resultReportStartedAt = Date()
             try await reporter.report(WorkerExecutionReport(collection: collection, diagnostics: diagnostics))
             stageTimings.record(
-                "result_report", milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000))
+                "result_report",
+                milliseconds: Int(Date().timeIntervalSince(resultReportStartedAt) * 1000)
+            )
             writeStructuredRunnerLog(
                 event: "result_submission_succeeded",
                 fields: [
@@ -311,6 +482,47 @@ extension WorkerDaemon {
                 ])
             throw error
         }
+    }
+
+    // MARK: - Per-job tear-down logging
+
+    private func emitJobStageTimingsLog(
+        stageTimings: JobStageTimings,
+        job: Job,
+        totalWallClockMs: Int
+    ) {
+        var fields: [String: Any] = [
+            "runner_id": workerID,
+            "submission_id": job.submissionID,
+            "job_id": job.submissionID,
+            "total_wall_clock_ms": totalWallClockMs,
+        ]
+        for (key, value) in stageTimings.fields() {
+            fields[key] = value
+        }
+        writeStructuredRunnerLog(event: "job_stage_timings", fields: fields)
+    }
+
+    /// Emit a dedicated disk-usage event so ops can answer "are we
+    /// close to the floor?" without having to join across log events.
+    private func emitJobDiskUsageLog(
+        tempRoot: URL,
+        job: Job,
+        disk: JobDiskReadings,
+        freeDiskMBPostCleanup: Int?
+    ) {
+        var diskFields: [String: Any] = [
+            "runner_id": workerID,
+            "submission_id": job.submissionID,
+            "job_id": job.submissionID,
+            "path": tempRoot.path,
+            "min_free_disk_mb": config.minFreeDiskMB,
+        ]
+        if let v = disk.freeMBAtStart { diskFields["free_disk_mb_at_start"] = v }
+        if let v = disk.freeMBAtEnd { diskFields["free_disk_mb_at_end"] = v }
+        if let v = freeDiskMBPostCleanup { diskFields["free_disk_mb_post_cleanup"] = v }
+        if let v = disk.workdirPeakBytes { diskFields["workdir_peak_bytes"] = v }
+        writeStructuredRunnerLog(event: "job_disk_usage", fields: diskFields)
     }
 
     // MARK: - Test execution

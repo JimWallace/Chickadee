@@ -241,6 +241,24 @@ private func configureLinuxUnsandboxedProcess(
     )
 }
 
+/// Holds the per-run pipe pair plus their shared buffers so the parent path
+/// can install capture, hand the write ends to the child, then drain the
+/// read ends after wait.
+private struct LinuxScriptPipes {
+    let stdoutPipe: Pipe
+    let stderrPipe: Pipe
+    let stdoutBuffer: CapturedPipeBuffer
+    let stderrBuffer: CapturedPipeBuffer
+}
+
+/// Result of `waitpid`-loop bookkeeping. `status` is the raw wait status; the
+/// caller maps it to `ScriptOutput.exitCode` after taking the timeout flag
+/// into account.
+private struct LinuxWaitOutcome {
+    let status: Int32
+    let timedOut: Bool
+}
+
 func executeLinuxScriptProcess(
     _ launch: LinuxProcessLaunchConfiguration,
     workDir: URL,
@@ -248,95 +266,140 @@ func executeLinuxScriptProcess(
     launchErrorPrefix: String
 ) async -> ScriptOutput {
     let start = Date()
+    let pipes = makeLinuxScriptPipes()
 
-    let stdoutPipe = Pipe()
-    let stderrPipe = Pipe()
-    let stdoutBuffer = CapturedPipeBuffer()
-    let stderrBuffer = CapturedPipeBuffer()
-
-    installPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
-    installPipeCapture(for: stderrPipe, buffer: stderrBuffer)
-
-    let executable = strdup(launch.executablePath)
     let rawArguments = [launch.executablePath] + launch.arguments
+    let executable = strdup(launch.executablePath)
     let argvStorage = rawArguments.map { strdup($0) }
-    // env overrides are applied via setenv() in the child below — cheaper
-    // than building an envp array and avoids depending on the glibc-only
-    // execvpe symbol surface.
-    let envOverrides = launch.env
     defer {
-        if let executable {
-            free(executable)
-        }
-        for pointer in argvStorage {
-            if let pointer {
-                free(pointer)
-            }
+        if let executable { free(executable) }
+        for pointer in argvStorage where pointer != nil {
+            free(pointer)
         }
     }
 
     guard let executable else {
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        return ScriptOutput(
-            exitCode: 2,
-            stdout: "",
-            stderr: "\(launchErrorPrefix): out of memory",
-            executionTimeMs: elapsed,
-            timedOut: false
+        return linuxLaunchFailure(
+            prefix: launchErrorPrefix,
+            detail: "out of memory",
+            start: start
         )
     }
 
     let pid = fork()
     if pid == -1 {
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        return ScriptOutput(
-            exitCode: 2,
-            stdout: "",
-            stderr: "\(launchErrorPrefix): \(String(cString: strerror(errno)))",
-            executionTimeMs: elapsed,
-            timedOut: false
+        return linuxLaunchFailure(
+            prefix: launchErrorPrefix,
+            detail: String(cString: strerror(errno)),
+            start: start
         )
     }
 
     if pid == 0 {
-        let stdoutRead = stdoutPipe.fileHandleForReading.fileDescriptor
-        let stdoutWrite = stdoutPipe.fileHandleForWriting.fileDescriptor
-        let stderrRead = stderrPipe.fileHandleForReading.fileDescriptor
-        let stderrWrite = stderrPipe.fileHandleForWriting.fileDescriptor
+        linuxChildExec(
+            pipes: pipes,
+            workDir: workDir,
+            envOverrides: launch.env,
+            executable: executable,
+            argvStorage: argvStorage
+        )
+        // execvp never returns on success; the child path _exit()s on error.
+    }
 
-        _ = Glibc.close(stdoutRead)
-        _ = Glibc.close(stderrRead)
+    pipes.stdoutPipe.fileHandleForWriting.closeFile()
+    pipes.stderrPipe.fileHandleForWriting.closeFile()
 
-        if dup2(stdoutWrite, STDOUT_FILENO) == -1 || dup2(stderrWrite, STDERR_FILENO) == -1 {
-            _exit(127)
-        }
+    let wait = linuxWaitForChild(pid: pid, timeLimitSeconds: timeLimitSeconds)
 
-        _ = Glibc.close(stdoutWrite)
-        _ = Glibc.close(stderrWrite)
+    let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+    let stdoutData = finishPipeCapture(for: pipes.stdoutPipe, buffer: pipes.stdoutBuffer)
+    let stderrData = finishPipeCapture(for: pipes.stderrPipe, buffer: pipes.stderrBuffer)
+    let exitCode = wait.timedOut ? -1 : linuxExitCode(from: wait.status)
 
-        if chdir(workDir.path) == -1 {
-            _exit(127)
-        }
+    return ScriptOutput(
+        exitCode: exitCode,
+        stdout: String(data: stdoutData, encoding: .utf8) ?? "",
+        stderr: String(data: stderrData, encoding: .utf8) ?? "",
+        executionTimeMs: elapsed,
+        timedOut: wait.timedOut
+    )
+}
 
-        if setsid() == -1 {
-            _exit(127)
-        }
+private func makeLinuxScriptPipes() -> LinuxScriptPipes {
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    let stdoutBuffer = CapturedPipeBuffer()
+    let stderrBuffer = CapturedPipeBuffer()
+    installPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
+    installPipeCapture(for: stderrPipe, buffer: stderrBuffer)
+    return LinuxScriptPipes(
+        stdoutPipe: stdoutPipe,
+        stderrPipe: stderrPipe,
+        stdoutBuffer: stdoutBuffer,
+        stderrBuffer: stderrBuffer
+    )
+}
 
-        // Apply env overrides to the child's `environ` before exec.  setenv()
-        // with overwrite=1 mutates the child's copy of the parent env; execvp
-        // then inherits it.
-        for (key, value) in envOverrides {
-            _ = setenv(key, value, 1)
-        }
+private func linuxLaunchFailure(prefix: String, detail: String, start: Date) -> ScriptOutput {
+    let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+    return ScriptOutput(
+        exitCode: 2,
+        stdout: "",
+        stderr: "\(prefix): \(detail)",
+        executionTimeMs: elapsed,
+        timedOut: false
+    )
+}
 
-        var argv = argvStorage + [nil]
-        execvp(executable, &argv)
+/// Runs in the forked child between `fork()` and `execvp`.  Sets up FDs,
+/// applies env overrides, then execs. Always terminates the child via
+/// `_exit(127)` on any failure path.  Never returns on success.
+private func linuxChildExec(
+    pipes: LinuxScriptPipes,
+    workDir: URL,
+    envOverrides: [String: String],
+    executable: UnsafeMutablePointer<CChar>,
+    argvStorage: [UnsafeMutablePointer<CChar>?]
+) {
+    let stdoutRead = pipes.stdoutPipe.fileHandleForReading.fileDescriptor
+    let stdoutWrite = pipes.stdoutPipe.fileHandleForWriting.fileDescriptor
+    let stderrRead = pipes.stderrPipe.fileHandleForReading.fileDescriptor
+    let stderrWrite = pipes.stderrPipe.fileHandleForWriting.fileDescriptor
+
+    _ = Glibc.close(stdoutRead)
+    _ = Glibc.close(stderrRead)
+
+    if dup2(stdoutWrite, STDOUT_FILENO) == -1 || dup2(stderrWrite, STDERR_FILENO) == -1 {
         _exit(127)
     }
 
-    stdoutPipe.fileHandleForWriting.closeFile()
-    stderrPipe.fileHandleForWriting.closeFile()
+    _ = Glibc.close(stdoutWrite)
+    _ = Glibc.close(stderrWrite)
 
+    if chdir(workDir.path) == -1 {
+        _exit(127)
+    }
+
+    if setsid() == -1 {
+        _exit(127)
+    }
+
+    // Apply env overrides to the child's `environ` before exec.  setenv()
+    // with overwrite=1 mutates the child's copy of the parent env; execvp
+    // then inherits it.
+    for (key, value) in envOverrides {
+        _ = setenv(key, value, 1)
+    }
+
+    var argv = argvStorage + [nil]
+    execvp(executable, &argv)
+    _exit(127)
+}
+
+/// Polls `waitpid` until the child exits or the deadline is hit. On
+/// timeout, sends SIGTERM to the process group, sleeps briefly, then SIGKILL
+/// and reaps.  Returns the final wait status plus a timeout flag.
+private func linuxWaitForChild(pid: pid_t, timeLimitSeconds: Int) -> LinuxWaitOutcome {
     var timedOut = false
     var status: Int32 = 0
     let deadline = Date().addingTimeInterval(TimeInterval(timeLimitSeconds))
@@ -366,18 +429,7 @@ func executeLinuxScriptProcess(
         usleep(50_000)
     }
 
-    let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-    let stdoutData = finishPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
-    let stderrData = finishPipeCapture(for: stderrPipe, buffer: stderrBuffer)
-    let exitCode = timedOut ? -1 : linuxExitCode(from: status)
-
-    return ScriptOutput(
-        exitCode: exitCode,
-        stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-        stderr: String(data: stderrData, encoding: .utf8) ?? "",
-        executionTimeMs: elapsed,
-        timedOut: timedOut
-    )
+    return LinuxWaitOutcome(status: status, timedOut: timedOut)
 }
 
 private func linuxExitCode(from status: Int32) -> Int32 {

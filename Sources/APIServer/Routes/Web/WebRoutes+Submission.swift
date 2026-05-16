@@ -300,94 +300,144 @@ extension WebRoutes {
             .first()
         let allowedTiers = visibleTiers(for: user, assignment: submissionAssignment)
 
-        let isPending = submission.status == "pending" || submission.status == "assigned"
-        let isBrowserComplete = false  // browser submissions now go straight to "complete"
-        let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
-        let nameExt = (submission.filename ?? "").lowercased()
-        let openInNotebookURL: String? =
-            (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))
-            ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(subID)"
-            : nil
-
-        var buildFailed = false
-        var compilerOutput: String?
-        var warnings: [String] = []
-        var outcomes: [OutcomeRow] = []
-        var passCount = 0
-        var totalTests = 0
-        var totalPoints = 0
-        var earnedPoints = 0
-        var executionTimeMs = 0
-        var gradePercent = 0
-        var resultSource = ""  // "browser" | "worker" | ""
-        var badges: [AchievementBadge] = []
-
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        // Prefer the worker result (official); fall back to browser result.
-        let allResults = try await APIResult.query(on: req.db)
+        let displayResult = try await loadPreferredDisplayResult(subID: subID, on: req.db)
+        let priorAttempt = try await loadPriorAttemptDelta(
+            submission: submission, decoder: decoder, on: req.db)
+        let manifestDisplay = try await loadManifestDisplayData(
+            testSetupID: submission.testSetupID, on: req.db)
+
+        var processed = ProcessedCollection.empty
+        if let result = displayResult {
+            processed = processDisplayResult(
+                result: result,
+                viewer: SubmissionViewer(user: user, allowedTiers: allowedTiers),
+                submission: submission,
+                priorAttempt: priorAttempt,
+                manifestDisplay: manifestDisplay,
+                decoder: decoder
+            )
+        }
+
+        // Append class-wide achievement badges held by this specific submission.
+        let classAchievements = try await APIClassAchievement.query(on: req.db)
+            .filter(\.$submissionID == subID)
+            .all()
+        let badges =
+            processed.badges
+            + classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
+
+        let sectionedOutcomes = buildSectionedOutcomes(
+            outcomes: processed.outcomes,
+            manifestEntries: manifestDisplay.entries,
+            manifestSections: manifestDisplay.sections,
+            allowedTiers: allowedTiers
+        )
+
+        let currentAttempt = submission.attemptNumber ?? 1
+        let hasDelta = !priorAttempt.outcomeMap.isEmpty
+        let deltaHeaderText = buildDeltaHeaderText(
+            outcomes: processed.outcomes,
+            hasDelta: hasDelta,
+            currentAttempt: currentAttempt
+        )
+
+        let ctx = buildSubmissionContext(
+            subID: subID,
+            submission: submission,
+            processed: processed,
+            sectionedOutcomes: sectionedOutcomes,
+            decorations: SubmissionDecorations(badges: badges, currentUser: req.currentUserContext),
+            delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
+        )
+        return try await req.view.render("submission", ctx)
+    }
+
+    // MARK: - submissionPage helpers
+
+    /// Selects the result row to render on the submission page: the worker
+    /// result is preferred (official grade); the browser result is the
+    /// fallback used for in-page preview while the worker is still queued.
+    private func loadPreferredDisplayResult(
+        subID: String, on db: Database
+    ) async throws -> APIResult? {
+        let allResults = try await APIResult.query(on: db)
             .filter(\.$submissionID == subID)
             .sort(\.$receivedAt, .descending)
             .all()
-
         let workerResult = allResults.first { ($0.source ?? "worker") == "worker" }
         let browserResult = allResults.first { $0.source == "browser" }
-        let displayResult = workerResult ?? browserResult
+        return workerResult ?? browserResult
+    }
 
-        // Fetch the immediately-prior attempt for per-test delta display and Comeback Kid badge.
+    /// Fetches the immediately-prior attempt for per-test delta display and the
+    /// Comeback Kid badge.  Returns `(outcomeMap: empty, gradePercent: nil)`
+    /// when there is no prior attempt or no decodable prior result.
+    private func loadPriorAttemptDelta(
+        submission: APISubmission, decoder: JSONDecoder, on db: Database
+    ) async throws -> PriorAttemptDelta {
         let currentAttempt = submission.attemptNumber ?? 1
-        var priorOutcomeMap: [String: TestStatus] = [:]
-        var priorGradePercent: Int?
-        if currentAttempt > 1, let userID = submission.userID {
-            if let priorSub = try await APISubmission.query(on: req.db)
+        guard currentAttempt > 1, let userID = submission.userID else {
+            return .empty
+        }
+        guard
+            let priorSub = try await APISubmission.query(on: db)
                 .filter(\.$testSetupID == submission.testSetupID)
                 .filter(\.$userID == userID)
                 .filter(\.$attemptNumber == currentAttempt - 1)
                 .first(),
-                let priorSubID = priorSub.id
-            {
-                let priorResults = try await APIResult.query(on: req.db)
-                    .filter(\.$submissionID == priorSubID)
-                    .sort(\.$receivedAt, .descending)
-                    .all()
-                let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
-                if let priorResult,
-                    let data = priorResult.collectionJSON.data(using: .utf8),
-                    let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-                {
-                    for o in priorCollection.outcomes {
-                        priorOutcomeMap[o.testName] = o.status
-                    }
-                    priorGradePercent =
-                        priorCollection.totalPoints > 0
-                        ? Int(
-                            (Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded()
-                        )
-                        : nil
-                }
-            }
+            let priorSubID = priorSub.id
+        else {
+            return .empty
+        }
+        let priorResults = try await APIResult.query(on: db)
+            .filter(\.$submissionID == priorSubID)
+            .sort(\.$receivedAt, .descending)
+            .all()
+        let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
+        guard let priorResult,
+            let data = priorResult.collectionJSON.data(using: .utf8),
+            let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+        else {
+            return .empty
         }
 
-        // Build a script/stem→displayName map from the current manifest so the page
-        // shows friendly names for:
-        //  - worker results that already use the display name directly
-        //  - older worker results where testName is the filename stem
-        //  - browser results where testName is the full script filename
-        //
-        // Also collect the manifest's section list + the testSuites list
-        // so the call site below can build a parallel sectionIDPerOutcome
-        // array.  We can't do a name-keyed lookup because two families in
-        // different sections may legally share case labels (v0.4.105 bug).
+        var outcomeMap: [String: TestStatus] = [:]
+        for o in priorCollection.outcomes {
+            outcomeMap[o.testName] = o.status
+        }
+        let gradePercent: Int? =
+            priorCollection.totalPoints > 0
+            ? Int(
+                (Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded()
+            )
+            : nil
+        return PriorAttemptDelta(outcomeMap: outcomeMap, gradePercent: gradePercent)
+    }
+
+    /// Reads the manifest from `APITestSetup` and extracts:
+    /// - a script/stem→displayName map so the page shows friendly names for
+    ///   worker results that already use the display name directly, older
+    ///   worker results where testName is the filename stem, and browser
+    ///   results where testName is the full script filename;
+    /// - the manifest's section list and the full `testSuites` list, so the
+    ///   page can build a parallel `sectionIDPerOutcome` array.  We can't do
+    ///   a name-keyed lookup because two families in different sections may
+    ///   legally share case labels (v0.4.105 bug).
+    private func loadManifestDisplayData(
+        testSetupID: String, on db: Database
+    ) async throws -> ManifestDisplayData {
         var displayNameMap: [String: String] = [:]
-        var manifestSections: [TestSuiteSection] = []
-        var manifestEntries: [TestSuiteEntry] = []
-        if let setup = try? await APITestSetup.find(submission.testSetupID, on: req.db),
+        var sections: [TestSuiteSection] = []
+        var entries: [TestSuiteEntry] = []
+        if let setup = try? await APITestSetup.find(testSetupID, on: db),
             let manifestData = setup.manifest.data(using: .utf8),
             let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         {
-            manifestSections = props.sections
-            manifestEntries = props.testSuites
+            sections = props.sections
+            entries = props.testSuites
             for entry in props.testSuites {
                 let stem = (entry.script as NSString).deletingPathExtension
                 let stemKey = stem.isEmpty ? entry.script : stem
@@ -399,112 +449,142 @@ extension WebRoutes {
                 }
             }
         }
+        return ManifestDisplayData(displayNameMap: displayNameMap, sections: sections, entries: entries)
+    }
 
-        // Summaries for hidden tiers (students only; instructors see everything directly).
-        var releaseSummary: TierSummary?
-        var secretSummary: TierSummary?
+    /// Decodes the chosen result's `TestOutcomeCollection`, filters by tier,
+    /// computes totals and badges, and renders each visible outcome into an
+    /// `OutcomeRow` for the template.  Hidden-tier summaries (release before
+    /// deadline, secret) are computed for non-instructors only — instructors
+    /// see every tier directly.
+    private func processDisplayResult(
+        result: APIResult,
+        viewer: SubmissionViewer,
+        submission: APISubmission,
+        priorAttempt: PriorAttemptDelta,
+        manifestDisplay: ManifestDisplayData,
+        decoder: JSONDecoder
+    ) -> ProcessedCollection {
+        var processed = ProcessedCollection.empty
+        processed.resultSource = result.source ?? "worker"
+        guard let data = result.collectionJSON.data(using: .utf8),
+            let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+        else {
+            return processed
+        }
 
-        if let result = displayResult {
-            resultSource = result.source ?? "worker"
-            if let data = result.collectionJSON.data(using: .utf8),
-                let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-            {
-                // Compute per-tier summaries from the full (unfiltered) collection.
-                if !user.isInstructor {
-                    let releaseOutcomes = collection.outcomes.filter { $0.tier == .release }
-                    let secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
-                    let releaseVisible = allowedTiers.contains("release")
-                    if !releaseVisible, !releaseOutcomes.isEmpty {
-                        releaseSummary = TierSummary(outcomes: releaseOutcomes, isRelease: true)
-                    }
-                    if !secretOutcomes.isEmpty {
-                        secretSummary = TierSummary(outcomes: secretOutcomes, isRelease: false)
-                    }
-                }
-
-                let visible = collection.filtering(tiers: allowedTiers)
-                buildFailed = collection.buildStatus == .failed
-                compilerOutput = collection.compilerOutput
-                warnings = collection.warnings
-                passCount = visible.passCount
-                totalTests = visible.totalTests
-                executionTimeMs = collection.executionTimeMs
-                totalPoints = visible.totalPoints
-                earnedPoints = visible.earnedPoints
-                gradePercent =
-                    totalPoints > 0
-                    ? Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
-                    : 0
-                badges = AchievementBadge.forSubmission(
-                    BadgeContext(
-                        attemptNumber: submission.attemptNumber ?? 1,
-                        gradePercent: gradePercent,
-                        executionTimeMs: collection.executionTimeMs,
-                        priorGradePercent: priorGradePercent
-                    ))
-                let weighted = totalPoints != visible.totalTests
-                outcomes = visible.outcomes.map { o in
-                    let skip = parseSkip(shortResult: o.shortResult)
-                    let shortOutput = formattedShortResult(from: o.shortResult, status: o.status)
-                    let longOutput =
-                        o.status == .pass
-                        ? formattedPassingDetailedOutput(primary: o.longResult)
-                        : formattedDetailedOutput(
-                            primary: o.longResult,
-                            fallback: o.shortResult,
-                            status: o.status
-                        )
-                    let (markLabel, markClass): (String, String) = {
-                        if skip.isSkipped { return ("—", "skipped") }
-                        switch o.status {
-                        case .pass: return ("Pass", "pass")
-                        case .fail: return ("Fail", "fail")
-                        case .error: return ("Error", "error")
-                        case .timeout: return ("Timeout", "timeout")
-                        }
-                    }()
-                    let (deltaImproved, deltaRegressed): (Bool, Bool) = {
-                        guard let prior = priorOutcomeMap[o.testName] else { return (false, false) }
-                        let wasPass = (prior == .pass)
-                        let isPass = (o.status == .pass)
-                        return (!wasPass && isPass, wasPass && !isPass)
-                    }()
-                    let pointsLabel: String? = weighted && o.points > 1 ? "\(o.points) pts" : nil
-                    return OutcomeRow(
-                        testName: displayNameMap[o.testName] ?? o.testName,
-                        tier: o.tier.rawValue,
-                        status: o.status.rawValue,
-                        shortResult: shortOutput,
-                        longResult: longOutput,
-                        markLabel: markLabel,
-                        markClass: markClass,
-                        isSkipped: skip.isSkipped,
-                        blockerName: skip.blockerName,
-                        deltaImproved: deltaImproved,
-                        deltaRegressed: deltaRegressed,
-                        pointsLabel: pointsLabel
-                    )
-                }
+        // Compute per-tier summaries from the full (unfiltered) collection.
+        if !viewer.user.isInstructor {
+            let releaseOutcomes = collection.outcomes.filter { $0.tier == .release }
+            let secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
+            let releaseVisible = viewer.allowedTiers.contains("release")
+            if !releaseVisible, !releaseOutcomes.isEmpty {
+                processed.releaseSummary = TierSummary(outcomes: releaseOutcomes, isRelease: true)
+            }
+            if !secretOutcomes.isEmpty {
+                processed.secretSummary = TierSummary(outcomes: secretOutcomes, isRelease: false)
             }
         }
 
-        // Append class-wide achievement badges held by this specific submission.
-        let classAchievements = try await APIClassAchievement.query(on: req.db)
-            .filter(\.$submissionID == subID)
-            .all()
-        badges += classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
+        let visible = collection.filtering(tiers: viewer.allowedTiers)
+        processed.buildFailed = collection.buildStatus == .failed
+        processed.compilerOutput = collection.compilerOutput
+        processed.warnings = collection.warnings
+        processed.passCount = visible.passCount
+        processed.totalTests = visible.totalTests
+        processed.executionTimeMs = collection.executionTimeMs
+        processed.totalPoints = visible.totalPoints
+        processed.earnedPoints = visible.earnedPoints
+        processed.gradePercent =
+            processed.totalPoints > 0
+            ? Int((Double(processed.earnedPoints) / Double(processed.totalPoints) * 100).rounded())
+            : 0
+        processed.badges = AchievementBadge.forSubmission(
+            BadgeContext(
+                attemptNumber: submission.attemptNumber ?? 1,
+                gradePercent: processed.gradePercent,
+                executionTimeMs: collection.executionTimeMs,
+                priorGradePercent: priorAttempt.gradePercent
+            ))
+        let weighted = processed.totalPoints != visible.totalTests
+        processed.outcomes = visible.outcomes.map { outcome in
+            renderOutcomeRow(
+                outcome: outcome,
+                weighted: weighted,
+                priorOutcomeMap: priorAttempt.outcomeMap,
+                displayNameMap: manifestDisplay.displayNameMap
+            )
+        }
+        return processed
+    }
 
-        // Worker emits exactly one outcome per manifest.testSuites entry,
-        // in the same order.  The student-visible outcomes are filtered
-        // by tier, so we filter `manifestEntries` by the same tier
-        // predicate to keep the parallel-index correlation aligned.
-        // Each `outcomes[i]` corresponds to `visibleEntries[i]`.
+    /// Renders a single `TestOutcome` into the template-facing `OutcomeRow`.
+    /// Pulled out of `processDisplayResult` so the per-row formatting stays
+    /// inspectable in isolation.
+    private func renderOutcomeRow(
+        outcome: TestOutcome,
+        weighted: Bool,
+        priorOutcomeMap: [String: TestStatus],
+        displayNameMap: [String: String]
+    ) -> OutcomeRow {
+        let skip = parseSkip(shortResult: outcome.shortResult)
+        let shortOutput = formattedShortResult(from: outcome.shortResult, status: outcome.status)
+        let longOutput =
+            outcome.status == .pass
+            ? formattedPassingDetailedOutput(primary: outcome.longResult)
+            : formattedDetailedOutput(
+                primary: outcome.longResult,
+                fallback: outcome.shortResult,
+                status: outcome.status
+            )
+        let (markLabel, markClass): (String, String) = {
+            if skip.isSkipped { return ("—", "skipped") }
+            switch outcome.status {
+            case .pass: return ("Pass", "pass")
+            case .fail: return ("Fail", "fail")
+            case .error: return ("Error", "error")
+            case .timeout: return ("Timeout", "timeout")
+            }
+        }()
+        let (deltaImproved, deltaRegressed): (Bool, Bool) = {
+            guard let prior = priorOutcomeMap[outcome.testName] else { return (false, false) }
+            let wasPass = (prior == .pass)
+            let isPass = (outcome.status == .pass)
+            return (!wasPass && isPass, wasPass && !isPass)
+        }()
+        let pointsLabel: String? = weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
+        return OutcomeRow(
+            testName: displayNameMap[outcome.testName] ?? outcome.testName,
+            tier: outcome.tier.rawValue,
+            status: outcome.status.rawValue,
+            shortResult: shortOutput,
+            longResult: longOutput,
+            markLabel: markLabel,
+            markClass: markClass,
+            isSkipped: skip.isSkipped,
+            blockerName: skip.blockerName,
+            deltaImproved: deltaImproved,
+            deltaRegressed: deltaRegressed,
+            pointsLabel: pointsLabel
+        )
+    }
+
+    /// Worker emits exactly one outcome per `manifest.testSuites` entry, in
+    /// the same order.  The student-visible outcomes are filtered by tier, so
+    /// we filter `manifestEntries` by the same tier predicate to keep the
+    /// parallel-index correlation aligned (`outcomes[i]` ↔ `visibleEntries[i]`).
+    /// We then defensively pad/truncate the section-id array in case browser-
+    /// mode submissions emit a slightly different shape or a manifest churn
+    /// happens mid-flight — drift falls into Ungrouped rather than
+    /// misattributing outcomes.
+    private func buildSectionedOutcomes(
+        outcomes: [OutcomeRow],
+        manifestEntries: [TestSuiteEntry],
+        manifestSections: [TestSuiteSection],
+        allowedTiers: Set<String>
+    ) -> [SectionedOutcomes] {
         let visibleEntries = manifestEntries.filter { allowedTiers.contains($0.tier.rawValue) }
         var sectionIDPerOutcome: [String?] = visibleEntries.map { $0.sectionID }
-        // Defensive: if the count drifts (e.g. browser-mode submissions
-        // emit a slightly different shape, or a manifest churn happened
-        // mid-flight), pad with nils so the bucketing falls into
-        // Ungrouped instead of misattributing outcomes.
         if sectionIDPerOutcome.count < outcomes.count {
             sectionIDPerOutcome.append(
                 contentsOf:
@@ -512,25 +592,50 @@ extension WebRoutes {
         } else if sectionIDPerOutcome.count > outcomes.count {
             sectionIDPerOutcome = Array(sectionIDPerOutcome.prefix(outcomes.count))
         }
-        let sectionedOutcomes = groupOutcomesBySection(
+        return groupOutcomesBySection(
             outcomes,
             sections: manifestSections,
             sectionIDPerOutcome: sectionIDPerOutcome
         )
+    }
 
-        let hasDelta = !priorOutcomeMap.isEmpty
-        let deltaHeaderText: String? = {
-            guard hasDelta else { return nil }
-            let improved = outcomes.filter { $0.deltaImproved }.count
-            let regressed = outcomes.filter { $0.deltaRegressed }.count
-            var parts: [String] = []
-            if improved > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
-            if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }
-            if parts.isEmpty { return "No change since attempt \(currentAttempt - 1)" }
-            return parts.joined(separator: " · ") + " since attempt \(currentAttempt - 1)"
-        }()
+    /// Composes the human-readable banner text shown above the outcomes table
+    /// when this attempt is being compared with the previous one.  Returns nil
+    /// when there's no prior attempt to compare against.
+    private func buildDeltaHeaderText(
+        outcomes: [OutcomeRow], hasDelta: Bool, currentAttempt: Int
+    ) -> String? {
+        guard hasDelta else { return nil }
+        let improved = outcomes.filter { $0.deltaImproved }.count
+        let regressed = outcomes.filter { $0.deltaRegressed }.count
+        var parts: [String] = []
+        if improved > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
+        if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }
+        if parts.isEmpty { return "No change since attempt \(currentAttempt - 1)" }
+        return parts.joined(separator: " · ") + " since attempt \(currentAttempt - 1)"
+    }
 
-        let ctx = SubmissionContext(
+    /// Builds the final Leaf-facing `SubmissionContext` from the processed
+    /// pieces.  Pulled out so `submissionPage` itself stays a thin orchestrator.
+    private func buildSubmissionContext(
+        subID: String,
+        submission: APISubmission,
+        processed: ProcessedCollection,
+        sectionedOutcomes: [SectionedOutcomes],
+        decorations: SubmissionDecorations,
+        delta: DeltaBanner
+    ) -> SubmissionContext {
+        let badges = decorations.badges
+        let currentUser = decorations.currentUser
+        let isPending = submission.status == "pending" || submission.status == "assigned"
+        let isBrowserComplete = false  // browser submissions now go straight to "complete"
+        let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
+        let nameExt = (submission.filename ?? "").lowercased()
+        let openInNotebookURL: String? =
+            (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))
+            ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(subID)"
+            : nil
+        return SubmissionContext(
             submissionID: subID,
             testSetupID: submission.testSetupID,
             status: submission.status,
@@ -539,29 +644,102 @@ extension WebRoutes {
             openInNotebookURL: openInNotebookURL,
             isPending: isPending,
             isBrowserComplete: isBrowserComplete,
-            resultSource: resultSource,
-            buildFailed: buildFailed,
-            compilerOutput: compilerOutput,
-            hasWarnings: !warnings.isEmpty,
-            warnings: warnings,
-            outcomes: outcomes,
+            resultSource: processed.resultSource,
+            buildFailed: processed.buildFailed,
+            compilerOutput: processed.compilerOutput,
+            hasWarnings: !processed.warnings.isEmpty,
+            warnings: processed.warnings,
+            outcomes: processed.outcomes,
             sectionedOutcomes: sectionedOutcomes,
-            passCount: passCount,
-            totalTests: totalTests,
-            gradePercent: gradePercent,
-            executionTimeMs: executionTimeMs,
-            isWeighted: totalPoints != totalTests,
-            totalPoints: totalPoints,
-            earnedPoints: earnedPoints,
-            hasDelta: hasDelta,
-            deltaHeaderText: deltaHeaderText,
-            releaseSummary: releaseSummary,
-            secretSummary: secretSummary,
+            passCount: processed.passCount,
+            totalTests: processed.totalTests,
+            gradePercent: processed.gradePercent,
+            executionTimeMs: processed.executionTimeMs,
+            isWeighted: processed.totalPoints != processed.totalTests,
+            totalPoints: processed.totalPoints,
+            earnedPoints: processed.earnedPoints,
+            hasDelta: delta.hasDelta,
+            deltaHeaderText: delta.headerText,
+            releaseSummary: processed.releaseSummary,
+            secretSummary: processed.secretSummary,
             badges: badges,
-            currentUser: req.currentUserContext
+            currentUser: currentUser
         )
-        return try await req.view.render("submission", ctx)
     }
+}
+
+// MARK: - submissionPage support types
+
+/// All values derived from decoding & filtering the chosen
+/// `TestOutcomeCollection`.  Bundled into a struct so the per-helper signatures
+/// stay readable.
+private struct ProcessedCollection {
+    var resultSource: String  // "browser" | "worker" | ""
+    var buildFailed: Bool
+    var compilerOutput: String?
+    var warnings: [String]
+    var outcomes: [OutcomeRow]
+    var passCount: Int
+    var totalTests: Int
+    var totalPoints: Int
+    var earnedPoints: Int
+    var executionTimeMs: Int
+    var gradePercent: Int
+    var badges: [AchievementBadge]
+    var releaseSummary: TierSummary?
+    var secretSummary: TierSummary?
+
+    static let empty = ProcessedCollection(
+        resultSource: "",
+        buildFailed: false,
+        compilerOutput: nil,
+        warnings: [],
+        outcomes: [],
+        passCount: 0,
+        totalTests: 0,
+        totalPoints: 0,
+        earnedPoints: 0,
+        executionTimeMs: 0,
+        gradePercent: 0,
+        badges: [],
+        releaseSummary: nil,
+        secretSummary: nil
+    )
+}
+
+/// Delta information harvested from the immediately-prior attempt.
+private struct PriorAttemptDelta {
+    let outcomeMap: [String: TestStatus]
+    let gradePercent: Int?
+
+    static let empty = PriorAttemptDelta(outcomeMap: [:], gradePercent: nil)
+}
+
+/// Manifest-derived data used for friendly test names and section bucketing.
+private struct ManifestDisplayData {
+    let displayNameMap: [String: String]
+    let sections: [TestSuiteSection]
+    let entries: [TestSuiteEntry]
+}
+
+/// Viewer-side inputs that gate which tiers and summaries are visible.
+private struct SubmissionViewer {
+    let user: APIUser
+    let allowedTiers: Set<String>
+}
+
+/// Banner text shown above the outcomes table comparing this attempt against
+/// the previous one.  `headerText` is nil when `hasDelta` is false.
+private struct DeltaBanner {
+    let hasDelta: Bool
+    let headerText: String?
+}
+
+/// Per-page decoration data attached to `SubmissionContext` — class-wide
+/// achievement badges and the current user's display context.
+private struct SubmissionDecorations {
+    let badges: [AchievementBadge]
+    let currentUser: CurrentUserContext?
 }
 
 // `SubmitFormBody` and the submission-output formatting helpers live in

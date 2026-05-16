@@ -16,9 +16,51 @@ extension AssignmentRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
 
-        // Only include students enrolled in the active course (if one is set).
-        let students: [APIUser]
-        if let activeCourseUUID = courseState.activeCourseUUID {
+        let students = try await loadGradesCSVStudents(
+            req: req, activeCourseUUID: courseState.activeCourseUUID)
+        let assignments = try await loadGradesCSVAssignments(
+            req: req, activeCourseUUID: courseState.activeCourseUUID)
+
+        let setupIDs = Set(assignments.map(\.testSetupID))
+        let setupByID = try await loadGradesCSVSetupsByID(req: req, setupIDs: setupIDs)
+        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
+
+        let studentIDs = Set(students.compactMap(\.id))
+        let submissions = try await loadGradesCSVSubmissions(
+            req: req, setupIDs: setupIDs, studentIDs: studentIDs)
+        let submissionIDs = submissions.map(\.id)
+
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissionIDs, on: req.db)
+        let bestPointsByUserAndSetup = bestPointsByUserAndSetup(
+            submissions: submissions,
+            preferredResultBySubmissionID: preferredResultBySubmissionID
+        )
+
+        let csv = renderGradesCSV(
+            students: students,
+            sortedAssignments: sortedAssignments,
+            bestPointsByUserAndSetup: bestPointsByUserAndSetup
+        )
+
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let response = Response(status: .ok)
+        response.headers.replaceOrAdd(name: .contentType, value: "text/csv; charset=utf-8")
+        response.headers.replaceOrAdd(
+            name: .contentDisposition,
+            value: "attachment; filename=\"grades-\(timestamp).csv\""
+        )
+        response.body = .init(string: csv)
+        return response
+    }
+
+    // MARK: - exportGradesCSV helpers
+
+    /// Only include students enrolled in the active course (if one is set).
+    private func loadGradesCSVStudents(
+        req: Request, activeCourseUUID: UUID?
+    ) async throws -> [APIUser] {
+        if let activeCourseUUID {
             let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
                 .filter(\.$course.$id == activeCourseUUID)
                 .all()
@@ -28,35 +70,45 @@ extension AssignmentRoutes {
                 .filter(\.$role == "student")
                 .sort(\.$username, .ascending)
                 .all()
-            students = allStudents.filter { u in u.id.map { enrolledSet.contains($0) } ?? false }
-        } else {
-            students = try await APIUser.query(on: req.db)
-                .filter(\.$role == "student")
-                .sort(\.$username, .ascending)
-                .all()
+            return allStudents.filter { u in u.id.map { enrolledSet.contains($0) } ?? false }
         }
+        return try await APIUser.query(on: req.db)
+            .filter(\.$role == "student")
+            .sort(\.$username, .ascending)
+            .all()
+    }
 
-        let assignments: [APIAssignment]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            assignments = try await APIAssignment.query(on: req.db)
+    private func loadGradesCSVAssignments(
+        req: Request, activeCourseUUID: UUID?
+    ) async throws -> [APIAssignment] {
+        if let activeCourseUUID {
+            return try await APIAssignment.query(on: req.db)
                 .filter(\.$courseID == activeCourseUUID)
                 .all()
-        } else {
-            assignments = try await APIAssignment.query(on: req.db).all()
         }
-        let setupIDs = Set(assignments.map(\.testSetupID))
+        return try await APIAssignment.query(on: req.db).all()
+    }
+
+    private func loadGradesCSVSetupsByID(
+        req: Request, setupIDs: Set<String>
+    ) async throws -> [String: APITestSetup] {
         let setups =
             setupIDs.isEmpty
             ? []
             : try await APITestSetup.query(on: req.db)
                 .filter(\.$id ~~ setupIDs)
                 .all()
-        let setupByID = Dictionary(
+        return Dictionary(
             uniqueKeysWithValues: setups.compactMap { setup in
                 setup.id.map { ($0, setup) }
             })
+    }
 
-        let sortedAssignments = assignments.sorted { lhs, rhs in
+    private func sortedGradesCSVAssignments(
+        _ assignments: [APIAssignment],
+        setupByID: [String: APITestSetup]
+    ) -> [APIAssignment] {
+        assignments.sorted { lhs, rhs in
             switch (lhs.sortOrder, rhs.sortOrder) {
             case (let l?, let r?) where l != r:
                 return l < r
@@ -67,8 +119,13 @@ extension AssignmentRoutes {
                 return lhs.testSetupID < rhs.testSetupID
             }
         }
+    }
 
-        let studentIDs = Set(students.compactMap(\.id))
+    private func loadGradesCSVSubmissions(
+        req: Request,
+        setupIDs: Set<String>,
+        studentIDs: Set<UUID>
+    ) async throws -> [(id: String, userID: UUID, setupID: String)] {
         let submissionRows =
             (setupIDs.isEmpty || studentIDs.isEmpty)
             ? []
@@ -77,34 +134,16 @@ extension AssignmentRoutes {
                 .filter(\.$testSetupID ~~ setupIDs)
                 .filter(\.$userID ~~ studentIDs)
                 .all()
-        let submissions = submissionRows.compactMap { row -> (id: String, userID: UUID, setupID: String)? in
+        return submissionRows.compactMap { row -> (id: String, userID: UUID, setupID: String)? in
             guard let id = row.id, let userID = row.userID else { return nil }
             return (id, userID, row.testSetupID)
         }
-        let submissionIDs = submissions.map(\.id)
+    }
 
-        let results =
-            submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .sort(\.$receivedAt, .descending)
-                .all()
-        var preferredResultBySubmissionID: [String: APIResult] = [:]
-        for result in results {
-            let key = result.submissionID
-            if let existing = preferredResultBySubmissionID[key] {
-                let existingSource = existing.source ?? "worker"
-                let candidateSource = result.source ?? "worker"
-                if existingSource == "worker" { continue }
-                if candidateSource == "worker" {
-                    preferredResultBySubmissionID[key] = result
-                }
-            } else {
-                preferredResultBySubmissionID[key] = result
-            }
-        }
-
+    private func bestPointsByUserAndSetup(
+        submissions: [(id: String, userID: UUID, setupID: String)],
+        preferredResultBySubmissionID: [String: APIResult]
+    ) -> [String: Double] {
         var bestPointsByUserAndSetup: [String: Double] = [:]
         for submission in submissions {
             guard let result = preferredResultBySubmissionID[submission.id],
@@ -118,7 +157,14 @@ extension AssignmentRoutes {
                 bestPointsByUserAndSetup[key] = points
             }
         }
+        return bestPointsByUserAndSetup
+    }
 
+    private func renderGradesCSV(
+        students: [APIUser],
+        sortedAssignments: [APIAssignment],
+        bestPointsByUserAndSetup: [String: Double]
+    ) -> String {
         var lines: [String] = []
         let header =
             ["OrgDefinedId", "Username"]
@@ -141,16 +187,7 @@ extension AssignmentRoutes {
             lines.append(row.map(csvEscaped).joined(separator: ","))
         }
 
-        let csv = lines.joined(separator: "\n") + "\n"
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let response = Response(status: .ok)
-        response.headers.replaceOrAdd(name: .contentType, value: "text/csv; charset=utf-8")
-        response.headers.replaceOrAdd(
-            name: .contentDisposition,
-            value: "attachment; filename=\"grades-\(timestamp).csv\""
-        )
-        response.body = .init(string: csv)
-        return response
+        return lines.joined(separator: "\n") + "\n"
     }
 
     // MARK: - GET /instructor/:assignmentID/submissions
@@ -168,83 +205,136 @@ extension AssignmentRoutes {
         // the row count when pre-enrolled students haven't signed in yet.
         async let enrolledStudentCountFetch = enrolledStudentCount(forCourse: assignment.courseID, on: req.db)
 
+        let students = try await loadAssignmentSubmissionsStudents(req: req, assignment: assignment)
+        let studentIDs = Set(students.compactMap(\.id))
+
+        let submissions = try await loadAssignmentSubmissionRows(
+            req: req, assignment: assignment, studentIDs: studentIDs)
+        let submissionsByStudentID = submissionsGroupedByStudentID(submissions)
+        let submissionIDs = submissions.compactMap(\.id)
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissionIDs, on: req.db)
+
+        let fmt = waterlooDateTimeFormatter()
+        let rows = students.compactMap { student -> AssignmentStudentRow? in
+            buildAssignmentStudentRow(
+                student: student,
+                submissionsByStudentID: submissionsByStudentID,
+                preferredResultBySubmissionID: preferredResultBySubmissionID,
+                assignmentIDRaw: assignmentIDRaw,
+                fmt: fmt
+            )
+        }
+
+        let enrolledStudentRosterCount = try await enrolledStudentCountFetch
+        let metrics = buildAssignmentSubmissionsMetrics(
+            rows: rows,
+            submissions: submissions,
+            enrolledStudentRosterCount: enrolledStudentRosterCount
+        )
+
+        return try await req.view.render(
+            "assignment-submissions",
+            AssignmentSubmissionsContext(
+                currentUser: req.currentUserContext,
+                assignmentID: assignmentIDRaw,
+                assignmentTitle: assignment.title,
+                metrics: metrics,
+                rows: rows
+            )
+        )
+    }
+
+    // MARK: - assignmentSubmissionsPage helpers
+
+    private func loadAssignmentSubmissionsStudents(
+        req: Request, assignment: APIAssignment
+    ) async throws -> [APIUser] {
         let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == assignment.courseID)
             .all()
             .map(\.userID)
-        let students =
-            enrolledUserIDs.isEmpty
-            ? []
-            : try await APIUser.query(on: req.db)
-                .filter(\.$role == "student")
-                .filter(\.$id ~~ enrolledUserIDs)
-                .sort(\.$username, .ascending)
-                .all()
-        let studentIDs = Set(students.compactMap(\.id))
+        guard !enrolledUserIDs.isEmpty else { return [] }
+        return try await APIUser.query(on: req.db)
+            .filter(\.$role == "student")
+            .filter(\.$id ~~ enrolledUserIDs)
+            .sort(\.$username, .ascending)
+            .all()
+    }
 
-        let submissions =
-            (studentIDs.isEmpty)
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID == assignment.testSetupID)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$userID ~~ studentIDs)
-                .sort(\.$submittedAt, .descending)
-                .all()
+    private func loadAssignmentSubmissionRows(
+        req: Request, assignment: APIAssignment, studentIDs: Set<UUID>
+    ) async throws -> [APISubmission] {
+        guard !studentIDs.isEmpty else { return [] }
+        return try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$userID ~~ studentIDs)
+            .sort(\.$submittedAt, .descending)
+            .all()
+    }
 
+    private func submissionsGroupedByStudentID(
+        _ submissions: [APISubmission]
+    ) -> [UUID: [APISubmission]] {
         var submissionsByStudentID: [UUID: [APISubmission]] = [:]
         for row in submissions {
             guard let userID = row.userID else { continue }
             submissionsByStudentID[userID, default: []].append(row)
         }
+        return submissionsByStudentID
+    }
 
-        let submissionIDs = submissions.compactMap(\.id)
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
-            for: submissionIDs,
-            on: req.db
-        )
-
-        let fmt = waterlooDateTimeFormatter()
-        let windowStart = Date().addingTimeInterval(-24 * 60 * 60)
-
-        let rows = students.compactMap { student -> AssignmentStudentRow? in
-            guard let studentID = student.id else { return nil }
-            let history = submissionsByStudentID[studentID] ?? []
-            let latest = history.first
-            let bestGradePercent: Int? = {
-                var best = -1
-                for submission in history {
-                    guard let subID = submission.id,
-                        let result = preferredResultBySubmissionID[subID],
-                        let pct = gradePercentFromCollectionJSON(result.collectionJSON)
-                    else {
-                        continue
-                    }
-                    if pct > best { best = pct }
+    private func buildAssignmentStudentRow(
+        student: APIUser,
+        submissionsByStudentID: [UUID: [APISubmission]],
+        preferredResultBySubmissionID: [String: APIResult],
+        assignmentIDRaw: String,
+        fmt: DateFormatter
+    ) -> AssignmentStudentRow? {
+        guard let studentID = student.id else { return nil }
+        let history = submissionsByStudentID[studentID] ?? []
+        let latest = history.first
+        let bestGradePercent: Int? = {
+            var best = -1
+            for submission in history {
+                guard let subID = submission.id,
+                    let result = preferredResultBySubmissionID[subID],
+                    let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                else {
+                    continue
                 }
-                return best >= 0 ? best : nil
-            }()
-            let inferredName =
-                splitHumanName(student.displayName)
-                ?? splitHumanName(student.preferredName)
-                ?? inferNameFromStudentID(student.username)
-            return AssignmentStudentRow(
-                studentID: student.username,
-                studentUUID: studentID.uuidString,
-                surname: inferredName.surname,
-                givenNames: inferredName.givenNames,
-                gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
-                submissionCount: history.count,
-                hasLatestSubmission: latest != nil,
-                latestSubmissionID: latest?.id ?? "",
-                latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
-                additionalSubmissionCount: max(history.count - 1, 0),
-                fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
-                bestGradePercent: bestGradePercent
-            )
-        }
+                if pct > best { best = pct }
+            }
+            return best >= 0 ? best : nil
+        }()
+        let inferredName =
+            splitHumanName(student.displayName)
+            ?? splitHumanName(student.preferredName)
+            ?? inferNameFromStudentID(student.username)
+        return AssignmentStudentRow(
+            studentID: student.username,
+            studentUUID: studentID.uuidString,
+            surname: inferredName.surname,
+            givenNames: inferredName.givenNames,
+            gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
+            submissionCount: history.count,
+            hasLatestSubmission: latest != nil,
+            latestSubmissionID: latest?.id ?? "",
+            latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
+            latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
+            additionalSubmissionCount: max(history.count - 1, 0),
+            fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
+            bestGradePercent: bestGradePercent
+        )
+    }
 
+    private func buildAssignmentSubmissionsMetrics(
+        rows: [AssignmentStudentRow],
+        submissions: [APISubmission],
+        enrolledStudentRosterCount: Int
+    ) -> [InstructorDashboardMetric] {
+        let windowStart = Date().addingTimeInterval(-24 * 60 * 60)
         let submittedCount = rows.filter { $0.submissionCount > 0 }.count
         let submissions24h = submissions.filter { submission in
             guard let submittedAt = submission.submittedAt else { return false }
@@ -276,8 +366,7 @@ extension AssignmentRoutes {
             let avg = Double(total) / Double(submittedRows.count)
             avgAttempts = String(format: "%.1f", avg)
         }
-        let enrolledStudentRosterCount = try await enrolledStudentCountFetch
-        let metrics = [
+        return [
             InstructorDashboardMetric(
                 label: "Students Submitted", value: "\(submittedCount)/\(enrolledStudentRosterCount)"),
             InstructorDashboardMetric(label: "Avg Attempts/Student", value: avgAttempts),
@@ -285,17 +374,6 @@ extension AssignmentRoutes {
             InstructorDashboardMetric(label: "Queued Jobs", value: "\(pendingLatestCount)"),
             InstructorDashboardMetric(label: "Median Grade", value: medianBestGrade),
         ]
-
-        return try await req.view.render(
-            "assignment-submissions",
-            AssignmentSubmissionsContext(
-                currentUser: req.currentUserContext,
-                assignmentID: assignmentIDRaw,
-                assignmentTitle: assignment.title,
-                metrics: metrics,
-                rows: rows
-            )
-        )
     }
 
     // MARK: - GET /instructor/:assignmentID/students/:studentID/history
