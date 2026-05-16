@@ -125,6 +125,62 @@ final class SecurityAndHealthTests: XCTestCase {
         }
     }
 
+    func testCSPFormActionDefaultsToSelfOnly() async throws {
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            try await app.asyncTest(.GET, "/headers") { res in
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                XCTAssertTrue(
+                    csp.contains("form-action 'self'"),
+                    "expected form-action 'self' in CSP, got: \(csp)"
+                )
+            }
+        }
+    }
+
+    func testCSPFormActionIncludesIdPOriginWhenSSOConfigured() async throws {
+        // Regression: CSP form-action 'self' alone blocks the SSO logout
+        // redirect chain (POST /logout → 303 → end_session_endpoint), which
+        // Chrome and recent Firefox enforce across redirects.  Loading an
+        // OIDC config with an end_session_endpoint must extend form-action
+        // with that IdP origin so the "Log out" button actually navigates.
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            app.oidcConfig = OIDCConfiguration(
+                clientID: "id",
+                clientSecret: "secret",
+                redirectURI: "http://localhost:8080/auth/sso/callback",
+                discovery: OIDCDiscovery(
+                    issuer: "https://idp.example.com",
+                    authorizationEndpoint: "https://idp.example.com/oauth/authorize",
+                    tokenEndpoint: "https://idp.example.com/oauth/token",
+                    jwksURI: "https://idp.example.com/oauth/jwks",
+                    revocationEndpoint: nil,
+                    endSessionEndpoint: "https://idp.example.com/oauth/logout"
+                ),
+                claimConfig: OIDCClaimConfig()
+            )
+            try await app.asyncTest(.GET, "/headers") { res in
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                XCTAssertTrue(
+                    csp.contains("form-action 'self' https://idp.example.com"),
+                    "expected end_session_endpoint origin in form-action, got: \(csp)"
+                )
+            }
+        }
+    }
+
+    func testCSPOriginExtractionHandlesSchemeHostPort() {
+        XCTAssertEqual(
+            SecurityHeadersMiddleware.cspOrigin(of: "https://idp.example.com/oauth/logout"),
+            "https://idp.example.com"
+        )
+        XCTAssertEqual(
+            SecurityHeadersMiddleware.cspOrigin(of: "http://127.0.0.1:9001/logout?foo=bar"),
+            "http://127.0.0.1:9001"
+        )
+        XCTAssertNil(SecurityHeadersMiddleware.cspOrigin(of: "not a url"))
+        XCTAssertNil(SecurityHeadersMiddleware.cspOrigin(of: "mailto:nobody@example.com"))
+    }
+
     func testLeafErrorMiddlewareReturnsJSONForAPIRoutes() async throws {
         try await withApp(try await makeLeafErrorApp(configureViews: false)) { app in
             try await app.asyncTest(.GET, "/api/boom") { res in
