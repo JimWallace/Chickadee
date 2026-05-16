@@ -57,8 +57,18 @@ opt_in_rules:
   - prefer_zero_over_explicit_init
   - override_in_extension
   - prohibited_super_call
-  - discouraged_optional_boolean
-  - discouraged_optional_collection
+  # NOTE: discouraged_optional_boolean and discouraged_optional_collection
+  # are intentionally NOT enabled.  They conflict with two well-established
+  # patterns in this codebase:
+  #   1. Codable JSON models where `nil` (key absent) is semantically
+  #      distinct from `false` / `[]` (key present, explicitly false /
+  #      explicitly empty).  NotebookCheck, CourseBundleManifest, and
+  #      most Fluent models rely on this distinction at decode time.
+  #   2. Functions / env parsers that return `Bool?` or `[T]?` where
+  #      `nil` means "input absent or unparseable" — a meaning that
+  #      collapses to false / [] if the rule's advice were followed.
+  # Re-enable only after auditing every Codable schema for absence-vs-
+  # default-value semantics.
 
 excluded:
   - .build
