@@ -103,7 +103,7 @@ extension AssignmentRoutes {
     // same five locals through each helper.  Inline switch reads more
     // straightforwardly than the threaded-helper version.
     @Sendable
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     func updateNewAssignmentDraft(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
@@ -500,36 +500,145 @@ extension AssignmentRoutes {
         case .redirect(toURL: let url): return req.redirect(to: url)
         }
 
-        let title = validated.title
-        let due = validated.dueAt
-        let dueAtRaw = validated.dueAtRaw
-        let sectionIDRaw = validated.sectionIDRaw
-        let draftID = validated.draftID
-        let draftSetup = validated.draftSetup
-        let draftState = validated.draftState
-        let assignmentNotebookRaw = validated.assignmentNotebookRaw
-        let solutionNotebookRaw = validated.solutionNotebookRaw
-        let uploadedAssignmentNotebookFilename = validated.uploadedAssignmentNotebookFilename
-        let uploadedSolutionNotebookFilename = validated.uploadedSolutionNotebookFilename
-        let suiteFiles = validated.suiteFiles
-        let suiteConfigRaw = validated.suiteConfigRaw
-        let requirementSpec = validated.requirementSpec
+        let paths = try writeNewAssignmentNotebookAndPlanPaths(req: req, validated: validated)
 
-        let assignmentNotebook = normalizeNotebookForJupyterLite(assignmentNotebookRaw)
-        let setupID = draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let setupPackage = try rebuildNewAssignmentSuiteZip(
+            validated: validated,
+            zipPath: paths.zipPath
+        )
+
+        let resolvedSectionID: UUID? = try await resolveSectionID(
+            validated.sectionIDRaw, courseID: courseID, db: req.db)
+        let sectionGradingMode = try await newAssignmentResolvedGradingMode(
+            req: req, sectionID: resolvedSectionID)
+
+        // Preserve the draft's pattern families, sections, and notebook
+        // checks across the manifest rebuild.
+        let preserved = preservedDraftDescriptors(draftSetup: validated.draftSetup)
+
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: setupPackage.testSuites,
+            includeMakefile: setupPackage.hasMakefile,
+            gradingMode: sectionGradingMode,
+            patternFamilies: preserved.families,
+            notebookChecks: preserved.checks,
+            sections: preserved.sections
+        )
+        let setup = try await persistNewAssignmentSetup(
+            req: req,
+            draftSetup: validated.draftSetup,
+            setupID: paths.setupID,
+            manifest: manifest,
+            zipPath: paths.zipPath,
+            notebookPath: paths.notebookPath,
+            courseID: courseID
+        )
+
+        try await reapplyDraftMetadataIfNeeded(
+            req: req,
+            setup: setup,
+            preserved: preserved,
+            setupPackage: setupPackage
+        )
+        extractSupportFilesToSharedDirectory(
+            zipPath: paths.zipPath,
+            setupID: paths.setupID,
+            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
+            testSetupsDirectory: req.application.testSetupsDirectory
+        )
+
+        let shouldQueueValidation = !setupPackage.testSuites.isEmpty
+        if shouldQueueValidation {
+            let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
+                req: req,
+                requirements: validated.requirementSpec
+            )
+            guard hasEligibleRunner else {
+                return redirectToNewAssignmentDraft(
+                    req: req,
+                    draftID: validated.draftID,
+                    assignmentName: validated.title,
+                    dueAt: validated.dueAtRaw,
+                    sectionID: validated.sectionIDRaw,
+                    notice: nil,
+                    error: "No compatible active runner is available to validate this assignment."
+                )
+            }
+        }
+
+        let assignment = try await createNewAssignmentRow(
+            req: req,
+            validated: validated,
+            courseID: courseID,
+            sectionID: resolvedSectionID,
+            setupID: paths.setupID,
+            shouldQueueValidation: shouldQueueValidation
+        )
+
+        if shouldQueueValidation {
+            try await enqueueNewAssignmentValidationSubmission(
+                req: req,
+                assignment: assignment,
+                validated: validated,
+                setupID: paths.setupID
+            )
+        }
+        if !validated.draftID.isEmpty {
+            clearDraftFormState(req: req, draftID: validated.draftID)
+        }
+        return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - saveNewAssignment helpers
+
+    fileprivate struct NewAssignmentPaths {
+        let setupID: String
+        let notebookPath: String
+        let zipPath: String
+    }
+
+    fileprivate struct PreservedDraftDescriptors {
+        let props: TestProperties?
+        let families: [PatternFamily]
+        let checks: [NotebookCheck]
+        let sections: [TestSuiteSection]
+
+        var needsApply: Bool {
+            !families.isEmpty || !checks.isEmpty || !sections.isEmpty
+        }
+    }
+
+    /// Writes the assignment notebook to disk and returns the planned
+    /// setup ID, notebook path, and zip path.
+    fileprivate func writeNewAssignmentNotebookAndPlanPaths(
+        req: Request,
+        validated: ValidatedSaveNewAssignment
+    ) throws -> NewAssignmentPaths {
+        let assignmentNotebook = normalizeNotebookForJupyterLite(validated.assignmentNotebookRaw)
+        let setupID = validated.draftSetup?.id ?? "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let setupsDir = req.application.testSetupsDirectory
         let notebookFilename = notebookFilenameForStorage(
-            uploadedName: uploadedAssignmentNotebookFilename ?? draftState.assignmentNotebookName,
-            fallback: draftSetup?.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
+            uploadedName: validated.uploadedAssignmentNotebookFilename ?? validated.draftState.assignmentNotebookName,
+            fallback: validated.draftSetup?.notebookPath
+                .map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
         )
         let notebookDir = setupsDir + "notebooks/\(setupID)/"
         try FileManager.default.createDirectory(atPath: notebookDir, withIntermediateDirectories: true)
         let notebookPath = notebookDir + notebookFilename
-        let zipPath = draftSetup?.zipPath ?? (setupsDir + "\(setupID).zip")
+        let zipPath = validated.draftSetup?.zipPath ?? (setupsDir + "\(setupID).zip")
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
+        return NewAssignmentPaths(setupID: setupID, notebookPath: notebookPath, zipPath: zipPath)
+    }
+
+    /// Resolves the suite files + suite config (preferring uploaded over
+    /// draft-derived) and runs the zip rebuild.
+    fileprivate func rebuildNewAssignmentSuiteZip(
+        validated: ValidatedSaveNewAssignment,
+        zipPath: String
+    ) throws -> RunnerSetupPackage {
         let resolvedSuiteFiles: [File] = {
-            if !suiteFiles.isEmpty { return suiteFiles }
-            guard let draftSetup else { return [] }
+            if !validated.suiteFiles.isEmpty { return validated.suiteFiles }
+            guard let draftSetup = validated.draftSetup else { return [] }
             return editableSuiteRowsForSetup(draftSetup).compactMap { row in
                 guard let data = extractZipEntry(zipPath: draftSetup.zipPath, entryName: row.name) else { return nil }
                 var buffer = ByteBufferAllocator().buffer(capacity: data.count)
@@ -538,10 +647,12 @@ extension AssignmentRoutes {
             }
         }()
         let resolvedSuiteConfigJSON: String? = {
-            if let suiteConfigRaw, !suiteConfigRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let suiteConfigRaw = validated.suiteConfigRaw,
+                !suiteConfigRaw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
                 return suiteConfigRaw
             }
-            return draftSetup?.manifest.data(using: .utf8).flatMap { data in
+            return validated.draftSetup?.manifest.data(using: .utf8).flatMap { data in
                 guard let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else { return nil }
                 let rows = props.testSuites.enumerated().map { index, entry in
                     ReindexedSuiteConfigRow(
@@ -563,51 +674,60 @@ extension AssignmentRoutes {
         let (mergedSuiteFiles, mergedConfigJSON) = mergeExistingFilesIntoSuiteFiles(
             suiteFiles: resolvedSuiteFiles,
             suiteConfigJSON: resolvedSuiteConfigJSON,
-            draftZipPath: draftSetup?.zipPath
+            draftZipPath: validated.draftSetup?.zipPath
         )
-        let setupPackage = try createRunnerSetupZip(
+        return try createRunnerSetupZip(
             suiteFiles: mergedSuiteFiles,
             suiteConfigJSON: mergedConfigJSON,
             zipPath: zipPath
         )
+    }
 
-        // Resolve the section up front so we can inherit its grading mode.
-        let resolvedSectionID: UUID? = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db)
-        let sectionGradingMode: String
-        if let sid = resolvedSectionID,
+    fileprivate func newAssignmentResolvedGradingMode(
+        req: Request,
+        sectionID: UUID?
+    ) async throws -> String {
+        if let sid = sectionID,
             let sec = try await APICourseSection.find(sid, on: req.db)
         {
-            sectionGradingMode = sec.defaultGradingMode  // "browser" | "worker"
-        } else {
-            sectionGradingMode = "worker"
+            return sec.defaultGradingMode  // "browser" | "worker"
         }
+        return "worker"
+    }
 
-        // Preserve the draft's pattern families, sections, and notebook
-        // checks across the manifest rebuild.  Each was added on a
-        // different version (v0.4.77 for families, v0.4.96 for sections,
-        // v0.4.113 for checks); without forwarding all three,
-        // `makeWorkerManifestJSON` emits empty fields and any
-        // sections / checks / families authored on the create page get
-        // dropped on publish.  Regression guard:
-        // `testCreatePublishPreservesSectionsAndChecks`.
+    /// Each was added on a different version (v0.4.77 for families,
+    /// v0.4.96 for sections, v0.4.113 for checks); without forwarding all
+    /// three, `makeWorkerManifestJSON` emits empty fields and any
+    /// sections/checks/families authored on the create page get dropped
+    /// on publish.  Regression guard:
+    /// `testCreatePublishPreservesSectionsAndChecks`.
+    fileprivate func preservedDraftDescriptors(draftSetup: APITestSetup?) -> PreservedDraftDescriptors {
         let draftProps: TestProperties? = {
             guard let existingManifest = draftSetup?.manifest,
                 let data = existingManifest.data(using: .utf8)
             else { return nil }
             return try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
         }()
-        let existingFamilies: [PatternFamily] = draftProps?.patternFamilies ?? []
-        let existingChecks: [NotebookCheck] = draftProps?.notebookChecks ?? []
-        let existingSections: [TestSuiteSection] = draftProps?.sections ?? []
-
-        let manifest = try makeWorkerManifestJSON(
-            testSuites: setupPackage.testSuites,
-            includeMakefile: setupPackage.hasMakefile,
-            gradingMode: sectionGradingMode,
-            patternFamilies: existingFamilies,
-            notebookChecks: existingChecks,
-            sections: existingSections
+        return PreservedDraftDescriptors(
+            props: draftProps,
+            families: draftProps?.patternFamilies ?? [],
+            checks: draftProps?.notebookChecks ?? [],
+            sections: draftProps?.sections ?? []
         )
+    }
+
+    // The parameter list here mirrors the call site exactly; bundling
+    // them into a struct would push the same names one layer down.
+    // swiftlint:disable:next function_parameter_count
+    fileprivate func persistNewAssignmentSetup(
+        req: Request,
+        draftSetup: APITestSetup?,
+        setupID: String,
+        manifest: String,
+        zipPath: String,
+        notebookPath: String,
+        courseID: UUID
+    ) async throws -> APITestSetup {
         let setup =
             draftSetup
             ?? APITestSetup(
@@ -622,96 +742,85 @@ extension AssignmentRoutes {
         setup.notebookPath = notebookPath
         setup.courseID = courseID
         try await setup.save(on: req.db)
+        return setup
+    }
 
-        // Re-run applyPatternFamilies so generated scripts survive the
-        // zip rebuild AND so each entry's `sectionID` is restored —
-        // `setupPackage.testSuites` loses sectionID through the
-        // ReindexedSuiteConfigRow JSON round-trip, and the `authoredItems`
-        // path is the only one that re-stamps it from the draft manifest.
-        // Run unconditionally when ANY of families / checks / sections
-        // exist; the previous gate (families-only) silently dropped
-        // sections + checks on publish.
-        let needsApply =
-            !existingFamilies.isEmpty
-            || !existingChecks.isEmpty
-            || !existingSections.isEmpty
-        if needsApply {
-            let authoredItems = authoredSuiteItemsFromDraftManifest(
-                draftProps: draftProps,
-                newRawEntries: setupPackage.testSuites
-            )
-            _ = try await applyPatternFamilies(
-                to: setup,
-                nextFamilies: existingFamilies,
-                nextChecks: existingChecks.isEmpty ? nil : existingChecks,
-                authoredItems: authoredItems,
-                sections: existingSections.isEmpty ? nil : existingSections,
-                on: req.db
-            )
-        }
-        extractSupportFilesToSharedDirectory(
-            zipPath: zipPath,
-            setupID: setupID,
-            testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
-            testSetupsDirectory: req.application.testSetupsDirectory
+    /// Re-runs applyPatternFamilies so generated scripts survive the zip
+    /// rebuild AND so each entry's `sectionID` is restored —
+    /// `setupPackage.testSuites` loses sectionID through the
+    /// ReindexedSuiteConfigRow JSON round-trip, and the `authoredItems`
+    /// path is the only one that re-stamps it from the draft manifest.
+    /// Run unconditionally when ANY of families/checks/sections exist;
+    /// the previous gate (families-only) silently dropped sections +
+    /// checks on publish.
+    fileprivate func reapplyDraftMetadataIfNeeded(
+        req: Request,
+        setup: APITestSetup,
+        preserved: PreservedDraftDescriptors,
+        setupPackage: RunnerSetupPackage
+    ) async throws {
+        guard preserved.needsApply else { return }
+        let authoredItems = authoredSuiteItemsFromDraftManifest(
+            draftProps: preserved.props,
+            newRawEntries: setupPackage.testSuites
         )
+        _ = try await applyPatternFamilies(
+            to: setup,
+            nextFamilies: preserved.families,
+            nextChecks: preserved.checks.isEmpty ? nil : preserved.checks,
+            authoredItems: authoredItems,
+            sections: preserved.sections.isEmpty ? nil : preserved.sections,
+            on: req.db
+        )
+    }
 
-        let shouldQueueValidation = !setupPackage.testSuites.isEmpty
-        if shouldQueueValidation {
-            let hasEligibleRunner = try await ensureCompatibleValidationRunnerAvailability(
-                req: req,
-                requirements: requirementSpec
-            )
-            guard hasEligibleRunner else {
-                return redirectToNewAssignmentDraft(
-                    req: req,
-                    draftID: draftID,
-                    assignmentName: title,
-                    dueAt: dueAtRaw,
-                    sectionID: sectionIDRaw,
-                    notice: nil,
-                    error: "No compatible active runner is available to validate this assignment."
-                )
-            }
-        }
-
+    fileprivate func createNewAssignmentRow(
+        req: Request,
+        validated: ValidatedSaveNewAssignment,
+        courseID: UUID,
+        sectionID: UUID?,
+        setupID: String,
+        shouldQueueValidation: Bool
+    ) async throws -> APIAssignment {
         let assignment = try await createAssignmentWithUniquePublicID(
             req: req,
             testSetupID: setupID,
-            title: title,
-            dueAt: due,
+            title: validated.title,
+            dueAt: validated.dueAt,
             isOpen: false,
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: shouldQueueValidation ? "pending" : nil,
             validationSubmissionID: nil,
-            sectionID: resolvedSectionID,
+            sectionID: sectionID,
             courseID: courseID
         )
-        if let requirements = requirementSpec {
+        if let requirements = validated.requirementSpec {
             let requirement = AssignmentRequirement(
                 assignmentID: try assignment.requireID(),
                 specification: requirements
             )
             try await requirement.save(on: req.db)
         }
+        return assignment
+    }
 
-        if shouldQueueValidation {
-            let validationSubmissionID = try await enqueueRunnerValidationSubmission(
-                req: req,
-                setupID: setupID,
-                solutionNotebookData: normalizeNotebookForJupyterLite(solutionNotebookRaw),
-                filename: uploadedSolutionNotebookFilename
-                    ?? draftState.solutionNotebookName
-                    ?? "solution.ipynb"
-            )
-            assignment.validationSubmissionID = validationSubmissionID
-            try await assignment.save(on: req.db)
-            await ensureValidationRunnerAvailability(req: req)
-        }
-        if !draftID.isEmpty {
-            clearDraftFormState(req: req, draftID: draftID)
-        }
-        return req.redirect(to: "/instructor")
+    fileprivate func enqueueNewAssignmentValidationSubmission(
+        req: Request,
+        assignment: APIAssignment,
+        validated: ValidatedSaveNewAssignment,
+        setupID: String
+    ) async throws {
+        let validationSubmissionID = try await enqueueRunnerValidationSubmission(
+            req: req,
+            setupID: setupID,
+            solutionNotebookData: normalizeNotebookForJupyterLite(validated.solutionNotebookRaw),
+            filename: validated.uploadedSolutionNotebookFilename
+                ?? validated.draftState.solutionNotebookName
+                ?? "solution.ipynb"
+        )
+        assignment.validationSubmissionID = validationSubmissionID
+        try await assignment.save(on: req.db)
+        await ensureValidationRunnerAvailability(req: req)
     }
 
     // MARK: - POST /instructor

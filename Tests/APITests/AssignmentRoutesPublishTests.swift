@@ -478,6 +478,7 @@ final class AssignmentRoutesPublishTests: AssignmentRoutesTestCase {
         XCTAssertEqual(requirement?.requirementSpec.requiredCapabilities.map(\.name), ["numpy", "pandas"])
     }
 
+    // swiftlint:disable:next function_body_length
     func testSaveNewAssignmentFinalizesDraftWithGeneratedSuiteFilesVisibleOnEdit() async throws {
         let courseID = try await app.testCourseID(enrollmentMode: .auto)
         app.migrations.add(CreateRunnerProfiles())

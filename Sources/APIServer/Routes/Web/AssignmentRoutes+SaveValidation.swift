@@ -181,72 +181,31 @@ extension AssignmentRoutes {
 
         let suiteFiles = form.suiteFilesRaw.filter { $0.data.readableBytes > 0 }
 
-        let uploadedAssignmentNotebookFilename: String? = {
-            guard let f = form.assignmentNotebookFile, f.data.readableBytes > 0 else { return nil }
-            return f.filename
-        }()
-        let uploadedSolutionNotebookFilename: String? = {
-            guard let f = form.solutionNotebookFile, f.data.readableBytes > 0 else { return nil }
-            return f.filename
-        }()
+        let uploadedAssignmentNotebookFilename = uploadedFilename(form.assignmentNotebookFile)
+        let uploadedSolutionNotebookFilename = uploadedFilename(form.solutionNotebookFile)
 
-        let assignmentNotebookRaw: Data = {
-            if let f = form.assignmentNotebookFile, f.data.readableBytes > 0 {
-                return Data(f.data.readableBytesView)
-            }
-            guard let draftSetup, let draftSetupID = draftSetup.id, let saveUserID else { return Data() }
-            return draftNotebookData(
-                req: req,
-                setupID: draftSetupID,
-                userID: saveUserID,
-                fileKind: .assignment,
-                fallbackPath: draftSetup.notebookPath
-            ) ?? Data()
-        }()
-        guard !assignmentNotebookRaw.isEmpty else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                    error: "Assignment notebook (.ipynb) is required"
-                ))
+        let assignmentNotebookRaw = resolvedDraftAssignmentNotebookData(
+            req: req, form: form, draftSetup: draftSetup, saveUserID: saveUserID)
+        if let earlyRedirect = redirectIfNotebookDataInvalid(
+            data: assignmentNotebookRaw,
+            isPresent: !assignmentNotebookRaw.isEmpty,
+            title: title, dueAtRaw: dueAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            missingError: "Assignment notebook (.ipynb) is required",
+            invalidJSONError: "Assignment notebook is not valid JSON (.ipynb)"
+        ) {
+            return earlyRedirect
         }
 
-        let solutionNotebookRaw: Data = {
-            if let f = form.solutionNotebookFile, f.data.readableBytes > 0 {
-                return Data(f.data.readableBytesView)
-            }
-            guard let draftSetup, let draftSetupID = draftSetup.id, let saveUserID else { return Data() }
-            return draftNotebookData(
-                req: req,
-                setupID: draftSetupID,
-                userID: saveUserID,
-                fileKind: .solution,
-                fallbackPath: draftSolutionNotebookPath(
-                    testSetupsDirectory: req.application.testSetupsDirectory,
-                    setupID: draftSetupID
-                )
-            ) ?? Data()
-        }()
-        guard !solutionNotebookRaw.isEmpty else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                    error: "Solution notebook (.ipynb) is required"
-                ))
-        }
-        guard (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                    error: "Assignment notebook is not valid JSON (.ipynb)"
-                ))
-        }
-        guard (try? JSONSerialization.jsonObject(with: solutionNotebookRaw)) != nil else {
-            return .redirect(
-                toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
-                    error: "Solution notebook is not valid JSON (.ipynb)"
-                ))
+        let solutionNotebookRaw = resolvedDraftSolutionNotebookData(
+            req: req, form: form, draftSetup: draftSetup, saveUserID: saveUserID)
+        if let earlyRedirect = redirectIfNotebookDataInvalid(
+            data: solutionNotebookRaw,
+            isPresent: !solutionNotebookRaw.isEmpty,
+            title: title, dueAtRaw: dueAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            missingError: "Solution notebook (.ipynb) is required",
+            invalidJSONError: "Solution notebook is not valid JSON (.ipynb)"
+        ) {
+            return earlyRedirect
         }
 
         let requirementSpec = assignmentRequirementSpec(
@@ -273,6 +232,86 @@ extension AssignmentRoutes {
                 suiteConfigRaw: form.suiteConfigRaw,
                 requirementSpec: requirementSpec
             ))
+    }
+
+    // MARK: - validateSaveNewAssignment helpers
+
+    private func uploadedFilename(_ file: File?) -> String? {
+        guard let f = file, f.data.readableBytes > 0 else { return nil }
+        return f.filename
+    }
+
+    private func resolvedDraftAssignmentNotebookData(
+        req: Request,
+        form: SaveNewAssignmentForm,
+        draftSetup: APITestSetup?,
+        saveUserID: UUID?
+    ) -> Data {
+        if let f = form.assignmentNotebookFile, f.data.readableBytes > 0 {
+            return Data(f.data.readableBytesView)
+        }
+        guard let draftSetup, let draftSetupID = draftSetup.id, let saveUserID else { return Data() }
+        return draftNotebookData(
+            req: req,
+            setupID: draftSetupID,
+            userID: saveUserID,
+            fileKind: .assignment,
+            fallbackPath: draftSetup.notebookPath
+        ) ?? Data()
+    }
+
+    private func resolvedDraftSolutionNotebookData(
+        req: Request,
+        form: SaveNewAssignmentForm,
+        draftSetup: APITestSetup?,
+        saveUserID: UUID?
+    ) -> Data {
+        if let f = form.solutionNotebookFile, f.data.readableBytes > 0 {
+            return Data(f.data.readableBytesView)
+        }
+        guard let draftSetup, let draftSetupID = draftSetup.id, let saveUserID else { return Data() }
+        return draftNotebookData(
+            req: req,
+            setupID: draftSetupID,
+            userID: saveUserID,
+            fileKind: .solution,
+            fallbackPath: draftSolutionNotebookPath(
+                testSetupsDirectory: req.application.testSetupsDirectory,
+                setupID: draftSetupID
+            )
+        ) ?? Data()
+    }
+
+    // Returns a `.redirect` validation result if the bytes are missing
+    // or not valid JSON; otherwise nil.  Parameter count tracks the
+    // caller's distinct redirect-context strings; bundling them into a
+    // struct would just push the same names one layer down.
+    // swiftlint:disable:next function_parameter_count
+    private func redirectIfNotebookDataInvalid(
+        data: Data,
+        isPresent: Bool,
+        title: String,
+        dueAtRaw: String,
+        sectionIDRaw: String,
+        draftID: String,
+        missingError: String,
+        invalidJSONError: String
+    ) -> SaveNewAssignmentValidation? {
+        guard isPresent else {
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    error: missingError
+                ))
+        }
+        guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
+            return .redirect(
+                toURL: newAssignmentErrorRedirect(
+                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    error: invalidJSONError
+                ))
+        }
+        return nil
     }
 
     // MARK: - Error redirect builder

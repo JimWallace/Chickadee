@@ -135,29 +135,8 @@ func makeWorkerManifestJSON(
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
     let sorted = topologicallySorted(testSuites)
+    let testSuiteJSON: [[String: Any]] = sorted.map(testSuiteEntryToDict)
 
-    let testSuiteJSON: [[String: Any]] = sorted.map { entry in
-        var dict: [String: Any] = ["tier": entry.tier, "script": entry.script]
-        if let n = entry.displayName, !n.isEmpty {
-            dict["name"] = n
-        }
-        if !entry.dependsOn.isEmpty {
-            dict["dependsOn"] = entry.dependsOn
-        }
-        if entry.points > 1 {
-            dict["points"] = entry.points
-        }
-        if let fid = entry.generatedBy, !fid.isEmpty {
-            dict["generatedBy"] = fid
-        }
-        if let cid = entry.generatedByCheck, !cid.isEmpty {
-            dict["generatedByCheck"] = cid
-        }
-        if let sid = entry.sectionID, !sid.isEmpty {
-            dict["sectionID"] = sid
-        }
-        return dict
-    }
     var manifest: [String: Any] = [
         "schemaVersion": 1,
         "gradingMode": gradingMode,
@@ -169,64 +148,62 @@ func makeWorkerManifestJSON(
     if let starterNotebook {
         manifest["starterNotebook"] = starterNotebook
     }
-    if !patternFamilies.isEmpty {
-        // Encode the typed family values via JSONEncoder (keys sorted for
-        // reproducibility), then reparse with JSONSerialization so they
-        // splice into the dictionary-of-Any shape used here.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let familyData = try encoder.encode(patternFamilies)
-        if let parsed = try JSONSerialization.jsonObject(with: familyData) as? [Any] {
-            manifest["patternFamilies"] = parsed
-        }
-    }
-    if !notebookChecks.isEmpty {
-        // Same encode-then-reparse trick as patternFamilies above.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let checksData = try encoder.encode(notebookChecks)
-        if let parsed = try JSONSerialization.jsonObject(with: checksData) as? [Any] {
-            manifest["notebookChecks"] = parsed
-        }
-    }
-    if !sections.isEmpty {
-        // Route sections through JSONEncoder (same pattern patternFamilies
-        // uses above) so all fields — including `variables` (v0.4.100+)
-        // — round-trip through the manifest.  Pre-v0.4.102 we hand-
-        // rolled a minimal `[id, name]` dict that silently dropped the
-        // section's variables on every save, which meant any family
-        // CRUD or suite PUT wiped shared inputs the instructor had
-        // just declared.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let sectionData = try encoder.encode(sections)
-        if let parsed = try JSONSerialization.jsonObject(with: sectionData) as? [Any] {
-            manifest["sections"] = parsed
-        }
-    }
-    if !globalVariables.isEmpty {
-        // Slice 1 — assignment-scope variables.  Same encode-then-reparse
-        // trick so the typed `FamilyVariable` values land inside the
-        // dictionary-of-Any manifest.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let globalsData = try encoder.encode(globalVariables)
-        if let parsed = try JSONSerialization.jsonObject(with: globalsData) as? [Any] {
-            manifest["globalVariables"] = parsed
-        }
-    }
-    if !globalExpressions.isEmpty {
-        // Slice 2 — assignment-scope expressions (notebook only).  Each
-        // entry is `{ name, expression }`.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let exprData = try encoder.encode(globalExpressions)
-        if let parsed = try JSONSerialization.jsonObject(with: exprData) as? [Any] {
-            manifest["globalExpressions"] = parsed
-        }
-    }
+    try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
+    try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)
+    // Route sections through JSONEncoder so all fields — including
+    // `variables` (v0.4.100+) — round-trip through the manifest.
+    // Pre-v0.4.102 we hand-rolled a minimal `[id, name]` dict that
+    // silently dropped the section's variables on every save.
+    try spliceEncodedArray(into: &manifest, key: "sections", values: sections)
+    // Slice 1 — assignment-scope variables.
+    try spliceEncodedArray(into: &manifest, key: "globalVariables", values: globalVariables)
+    // Slice 2 — assignment-scope expressions (notebook only). Each
+    // entry is `{ name, expression }`.
+    try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any] {
+    var dict: [String: Any] = ["tier": entry.tier, "script": entry.script]
+    if let n = entry.displayName, !n.isEmpty {
+        dict["name"] = n
+    }
+    if !entry.dependsOn.isEmpty {
+        dict["dependsOn"] = entry.dependsOn
+    }
+    if entry.points > 1 {
+        dict["points"] = entry.points
+    }
+    if let fid = entry.generatedBy, !fid.isEmpty {
+        dict["generatedBy"] = fid
+    }
+    if let cid = entry.generatedByCheck, !cid.isEmpty {
+        dict["generatedByCheck"] = cid
+    }
+    if let sid = entry.sectionID, !sid.isEmpty {
+        dict["sectionID"] = sid
+    }
+    return dict
+}
+
+/// Encodes a typed `Encodable` array with `JSONEncoder` (keys sorted for
+/// reproducibility), then reparses with `JSONSerialization` so the
+/// values splice into the dictionary-of-Any manifest under `key`.
+/// No-op when `values` is empty.
+private func spliceEncodedArray<T: Encodable>(
+    into manifest: inout [String: Any],
+    key: String,
+    values: [T]
+) throws {
+    guard !values.isEmpty else { return }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = try encoder.encode(values)
+    if let parsed = try JSONSerialization.jsonObject(with: data) as? [Any] {
+        manifest[key] = parsed
+    }
 }
 
 /// Returns `entries` in topological order (prerequisites before dependents)

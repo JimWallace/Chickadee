@@ -55,7 +55,6 @@ extension WebRoutes {
             return "Assignment"
         }()
         let requestedSubmissionID = (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let userSlug = userID.uuidString.lowercased()
 
         // --- Submission view (read-only) ---
         // Use a submission-specific working copy path and workspace ID so:
@@ -63,57 +62,94 @@ extension WebRoutes {
         //   2. Each submission gets a fresh JupyterLite workspace; the browser
         //      IndexedDB cache from a previous visit to the edit/submit page
         //      cannot shadow the student's actual content.
+        let args = NotebookPageRenderArgs(
+            user: user,
+            setup: setup,
+            setupID: setupID,
+            userID: userID,
+            assignment: assignment,
+            assignmentTitle: assignmentTitle,
+            isClosed: isClosed
+        )
         if !requestedSubmissionID.isEmpty {
-            let notebookData = try await notebookDataForHistorySelection(
+            return try await renderSubmissionNotebookView(
                 req: req,
-                caller: user,
-                submissionID: requestedSubmissionID,
-                setupID: setupID,
-                userID: userID
+                args: args,
+                submissionID: requestedSubmissionID
             )
-            let submissionRelativePath = "users/\(userSlug)/\(setupID)/view-\(requestedSubmissionID).ipynb"
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: submissionRelativePath,
-                overwriteWith: notebookData  // always overwrite — we want the exact submission
-            )
-            let encodedPath =
-                submissionRelativePath
-                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                ?? submissionRelativePath
-            let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
-            let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
-            let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
-            let submissionViewAbsPath =
-                req.application.directory.publicDirectory
-                + "jupyterlite/files/" + submissionRelativePath
-            let manifestGradingMode: String = {
-                let data = Data(setup.manifest.utf8)
-                guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
-                    return GradingMode.browser.rawValue
-                }
-                return manifest.gradingMode.rawValue
-            }()
-            return try await req.view.render(
-                "notebook",
-                NotebookContext(
-                    testSetupID: setupID,
-                    assignmentTitle: assignmentTitle,
-                    notebookURL: notebookURL,
-                    jupyterLiteEditorURL: editorURL,
-                    downloadURL: nil,  // download link lives on the submission page
-                    gradingMode: manifestGradingMode,
-                    showSubmit: false,  // read-only view
-                    isClosed: isClosed,
-                    workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
-                    currentUser: req.currentUserContext
-                ))
         }
 
-        // --- Normal assignment / solution view ---
+        return try await renderAssignmentNotebookView(
+            req: req,
+            args: args,
+            fileKind: fileKind
+        )
+    }
+
+    /// Renders the submission-view branch of `notebookPage` (read-only,
+    /// per-submission working copy, fresh JupyterLite workspace).
+    private func renderSubmissionNotebookView(
+        req: Request,
+        args: NotebookPageRenderArgs,
+        submissionID requestedSubmissionID: String
+    ) async throws -> View {
+        let setup = args.setup
+        let setupID = args.setupID
+        let userID = args.userID
+        let userSlug = userID.uuidString.lowercased()
+        let notebookData = try await notebookDataForHistorySelection(
+            req: req,
+            caller: args.user,
+            submissionID: requestedSubmissionID,
+            setupID: setupID,
+            userID: userID
+        )
+        let submissionRelativePath = "users/\(userSlug)/\(setupID)/view-\(requestedSubmissionID).ipynb"
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup,
+            relativePath: submissionRelativePath,
+            overwriteWith: notebookData  // always overwrite — we want the exact submission
+        )
+        let encodedPath =
+            submissionRelativePath
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            ?? submissionRelativePath
+        let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
+        let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
+        let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
+        let submissionViewAbsPath =
+            req.application.directory.publicDirectory
+            + "jupyterlite/files/" + submissionRelativePath
+        return try await req.view.render(
+            "notebook",
+            NotebookContext(
+                testSetupID: setupID,
+                assignmentTitle: args.assignmentTitle,
+                notebookURL: notebookURL,
+                jupyterLiteEditorURL: editorURL,
+                downloadURL: nil,  // download link lives on the submission page
+                gradingMode: decodeManifestGradingMode(setup),
+                showSubmit: false,  // read-only view
+                isClosed: args.isClosed,
+                workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
+                currentUser: req.currentUserContext
+            ))
+    }
+
+    /// Renders the normal assignment / solution branch of `notebookPage`.
+    private func renderAssignmentNotebookView(
+        req: Request,
+        args: NotebookPageRenderArgs,
+        fileKind: NotebookFileKind
+    ) async throws -> View {
+        let setup = args.setup
+        let setupID = args.setupID
+        let userID = args.userID
+        let assignment = args.assignment
+        let userSlug = userID.uuidString.lowercased()
         if fileKind == .solution {
             let solutionData = try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
             _ = try await ensureUserNotebookWorkingCopy(
@@ -152,16 +188,6 @@ extension WebRoutes {
             }
         }()
 
-        // Decode gradingMode from the manifest so the template can load
-        // browser-runner.js for browser-graded assignments.
-        let manifestGradingMode: String = {
-            let data = Data(setup.manifest.utf8)
-            guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
-                return GradingMode.browser.rawValue
-            }
-            return manifest.gradingMode.rawValue
-        }()
-
         let workingCopyAbsPath =
             req.application.directory.publicDirectory
             + "jupyterlite/files/" + jupyterLiteNotebookPath
@@ -169,16 +195,39 @@ extension WebRoutes {
             "notebook",
             NotebookContext(
                 testSetupID: setupID,
-                assignmentTitle: assignmentTitle,
+                assignmentTitle: args.assignmentTitle,
                 notebookURL: notebookURL,
                 jupyterLiteEditorURL: editorURL,
                 downloadURL: downloadURL,
-                gradingMode: manifestGradingMode,
-                showSubmit: fileKind == .assignment && !isClosed,
-                isClosed: isClosed,
+                gradingMode: decodeManifestGradingMode(setup),
+                showSubmit: fileKind == .assignment && !args.isClosed,
+                isClosed: args.isClosed,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
+    }
+
+    /// Bundles the common state passed to both `notebookPage` render
+    /// branches.  Reduces the per-helper parameter count and keeps the
+    /// rendering signatures intentionally close to one another.
+    private struct NotebookPageRenderArgs {
+        let user: APIUser
+        let setup: APITestSetup
+        let setupID: String
+        let userID: UUID
+        let assignment: APIAssignment?
+        let assignmentTitle: String
+        let isClosed: Bool
+    }
+
+    /// Decodes the manifest's `gradingMode` for the notebook template;
+    /// falls back to `.browser` whenever the manifest can't be decoded.
+    private func decodeManifestGradingMode(_ setup: APITestSetup) -> String {
+        let data = Data(setup.manifest.utf8)
+        guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+            return GradingMode.browser.rawValue
+        }
+        return manifest.gradingMode.rawValue
     }
 
     // MARK: - GET /testsetups/:id/notebook/source

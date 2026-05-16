@@ -124,8 +124,7 @@ enum ShellTestTemplateType: String, CaseIterable {
 /// `PythonTestTemplateType` case (one per template kind, each holding
 /// a multi-line Python `"""…"""` literal).  Extracting per-kind helpers
 /// just renames the same templates without removing any.
-// swiftlint:disable:next function_body_length
-func pythonTestScript(
+func pythonTestScript(  // swiftlint:disable:this function_body_length
     type: PythonTestTemplateType,
     functionName: String = "my_function",
     paramNames: [String] = []

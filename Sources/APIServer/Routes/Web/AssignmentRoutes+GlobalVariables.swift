@@ -78,12 +78,64 @@ extension AssignmentRoutes {
 
         let manifest = try decodeManifest(setup: setup)
 
-        // 1. Per-row validation across variables + expressions.  Both
-        // kinds share the same namespace at inline / substitution time,
-        // so duplicates across kinds are also rejected.
-        var seenNames: Set<String> = []
+        // 1. Per-row validation across variables + expressions.
+        let seenNames = try validateGlobalInputNames(
+            variables: body.variables, expressions: expressions)
 
-        for v in body.variables {
+        // 2. Cross-list: no clash with any section variable name.
+        try validateGlobalNamesAgainstSections(seenNames: seenNames, manifest: manifest)
+
+        // 3. Starter-notebook `{{undeclared}}` scan.
+        try validateStarterNotebookPlaceholders(
+            seenNames: seenNames,
+            manifest: manifest,
+            setup: setup
+        )
+
+        // 4. Save-time eval check.
+        try await evaluateGlobalExpressionsForInstructorSeed(
+            req: req,
+            assignment: assignment,
+            manifest: manifest,
+            variables: body.variables,
+            expressions: expressions
+        )
+
+        // 5. Re-render through `applyPatternFamilies` so generated tests
+        // and raw scripts pick up the new literal values.  Expressions
+        // flow through unchanged — they don't affect test scripts in
+        // this slice, only notebook substitution at first-open.
+        _ = try await applyPatternFamilies(
+            to: setup,
+            nextFamilies: manifest.patternFamilies,
+            nextChecks: manifest.notebookChecks,
+            authoredItems: nil,
+            sections: manifest.sections,
+            globalVariables: body.variables,
+            globalExpressions: expressions,
+            on: req.db
+        )
+
+        // 6. Re-load the persisted manifest so the response reflects
+        // reconciled state.
+        let updatedManifest = try decodeManifest(setup: setup)
+        return GlobalVariablesResponse(
+            variables: updatedManifest.globalVariables,
+            expressions: updatedManifest.globalExpressions,
+            warnings: []
+        )
+    }
+
+    // MARK: - putGlobalVariables helpers
+
+    /// Both kinds share the same namespace at inline / substitution time,
+    /// so duplicates across kinds are also rejected.
+    private func validateGlobalInputNames(
+        variables: [FamilyVariable],
+        expressions: [PersonalizationExpression]
+    ) throws -> Set<String> {
+        var seenNames: Set<String> = []
+        for v in variables {
             guard isValidPythonIdentifier(v.name) else {
                 throw WebAssignmentError.unprocessable(
                     reason: "Global variable name '\(v.name)' is not a valid Python identifier.")
@@ -118,8 +170,13 @@ extension AssignmentRoutes {
                         + "Names must be unique across literal values and expressions.")
             }
         }
+        return seenNames
+    }
 
-        // 2. Cross-list: no clash with any section variable name.
+    private func validateGlobalNamesAgainstSections(
+        seenNames: Set<String>,
+        manifest: TestProperties
+    ) throws {
         for section in manifest.sections {
             for sv in section.variables {
                 guard !seenNames.contains(sv.name) else {
@@ -130,91 +187,77 @@ extension AssignmentRoutes {
                 }
             }
         }
+    }
 
-        // 3. Starter-notebook `{{undeclared}}` scan.
+    private func validateStarterNotebookPlaceholders(
+        seenNames: Set<String>,
+        manifest: TestProperties,
+        setup: APITestSetup
+    ) throws {
         var declared: Set<String> = seenNames
         for section in manifest.sections {
             for sv in section.variables { declared.insert(sv.name) }
         }
-        if let starterName = manifest.starterNotebook,
+        guard let starterName = manifest.starterNotebook,
             let notebookData = extractZipEntry(
                 zipPath: setup.zipPath,
                 entryName: starterName)
-        {
-            let used = NotebookSubstitution.placeholderNames(in: notebookData)
-            let unknown = used.filter { !declared.contains($0) }
-            if !unknown.isEmpty {
-                let list = unknown.map { "{{\($0)}}" }.joined(separator: ", ")
-                throw WebAssignmentError.unprocessable(
-                    reason: "Starter notebook references unknown placeholder(s): \(list). "
-                        + "Declare them as global or section inputs first.")
-            }
-        }
+        else { return }
+        let used = NotebookSubstitution.placeholderNames(in: notebookData)
+        let unknown = used.filter { !declared.contains($0) }
+        guard !unknown.isEmpty else { return }
+        let list = unknown.map { "{{\($0)}}" }.joined(separator: ", ")
+        throw WebAssignmentError.unprocessable(
+            reason: "Starter notebook references unknown placeholder(s): \(list). "
+                + "Declare them as global or section inputs first.")
+    }
 
-        // 4. Save-time eval check: run every expression against the
-        // INSTRUCTOR's own seed.  Any syntax error / runtime exception
-        // surfaces here as a 400 with the offending expression's name,
-        // so typos don't reach students.  Skipped when no expressions
-        // were declared (most common case).
-        if !expressions.isEmpty, let userID = (try req.auth.require(APIUser.self)).id,
+    /// Runs every expression against the INSTRUCTOR's own seed.  Any
+    /// syntax error / runtime exception surfaces here as a 400 with the
+    /// offending expression's name, so typos don't reach students.
+    /// Skipped when no expressions were declared (most common case).
+    private func evaluateGlobalExpressionsForInstructorSeed(
+        req: Request,
+        assignment: APIAssignment,
+        manifest: TestProperties,
+        variables: [FamilyVariable],
+        expressions: [PersonalizationExpression]
+    ) async throws {
+        guard !expressions.isEmpty,
+            let userID = (try req.auth.require(APIUser.self)).id,
             let assignmentID = assignment.id
-        {
-            let seedHex = try await AssignmentSeedStore.ensureSeed(
-                userID: userID,
-                assignmentID: assignmentID,
-                on: req.db
-            )
-            // Combine globals + section vars so expressions can reference
-            // the same static names they would at student first-open.
-            var staticVars: [FamilyVariable] = body.variables
-            for section in manifest.sections {
-                staticVars.append(contentsOf: section.variables)
-            }
-            do {
-                _ = try await PersonalizationEvaluator.evaluate(
-                    seedHex: seedHex,
-                    staticVariables: staticVars,
-                    expressions: expressions,
-                    supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(assignment.testSetupID)/"
-                )
-            } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
-                let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
-                throw WebAssignmentError.unprocessable(
-                    reason: "One of your expressions failed to evaluate: \(tail). "
-                        + "Fix the expression(s) and save again.")
-            } catch PersonalizationEvaluatorError.timedOut {
-                throw WebAssignmentError.unprocessable(
-                    reason: "Expression evaluation timed out (>5s). "
-                        + "Simplify the expressions or move heavy lifting into a support module.")
-            } catch {
-                throw WebAssignmentError.internalFailure(
-                    reason: "Expression evaluator failed: \(error)")
-            }
-        }
-
-        // 5. Re-render through `applyPatternFamilies` so generated tests
-        // and raw scripts pick up the new literal values.  Expressions
-        // flow through unchanged — they don't affect test scripts in
-        // this slice, only notebook substitution at first-open.
-        _ = try await applyPatternFamilies(
-            to: setup,
-            nextFamilies: manifest.patternFamilies,
-            nextChecks: manifest.notebookChecks,
-            authoredItems: nil,
-            sections: manifest.sections,
-            globalVariables: body.variables,
-            globalExpressions: expressions,
+        else { return }
+        let seedHex = try await AssignmentSeedStore.ensureSeed(
+            userID: userID,
+            assignmentID: assignmentID,
             on: req.db
         )
-
-        // 6. Re-load the persisted manifest so the response reflects
-        // reconciled state.
-        let updatedManifest = try decodeManifest(setup: setup)
-        return GlobalVariablesResponse(
-            variables: updatedManifest.globalVariables,
-            expressions: updatedManifest.globalExpressions,
-            warnings: []
-        )
+        // Combine globals + section vars so expressions can reference
+        // the same static names they would at student first-open.
+        var staticVars: [FamilyVariable] = variables
+        for section in manifest.sections {
+            staticVars.append(contentsOf: section.variables)
+        }
+        do {
+            _ = try await PersonalizationEvaluator.evaluate(
+                seedHex: seedHex,
+                staticVariables: staticVars,
+                expressions: expressions,
+                supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(assignment.testSetupID)/"
+            )
+        } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
+            let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
+            throw WebAssignmentError.unprocessable(
+                reason: "One of your expressions failed to evaluate: \(tail). "
+                    + "Fix the expression(s) and save again.")
+        } catch PersonalizationEvaluatorError.timedOut {
+            throw WebAssignmentError.unprocessable(
+                reason: "Expression evaluation timed out (>5s). "
+                    + "Simplify the expressions or move heavy lifting into a support module.")
+        } catch {
+            throw WebAssignmentError.internalFailure(
+                reason: "Expression evaluator failed: \(error)")
+        }
     }
 
     // MARK: - helpers

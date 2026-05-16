@@ -325,153 +325,165 @@ actor WorkerDaemon {
         )
         while !Task.isCancelled {
             do {
-                let currentActiveJobs = activeJobs
-                writeStructuredRunnerLog(
-                    event: "poll_cycle_start",
-                    fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "runner_active_jobs": currentActiveJobs,
-                        "max_jobs": maxConcurrentJobs,
-                        "api_base_url": apiBaseURL.absoluteString,
-                    ])
-                if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {
-                    recordConnectionRestoredIfNeeded(stage: .poll)
-                    backoff.reset()
-                    writeStructuredRunnerLog(
-                        event: "poll_cycle_end",
-                        fields: [
-                            "runner_id": workerID,
-                            "slot": slot,
-                            "status": "job_assigned",
-                            "submission_id": job.submissionID,
-                        ])
-                    do {
-                        try await process(job)
-                    } catch {
-                        writeStructuredRunnerLog(
-                            event: "local_execution_error",
-                            fields: [
-                                "runner_id": workerID,
-                                "submission_id": job.submissionID,
-                                "error_type": String(describing: type(of: error)),
-                                "error_message_summary": String(describing: error),
-                            ])
-                        try? await reportProcessingFailure(job: job, error: error)
-                    }
-                } else {
-                    writeStructuredRunnerLog(
-                        event: "poll_cycle_end",
-                        fields: [
-                            "runner_id": workerID,
-                            "slot": slot,
-                            "status": "no_job",
-                        ])
-                    let delay = backoff.next()
-                    try await Task.sleep(for: delay)
-                }
+                try await runPollCycle(slot: slot, backoff: &backoff)
             } catch JobPollerError.duplicateWorkerID(let message) {
-                let delay = backoff.next()
-                let seconds = delay.components.seconds
-                recordConnectionLostIfNeeded(
-                    stage: .poll,
+                try await handleRetryablePollError(
+                    slot: slot,
+                    status: "duplicate_worker_id",
                     message: message,
-                    retryInSeconds: Int(seconds)
+                    httpStatus: nil,
+                    backoff: &backoff
                 )
-                writeStructuredRunnerLog(
-                    event: "poll_cycle_end",
-                    fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "duplicate_worker_id",
-                        "failure_stage": RunnerRetryStage.poll.rawValue,
-                        "retryable": true,
-                        "error_message_summary": message,
-                        "retry_in_seconds": seconds,
-                    ])
-                try await Task.sleep(for: delay)
             } catch JobPollerError.transportError(let underlying) {
                 // Server is unreachable (connection refused, DNS failure, etc.).
                 // Apply the same exponential backoff used for the no-job poll and
                 // keep retrying so the runner survives server restarts automatically.
-                let delay = backoff.next()
-                let seconds = delay.components.seconds
-                recordConnectionLostIfNeeded(
-                    stage: .poll,
+                try await handleRetryablePollError(
+                    slot: slot,
+                    status: "transport_error",
                     message: underlying.localizedDescription,
-                    retryInSeconds: Int(seconds)
+                    httpStatus: nil,
+                    backoff: &backoff
                 )
-                writeStructuredRunnerLog(
-                    event: "poll_cycle_end",
-                    fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "transport_error",
-                        "failure_stage": RunnerRetryStage.poll.rawValue,
-                        "retryable": true,
-                        "error_message_summary": underlying.localizedDescription,
-                        "retry_in_seconds": seconds,
-                    ])
-                try await Task.sleep(for: delay)
             } catch JobPollerError.httpError(let statusCode, let body) {
-                let disposition = classifyPollHTTPRetry(statusCode: statusCode, body: body)
-                switch disposition {
-                case .retryable(let message):
-                    let delay = backoff.next()
-                    let seconds = delay.components.seconds
-                    recordConnectionLostIfNeeded(
-                        stage: .poll,
-                        message: message,
-                        retryInSeconds: Int(seconds)
-                    )
-                    writeStructuredRunnerLog(
-                        event: "poll_cycle_end",
-                        fields: [
-                            "runner_id": workerID,
-                            "slot": slot,
-                            "status": "http_error",
-                            "failure_stage": RunnerRetryStage.poll.rawValue,
-                            "retryable": true,
-                            "http_status": statusCode,
-                            "error_message_summary": message,
-                            "retry_in_seconds": seconds,
-                        ])
-                    try await Task.sleep(for: delay)
-                case .terminal(let message):
-                    writeStructuredRunnerLog(
-                        event: "poll_cycle_end",
-                        fields: [
-                            "runner_id": workerID,
-                            "slot": slot,
-                            "status": "http_error",
-                            "failure_stage": RunnerRetryStage.poll.rawValue,
-                            "retryable": false,
-                            "http_status": statusCode,
-                            "error_message_summary": message,
-                        ])
-                    throw JobPollerError.httpError(statusCode, body)
-                }
-            } catch JobPollerError.unexpectedResponse {
-                let delay = backoff.next()
-                let seconds = delay.components.seconds
-                recordConnectionLostIfNeeded(
-                    stage: .poll,
-                    message: "unexpected response from API server",
-                    retryInSeconds: Int(seconds)
+                try await handleHTTPPollError(
+                    slot: slot,
+                    statusCode: statusCode,
+                    body: body,
+                    backoff: &backoff
                 )
-                writeStructuredRunnerLog(
-                    event: "poll_cycle_end",
-                    fields: [
-                        "runner_id": workerID,
-                        "slot": slot,
-                        "status": "unexpected_response",
-                        "failure_stage": RunnerRetryStage.poll.rawValue,
-                        "retryable": true,
-                        "error_message_summary": "unexpected response from API server",
-                        "retry_in_seconds": seconds,
-                    ])
-                try await Task.sleep(for: delay)
+            } catch JobPollerError.unexpectedResponse {
+                try await handleRetryablePollError(
+                    slot: slot,
+                    status: "unexpected_response",
+                    message: "unexpected response from API server",
+                    httpStatus: nil,
+                    backoff: &backoff
+                )
             }
+        }
+    }
+
+    /// Single iteration of the poll loop: emit a `poll_cycle_start` log, ask
+    /// the poller for work, and either run the job (handling per-job errors
+    /// inline) or sleep `backoff.next()` if no job was returned.
+    private func runPollCycle(slot: Int, backoff: inout ExponentialBackoff) async throws {
+        let currentActiveJobs = activeJobs
+        writeStructuredRunnerLog(
+            event: "poll_cycle_start",
+            fields: [
+                "runner_id": workerID,
+                "slot": slot,
+                "runner_active_jobs": currentActiveJobs,
+                "max_jobs": maxConcurrentJobs,
+                "api_base_url": apiBaseURL.absoluteString,
+            ])
+        if let job = try await poller.requestJob(activeJobs: currentActiveJobs) {
+            recordConnectionRestoredIfNeeded(stage: .poll)
+            backoff.reset()
+            writeStructuredRunnerLog(
+                event: "poll_cycle_end",
+                fields: [
+                    "runner_id": workerID,
+                    "slot": slot,
+                    "status": "job_assigned",
+                    "submission_id": job.submissionID,
+                ])
+            await runAssignedJob(job)
+        } else {
+            writeStructuredRunnerLog(
+                event: "poll_cycle_end",
+                fields: [
+                    "runner_id": workerID,
+                    "slot": slot,
+                    "status": "no_job",
+                ])
+            let delay = backoff.next()
+            try await Task.sleep(for: delay)
+        }
+    }
+
+    /// Runs `process(job)` and reports any local-execution failure back to
+    /// the server. Extracted so the outer loop reads as a single statement.
+    private func runAssignedJob(_ job: Job) async {
+        do {
+            try await process(job)
+        } catch {
+            writeStructuredRunnerLog(
+                event: "local_execution_error",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "error_type": String(describing: type(of: error)),
+                    "error_message_summary": String(describing: error),
+                ])
+            try? await reportProcessingFailure(job: job, error: error)
+        }
+    }
+
+    /// Shared retry/backoff handling for every retryable poll-side error
+    /// (duplicate worker id, transport, retryable HTTP, unexpected response).
+    /// Records the connection-lost transition, logs `poll_cycle_end` with
+    /// the appropriate status and `retry_in_seconds`, then sleeps.
+    private func handleRetryablePollError(
+        slot: Int,
+        status: String,
+        message: String,
+        httpStatus: Int?,
+        backoff: inout ExponentialBackoff
+    ) async throws {
+        let delay = backoff.next()
+        let seconds = delay.components.seconds
+        recordConnectionLostIfNeeded(
+            stage: .poll,
+            message: message,
+            retryInSeconds: Int(seconds)
+        )
+        var fields: [String: Any] = [
+            "runner_id": workerID,
+            "slot": slot,
+            "status": status,
+            "failure_stage": RunnerRetryStage.poll.rawValue,
+            "retryable": true,
+            "error_message_summary": message,
+            "retry_in_seconds": seconds,
+        ]
+        if let httpStatus { fields["http_status"] = httpStatus }
+        writeStructuredRunnerLog(event: "poll_cycle_end", fields: fields)
+        try await Task.sleep(for: delay)
+    }
+
+    /// HTTP-specific dispatch: classify the response, then either reuse the
+    /// shared retry handler or log a terminal failure and rethrow.
+    private func handleHTTPPollError(
+        slot: Int,
+        statusCode: Int,
+        body: String,
+        backoff: inout ExponentialBackoff
+    ) async throws {
+        let disposition = classifyPollHTTPRetry(statusCode: statusCode, body: body)
+        switch disposition {
+        case .retryable(let message):
+            try await handleRetryablePollError(
+                slot: slot,
+                status: "http_error",
+                message: message,
+                httpStatus: statusCode,
+                backoff: &backoff
+            )
+        case .terminal(let message):
+            writeStructuredRunnerLog(
+                event: "poll_cycle_end",
+                fields: [
+                    "runner_id": workerID,
+                    "slot": slot,
+                    "status": "http_error",
+                    "failure_stage": RunnerRetryStage.poll.rawValue,
+                    "retryable": false,
+                    "http_status": statusCode,
+                    "error_message_summary": message,
+                ])
+            throw JobPollerError.httpError(statusCode, body)
         }
     }
 
