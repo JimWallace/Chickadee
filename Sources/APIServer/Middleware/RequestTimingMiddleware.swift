@@ -8,39 +8,50 @@ struct RequestTimingMiddleware: AsyncMiddleware {
         let start = clock.now
         do {
             let response = try await next.respond(to: request)
-            let durationMs = milliseconds(from: start.duration(to: clock.now))
             await request.application.diagnostics.recordRequestMetric(
-                method: request.method.rawValue,
-                path: request.url.path,
-                requestKind: requestKind(for: request.url.path),
-                statusCode: Int(response.status.code),
-                startedAt: startDate,
-                finishedAt: Date(),
-                durationMs: durationMs,
-                submissionID: request.parameters.get("submissionID"),
-                workerID: request.headers.first(name: "X-Worker-Id"),
+                buildMetric(
+                    request: request,
+                    statusCode: Int(response.status.code),
+                    startedAt: startDate,
+                    durationMs: milliseconds(from: start.duration(to: clock.now))
+                ),
                 on: request.db,
                 logger: request.logger
             )
             return response
         } catch {
             let statusCode = (error as? AbortError)?.status.code ?? HTTPResponseStatus.internalServerError.code
-            let durationMs = milliseconds(from: start.duration(to: clock.now))
             await request.application.diagnostics.recordRequestMetric(
-                method: request.method.rawValue,
-                path: request.url.path,
-                requestKind: requestKind(for: request.url.path),
-                statusCode: Int(statusCode),
-                startedAt: startDate,
-                finishedAt: Date(),
-                durationMs: durationMs,
-                submissionID: request.parameters.get("submissionID"),
-                workerID: request.headers.first(name: "X-Worker-Id"),
+                buildMetric(
+                    request: request,
+                    statusCode: Int(statusCode),
+                    startedAt: startDate,
+                    durationMs: milliseconds(from: start.duration(to: clock.now))
+                ),
                 on: request.db,
                 logger: request.logger
             )
             throw error
         }
+    }
+
+    private func buildMetric(
+        request: Request,
+        statusCode: Int,
+        startedAt: Date,
+        durationMs: Int
+    ) -> APIRequestMetric {
+        APIRequestMetric(
+            method: request.method.rawValue,
+            path: request.url.path,
+            requestKind: requestKind(for: request.url.path),
+            statusCode: statusCode,
+            startedAt: startedAt,
+            finishedAt: Date(),
+            durationMs: durationMs,
+            submissionID: request.parameters.get("submissionID"),
+            workerID: request.headers.first(name: "X-Worker-Id")
+        )
     }
 }
 

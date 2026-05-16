@@ -173,11 +173,11 @@ actor BrightSpaceAPIClient {
         }
 
         // D2L returns { "Items": [{ "UserId": 12345, ... }], "PagingInfo": {...} }
+        struct UserItem: Decodable {
+            let userId: Int
+            enum CodingKeys: String, CodingKey { case userId = "UserId" }
+        }
         struct UserListResponse: Decodable {
-            struct UserItem: Decodable {
-                let userId: Int
-                enum CodingKeys: String, CodingKey { case userId = "UserId" }
-            }
             let items: [UserItem]
             enum CodingKeys: String, CodingKey { case items = "Items" }
         }

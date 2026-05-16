@@ -50,6 +50,11 @@ func assignmentPublicIDParameter(from req: Request) throws -> String {
     return raw
 }
 
+// Mirrors the column-set on APIAssignment that publish / import flows
+// need to set independently; bundling these into a struct would duplicate
+// the model's own initializer surface without removing any names.  All
+// call sites use labelled args so the long list reads cleanly.
+// swiftlint:disable:next function_parameter_count
 func createAssignmentWithUniquePublicID(
     req: Request,
     testSetupID: String,

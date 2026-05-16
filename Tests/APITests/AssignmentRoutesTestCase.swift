@@ -230,9 +230,12 @@ class AssignmentRoutesTestCase: XCTestCase {
         return body
     }
 
+    // Internal test helper: each file is `(name, filename, contentType, data)`.
+    // A struct would touch every multipartBody call site for cosmetic gain.
     func multipartBody(
         boundary: String,
         fields: [(String, String)],
+        // swiftlint:disable:next large_tuple
         files: [(name: String, filename: String, contentType: String, data: Data)] = []
     ) -> ByteBuffer {
         var body = ByteBufferAllocator().buffer(capacity: 4096)
@@ -244,6 +247,7 @@ class AssignmentRoutesTestCase: XCTestCase {
             body.writeString("\r\n")
         }
 
+        // swiftlint:disable:next large_tuple
         func appendFile(_ file: (name: String, filename: String, contentType: String, data: Data)) {
             body.writeString("--\(boundary)\r\n")
             body.writeString("Content-Disposition: form-data; name=\"\(file.name)\"; filename=\"\(file.filename)\"\r\n")

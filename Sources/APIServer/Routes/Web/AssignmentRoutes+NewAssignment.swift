@@ -706,6 +706,11 @@ extension AssignmentRoutes {
     // MARK: - POST /instructor
     // Creates a draft (isOpen: false) assignment and redirects to the validate page.
 
+    // The argument list mirrors the URL query string the redirect builds —
+    // each parameter is an independent named field on the new-assignment
+    // form, so bundling them into a struct would only push the same names
+    // one layer down without removing any.
+    // swiftlint:disable:next function_parameter_count
     private func redirectToNewAssignmentDraft(
         req: Request,
         draftID: String,

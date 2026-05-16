@@ -113,17 +113,20 @@ extension AssignmentRoutes {
             return lhs.testSetupID < rhs.testSetupID
         }
 
+        let rowContext = StudentAssignmentRowContext(
+            courseCode: course.code,
+            username: student.username,
+            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            student: student,
+            fmt: fmt
+        )
         let rows = sortedAssignments.map { assignment in
             buildStudentAssignmentRow(
                 assignment: assignment,
-                courseCode: course.code,
-                username: student.username,
                 history: submissionsBySetupID[assignment.testSetupID] ?? [],
-                preferredResultBySubmissionID: preferredResultBySubmissionID,
                 classBadges: classBadgesBySetupID[assignment.testSetupID] ?? [],
                 activeExtension: assignment.id.flatMap { extensionByAssignmentID[$0] },
-                student: student,
-                fmt: fmt
+                context: rowContext
             )
         }
 
@@ -469,17 +472,29 @@ extension AssignmentRoutes {
         return (course, student)
     }
 
+    /// Bundles the per-table inputs that don't vary across rows.  Lets
+    /// `buildStudentAssignmentRow` stay at 5 parameters even with 9
+    /// logical inputs.
+    fileprivate struct StudentAssignmentRowContext {
+        let courseCode: String
+        let username: String
+        let preferredResultBySubmissionID: [String: APIResult]
+        let student: APIUser
+        let fmt: DateFormatter
+    }
+
     fileprivate func buildStudentAssignmentRow(
         assignment: APIAssignment,
-        courseCode: String,
-        username: String,
         history: [APISubmission],
-        preferredResultBySubmissionID: [String: APIResult],
         classBadges: [AchievementBadge],
         activeExtension: APIAssignmentExtension?,
-        student: APIUser,
-        fmt: DateFormatter
+        context: StudentAssignmentRowContext
     ) -> StudentAssignmentRow {
+        let courseCode = context.courseCode
+        let username = context.username
+        let preferredResultBySubmissionID = context.preferredResultBySubmissionID
+        let student = context.student
+        let fmt = context.fmt
         let latest = history.first
         let bestGradePercent: Int? = {
             var best = -1

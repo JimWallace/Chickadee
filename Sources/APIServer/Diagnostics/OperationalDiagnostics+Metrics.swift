@@ -170,54 +170,35 @@ extension OperationalDiagnosticsService {
     }
 
     func recordRequestMetric(
-        method: String,
-        path: String,
-        requestKind: String?,
-        statusCode: Int,
-        startedAt: Date,
-        finishedAt: Date,
-        durationMs: Int,
-        submissionID: String?,
-        workerID: String?,
+        _ metric: APIRequestMetric,
         on db: Database,
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
-        guard shouldCaptureRequest(path: path) else { return }
+        guard shouldCaptureRequest(path: metric.path) else { return }
 
         do {
-            let metric = APIRequestMetric(
-                method: method,
-                path: path,
-                requestKind: requestKind,
-                statusCode: statusCode,
-                startedAt: startedAt,
-                finishedAt: finishedAt,
-                durationMs: durationMs,
-                submissionID: submissionID,
-                workerID: workerID
-            )
             try await metric.save(on: db)
         } catch {
             logger.warning(
                 "diagnostics_request_metric_failed",
                 metadata: [
-                    "path": .string(path),
+                    "path": .string(metric.path),
                     "error": .string(String(describing: error)),
                 ])
         }
 
-        guard configuration.verboseRequestTiming || shouldAlwaysLogRequest(path: path) else { return }
+        guard configuration.verboseRequestTiming || shouldAlwaysLogRequest(path: metric.path) else { return }
         logger.info(
             "request_completed",
             metadata: [
-                "method": .string(method),
-                "path": .string(path),
-                "request_kind": .string(requestKind ?? ""),
-                "status_code": .stringConvertible(statusCode),
-                "duration_ms": .stringConvertible(durationMs),
-                "submission_id": .string(submissionID ?? ""),
-                "worker_id": .string(workerID ?? ""),
+                "method": .string(metric.method),
+                "path": .string(metric.path),
+                "request_kind": .string(metric.requestKind ?? ""),
+                "status_code": .stringConvertible(metric.statusCode),
+                "duration_ms": .stringConvertible(metric.durationMs),
+                "submission_id": .string(metric.submissionID ?? ""),
+                "worker_id": .string(metric.workerID ?? ""),
             ])
     }
 
