@@ -27,10 +27,6 @@ struct ScanModeConfiguration: Sendable {
 struct ScanModeMiddleware: AsyncMiddleware {
     let configuration: ScanModeConfiguration
 
-    init(configuration: ScanModeConfiguration) {
-        self.configuration = configuration
-    }
-
     func respond(
         to request: Request,
         chainingTo next: any AsyncResponder

@@ -187,10 +187,10 @@ extension OperationalDiagnosticsService {
     }
 
     func peakUtilizationPercent(from snapshots: [RunnerSnapshot]) -> Int? {
-        peakLoad(from: snapshots).map { snapshot in
+        peakLoad(from: snapshots).flatMap { snapshot in
             guard snapshot.maxJobs > 0 else { return nil }
             return Int((Double(snapshot.activeJobs) / Double(snapshot.maxJobs) * 100).rounded())
-        } ?? nil
+        }
     }
 
     func peakLoad(from snapshots: [RunnerSnapshot]) -> (activeJobs: Int, maxJobs: Int)? {

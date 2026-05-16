@@ -460,7 +460,7 @@ struct CourseBundleRoutes: RouteCollection {
                     to: URL(fileURLWithPath: newZipPath))
 
                 // Extract .ipynb if present (browser-mode setups).
-                var notebookPath: String? = nil
+                var notebookPath: String?
                 if let nbData = extractNotebookFromZip(zipPath: newZipPath) {
                     let nbPath = setupsDir + "\(newSetupID).ipynb"
                     try nbData.write(to: URL(fileURLWithPath: nbPath))

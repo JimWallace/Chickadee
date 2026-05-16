@@ -133,7 +133,7 @@ extension AdminRoutes {
                 let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
                 try FileManager.default.copyItem(at: srcZip, to: dstZip)
 
-                var newNotebookPath: String? = nil
+                var newNotebookPath: String?
                 if setup.notebookPath != nil {
                     let srcNb = URL(fileURLWithPath: setupsDir + "\(oldID).ipynb")
                     if FileManager.default.fileExists(atPath: srcNb.path) {

@@ -310,7 +310,7 @@ extension WebRoutes {
             : nil
 
         var buildFailed = false
-        var compilerOutput: String? = nil
+        var compilerOutput: String?
         var warnings: [String] = []
         var outcomes: [OutcomeRow] = []
         var passCount = 0
@@ -338,7 +338,7 @@ extension WebRoutes {
         // Fetch the immediately-prior attempt for per-test delta display and Comeback Kid badge.
         let currentAttempt = submission.attemptNumber ?? 1
         var priorOutcomeMap: [String: TestStatus] = [:]
-        var priorGradePercent: Int? = nil
+        var priorGradePercent: Int?
         if currentAttempt > 1, let userID = submission.userID {
             if let priorSub = try await APISubmission.query(on: req.db)
                 .filter(\.$testSetupID == submission.testSetupID)
@@ -401,8 +401,8 @@ extension WebRoutes {
         }
 
         // Summaries for hidden tiers (students only; instructors see everything directly).
-        var releaseSummary: TierSummary? = nil
-        var secretSummary: TierSummary? = nil
+        var releaseSummary: TierSummary?
+        var secretSummary: TierSummary?
 
         if let result = displayResult {
             resultSource = result.source ?? "worker"

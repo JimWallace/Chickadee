@@ -288,7 +288,7 @@ func applyPatternFamilies(
     // section straddles another section.
     do {
         var seenCompleted: Set<String?> = []
-        var current: String? = nil
+        var current: String?
         var haveStarted = false
         for item in itemsForOrdering {
             let sid: String? = {

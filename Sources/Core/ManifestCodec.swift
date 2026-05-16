@@ -22,6 +22,6 @@ import Foundation
 /// The shared instances exist for allocation reuse on hot paths, not
 /// for concurrency-safety reasons.
 public enum ManifestCodec {
-    public static let decoder: JSONDecoder = JSONDecoder()
-    public static let encoder: JSONEncoder = JSONEncoder()
+    public static let decoder = JSONDecoder()
+    public static let encoder = JSONEncoder()
 }

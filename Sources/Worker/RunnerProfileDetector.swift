@@ -9,10 +9,6 @@ struct RunnerProfileDetector {
     /// indefinitely.
     static let probeTimeoutSeconds: Double = 5.0
 
-    init(discoveryEnabled: Bool) {
-        self.discoveryEnabled = discoveryEnabled
-    }
-
     func detect() async -> RunnerCapabilityProfile? {
         guard discoveryEnabled else { return nil }
 

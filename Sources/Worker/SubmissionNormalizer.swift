@@ -49,8 +49,8 @@ struct SubmissionNormalizer {
         let submissionFiles = regularFiles(in: submissionDirectory)
         var warnings: [String] = []
         var producedPythonFiles: [URL] = []
-        var preferredStudentModule: String? = nil
-        var unsupportedOnlyFilename: String? = nil
+        var preferredStudentModule: String?
+        var unsupportedOnlyFilename: String?
 
         writeStructuredRunnerLog(
             event: "submission_normalization_start",

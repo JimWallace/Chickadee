@@ -233,7 +233,7 @@ struct WorkerJobRoutes: RouteCollection {
         // Generated lazily on first grading attempt; stable for the lifetime of the
         // (user, assignment) pair. Nil when the submission has no associated user
         // (legacy / unauthenticated path) or no assignment row was matched.
-        var assignmentSeed: String? = nil
+        var assignmentSeed: String?
         if let userID = submission.userID, let resolvedAssignmentID = assignmentID {
             do {
                 assignmentSeed = try await AssignmentSeedStore.ensureSeed(

@@ -96,8 +96,8 @@ extension WorkerDaemon {
         // even on error paths where the body didn't reach the report).
         // `freeDiskMBAtEnd` is sampled just before cleanup, so it represents
         // the worst-case free-disk reading for this job.
-        var workdirPeakBytes: Int? = nil
-        var freeDiskMBAtEnd: Int? = nil
+        var workdirPeakBytes: Int?
+        var freeDiskMBAtEnd: Int?
         defer {
             // If the happy path already measured these (right before the
             // report), don't double-walk the directory.
