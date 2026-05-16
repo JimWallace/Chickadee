@@ -54,7 +54,14 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ///   - https://esm.sh is whitelisted because the new-assignment editor
     ///     imports CodeMirror modules from there.
     /// Tighten with per-response nonces in a follow-up.
-    static let defaultContentSecurityPolicy: String = [
+    ///
+    /// `form-action` is rendered per-request so the IdP origin from
+    /// `app.oidcConfig?.discovery.endSessionEndpoint` can be appended when
+    /// SSO is configured.  Without that, Chrome (and recent Firefox) enforce
+    /// form-action across the redirect chain and block the POST /logout →
+    /// 303 → end_session_endpoint navigation, breaking the SSO "Log out"
+    /// button.
+    static let defaultContentSecurityPolicyBase: [String] = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://esm.sh",
         "style-src 'self' 'unsafe-inline'",
@@ -64,10 +71,44 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         "child-src 'self' blob:",
         "connect-src 'self' https://cdn.jsdelivr.net https://esm.sh",
         "frame-ancestors 'self'",
-        "form-action 'self'",
         "base-uri 'self'",
         "object-src 'none'",
-    ].joined(separator: "; ")
+    ]
+
+    /// CSP used when no extra form-action origins apply (e.g. local-only mode
+    /// or pre-OIDC-load).  Kept around for tests that pin the literal header.
+    static let defaultContentSecurityPolicy: String = renderCSP(
+        base: defaultContentSecurityPolicyBase,
+        formActionOrigins: []
+    )
+
+    /// Builds the CSP string from the base directives plus a `form-action`
+    /// directive whose allow-list always includes `'self'` and any extra
+    /// origins passed in.
+    static func renderCSP(base: [String], formActionOrigins: [String]) -> String {
+        var sources = ["'self'"]
+        for origin in formActionOrigins where !sources.contains(origin) {
+            sources.append(origin)
+        }
+        var directives = base
+        directives.append("form-action " + sources.joined(separator: " "))
+        return directives.joined(separator: "; ")
+    }
+
+    /// Extracts the scheme://host[:port] origin from a URL string, suitable
+    /// for use as a CSP source expression.  Returns nil for malformed input
+    /// or schemes without a host (e.g. `data:`, `mailto:`).
+    static func cspOrigin(of urlString: String) -> String? {
+        guard
+            let components = URLComponents(string: urlString),
+            let scheme = components.scheme,
+            let host = components.host, !host.isEmpty
+        else { return nil }
+        if let port = components.port {
+            return "\(scheme)://\(host):\(port)"
+        }
+        return "\(scheme)://\(host)"
+    }
 
     /// Permissions-Policy denying browser features Chickadee never uses.
     static let defaultPermissionsPolicy: String = [
@@ -86,16 +127,16 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// since it's near-impossible to undo.
     static let defaultStrictTransportSecurity: String = "max-age=63072000; includeSubDomains"
 
-    let contentSecurityPolicy: String
+    let cspBaseDirectives: [String]
     let permissionsPolicy: String
     let strictTransportSecurity: String?
 
     init(
-        contentSecurityPolicy: String = Self.defaultContentSecurityPolicy,
+        cspBaseDirectives: [String] = Self.defaultContentSecurityPolicyBase,
         permissionsPolicy: String = Self.defaultPermissionsPolicy,
         strictTransportSecurity: String? = nil
     ) {
-        self.contentSecurityPolicy = contentSecurityPolicy
+        self.cspBaseDirectives = cspBaseDirectives
         self.permissionsPolicy = permissionsPolicy
         self.strictTransportSecurity = strictTransportSecurity
     }
@@ -105,14 +146,29 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         chainingTo next: any AsyncResponder
     ) async throws -> Response {
         let response = try await next.respond(to: request)
+        let csp = Self.renderCSP(
+            base: cspBaseDirectives,
+            formActionOrigins: formActionExtras(for: request)
+        )
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
         response.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
         response.headers.replaceOrAdd(name: "Referrer-Policy", value: "strict-origin-when-cross-origin")
-        response.headers.replaceOrAdd(name: "Content-Security-Policy", value: contentSecurityPolicy)
+        response.headers.replaceOrAdd(name: "Content-Security-Policy", value: csp)
         response.headers.replaceOrAdd(name: "Permissions-Policy", value: permissionsPolicy)
         if let hsts = strictTransportSecurity {
             response.headers.replaceOrAdd(name: "Strict-Transport-Security", value: hsts)
         }
         return response
+    }
+
+    /// The SSO `end_session_endpoint` is an external origin the browser is
+    /// redirected to after POST /logout.  Without it in form-action, the
+    /// redirect chain is blocked and "Log out" silently does nothing.
+    private func formActionExtras(for request: Request) -> [String] {
+        guard
+            let endpoint = request.application.oidcConfig?.discovery.endSessionEndpoint,
+            let origin = Self.cspOrigin(of: endpoint)
+        else { return [] }
+        return [origin]
     }
 }
