@@ -10,3 +10,11 @@ parent_config: ../.swiftlint.yml
 
 disabled_rules:
   - force_unwrapping
+  # `non_optional_string_data_conversion` flags
+  # `<string>.data(using: .utf8)` and suggests `Data(<string>.utf8)`.
+  # All 29 violations are in test fixtures with controlled multi-line
+  # `"""…"""` literals where `.data(using: .utf8)!` is the standard
+  # idiom.  The transformation would require wrapping every fixture in
+  # `Data(... .utf8)` for negligible benefit.  The companion
+  # force_unwrapping exemption above covers the same reasoning.
+  - non_optional_string_data_conversion
