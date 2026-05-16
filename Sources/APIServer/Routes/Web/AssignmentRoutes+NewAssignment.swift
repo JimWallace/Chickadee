@@ -202,8 +202,11 @@ extension AssignmentRoutes {
             draftID: draftIDRaw,
             sectionIDRaw: sectionIDRaw
         )
+        guard let setupID = setup.id else {
+            throw WebAssignmentError.internalFailure(reason: "Draft test setup persisted without an id")
+        }
 
-        var formState = loadDraftFormState(req: req, draftID: setup.id!)
+        var formState = loadDraftFormState(req: req, draftID: setupID)
         formState.assignmentName = assignmentName
         formState.dueAt = dueAt
         formState.sectionID = sectionIDRaw
@@ -219,14 +222,14 @@ extension AssignmentRoutes {
         case "create-assignment-notebook":
             let data = defaultNotebookData(title: notebookTitle)
             let dir = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             let path = dir + "assignment.ipynb"
             try data.write(to: URL(fileURLWithPath: path))
             setup.notebookPath = path
             try await setup.save(on: req.db)
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 overwriteWith: data
@@ -236,7 +239,7 @@ extension AssignmentRoutes {
             guard let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 else {
                 return redirectToNewAssignmentDraft(
                     req: req,
-                    draftID: setup.id!,
+                    draftID: setupID,
                     assignmentName: assignmentName,
                     dueAt: dueAt,
                     sectionID: sectionIDRaw,
@@ -248,7 +251,7 @@ extension AssignmentRoutes {
             guard (try? JSONSerialization.jsonObject(with: raw)) != nil else {
                 return redirectToNewAssignmentDraft(
                     req: req,
-                    draftID: setup.id!,
+                    draftID: setupID,
                     assignmentName: assignmentName,
                     dueAt: dueAt,
                     sectionID: sectionIDRaw,
@@ -258,7 +261,7 @@ extension AssignmentRoutes {
             }
             let normalized = normalizeNotebookForJupyterLite(raw)
             let dir = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             let filename = notebookFilenameForStorage(
                 uploadedName: assignmentNotebookFile.filename, fallback: "assignment.ipynb")
             let path = dir + filename
@@ -267,7 +270,7 @@ extension AssignmentRoutes {
             try await setup.save(on: req.db)
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 overwriteWith: normalized
@@ -276,7 +279,7 @@ extension AssignmentRoutes {
         case "clear-assignment-notebook":
             removeDraftNotebookFiles(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fileKind: .assignment,
                 persistedPath: setup.notebookPath
@@ -287,17 +290,17 @@ extension AssignmentRoutes {
         case "create-solution-notebook":
             let data = defaultNotebookData(title: "\(notebookTitle) Solution")
             let path = draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             _ = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             try data.write(to: URL(fileURLWithPath: path))
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 relativePath: userNotebookWorkingCopyRelativePath(
-                    setupID: setup.id!, userID: userID, fileKind: .solution),
+                    setupID: setupID, userID: userID, fileKind: .solution),
                 overwriteWith: data
             )
             formState.solutionNotebookName = "solution.ipynb"
@@ -321,17 +324,17 @@ extension AssignmentRoutes {
             }()
             let normalized = normalizeNotebookForJupyterLite(sourceData)
             let path = draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             _ = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             try normalized.write(to: URL(fileURLWithPath: path))
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 relativePath: userNotebookWorkingCopyRelativePath(
-                    setupID: setup.id!, userID: userID, fileKind: .solution),
+                    setupID: setupID, userID: userID, fileKind: .solution),
                 overwriteWith: normalized
             )
             formState.solutionNotebookName = "solution.ipynb"
@@ -339,7 +342,7 @@ extension AssignmentRoutes {
             guard let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 else {
                 return redirectToNewAssignmentDraft(
                     req: req,
-                    draftID: setup.id!,
+                    draftID: setupID,
                     assignmentName: assignmentName,
                     dueAt: dueAt,
                     sectionID: sectionIDRaw,
@@ -351,7 +354,7 @@ extension AssignmentRoutes {
             guard (try? JSONSerialization.jsonObject(with: raw)) != nil else {
                 return redirectToNewAssignmentDraft(
                     req: req,
-                    draftID: setup.id!,
+                    draftID: setupID,
                     assignmentName: assignmentName,
                     dueAt: dueAt,
                     sectionID: sectionIDRaw,
@@ -361,17 +364,17 @@ extension AssignmentRoutes {
             }
             let normalized = normalizeNotebookForJupyterLite(raw)
             let path = draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             _ = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             try normalized.write(to: URL(fileURLWithPath: path))
             _ = try await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fallbackSetup: setup,
                 relativePath: userNotebookWorkingCopyRelativePath(
-                    setupID: setup.id!, userID: userID, fileKind: .solution),
+                    setupID: setupID, userID: userID, fileKind: .solution),
                 overwriteWith: normalized
             )
             formState.solutionNotebookName = notebookFilenameForStorage(
@@ -402,11 +405,11 @@ extension AssignmentRoutes {
         case "clear-solution-notebook":
             removeDraftNotebookFiles(
                 req: req,
-                setupID: setup.id!,
+                setupID: setupID,
                 userID: userID,
                 fileKind: .solution,
                 persistedPath: draftSolutionNotebookPath(
-                    testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+                    testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
             )
             formState.solutionNotebookName = nil
         case "replace-suite-files":
@@ -431,7 +434,7 @@ extension AssignmentRoutes {
             try await setup.save(on: req.db)
             extractSupportFilesToSharedDirectory(
                 zipPath: setup.zipPath,
-                setupID: setup.id!,
+                setupID: setupID,
                 testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
                 testSetupsDirectory: req.application.testSetupsDirectory
             )
@@ -451,11 +454,11 @@ extension AssignmentRoutes {
             break
         }
 
-        saveDraftFormState(req: req, draftID: setup.id!, state: formState)
+        saveDraftFormState(req: req, draftID: setupID, state: formState)
 
         return redirectToNewAssignmentDraft(
             req: req,
-            draftID: setup.id!,
+            draftID: setupID,
             assignmentName: assignmentName,
             dueAt: dueAt,
             sectionID: sectionIDRaw,

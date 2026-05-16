@@ -234,9 +234,9 @@ extension AssignmentRoutes {
         }
         if resolvedSolutionNotebookRaw.isEmpty, let userID = user.id,
             let draftData = draftNotebookData(
-                req: req, setupID: setup.id!, userID: userID, fileKind: .solution,
+                req: req, setupID: assignment.testSetupID, userID: userID, fileKind: .solution,
                 fallbackPath: draftSolutionNotebookPath(
-                    testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!))
+                    testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID))
         {
             resolvedSolutionNotebookRaw = draftData
         }
@@ -273,11 +273,11 @@ extension AssignmentRoutes {
                     ?? "assignment.ipynb"
                 let uploadedName = assignmentNotebookFile?.filename
                 let filename = notebookFilenameForStorage(uploadedName: uploadedName, fallback: fallbackName)
-                let dir = req.application.testSetupsDirectory + "notebooks/\(setup.id!)/"
+                let dir = req.application.testSetupsDirectory + "notebooks/\(assignment.testSetupID)/"
                 try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
                 return dir + filename
             }
-            return setup.notebookPath ?? (req.application.testSetupsDirectory + "\(setup.id!).ipynb")
+            return setup.notebookPath ?? (req.application.testSetupsDirectory + "\(assignment.testSetupID).ipynb")
         }()
         try assignmentNotebook.write(to: URL(fileURLWithPath: notebookPath))
 
@@ -292,7 +292,7 @@ extension AssignmentRoutes {
         }()
         extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
-            setupID: setup.id!,
+            setupID: assignment.testSetupID,
             testSuiteScripts: activeTestSuiteScripts,
             testSetupsDirectory: req.application.testSetupsDirectory
         )
@@ -335,7 +335,7 @@ extension AssignmentRoutes {
             : resolvedSolutionNotebookRaw
         let validationSubmissionID = try await enqueueRunnerValidationSubmission(
             req: req,
-            setupID: setup.id!,
+            setupID: assignment.testSetupID,
             solutionNotebookData: solutionDataToSubmit,
             filename: solutionFilename
         )
@@ -516,7 +516,7 @@ extension AssignmentRoutes {
             }()
             extractSupportFilesToSharedDirectory(
                 zipPath: setup.zipPath,
-                setupID: setup.id!,
+                setupID: assignment.testSetupID,
                 testSuiteScripts: activeTestSuiteScripts,
                 testSetupsDirectory: req.application.testSetupsDirectory
             )
@@ -601,7 +601,7 @@ extension AssignmentRoutes {
         }()
         extractSupportFilesToSharedDirectory(
             zipPath: setup.zipPath,
-            setupID: setup.id!,
+            setupID: assignment.testSetupID,
             testSuiteScripts: activeTestSuiteScripts,
             testSetupsDirectory: req.application.testSetupsDirectory
         )
@@ -622,14 +622,16 @@ extension AssignmentRoutes {
 
         guard let draftID = try? req.query.get(String.self, at: "draftID"),
             !draftID.isEmpty,
-            let setup = try await APITestSetup.find(draftID, on: req.db)
+            try await APITestSetup.find(draftID, on: req.db) != nil
         else { throw WebAssignmentError.notFound(resource: "Draft assignment") }
 
+        // setup.id equals draftID (lookup key); use the query parameter
+        // directly so we don't have to force-unwrap setup.id.
         let fallbackPath = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: draftID)
         guard
             let data = draftNotebookData(
-                req: req, setupID: setup.id!, userID: userID,
+                req: req, setupID: draftID, userID: userID,
                 fileKind: .solution, fallbackPath: fallbackPath)
         else { throw WebAssignmentError.notFound(resource: "Draft solution notebook") }
 
@@ -753,19 +755,19 @@ extension AssignmentRoutes {
         let normalized = normalizeNotebookForJupyterLite(sourceData)
 
         let draftPath = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID)
         _ = try ensureDraftNotebookDirectory(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID)
         try normalized.write(to: URL(fileURLWithPath: draftPath))
 
         _ = try await ensureUserNotebookWorkingCopy(
-            req: req, setupID: setup.id!, userID: userID, fallbackSetup: setup,
+            req: req, setupID: assignment.testSetupID, userID: userID, fallbackSetup: setup,
             relativePath: userNotebookWorkingCopyRelativePath(
-                setupID: setup.id!, userID: userID, fileKind: .solution),
+                setupID: assignment.testSetupID, userID: userID, fileKind: .solution),
             overwriteWith: normalized)
 
         return req.redirect(
-            to: "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")
+            to: "/testsetups/\(assignment.testSetupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))")
     }
 }
 
