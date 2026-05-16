@@ -86,7 +86,9 @@ struct CourseBundleRoutes: RouteCollection {
                 .all()
         }
         let allUsers = (enrolledUsers + additionalUsers)
-            .reduce(into: [UUID: APIUser]()) { $0[$1.id!] = $1 }
+            .reduce(into: [UUID: APIUser]()) { dict, user in
+                if let id = user.id { dict[id] = user }
+            }
             .values
             .sorted { ($0.username) < ($1.username) }
 
@@ -393,7 +395,10 @@ struct CourseBundleRoutes: RouteCollection {
                 code: manifest.course.code, name: manifest.course.name,
                 enrollmentMode: importedMode)
             try await newCourse.save(on: db)
-            t.courseID = newCourse.id!
+            guard let newCourseID = newCourse.id else {
+                throw Abort(.internalServerError, reason: "Created course missing id after save")
+            }
+            t.courseID = newCourseID
             t.courseCode = newCourse.code
             t.courseName = newCourse.name
 
@@ -404,7 +409,10 @@ struct CourseBundleRoutes: RouteCollection {
                     .filter(\.$username == bundledUser.username)
                     .first()
                 {
-                    userIDMap[bundledUser.bundleID] = existing.id!
+                    guard let existingID = existing.id else {
+                        throw Abort(.internalServerError, reason: "User '\(bundledUser.username)' missing id")
+                    }
+                    userIDMap[bundledUser.bundleID] = existingID
                     t.usersMatched += 1
                 } else {
                     // Create placeholder — inert until password reset or SSO login.
@@ -417,7 +425,10 @@ struct CourseBundleRoutes: RouteCollection {
                         displayName: bundledUser.displayName
                     )
                     try await newUser.save(on: db)
-                    userIDMap[bundledUser.bundleID] = newUser.id!
+                    guard let newUserID = newUser.id else {
+                        throw Abort(.internalServerError, reason: "Created user missing id after save")
+                    }
+                    userIDMap[bundledUser.bundleID] = newUserID
                     t.usersCreated += 1
                 }
             }

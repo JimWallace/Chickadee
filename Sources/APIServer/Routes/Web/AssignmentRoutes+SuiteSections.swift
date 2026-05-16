@@ -229,7 +229,7 @@ extension AssignmentRoutes {
                     seedHex: seedHex,
                     staticVariables: staticVars,
                     expressions: expressions,
-                    supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setup.id!)/"
+                    supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(assignment.testSetupID)/"
                 )
             } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
                 let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")

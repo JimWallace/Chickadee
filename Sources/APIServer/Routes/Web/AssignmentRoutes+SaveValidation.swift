@@ -194,10 +194,10 @@ extension AssignmentRoutes {
             if let f = form.assignmentNotebookFile, f.data.readableBytes > 0 {
                 return Data(f.data.readableBytesView)
             }
-            guard let draftSetup, let saveUserID else { return Data() }
+            guard let draftSetup, let draftSetupID = draftSetup.id, let saveUserID else { return Data() }
             return draftNotebookData(
                 req: req,
-                setupID: draftSetup.id!,
+                setupID: draftSetupID,
                 userID: saveUserID,
                 fileKind: .assignment,
                 fallbackPath: draftSetup.notebookPath
@@ -215,15 +215,15 @@ extension AssignmentRoutes {
             if let f = form.solutionNotebookFile, f.data.readableBytes > 0 {
                 return Data(f.data.readableBytesView)
             }
-            guard let draftSetup, let saveUserID else { return Data() }
+            guard let draftSetup, let draftSetupID = draftSetup.id, let saveUserID else { return Data() }
             return draftNotebookData(
                 req: req,
-                setupID: draftSetup.id!,
+                setupID: draftSetupID,
                 userID: saveUserID,
                 fileKind: .solution,
                 fallbackPath: draftSolutionNotebookPath(
                     testSetupsDirectory: req.application.testSetupsDirectory,
-                    setupID: draftSetup.id!
+                    setupID: draftSetupID
                 )
             ) ?? Data()
         }()

@@ -22,7 +22,7 @@ struct SubmissionRoutes: RouteCollection {
     func createSubmission(req: Request) async throws -> SubmissionCreatedResponse {
         let body = try req.content.decode(CreateSubmissionBody.self)
 
-        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
+        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
             throw Abort(.badRequest, reason: "Invalid testSetupID")
         }
 
@@ -39,13 +39,13 @@ struct SubmissionRoutes: RouteCollection {
 
         // Count prior submissions for this test setup to determine attempt number.
         let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setup.id!)
+            .filter(\.$testSetupID == body.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
             .count()
 
         let submission = APISubmission(
             id: subID,
-            testSetupID: setup.id!,
+            testSetupID: body.testSetupID,
             zipPath: zipPath,
             attemptNumber: priorCount + 1,
             kind: APISubmission.Kind.student
@@ -71,7 +71,7 @@ struct SubmissionRoutes: RouteCollection {
             fallback: "submission.bin"
         )
 
-        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
+        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
             throw Abort(.badRequest, reason: "Invalid testSetupID")
         }
 
@@ -96,13 +96,13 @@ struct SubmissionRoutes: RouteCollection {
         try fileData.write(to: URL(fileURLWithPath: filePath))
 
         let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setup.id!)
+            .filter(\.$testSetupID == body.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
             .count()
 
         let submission = APISubmission(
             id: subID,
-            testSetupID: setup.id!,
+            testSetupID: body.testSetupID,
             zipPath: filePath,
             attemptNumber: priorCount + 1,
             filename: submittedFilename,

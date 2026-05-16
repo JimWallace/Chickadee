@@ -81,7 +81,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     static func generatePublicID(length: Int = APIAssignment.publicIDLength) -> String {
         let alphabet = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         var rng = SystemRandomNumberGenerator()
-        return String((0..<length).map { _ in alphabet.randomElement(using: &rng)! })
+        return String((0..<length).compactMap { _ in alphabet.randomElement(using: &rng) })
     }
 
     init(

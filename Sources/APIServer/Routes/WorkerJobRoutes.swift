@@ -247,14 +247,23 @@ struct WorkerJobRoutes: RouteCollection {
             }
         }
 
-        let setupDownloadVersion = testSetupDownloadVersion(for: setup)
+        guard let submissionID = submission.id, let setupID = setup.id else {
+            throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
+        }
+        guard
+            let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
+            let testSetupURL = URL(
+                string: "\(base)/api/v1/worker/testsetups/\(setupID)/download?v=\(testSetupDownloadVersion(for: setup))"
+            )
+        else {
+            throw WorkerJobError.internalInconsistency(reason: "Failed to build worker download URLs from base=\(base)")
+        }
         let job = Job(
-            submissionID: submission.id!,
-            testSetupID: setup.id!,
+            submissionID: submissionID,
+            testSetupID: setupID,
             attemptNumber: submission.attemptNumber ?? 1,
-            submissionURL: URL(string: "\(base)/api/v1/worker/submissions/\(submission.id!)/download")!,
-            testSetupURL: URL(
-                string: "\(base)/api/v1/worker/testsetups/\(setup.id!)/download?v=\(setupDownloadVersion)")!,
+            submissionURL: submissionURL,
+            testSetupURL: testSetupURL,
             manifest: manifest.runnerSanitized(),
             submissionFilename: submission.filename,
             assignmentSeed: assignmentSeed

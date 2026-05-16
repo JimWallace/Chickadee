@@ -157,7 +157,9 @@ extension OperationalDiagnosticsService {
             guard isWorkerEligible, let submittedAt = submission.submittedAt else { continue }
 
             let assignedAt = submission.assignedAt
-            if submittedAt < windowStart && (assignedAt == nil || assignedAt! > windowStart) {
+            // Pending at windowStart: submitted before the window opened AND
+            // either never assigned, or assigned after the window opened.
+            if submittedAt < windowStart, (assignedAt ?? .distantFuture) > windowStart {
                 queueDepth += 1
             }
             if submittedAt >= windowStart && submittedAt <= now {

@@ -532,7 +532,7 @@ struct AssignmentRoutes: RouteCollection {
         }
         let q = try? req.query.decode(EditQuery.self)
         let draftSolutionPath = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: setup.id!)
+            testSetupsDirectory: req.application.testSetupsDirectory, setupID: assignment.testSetupID)
         let existingSolutionName = try await existingSolutionFilename(req: req, assignment: assignment)
         let hasDraftSolution = FileManager.default.fileExists(atPath: draftSolutionPath)
         let fallbackSolutionFilename =
@@ -566,16 +566,17 @@ struct AssignmentRoutes: RouteCollection {
         let ctx = EditAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentID: idStr,
-            testSetupID: setup.id!,
+            testSetupID: assignment.testSetupID,
             assignmentName: (q?.assignmentName ?? assignment.title).trimmingCharacters(in: .whitespacesAndNewlines),
             dueAt: q?.dueAt ?? currentDueAt,
             currentAssignmentFile: currentFiles.assignmentFile.name,
             currentAssignmentURL: currentFiles.assignmentFile.url,
-            assignmentNotebookEditURL: "/testsetups/\(setup.id!)/notebook?title=\(urlEncode(assignment.title))",
+            assignmentNotebookEditURL:
+                "/testsetups/\(assignment.testSetupID)/notebook?title=\(urlEncode(assignment.title))",
             currentSolutionFile: currentFiles.solutionFile?.name,
             currentSolutionURL: currentFiles.solutionFile?.url,
             solutionNotebookEditURL: currentFiles.solutionFile != nil
-                ? "/testsetups/\(setup.id!)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
+                ? "/testsetups/\(assignment.testSetupID)/notebook?file=solution&title=\(urlEncode("Solution Notebook"))"
                 : nil,
             existingSuiteRows: currentFiles.existingSuiteRows.filter { $0.tier != "support" },
             supportFileRows: currentFiles.existingSuiteRows.filter { $0.tier == "support" },
