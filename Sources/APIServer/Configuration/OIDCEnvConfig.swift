@@ -19,6 +19,11 @@ struct OIDCEnvConfig: Sendable {
     let usernameClaim: String
     /// JWT claim used as the email address (default `email`).
     let emailClaim: String
+    /// When true, `OIDC_AUTH_SERVER` accepts `http://` and private-range
+    /// hosts.  Required for local-Docker IdP fixtures; off in production
+    /// so a fat-fingered env var can't redirect the discovery fetch to an
+    /// internal service.
+    let allowInsecure: Bool
 
     static let `default` = OIDCEnvConfig(
         clientID: nil,
@@ -26,7 +31,8 @@ struct OIDCEnvConfig: Sendable {
         authServerOverride: nil,
         callbackPath: "/auth/sso/callback",
         usernameClaim: "preferred_username",
-        emailClaim: "email"
+        emailClaim: "email",
+        allowInsecure: false
     )
 
     static func fromEnvironment() -> OIDCEnvConfig {
@@ -36,7 +42,10 @@ struct OIDCEnvConfig: Sendable {
             authServerOverride: trimmedEnv("OIDC_AUTH_SERVER"),
             callbackPath: normalizedCallbackPath(trimmedEnv("OIDC_CALLBACK")),
             usernameClaim: trimmedEnv("OIDC_USERNAME_CLAIM") ?? "preferred_username",
-            emailClaim: trimmedEnv("OIDC_EMAIL_CLAIM") ?? "email"
+            emailClaim: trimmedEnv("OIDC_EMAIL_CLAIM") ?? "email",
+            allowInsecure: (trimmedEnv("OIDC_ALLOW_INSECURE")?.lowercased()).map {
+                ["1", "true", "yes"].contains($0)
+            } ?? false
         )
     }
 

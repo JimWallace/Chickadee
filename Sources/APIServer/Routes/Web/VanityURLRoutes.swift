@@ -44,6 +44,7 @@ struct VanityURLRoutes: RouteCollection {
     }
 
     private func resolveAssignment(req: Request) async throws -> APIAssignment {
+        let user = try req.auth.require(APIUser.self)
         guard
             let courseCode = req.parameters.get("courseCode"),
             let slug = req.parameters.get("assignmentSlug")
@@ -60,6 +61,24 @@ struct VanityURLRoutes: RouteCollection {
         }
 
         let courseID = try course.requireID()
+
+        // Treat unenrolled access as 404 (matching the no-such-course /
+        // no-such-assignment cases) so vanity URLs aren't a course /
+        // assignment enumeration vector for students browsing the
+        // institutional catalogue.  Instructors and admins bypass via
+        // the usual `isInstructor` short-circuit.
+        if !user.isInstructor {
+            let userID = try user.requireID()
+            let enrolled =
+                try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$userID == userID)
+                .filter(\.$course.$id == courseID)
+                .count() > 0
+            guard enrolled else {
+                throw Abort(.notFound)
+            }
+        }
+
         let assignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .all()

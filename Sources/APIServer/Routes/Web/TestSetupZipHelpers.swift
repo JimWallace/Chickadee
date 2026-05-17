@@ -16,6 +16,97 @@ enum ScriptZipError: Error {
     case zipFailed
 }
 
+// MARK: - Zip upload size guard
+
+/// Upper bounds applied to a freshly-uploaded test-setup zip before it is
+/// persisted.  Defaults are deliberately generous for legitimate course
+/// material while small enough that a single malicious upload can't
+/// exhaust the host's disk.  Per-entry plus total cover the two common
+/// zip-bomb shapes: many small entries summing into a giant whole, or
+/// one entry that expands wildly.
+struct ZipUploadLimits {
+    let maxTotalUncompressedBytes: Int
+    let maxEntryUncompressedBytes: Int
+
+    static let `default` = ZipUploadLimits(
+        maxTotalUncompressedBytes: 256 * 1024 * 1024,
+        maxEntryUncompressedBytes: 64 * 1024 * 1024
+    )
+}
+
+enum ZipUploadValidationError: Error, CustomStringConvertible {
+    case inspectionFailed
+    case totalSizeExceeded(actualBytes: Int, limitBytes: Int)
+    case entrySizeExceeded(name: String, actualBytes: Int, limitBytes: Int)
+
+    var description: String {
+        switch self {
+        case .inspectionFailed:
+            return "Could not read uploaded zip (corrupt or unsupported format)"
+        case .totalSizeExceeded(let actual, let limit):
+            return "Uploaded zip decompresses to \(actual) bytes; total limit is \(limit) bytes"
+        case .entrySizeExceeded(let name, let actual, let limit):
+            return "Zip entry '\(name)' decompresses to \(actual) bytes; per-entry limit is \(limit) bytes"
+        }
+    }
+}
+
+/// Inspects the supplied zip's declared uncompressed sizes via `unzip -v`
+/// and throws if any entry — or the total — exceeds `limits`.  Runs
+/// before extraction so a zip bomb can't waste disk on its way to being
+/// rejected.  `unzip -v` parses table-of-entries delimited by a pair of
+/// dashed separator lines; each entry has seven space-separated columns
+/// (Length, Method, Size, Cmpr, Date, Time, CRC-32) before the name.
+func validateZipUploadSize(zipPath: String, limits: ZipUploadLimits = .default) throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+    process.arguments = ["-v", zipPath]
+    let out = Pipe()
+    process.standardOutput = out
+    process.standardError = Pipe()
+    do {
+        try process.run()
+    } catch {
+        throw ZipUploadValidationError.inspectionFailed
+    }
+    let data = out.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0,
+        let text = String(data: data, encoding: .utf8)
+    else {
+        throw ZipUploadValidationError.inspectionFailed
+    }
+
+    var inEntries = false
+    var total = 0
+    for line in text.split(separator: "\n").map(String.init) {
+        if line.hasPrefix("--------") {
+            inEntries.toggle()
+            continue
+        }
+        guard inEntries else { continue }
+        let parts =
+            line.trimmingCharacters(in: .whitespaces)
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard parts.count >= 8, let length = Int(parts[0]) else { continue }
+        let name = parts.dropFirst(7).joined(separator: " ")
+        if length > limits.maxEntryUncompressedBytes {
+            throw ZipUploadValidationError.entrySizeExceeded(
+                name: name, actualBytes: length,
+                limitBytes: limits.maxEntryUncompressedBytes
+            )
+        }
+        total += length
+        if total > limits.maxTotalUncompressedBytes {
+            throw ZipUploadValidationError.totalSizeExceeded(
+                actualBytes: total,
+                limitBytes: limits.maxTotalUncompressedBytes
+            )
+        }
+    }
+}
+
 struct RunnerSetupPackage {
     let testSuites: [ConfiguredSuiteEntry]
     let hasMakefile: Bool

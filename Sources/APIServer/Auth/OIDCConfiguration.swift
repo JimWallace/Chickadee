@@ -137,6 +137,15 @@ struct OIDCConfiguration: Sendable {
             }
             return "https://sso-4ccc589b.sso.duosecurity.com/oidc/\(clientID)/.well-known/openid-configuration"
         }()
+
+        // Defense in depth against a fat-fingered OIDC_AUTH_SERVER pointing
+        // at an internal service or going out over plain HTTP.  Operator-
+        // settable, so not strictly a remote-attacker SSRF, but the failure
+        // mode without this check (server happily fetches from
+        // http://localhost:6379) is bad enough that failing loud at
+        // startup beats a confusing runtime error.
+        try validateOIDCDiscoveryURL(discoveryURL, allowInsecure: env.allowInsecure)
+
         app.logger.info("Fetching OIDC discovery document: \(discoveryURL)")
         let discoveryResponse = try await app.client.get(URI(string: discoveryURL))
         guard discoveryResponse.status == .ok else {
@@ -176,6 +185,74 @@ struct OIDCConfiguration: Sendable {
             claimConfig: claimConfig
         )
     }
+}
+
+// MARK: - Discovery URL validation
+
+enum OIDCDiscoveryURLError: Error, CustomStringConvertible {
+    case malformed(url: String)
+    case insecureScheme(url: String)
+    case privateHost(host: String)
+
+    var description: String {
+        switch self {
+        case .malformed(let url):
+            return "OIDC_AUTH_SERVER is not a valid URL: \(url)"
+        case .insecureScheme(let url):
+            return
+                "OIDC_AUTH_SERVER must use https:// (got \(url)); set OIDC_ALLOW_INSECURE=true to override (development only)"
+        case .privateHost(let host):
+            return
+                "OIDC_AUTH_SERVER host \(host) resolves into a loopback / private IP range; set OIDC_ALLOW_INSECURE=true to override (development only)"
+        }
+    }
+}
+
+/// Throws if `urlString` would have the discovery fetch land on plaintext or
+/// at a loopback / private-range host without an explicit `allowInsecure`
+/// override.  Intentionally string-based: we don't resolve DNS here, only
+/// reject hosts that are syntactically private — operators with a private
+/// IdP behind a domain name continue to work as long as the hostname isn't
+/// itself a private literal.
+func validateOIDCDiscoveryURL(_ urlString: String, allowInsecure: Bool) throws {
+    guard let url = URL(string: urlString), let scheme = url.scheme?.lowercased(),
+        let host = url.host?.lowercased()
+    else {
+        throw OIDCDiscoveryURLError.malformed(url: urlString)
+    }
+    if !allowInsecure {
+        guard scheme == "https" else {
+            throw OIDCDiscoveryURLError.insecureScheme(url: urlString)
+        }
+        if isPrivateOrLoopbackHost(host) {
+            throw OIDCDiscoveryURLError.privateHost(host: host)
+        }
+    }
+}
+
+private func isPrivateOrLoopbackHost(_ host: String) -> Bool {
+    if host == "localhost" || host.hasSuffix(".localhost") { return true }
+    if host == "0.0.0.0" { return true }
+    // IPv6 loopback.
+    if host == "::1" || host == "[::1]" { return true }
+    // IPv4 ranges: 10/8, 127/8, 172.16/12, 192.168/16.
+    let parts = host.split(separator: ".").map(String.init)
+    if parts.count == 4, let a = Int(parts[0]), let b = Int(parts[1]),
+        Int(parts[2]) != nil, Int(parts[3]) != nil
+    {
+        if a == 10 || a == 127 { return true }
+        if a == 192, b == 168 { return true }
+        if a == 172, (16...31).contains(b) { return true }
+        if a == 169, b == 254 { return true }  // link-local
+    }
+    // IPv6 unique-local fc00::/7 (literal form, post-bracket-strip).
+    let trimmedHost = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+    if trimmedHost.hasPrefix("fc") || trimmedHost.hasPrefix("fd") {
+        // Conservative: any host starting with fc/fd that contains a colon
+        // looks like an IPv6 unique-local literal.
+        if trimmedHost.contains(":") { return true }
+    }
+    return false
 }
 
 // MARK: - Application Storage
