@@ -33,7 +33,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func getDraftSuite(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest)
         return try await payload.encodeResponse(for: req)
@@ -47,7 +46,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func putDraftSuite(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
 
         let body: SuitePayload
@@ -67,7 +65,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func putDraftPatternFamilies(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
 
         let families: [PatternFamily]
@@ -94,7 +91,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func putDraftNotebookChecks(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
 
         let checks: [NotebookCheck]
@@ -115,7 +111,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func createDraftScript(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
 
         struct CreateBody: Content {
@@ -189,7 +184,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func deleteDraftScript(req: Request) async throws -> HTTPStatus {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
         let filename = try safeScriptFilename(from: req)
 
@@ -234,7 +228,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func downloadDraftSetupItem(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let setup = try await loadDraftSetup(req)
 
         struct FileQuery: Content { let name: String }

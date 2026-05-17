@@ -34,7 +34,6 @@ extension AssignmentRoutes {
     func createSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(Body.self)
         let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -60,7 +59,6 @@ extension AssignmentRoutes {
     func renameSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
@@ -89,7 +87,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func deleteSuiteSection(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
@@ -134,7 +131,6 @@ extension AssignmentRoutes {
             var expressions: [PersonalizationExpression]?
         }
 
-        try requireInstructor(req)
         let (assignment, setup) = try await loadAssignmentAndSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
@@ -346,7 +342,6 @@ extension AssignmentRoutes {
     func reorderSuiteSections(req: Request) async throws -> HTTPStatus {
         struct Body: Content { var sectionIDs: [String] }
 
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(Body.self)
 

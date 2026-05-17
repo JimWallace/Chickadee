@@ -31,19 +31,7 @@ import Fluent
 import Foundation
 import Vapor
 
-// MARK: - Auth + setup resolution
-
-/// Authenticates the request as an instructor.  Throws .unauthorized
-/// if no user, .forbidden if the user isn't at least an instructor.
-/// Returns the user for callers that need it (e.g. for retest stamping).
-@discardableResult
-func requireInstructor(_ req: Request) throws -> APIUser {
-    let user = try req.auth.require(APIUser.self)
-    guard user.isInstructor else {
-        throw WebAssignmentError.forbidden(action: "edit assignments")
-    }
-    return user
-}
+// MARK: - Setup resolution
 
 /// Loads the (assignment, setup) pair from a `:assignmentID` path
 /// parameter.  Throws `.notFound` if either the assignment or its

@@ -13,11 +13,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "download assignment files")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
@@ -39,11 +34,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func downloadCurrentSetupItem(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "download assignment files")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
@@ -71,11 +61,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "download assignment files")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
@@ -122,9 +107,6 @@ extension AssignmentRoutes {
     @Sendable
     func saveEditedAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "edit assignments")
-        }
 
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
@@ -442,11 +424,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func getScript(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "edit assignment scripts")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
 
@@ -470,11 +447,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func updateScript(req: Request) async throws -> HTTPStatus {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "edit assignment scripts")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
 
@@ -529,11 +501,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func createScript(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "create assignment scripts")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
 
         struct CreateBody: Content {
@@ -638,11 +605,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func deleteScript(req: Request) async throws -> HTTPStatus {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "delete assignment scripts")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         let filename = try safeScriptFilename(from: req)
 
@@ -708,8 +670,8 @@ extension AssignmentRoutes {
     @Sendable
     func draftSolutionNotebook(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor, let userID = user.id else {
-            throw WebAssignmentError.forbidden(action: "view draft solution notebooks")
+        guard let userID = user.id else {
+            throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
         }
 
         guard let draftID = try? req.query.get(String.self, at: "draftID"),
@@ -760,11 +722,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func scanNotebook(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "scan notebooks")
-        }
-
         guard let buffer = req.body.data else {
             throw WebAssignmentError.invalidParameter(name: "request body", reason: "Request body is empty")
         }
@@ -831,8 +788,8 @@ extension AssignmentRoutes {
     @Sendable
     func createSolutionFromAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor, let userID = user.id else {
-            throw WebAssignmentError.forbidden(action: "create a solution notebook")
+        guard let userID = user.id else {
+            throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
         }
 
         let idStr = try assignmentPublicIDParameter(from: req)

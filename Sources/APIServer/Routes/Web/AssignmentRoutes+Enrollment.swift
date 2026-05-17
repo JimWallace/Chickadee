@@ -13,10 +13,6 @@ extension AssignmentRoutes {
     @Sendable
     func enrollCSVForm(req: Request) async throws -> View {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "manage enrollments")
-        }
-
         let courseState = try await req.resolveActiveCourse(for: caller)
         guard let courseContext = courseState.active,
             let courseID = courseState.activeCourseUUID,
@@ -105,11 +101,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func instructorUnenrollUser(req: Request) async throws -> Response {
-        let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "manage enrollments")
-        }
-
         guard
             let courseIDString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: courseIDString),
@@ -138,11 +129,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func instructorCancelPreEnrollment(req: Request) async throws -> Response {
-        let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "manage enrollments")
-        }
-
         guard
             let courseIDString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: courseIDString),

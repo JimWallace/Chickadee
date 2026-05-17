@@ -21,7 +21,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func getPatternFamilies(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
 
         let families: [PatternFamily] = {
@@ -48,7 +47,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func putPatternFamilies(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let families: [PatternFamily]

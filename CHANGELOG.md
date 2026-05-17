@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Internal
+
+- **Wire SwiftLint into the `format-lint` CI job.**  `.swiftlint.yml` and
+  `scripts/swiftlint.sh` have been on disk since the adoption PR, but the
+  workflow only ran `scripts/lint.sh` (swift-format).  The violation
+  backlog is now empty (`Found 0 violations, 0 serious in 329 files`),
+  so the staged rollout described in `CLAUDE.md` advances to its final
+  state: the `Run SwiftLint` step runs after `Check formatting` in the
+  same job.  The script still skips `--strict`, so warning-severity
+  rules report without blocking while error-severity outliers (function
+  body > 300 lines, type body > 800 lines, cyclomatic complexity > 40,
+  etc.) fail the job.  Added an SPM checkout cache to keep the
+  swiftlint plugin warm across runs, and bumped the job timeout from
+  5 min to 10 min to absorb the first cold build.
+
+- **Drop redundant in-handler role guards on AssignmentRoutes.**  The
+  `AssignmentRoutes` collection (and every `+Extension`) is already
+  registered behind `RoleMiddleware(required: .instructor)` in
+  `routes.swift`, so the ~40 in-handler `guard user.isInstructor`
+  checks (15 inline `WebAssignmentError.forbidden(action:)` sites in
+  `+Editor` / `+Enrollment` / `editPage`; 25 `try requireInstructor(req)`
+  sites in `+Suite` / `+Checks` / `+Families` / `+GlobalVariables` /
+  `+SuiteSections` / `+DraftSections` / `+Draft`) were dead code — the
+  middleware throws `Abort(.forbidden)` before any handler runs.  The
+  `requireInstructor(_:)` helper in `SuiteEditHelpers.swift` is
+  removed too.  Net: 11 files, 5 +, 104 −.  Two combined
+  `guard user.isInstructor, let userID = user.id else { … }` sites in
+  `+Editor` are simplified to a plain `let userID = user.id` extract
+  (still required because `APIUser.id` is `UUID?` for Fluent reasons);
+  their throw site changes from `.forbidden` to `.internalFailure`
+  since the only reachable branch is a server-side data inconsistency,
+  not an authorization failure.  Tests assert on HTTP status
+  (`.forbidden`), not on `WebAssignmentError` cases, so existing
+  rejection coverage in `AssignmentRoutesDashboardTests`,
+  `AssignmentEnrollmentTests`, `SuiteRouteTests` continues to assert
+  the right thing — `Abort(.forbidden)` from the middleware also
+  yields a 403.  `TestSetupRoutes`, `WebRoutes(+Submission)`,
+  `SubmissionRoutes`, and `VanityURLRoutes` are unchanged because
+  their inline checks are legitimate per-resource authorization
+  (the collections themselves are in the `.authenticated` group,
+  not the `.instructor` group).
+
 ## [0.4.173] - 2026-05-17
 
 Security & privacy pass.  Closes the security findings raised by the
