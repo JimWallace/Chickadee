@@ -7,11 +7,7 @@
     <img class="error-bird" src="/images/chickadee-icon-alt.png" alt="">
     <div class="error-code">#(status)</div>
     <h1 class="error-title">#(title)</h1>
-    #if(isNotFound):
-    <p class="error-message">This page doesn't exist, or you don't have permission to view it.</p>
-    #else:
     <p class="error-message">#(message)</p>
-    #endif
     <a href="/" class="btn">Go home</a>
 </div>
 <style>
