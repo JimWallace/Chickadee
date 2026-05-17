@@ -49,6 +49,13 @@ struct DiagnosticsConfiguration: Sendable {
     let activeRunnerWindowSeconds: TimeInterval
     let recentMetricsWindowHours: Int
     let pruneIntervalHours: Int
+    /// How many days of `audit_log` rows to keep before the audit-log
+    /// reaper deletes them.  Zero disables the reaper entirely so
+    /// operators piping audit_log to an external sink can manage
+    /// retention there.  Default 90 — long enough for last-term
+    /// debugging, short enough to satisfy FIPPA / PIPEDA's "dispose
+    /// once the operational need ends" principle.
+    let auditLogRetentionDays: Int
 
     static func fromEnvironment() -> Self {
         Self(
@@ -58,7 +65,8 @@ struct DiagnosticsConfiguration: Sendable {
             runnerSnapshotRetentionDays: environmentInt("RUNNER_SNAPSHOT_RETENTION_DAYS") ?? 14,
             activeRunnerWindowSeconds: TimeInterval(environmentInt("RUNNER_ACTIVE_WINDOW_SECONDS") ?? 120),
             recentMetricsWindowHours: environmentInt("METRICS_RECENT_WINDOW_HOURS") ?? 24,
-            pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24
+            pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24,
+            auditLogRetentionDays: environmentInt("AUDIT_LOG_RETENTION_DAYS") ?? 90
         )
     }
 }

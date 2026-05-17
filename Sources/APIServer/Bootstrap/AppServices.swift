@@ -19,6 +19,11 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
     app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
     app.lifecycle.use(SessionReaperLifecycleHandler())
+    app.lifecycle.use(
+        AuditLogReaperLifecycleHandler(
+            maxAge: TimeInterval(appConfig.diagnostics.auditLogRetentionDays) * 86_400
+        )
+    )
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // BrightSpace grade sync (only registered when env vars are present).
