@@ -174,7 +174,8 @@ extension AppConfig {
                 runnerSnapshotRetentionDays: 14,
                 activeRunnerWindowSeconds: 120,
                 recentMetricsWindowHours: 24,
-                pruneIntervalHours: 24
+                pruneIntervalHours: 24,
+                auditLogRetentionDays: 90
             ),
             alerts: .default
         )
