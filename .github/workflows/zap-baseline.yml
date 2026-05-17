@@ -38,10 +38,11 @@ jobs:
           exit 1
 
       - name: Run ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8080'
           cmd_options: '-a'
+          rules_file_name: '.zap/rules.tsv'
           fail_action: false
           allow_issue_writing: true
 

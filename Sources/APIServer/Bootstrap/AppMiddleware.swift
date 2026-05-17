@@ -3,21 +3,24 @@
 // Order-sensitive middleware registration plus view/static-file setup.
 // The order here is load-bearing:
 //
-//   LeafErrorMiddleware     — outermost so it catches every downstream error
+//   SecurityHeadersMiddleware — outermost so it adds CSP / nosniff /
+//                               Permissions-Policy to EVERY response,
+//                               including 404s rendered by
+//                               LeafErrorMiddleware, static assets served
+//                               by FileMiddleware, and 301s from
+//                               HTTPSRedirectMiddleware
+//   LeafErrorMiddleware     — catches every downstream error
 //   HTTPSRedirectMiddleware — only when enforceHTTPS, before sessions
 //   sessions.middleware
 //   UserSessionAuthenticator
 //   UserActivityMiddleware
 //   UserFileNamespaceMiddleware
 //   ScanModeMiddleware      — gates destructive POSTs in scan windows
-//   FileMiddleware          — short-circuits the chain for static files,
-//                             so all *prior* middleware run only for
-//                             dynamic Leaf-rendered pages
+//   FileMiddleware          — short-circuits the chain for static files
 //   COEPMiddleware          — sets Cross-Origin-Embedder-Policy headers
 //                             on dynamic pages (NOT on JupyterLite static
 //                             assets, since the service worker produces
 //                             synthetic responses without CORP headers)
-//   SecurityHeadersMiddleware
 //
 // Storage seeding for auth/security configs happens here too because
 // the middleware chain reads them via app.storage.
@@ -61,8 +64,22 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
 
     // MARK: - Middleware (order matters)
 
-    // Error page middleware must be outermost so it catches errors from all
-    // subsequent middleware and route handlers.
+    // Security headers run *outermost* so that CSP, X-Content-Type-Options,
+    // Permissions-Policy, etc. land on every response — including 404s
+    // produced by LeafErrorMiddleware, static-asset responses served by
+    // FileMiddleware, and 301s issued by HTTPSRedirectMiddleware.  Each of
+    // those middlewares either short-circuits the chain or builds its own
+    // response, so middleware registered *after* them never sees the
+    // response on the way back.  HSTS is still gated on enforceHTTPS via
+    // the strictTransportSecurity argument below.
+    let hstsValue: String? =
+        securityConfiguration.enforceHTTPS
+        ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
+        : nil
+    app.middleware.use(SecurityHeadersMiddleware(strictTransportSecurity: hstsValue))
+
+    // Error page middleware sits beneath SecurityHeadersMiddleware so it
+    // catches errors from all subsequent middleware and route handlers.
     app.middleware.use(LeafErrorMiddleware())
     if securityConfiguration.enforceHTTPS {
         app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
@@ -103,12 +120,4 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // fallback — so cross-origin isolation on the iframe document is unnecessary.
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware())
-    // HSTS is set only when HTTPS enforcement is active. Pinning Strict-
-    // Transport-Security against a dev http://localhost server would brick
-    // local browsers; the enforceHTTPS gate matches HTTPSRedirectMiddleware.
-    let hstsValue: String? =
-        securityConfiguration.enforceHTTPS
-        ? SecurityHeadersMiddleware.defaultStrictTransportSecurity
-        : nil
-    app.middleware.use(SecurityHeadersMiddleware(strictTransportSecurity: hstsValue))
 }
