@@ -1,35 +1,38 @@
 # ZAP baseline rule configuration for the Chickadee weekly scan.
 #
-# Format (tab-separated):
-#   RULE_ID    THRESHOLD    [URL_REGEX]
+# Format (tab-separated, exactly three columns):
+#   RULE_ID<TAB>THRESHOLD<TAB>URL_REGEX
 #
 # THRESHOLD values: IGNORE | INFO | WARN | FAIL
+# URL_REGEX is required by the parser (zap-baseline.py refuses any line
+# with fewer than three tab-separated tokens). Use `.*` to apply the
+# threshold to every URL.
 #
 # Suppressions below are rules ZAP fires that are either informational
 # (it noticed a feature) or describe browser-side request headers the
-# server doesn't control.  Real findings (CSP, header coverage, etc.)
+# server doesn't control. Real findings (CSP, header coverage, etc.)
 # are still surfaced.
 
 # Information Disclosure - Suspicious Comments
 # Flags TODO/FIXME strings in JS bundles; not actionable as a recurring CI rule.
-10027	IGNORE
+10027	IGNORE	.*
 
 # Non-Storable / Storable Content
 # Informational caching observation, not a vulnerability.
-10049	IGNORE
+10049	IGNORE	.*
 
 # Base64 Disclosure
 # Flags session cookies and asset-versioning hashes that look base64.
-10094	IGNORE
+10094	IGNORE	.*
 
 # Authentication Request Identified
 # ZAP noting a login form exists; not a finding.
-10111	IGNORE
+10111	IGNORE	.*
 
 # Session Management Response Identified
 # ZAP noting session cookies exist; not a finding.
-10112	IGNORE
+10112	IGNORE	.*
 
 # Sec-Fetch-* Headers Missing
 # Those are request headers the browser sends; the server cannot set them.
-90005	IGNORE
+90005	IGNORE	.*
