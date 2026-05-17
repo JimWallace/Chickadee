@@ -250,4 +250,59 @@ final class ServerHealthAlertTests: XCTestCase {
                 testsTimedOut: nil
             ))
     }
+
+    // MARK: - evaluateQueueBackedUp
+
+    func testQueueBackedUp_freshRetestBurstDoesNotFire() {
+        // Instructor-triggered retest enqueues 250 submissions; oldest is 5s old.
+        // Depth exceeds the 25 default but nothing is stuck, so the rule must stay quiet.
+        let pending = PendingQueueState(pendingCount: 250, oldestPendingAge: 5)
+        let evaluation = evaluateQueueBackedUp(
+            pending: pending,
+            depthThreshold: 25,
+            oldestPendingSeconds: 600
+        )
+        XCTAssertFalse(evaluation.isFiring)
+    }
+
+    func testQueueBackedUp_oneStuckSubmissionFiresEvenAtLowDepth() {
+        // A single submission has been pending for 20 minutes — the queue is stuck
+        // even though depth (1) is far below the threshold.
+        let pending = PendingQueueState(pendingCount: 1, oldestPendingAge: 1200)
+        let evaluation = evaluateQueueBackedUp(
+            pending: pending,
+            depthThreshold: 25,
+            oldestPendingSeconds: 600
+        )
+        XCTAssertTrue(evaluation.isFiring)
+        XCTAssertTrue(
+            evaluation.summary.contains("oldest pending"),
+            "summary should describe the age breach, got: \(evaluation.summary)")
+        XCTAssertFalse(
+            evaluation.summary.contains("pending (>= "),
+            "depth context should be omitted when depth is below threshold")
+    }
+
+    func testQueueBackedUp_largeAndStuckMentionsBothInSummary() {
+        // Large pile AND oldest item exceeds the age threshold — fire and include
+        // the depth context for the on-call responder.
+        let pending = PendingQueueState(pendingCount: 218, oldestPendingAge: 1500)
+        let evaluation = evaluateQueueBackedUp(
+            pending: pending,
+            depthThreshold: 25,
+            oldestPendingSeconds: 600
+        )
+        XCTAssertTrue(evaluation.isFiring)
+        XCTAssertTrue(evaluation.summary.contains("oldest pending 1500s"))
+        XCTAssertTrue(evaluation.summary.contains("218 pending (>= 25)"))
+    }
+
+    func testQueueBackedUp_emptyQueueDoesNotFire() {
+        let evaluation = evaluateQueueBackedUp(
+            pending: .empty,
+            depthThreshold: 25,
+            oldestPendingSeconds: 600
+        )
+        XCTAssertFalse(evaluation.isFiring)
+    }
 }
