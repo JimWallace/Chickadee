@@ -391,10 +391,11 @@ same bytes without a build-time network fetch.
   delivered via the `SwiftLintPlugins` SwiftPM dependency — no separate
   install). Run `scripts/swiftlint.sh` to check. The two tools are
   complementary: swift-format owns formatting, SwiftLint owns correctness;
-  overlapping rules are disabled in `.swiftlint.yml`. CI enforcement of
-  SwiftLint is staged — adoption PR adds the config, follow-up PRs clear
-  the violation backlog, then the `Run SwiftLint` step is wired into the
-  `format-lint` job.
+  overlapping rules are disabled in `.swiftlint.yml`. CI enforces SwiftLint
+  as a step in the `format-lint` job (alongside `scripts/lint.sh`); the
+  script does not pass `--strict` so warning-severity rules still report
+  for visibility without blocking, while error-severity rules (outsized
+  functions/types, real outliers) fail the job.
 
 ---
 

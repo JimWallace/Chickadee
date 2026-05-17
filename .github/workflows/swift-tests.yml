@@ -8,15 +8,29 @@ on:
 jobs:
   format-lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     container:
       image: swift:6.3-jammy
 
     steps:
       - uses: actions/checkout@v6
 
+      - name: Compute SPM cache key
+        id: spm-cache-key
+        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SPM checkouts
+        uses: actions/cache@v5
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
+          restore-keys: ${{ runner.os }}-spm-
+
       - name: Check formatting
         run: scripts/lint.sh
+
+      - name: Run SwiftLint
+        run: scripts/swiftlint.sh
 
   core-tests:
     runs-on: ubuntu-latest

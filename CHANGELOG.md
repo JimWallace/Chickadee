@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Wire SwiftLint into the `format-lint` CI job.**  `.swiftlint.yml` and
+  `scripts/swiftlint.sh` have been on disk since the adoption PR, but the
+  workflow only ran `scripts/lint.sh` (swift-format).  The violation
+  backlog is now empty (`Found 0 violations, 0 serious in 329 files`),
+  so the staged rollout described in `CLAUDE.md` advances to its final
+  state: the `Run SwiftLint` step runs after `Check formatting` in the
+  same job.  The script still skips `--strict`, so warning-severity
+  rules report without blocking while error-severity outliers (function
+  body > 300 lines, type body > 800 lines, cyclomatic complexity > 40,
+  etc.) fail the job.  Added an SPM checkout cache to keep the
+  swiftlint plugin warm across runs, and bumped the job timeout from
+  5 min to 10 min to absorb the first cold build.
+
 - **Drop redundant in-handler role guards on AssignmentRoutes.**  The
   `AssignmentRoutes` collection (and every `+Extension`) is already
   registered behind `RoleMiddleware(required: .instructor)` in
