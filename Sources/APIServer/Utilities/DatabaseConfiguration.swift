@@ -182,6 +182,16 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
 }
 
 func registerMigrations(on app: Application) {
+    // Note: 13 historical `Add*` migrations were consolidated into the
+    // corresponding `Create*` files in PR #502 (v0.4.171), and their
+    // no-op stubs were removed in v0.5.0.  Production DBs that already
+    // applied those migrations still carry the names in
+    // `_fluent_migrations`; Fluent ignores history rows whose struct
+    // names are no longer registered, so this is harmless.  Fresh
+    // deploys produce the same final schema from the `Create*` files
+    // alone.  `AddSessionsCreatedAt` is NOT consolidated — it's a real
+    // migration against Vapor's `_fluent_sessions` table (not one of
+    // our own).
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateCourses())
     app.migrations.add(CreateCourseEnrollments())
@@ -189,32 +199,19 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
     app.migrations.add(CreateAssignments())
-    app.migrations.add(AddAssignmentSlugs())
     app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
     app.migrations.add(CreateSubmissionDiagnostics())
     app.migrations.add(CreateRequestMetrics())
     app.migrations.add(CreateJobExecutionMetrics())
-    app.migrations.add(AddJobExecutionStageTimings())
     app.migrations.add(CreateRunnerSnapshots())
     app.migrations.add(CreateRunnerProfiles())
     app.migrations.add(CreateAssignmentRequirements())
-    app.migrations.add(AddSubmissionRetestedAt())
-    app.migrations.add(AddAssignmentDeadlineOverrideActive())
     app.migrations.add(CreateClassAchievements())
-    app.migrations.add(AddSubmissionRetestedByUserID())
-    app.migrations.add(AddTestSetupLastRetestedManifestHash())
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
-    app.migrations.add(AddUserLastSeenAt())
-    app.migrations.add(AddBrightSpaceSyncFields())
     app.migrations.add(CreateClientDiagnostics())
     app.migrations.add(CreateAssignmentPersonalizationSeeds())
-    app.migrations.add(AddJobDiskUsageMetrics())
     app.migrations.add(AddSessionsCreatedAt())
     app.migrations.add(CreateAuditLog())
-    app.migrations.add(AddJobExecutionCacheHit())
     app.migrations.add(CreateAssignmentExtensions())
 }

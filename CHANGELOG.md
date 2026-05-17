@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **v0.5.0 cleanup: delete the 13 no-op `Add*` migration stubs.**
+  PR #502 (v0.4.171) folded these into the corresponding `Create*`
+  files, but left the structs in place as empty-bodied `AsyncMigration`
+  no-ops so production DBs that had them marked applied in
+  `_fluent_migrations` saw no runtime change.  CLAUDE.md flagged the
+  actual deletion for v0.5.0 once production was observed tolerant of
+  the consolidation.  Removed:
+  `AddAssignmentDeadlineOverrideActive`, `AddAssignmentSlugs`,
+  `AddBrightSpaceSyncFields`, `AddCourseEnrollmentMode`,
+  `AddCourseOpenEnrollment`, `AddCourseSections`,
+  `AddJobDiskUsageMetrics`, `AddJobExecutionCacheHit`,
+  `AddJobExecutionStageTimings`, `AddSubmissionRetestedAt`,
+  `AddSubmissionRetestedByUserID`, `AddTestSetupLastRetestedManifestHash`,
+  `AddUserLastSeenAt`.  Their `.add(...)` lines in
+  `registerMigrations(on:)` (`DatabaseConfiguration.swift:184`) are
+  deleted too.  `AddSessionsCreatedAt` stays — it's a real migration
+  against Vapor's `_fluent_sessions` table, not one of ours, and was
+  never consolidated.  Fluent ignores `_fluent_migrations` history
+  rows whose struct names are no longer registered, so existing
+  production DBs are unaffected.  Fresh deploys produce the same
+  final schema from the `Create*` files alone.
+
 - **Wire SwiftLint into the `format-lint` CI job.**  `.swiftlint.yml` and
   `scripts/swiftlint.sh` have been on disk since the adoption PR, but the
   workflow only ran `scripts/lint.sh` (swift-format).  The violation
@@ -19,7 +41,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   body > 300 lines, type body > 800 lines, cyclomatic complexity > 40,
   etc.) fail the job.  Added an SPM checkout cache to keep the
   swiftlint plugin warm across runs, and bumped the job timeout from
-  5 min to 10 min to absorb the first cold build.
+  5 min to 10 min to absorb the first cold build.  Job runs on
+  `swift:6.3-noble` because SwiftLintBinary 0.63.2 needs GLIBC 2.38
+  (jammy ships 2.35); other jobs stay on jammy.
 
 - **Drop redundant in-handler role guards on AssignmentRoutes.**  The
   `AssignmentRoutes` collection (and every `+Extension`) is already
