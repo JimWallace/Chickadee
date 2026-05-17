@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **v0.6.0 cleanup: drop the two DEPRECATED back-compat shims.**
+  CLAUDE.md flagged both for removal once their compatibility window
+  closed.  (1) `NotebookFunctionScanner`: the
+  `isShadowed = decodeIfPresent(...) ?? false` fallback in the custom
+  `init(from:)` is now a plain `decode(...)` — browser clients on
+  v0.4.94+ have shipped `isShadowed` unconditionally and the
+  fallback no longer carries weight.  (2) `CourseBundleManifest`:
+  the `openEnrollment: Bool?` field on `BundledCourse` (and its
+  init parameter) is gone, and `bundledCourseEnrollmentMode(_:)`
+  collapses to `course.enrollmentMode ?? .open`.  `.chickadee`
+  bundle exports have only emitted `enrollmentMode` (never
+  `openEnrollment`) since the helper extraction in #501, so old
+  imports were already going through the `?? .open` default branch.
+  Five tests that pinned the legacy contract
+  (`isShadowedDecodeFallback_legacyJSONWithoutFieldDefaultsToFalse`,
+  `bundledCourseBackwardCompatEnrollmentModeAbsent`, and the three
+  `enrollmentModeResolver_legacy*` cases) are rewritten to assert
+  the new contract: missing `isShadowed` now throws `DecodingError`,
+  `bundledCourseEnrollmentMode` only consults `enrollmentMode`.
+
 - **v0.5.0 cleanup: delete the 13 no-op `Add*` migration stubs.**
   PR #502 (v0.4.171) folded these into the corresponding `Create*`
   files, but left the structs in place as empty-bodied `AsyncMigration`

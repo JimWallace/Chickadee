@@ -70,40 +70,23 @@ public struct CourseBundleManifest: Codable, Sendable {
 public struct BundledCourse: Codable, Sendable {
     public let code: String
     public let name: String
-    /// Enrollment mode; nil in bundles exported before this field was added.
-    /// When nil, fall back to `openEnrollment` for backward compatibility.
+    /// Enrollment mode; nil defaults to `.open` at resolution time.
     public let enrollmentMode: CourseEnrollmentMode?
-    // DEPRECATED: remove in v0.6.0 — see CHANGELOG.
-    // Present only in `.chickadee` bundles exported before `enrollmentMode` was added.
-    // Ignored when `enrollmentMode` is non-nil. Once v0.6.0 is cut, drop the field
-    // and the `openEnrollment` branch inside `bundledCourseEnrollmentMode(_:)`.
-    public let openEnrollment: Bool?
 
     public init(
         code: String, name: String,
-        enrollmentMode: CourseEnrollmentMode? = nil,
-        openEnrollment: Bool? = nil
+        enrollmentMode: CourseEnrollmentMode? = nil
     ) {
         self.code = code
         self.name = name
         self.enrollmentMode = enrollmentMode
-        self.openEnrollment = openEnrollment
     }
 }
 
 /// Resolves the effective `CourseEnrollmentMode` for an imported bundle.
-///
-/// Prefers `enrollmentMode` (the canonical field).  Falls back to the
-/// pre-v0.3.x `openEnrollment` boolean for older bundles: `false → closed`,
-/// any other value → `open`.  Both paths default to `.open` when neither
-/// field is present so import never fails on a missing-field error.
-///
-/// v0.6.0 cleanup site: drop the `openEnrollment` branch and inline the
-/// `enrollmentMode ?? .open` form at the call site.
+/// Defaults to `.open` when the bundle omitted the field.
 public func bundledCourseEnrollmentMode(_ course: BundledCourse) -> CourseEnrollmentMode {
-    if let mode = course.enrollmentMode { return mode }
-    if course.openEnrollment == false { return .closed }
-    return .open
+    course.enrollmentMode ?? .open
 }
 
 public struct BundledUser: Codable, Sendable {

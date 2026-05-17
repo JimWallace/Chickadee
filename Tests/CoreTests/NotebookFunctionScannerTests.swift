@@ -166,25 +166,7 @@ struct NotebookFunctionScannerTests {
         #expect(fns[0].name == "public_fn")
     }
 
-    // Pre-v0.4.94 browser clients didn't send `isShadowed`. The custom
-    // decoder defaults the missing key to false. Pin both branches so the
-    // v0.6.0 cleanup that removes the fallback only has to delete the
-    // `decodeIfPresent ?? false` line — these tests will fail loudly if
-    // anyone changes the contract.
-    @Test func isShadowedDecodeFallback_legacyJSONWithoutFieldDefaultsToFalse() throws {
-        let json = """
-            {
-              "name": "tax",
-              "paramNames": ["price"],
-              "hasTypeHints": true,
-              "hasDocstring": false
-            }
-            """.data(using: .utf8)!
-        let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
-        #expect(decoded.isShadowed == false)
-    }
-
-    @Test func isShadowedDecodeFallback_modernJSONHonoursExplicitTrue() throws {
+    @Test func isShadowedDecodes() throws {
         let json = """
             {
               "name": "tax",
@@ -196,6 +178,22 @@ struct NotebookFunctionScannerTests {
             """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
         #expect(decoded.isShadowed == true)
+    }
+
+    @Test func isShadowedDecodeRequiresField() {
+        // v0.6.0 removed the `decodeIfPresent ?? false` fallback; missing
+        // `isShadowed` is now a decode error rather than silently false.
+        let json = """
+            {
+              "name": "tax",
+              "paramNames": ["price"],
+              "hasTypeHints": true,
+              "hasDocstring": false
+            }
+            """.data(using: .utf8)!
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
+        }
     }
 
     @Test func shadowedFunctionMarked() {
