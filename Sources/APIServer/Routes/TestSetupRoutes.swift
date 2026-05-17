@@ -284,6 +284,17 @@ struct TestSetupRoutes: RouteCollection {
         let zipBytes = upload.files
         try zipBytes.write(to: URL(fileURLWithPath: zipPath))
 
+        // Reject zip bombs before any DB row references this file.  The
+        // upload sits in setupsDir until validation passes; on failure we
+        // delete it so a malicious upload doesn't leave stale bytes on
+        // disk indefinitely.
+        do {
+            try validateZipUploadSize(zipPath: zipPath)
+        } catch let error as ZipUploadValidationError {
+            try? FileManager.default.removeItem(atPath: zipPath)
+            throw Abort(.unprocessableEntity, reason: String(describing: error))
+        }
+
         // Store metadata in DB.
         let storedManifest =
             String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest

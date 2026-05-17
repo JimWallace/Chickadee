@@ -73,6 +73,24 @@ final class VanityURLRoutesTests: XCTestCase {
         return assignment
     }
 
+    /// Enrolls the named user in `courseID`.  Required to exercise the
+    /// happy path after the v0.4.171 enrollment gate landed on
+    /// `resolveAssignment` (issue #561) — unenrolled users now get 404
+    /// from every vanity URL so the routes can't be used to enumerate
+    /// the catalogue.
+    private func enroll(username: String, courseID: UUID) async throws {
+        guard
+            let user = try await APIUser.query(on: app.db)
+                .filter(\.$username == username).first()
+        else {
+            XCTFail("Expected user \(username) to exist")
+            return
+        }
+        try await APICourseEnrollment(
+            userID: try user.requireID(), courseID: courseID
+        ).save(on: app.db)
+    }
+
     // MARK: - Unauthenticated
 
     func testVanityURL_unauthenticated_redirectsToLogin() async throws {
@@ -96,6 +114,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student1", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student1", courseID: courseID)
         try await app.asyncTest(
             .GET, "/hlth230/lab-1",
             beforeRequest: { req in
@@ -116,6 +135,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student2", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student2", courseID: courseID)
         try await app.asyncTest(
             .GET, "/cs246/assignment-2",
             beforeRequest: { req in
@@ -136,6 +156,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student3", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student3", courseID: courseID)
         try await app.asyncTest(
             .GET, "/hlth230/lab-1-intro",
             beforeRequest: { req in
@@ -187,6 +208,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student6", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student6", courseID: courseID)
         try await app.asyncTest(
             .GET, "/hlth230/lab99",
             beforeRequest: { req in
@@ -210,6 +232,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student7", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student7", courseID: activeID)
         try await app.asyncTest(
             .GET, "/hlth230/lab-1",
             beforeRequest: { req in
@@ -231,6 +254,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student8", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student8", courseID: courseID)
         try await app.asyncTest(
             .GET, "/hlth230/lab-1",
             beforeRequest: { req in
@@ -260,6 +284,53 @@ final class VanityURLRoutesTests: XCTestCase {
         XCTAssertEqual(slug, "lab-1-2")
     }
 
+    // MARK: - Enrollment gate (issue #561)
+
+    func testVanityURL_unenrolledStudent_returns404() async throws {
+        // Regression for issue #561: vanity URLs leaked the existence of
+        // a (courseCode, assignmentSlug) pair to any authenticated user
+        // by redirecting unenrolled students into the access-denied page
+        // instead of 404'ing.
+        let course = try await seedCourse(code: "HLTH230")
+        let courseID = try course.requireID()
+        try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van_enr01")
+
+        let cookie = try await loginUser(
+            username: "vanity_outsider", password: "pw",
+            role: "student", on: app)
+        try await app.asyncTest(
+            .GET, "/hlth230/lab-1",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .notFound,
+                    "Unenrolled student must see 404 (matching no-such-course response), got \(res.status)")
+            })
+    }
+
+    func testVanityURL_instructor_bypassesEnrollment() async throws {
+        // Instructors and admins skip the enrollment check so they can
+        // QA assignments in courses they aren't formally enrolled in.
+        let course = try await seedCourse(code: "HLTH230")
+        let courseID = try course.requireID()
+        try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van_enr02")
+
+        let cookie = try await loginUser(
+            username: "vanity_instructor", password: "pw",
+            role: "instructor", on: app)
+        try await app.asyncTest(
+            .GET, "/hlth230/lab-1",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van_enr02/notebook")
+            })
+    }
+
     func testVanityURL_submitAndHistoryRoutesRedirectToCanonicalStudentRoutes() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
@@ -268,6 +339,7 @@ final class VanityURLRoutesTests: XCTestCase {
         let cookie = try await loginUser(
             username: "vanity_student9", password: "pw",
             role: "student", on: app)
+        try await enroll(username: "vanity_student9", courseID: courseID)
         try await app.asyncTest(
             .GET, "/hlth230/lab-1/submit",
             beforeRequest: { req in

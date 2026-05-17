@@ -122,7 +122,8 @@ import Vapor
                 authServerOverride: nil,
                 callbackPath: "/x",
                 usernameClaim: "u",
-                emailClaim: "e"
+                emailClaim: "e",
+                allowInsecure: false
             ),
             security: seed.security,
             scanMode: seed.scanMode,
@@ -150,7 +151,8 @@ import Vapor
                 authServerOverride: nil,
                 callbackPath: "/cb",
                 usernameClaim: "u",
-                emailClaim: "e"
+                emailClaim: "e",
+                allowInsecure: false
             ),
             security: .default,
             scanMode: .default,
