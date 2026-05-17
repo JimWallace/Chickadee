@@ -51,7 +51,7 @@ func evaluateHealthRules(
 
 // MARK: - Per-rule evaluators
 
-private struct PendingQueueState: Sendable {
+struct PendingQueueState: Sendable {
     let pendingCount: Int
     let oldestPendingAge: TimeInterval?
     static let empty = PendingQueueState(pendingCount: 0, oldestPendingAge: nil)
@@ -62,8 +62,11 @@ private func loadPendingQueueState(on application: Application, now: Date) async
         .filter(\.$status == "pending")
         .all()
     let pendingCount = pending.count
-    let oldestSubmittedAt = pending.compactMap(\.submittedAt).min()
-    let oldestAge = oldestSubmittedAt.map { now.timeIntervalSince($0) }
+    // Use the effective enqueue time (retestedAt ?? submittedAt) so a fresh
+    // retest of an old submission doesn't look like it's been queued for days.
+    // Matches the queueWaitMs baseline established in v0.4.45.
+    let oldestEnqueuedAt = pending.compactMap { $0.retestedAt ?? $0.submittedAt }.min()
+    let oldestAge = oldestEnqueuedAt.map { now.timeIntervalSince($0) }
     return PendingQueueState(pendingCount: pendingCount, oldestPendingAge: oldestAge)
 }
 
@@ -90,19 +93,24 @@ private func evaluateRunnerOffline(
     )
 }
 
-private func evaluateQueueBackedUp(
+func evaluateQueueBackedUp(
     pending: PendingQueueState,
     depthThreshold: Int,
     oldestPendingSeconds: TimeInterval
 ) -> RuleEvaluation {
-    let depthBreached = pending.pendingCount >= depthThreshold
+    // A backup means "items are sitting around" — depth alone isn't a signal,
+    // since an instructor retesting an assignment can legitimately enqueue
+    // hundreds of submissions that drain in minutes.  Only fire when the
+    // oldest pending item has exceeded the age threshold; depth is included
+    // in the summary as extra context when it's also high.
     let ageBreached = (pending.oldestPendingAge ?? 0) >= oldestPendingSeconds
-    guard depthBreached || ageBreached else { return .ok }
+    guard ageBreached, let age = pending.oldestPendingAge else { return .ok }
 
-    var reasons: [String] = []
-    if depthBreached { reasons.append("\(pending.pendingCount) pending (>= \(depthThreshold))") }
-    if ageBreached, let age = pending.oldestPendingAge {
-        reasons.append("oldest pending \(Int(age))s old (>= \(Int(oldestPendingSeconds))s)")
+    var reasons: [String] = [
+        "oldest pending \(Int(age))s old (>= \(Int(oldestPendingSeconds))s)"
+    ]
+    if pending.pendingCount >= depthThreshold {
+        reasons.append("\(pending.pendingCount) pending (>= \(depthThreshold))")
     }
 
     return RuleEvaluation(
@@ -111,7 +119,7 @@ private func evaluateQueueBackedUp(
         details: [
             "pending_count": String(pending.pendingCount),
             "queue_depth_threshold": String(depthThreshold),
-            "oldest_pending_age_seconds": pending.oldestPendingAge.map { String(Int($0)) } ?? "n/a",
+            "oldest_pending_age_seconds": String(Int(age)),
             "oldest_pending_threshold_seconds": String(Int(oldestPendingSeconds)),
         ]
     )

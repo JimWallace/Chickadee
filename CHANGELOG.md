@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Queue-backup health alert no longer false-fires after a retest sweep.**
+  Two independent bugs were combining to produce bogus alerts like
+  `Queue backed up: 218 pending (>= 25); oldest pending 468679s old
+  (>= 600s)` immediately after an instructor retested an assignment
+  whose submissions drained within minutes.  (1) The "oldest pending
+  age" was measured from `submittedAt`, but a retest flips a
+  submission back to `pending` without resetting that column, so a
+  retest of a week-old submission looked week-old to the alert.  The
+  age now uses the effective enqueue time (`retestedAt ?? submittedAt`),
+  matching the `queueWaitMs` baseline established in v0.4.45.
+  (2) The rule fired on `depthBreached || ageBreached`, but a depth
+  spike with fresh items is normal load (instructor retest, exam
+  rush) — not a stuck queue.  The depth threshold is now an
+  *aggravating* signal that's only included in the summary when age
+  is *also* breached; age-breach is the sole trigger.  Both changes
+  live in `Sources/APIServer/Services/ServerHealthAlertService.swift`.
+  New regression tests cover both scenarios.
 - **Admin runner page no longer shows `Total < Queue Wait`.** v0.4.164's
   retest-clear fix closed one cause (stale per-attempt fields on the
   `JobExecutionMetric` row across a retest), but the underlying math
