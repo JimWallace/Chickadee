@@ -56,7 +56,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func getGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
 
         let manifest = try decodeManifest(setup: setup)
@@ -71,7 +70,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func putGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        try requireInstructor(req)
         let (assignment, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(GlobalVariablesBody.self)
         let expressions = body.expressions ?? []

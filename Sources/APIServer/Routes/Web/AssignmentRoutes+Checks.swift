@@ -21,7 +21,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func getNotebookChecks(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
 
         let checks: [NotebookCheck] = {
@@ -46,7 +45,6 @@ extension AssignmentRoutes {
 
     @Sendable
     func putNotebookChecks(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let checks: [NotebookCheck]

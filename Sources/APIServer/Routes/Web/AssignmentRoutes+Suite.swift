@@ -82,7 +82,6 @@ extension AssignmentRoutes {
     /// runner-facing expanded form.
     @Sendable
     func getSuite(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (_, setup) = try await loadAssignmentAndSetup(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest)
         return try await payload.encodeResponse(for: req)
@@ -96,7 +95,6 @@ extension AssignmentRoutes {
     /// view without a second round-trip.
     @Sendable
     func putSuite(req: Request) async throws -> Response {
-        try requireInstructor(req)
         let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let body: SuitePayload

@@ -510,11 +510,6 @@ struct AssignmentRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
-        let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "edit assignments")
-        }
-
         let idStr = try assignmentPublicIDParameter(from: req)
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
