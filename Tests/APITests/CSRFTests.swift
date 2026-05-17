@@ -179,6 +179,17 @@ final class CSRFTests: XCTestCase {
         let cookie = try await loginUser(
             username: "student_ok_tok", password: "pass1234",
             role: "student", on: app)
+        // Enroll the student in the seeded course so the cross-tenant
+        // enrollment gate (issue #551) doesn't 403 the GET below — the
+        // intent of this test is to exercise CSRF middleware, not the
+        // enrollment check.
+        let user = try await APIUser.query(on: app.db)
+            .filter(\.$username == "student_ok_tok").first()!
+        let courseID = try await APICourse.query(on: app.db)
+            .filter(\.$code == "CS203").first()!.requireID()
+        try await APICourseEnrollment(
+            userID: try user.requireID(), courseID: courseID
+        ).save(on: app.db)
 
         // GET the submit page to obtain a session-bound CSRF token.
         let (token, _) = try await csrfFields(

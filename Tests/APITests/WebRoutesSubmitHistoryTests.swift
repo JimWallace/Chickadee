@@ -17,6 +17,8 @@ final class WebRoutesSubmitHistoryTests: WebRoutesTestCase {
 
     func testSubmitFormRendersForStudent() async throws {
         let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enrollUser(user)
         try await insertSetup(id: "setup_sub")
 
         try await app.asyncTest(

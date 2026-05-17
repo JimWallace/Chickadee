@@ -69,12 +69,17 @@ extension WebRoutes {
 
     @Sendable
     func submitForm(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
         guard
             let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+        // Block cross-tenant info disclosure: an authenticated student
+        // shouldn't be able to learn that a setupID exists in a course
+        // they aren't enrolled in, nor see its assignment title.
+        try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
         // Browser-graded assignments are submitted from the notebook page, not this form.
         let manifestData = Data(setup.manifest.utf8)
         if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),

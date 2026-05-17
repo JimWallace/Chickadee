@@ -13,6 +13,95 @@ import XCTest
 
 final class WebRoutesSubmissionPageTests: WebRoutesTestCase {
 
+    // MARK: - Cross-tenant submission gate (issue #551)
+
+    func testStudentCannotSubmitToAssignmentInForeignCourse() async throws {
+        // requireOpenStudentAssignment must reject submissions to a setup
+        // whose course the caller isn't enrolled in.  Without the check, a
+        // student in CS101 who learns a testSetupID for a different course
+        // can submit there and pollute the foreign instructor's queue.
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enrollUser(user)  // Enrolls in CS101 only.
+
+        let foreignCourse = APICourse(code: "OTHER101", name: "Other Course")
+        try await foreignCourse.save(on: app.db)
+        let foreignCourseID = try foreignCourse.requireID()
+
+        let foreignSetup = APITestSetup(
+            id: "setup_foreign",
+            manifest: """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+                """,
+            zipPath: app.testSetupsDirectory + "setup_foreign.zip",
+            courseID: foreignCourseID
+        )
+        try await foreignSetup.save(on: app.db)
+        let foreignAssignment = APIAssignment(
+            testSetupID: "setup_foreign",
+            title: "Foreign Assignment",
+            dueAt: nil,
+            isOpen: true,
+            courseID: foreignCourseID
+        )
+        try await foreignAssignment.save(on: app.db)
+
+        // GET should already fail (added to submitForm in the same fix), so
+        // pull CSRF from a page the student CAN see.
+        let (csrf, sessionCookie) = try await csrfFields(
+            for: "/", cookie: cookie, on: app
+        )
+        let boundary = "xtenant-boundary"
+        try await app.asyncTest(
+            .POST, "/testsetups/setup_foreign/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data",
+                    parameters: ["boundary": boundary]
+                )
+                req.body = .init(
+                    buffer: self.submitMultipartBody(boundary: boundary, csrfToken: csrf)
+                )
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .forbidden,
+                    "Student not enrolled in foreign course must get 403; got \(res.status)")
+            })
+    }
+
+    func testStudentCannotGetSubmitPageForForeignCourse() async throws {
+        // GET /testsetups/:id/submit leaked the assignment title and the
+        // existence of the setup to any authenticated user.  Same fix as
+        // the POST: require course enrollment.
+        let cookie = try await loginAsStudent()
+        let user = try await studentUser()
+        try await enrollUser(user)
+
+        let foreignCourse = APICourse(code: "OTHER202", name: "Other Course 2")
+        try await foreignCourse.save(on: app.db)
+        let foreignCourseID = try foreignCourse.requireID()
+        let foreignSetup = APITestSetup(
+            id: "setup_foreign_get",
+            manifest: """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+                """,
+            zipPath: app.testSetupsDirectory + "setup_foreign_get.zip",
+            courseID: foreignCourseID
+        )
+        try await foreignSetup.save(on: app.db)
+
+        try await app.asyncTest(
+            .GET, "/testsetups/setup_foreign_get/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
+    }
+
     func testSubmissionPageRendersWarnings() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()

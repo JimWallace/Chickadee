@@ -157,6 +157,45 @@ final class AuthRoutesTests: XCTestCase {
             })
     }
 
+    func testLoginWithUnknownUserStillRunsBcryptVerify() async throws {
+        // Regression for issue #559 (account-enumeration timing).  The
+        // user-not-found path must run a bcrypt verify against a dummy
+        // hash so its wall-clock time matches the user-found-wrong-
+        // password path.  bcrypt cost 12 takes ≥100 ms on any reasonable
+        // host; without the equalizer the miss returns in <10 ms.
+        //
+        // Warm-up POST primes the timing-equalizer hash cache so we
+        // measure verify time, not the one-shot hash+verify cost of the
+        // first-ever miss.
+        let warmupCSRF = try await csrfFields(for: "/login", on: app)
+        try await app.asyncTest(
+            .POST, "/login",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: warmupCSRF.1)
+                try req.content.encode(
+                    ["username": "warmup_user", "password": "x", "_csrf": warmupCSRF.0],
+                    as: .urlEncodedForm)
+            }, afterResponse: { _ in })
+
+        let (token, cookie) = try await csrfFields(for: "/login", on: app)
+        let start = Date()
+        try await app.asyncTest(
+            .POST, "/login",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                try req.content.encode(
+                    ["username": "still_no_such_user", "password": "x", "_csrf": token],
+                    as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            })
+        let elapsed = Date().timeIntervalSince(start)
+        XCTAssertGreaterThan(
+            elapsed, 0.05,
+            "User-not-found login completed in \(elapsed)s; bcrypt verify likely skipped (cost 12 is ≥100 ms).")
+    }
+
     // MARK: - Access control
 
     func testUnauthenticatedHomeRedirectsToLogin() async throws {
