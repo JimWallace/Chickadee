@@ -38,3 +38,8 @@ Public/files/
 Public/jupyterlite/files/
 Public/jupyterlite/lab/files/
 Public/jupyterlite/notebooks/files/
+
+# CodeMirror bundling toolchain — only the entry point + package.json
+# are checked in; node_modules and lockfile regenerate via setup-vendor.sh.
+Tools/vendor/node_modules/
+Tools/vendor/package-lock.json

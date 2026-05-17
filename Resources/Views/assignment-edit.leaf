@@ -1048,17 +1048,17 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 </style>
 <script type="module">
 // ── CodeMirror 6 script editor ─────────────────────────────────────────────
-import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
-import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
-import { defaultKeymap, history, historyKeymap, indentWithTab }
-                                      from 'https://esm.sh/@codemirror/commands@6';
-import { syntaxHighlighting, defaultHighlightStyle }
-                                      from 'https://esm.sh/@codemirror/language@6';
-import { python }                     from 'https://esm.sh/@codemirror/lang-python@6';
-import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6';
-import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell';
-import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r';
+// Bundled by scripts/setup-vendor.sh; source-of-truth in
+// Tools/vendor/codemirror-entry.js.  Single import keeps the wire
+// origin same-origin so the CSP doesn't need esm.sh in script-src.
+import {
+    EditorView, keymap, lineNumbers, highlightActiveLine,
+    drawSelection, dropCursor,
+    EditorState, Compartment,
+    defaultKeymap, history, historyKeymap, indentWithTab,
+    syntaxHighlighting, defaultHighlightStyle, StreamLanguage,
+    python, shell, r
+} from '/vendor/codemirror.js';
 
 const langComp = new Compartment();
 

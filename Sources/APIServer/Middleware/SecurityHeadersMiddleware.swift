@@ -44,10 +44,9 @@
 //
 //   Cross-Origin-Embedder-Policy is intentionally NOT set here.
 //     `require-corp` blocks the JupyterLite iframe (its service worker
-//     synthesises responses without CORP headers) and breaks Pyodide /
-//     CodeMirror CDN imports.  `COEPMiddleware` opts the narrow set of
-//     pages that genuinely need cross-origin isolation (currently just
-//     `/validate`) into the strict policy.
+//     synthesises responses without CORP headers).  `COEPMiddleware`
+//     opts the narrow set of pages that genuinely need cross-origin
+//     isolation (currently just `/validate`) into the strict policy.
 //
 //   Strict-Transport-Security
 //     Set only when HTTPS enforcement is enabled.  Pinning HSTS during
@@ -64,15 +63,10 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ///   - 'unsafe-inline' covers inline `<script>` and `onclick=` handlers
     ///     in the Leaf templates.
     ///   - blob: in worker-src is required by JupyterLite's web workers.
-    ///   - https://cdn.jsdelivr.net is whitelisted because the notebook,
-    ///     browser-runner, and instructor-validate flows load Pyodide and
-    ///     jszip from there at runtime, and `pyodide-worker.js` does an
-    ///     `importScripts(...)` from the same origin.  Pyodide also fetches
-    ///     Python wheels via `fetch` from the same indexURL, hence
-    ///     `connect-src`.
-    ///   - https://esm.sh is whitelisted because the new-assignment editor
-    ///     imports CodeMirror modules from there.
-    /// Tighten with per-response nonces in a follow-up.
+    ///
+    /// Pyodide, jszip, and CodeMirror are now vendored under `Public/`
+    /// (see `scripts/setup-vendor.sh`), so no third-party origins appear
+    /// in the policy.  Tighten with per-response nonces in a follow-up.
     ///
     /// `form-action` is rendered per-request so the IdP origin from
     /// `app.oidcConfig?.discovery.endSessionEndpoint` can be appended when
@@ -82,13 +76,13 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// button.
     static let defaultContentSecurityPolicyBase: [String] = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://esm.sh",
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self' data:",
-        "worker-src 'self' blob: https://cdn.jsdelivr.net",
+        "worker-src 'self' blob:",
         "child-src 'self' blob:",
-        "connect-src 'self' https://cdn.jsdelivr.net https://esm.sh",
+        "connect-src 'self'",
         "frame-ancestors 'self'",
         "base-uri 'self'",
         "object-src 'none'",

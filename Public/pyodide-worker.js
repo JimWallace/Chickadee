@@ -43,7 +43,7 @@
 // has one auto-compute in flight at a time (the debounce coalesces),
 // but the id field keeps the protocol self-contained.
 
-importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
+importScripts('/pyodide/pyodide.js');
 
 let _pyodide = null;
 let _pyodidePromise = null;

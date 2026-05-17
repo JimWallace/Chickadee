@@ -858,7 +858,7 @@
         if (pyodide) return pyodide;
         // Pyodide is loaded from CDN the first time Submit is clicked.
         if (!window.loadPyodide) {
-            await loadScript('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
+            await loadScript('/pyodide/pyodide.js');
         }
         pyodide = await window.loadPyodide();
         return pyodide;
