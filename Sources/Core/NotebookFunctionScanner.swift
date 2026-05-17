@@ -77,9 +77,7 @@ public struct NotebookFunctionInfo: Codable, Sendable {
         paramNames = try c.decode([String].self, forKey: .paramNames)
         hasTypeHints = try c.decode(Bool.self, forKey: .hasTypeHints)
         hasDocstring = try c.decode(Bool.self, forKey: .hasDocstring)
-        // DEPRECATED: remove `decodeIfPresent ?? false` fallback in v0.6.0 —
-        // by then every browser client will have shipped the v0.4.94+ scanner.
-        isShadowed = try c.decodeIfPresent(Bool.self, forKey: .isShadowed) ?? false
+        isShadowed = try c.decode(Bool.self, forKey: .isShadowed)
         let decodedParamTypes = try c.decodeIfPresent([String?].self, forKey: .paramTypes) ?? []
         paramTypes =
             decodedParamTypes.count == paramNames.count

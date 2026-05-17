@@ -716,19 +716,18 @@ model quickly.
   Fresh deploys produce the same final schema from the `Create*`
   files alone.  Separately (#501), the inline enrollment-mode
   fallback in `CourseBundleRoutes.swift` was extracted to a Core
-  helper `bundledCourseEnrollmentMode(_:)` to give **v0.6.0** a
-  single resolver to update when dropping the `openEnrollment`
-  back-compat field.  The two remaining DEPRECATED back-compat sites
-  ([Sources/Core/NotebookFunctionScanner.swift:80](Sources/Core/NotebookFunctionScanner.swift:80)
-  and [Sources/Core/CourseBundleManifest.swift:76](Sources/Core/CourseBundleManifest.swift:76))
-  are slated for removal in v0.6.0.
+  helper `bundledCourseEnrollmentMode(_:)` so the v0.6.0 cleanup
+  had a single resolver to update.  The two DEPRECATED back-compat
+  sites — `NotebookFunctionScanner.isShadowed` decode fallback and
+  `CourseBundleManifest.openEnrollment` — have now been removed
+  (v0.6.0 cleanup).  Browser clients on v0.4.94+ already send
+  `isShadowed` unconditionally; `.chickadee` bundle exports have
+  only emitted `enrollmentMode` (never `openEnrollment`) since the
+  helper extraction in #501.
 
 **Near-term roadmap:**
 
-- **v0.6.0** — Drop the two DEPRECATED back-compat shims
-  (`NotebookFunctionScanner` `isShadowed` decode fallback,
-  `CourseBundleManifest` `openEnrollment` field).  Likely
-  Vapor 5 / LeafKit 2.x investigation window — the LeafKit 1.14.1
+- **Vapor 5 / LeafKit 2.x investigation window** — the LeafKit 1.14.1
   cycle-detection false positive blocking `assignment-{new,edit}.leaf`
   decomposition is upstream and only fixed in the LeafKit 2 line.
 - **Feature backlog:** continued personalization / notebook-check

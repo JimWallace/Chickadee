@@ -107,18 +107,7 @@ struct CourseBundleManifestTests {
         #expect(decoded.results[0].source == "worker")
     }
 
-    // MARK: - Backward compatibility: enrollmentMode nil → openEnrollment
-
-    @Test func bundledCourseBackwardCompatEnrollmentModeAbsent() throws {
-        // Old bundle JSON without enrollmentMode — only openEnrollment present.
-        let json = """
-            { "code": "CS101", "name": "Intro CS", "openEnrollment": true }
-            """.data(using: .utf8)!
-
-        let course = try decoder.decode(BundledCourse.self, from: json)
-        #expect(course.enrollmentMode == nil)
-        #expect(course.openEnrollment == true)
-    }
+    // MARK: - bundledCourseEnrollmentMode resolver
 
     @Test func bundledCourseEnrollmentModePresent() throws {
         let json = """
@@ -127,43 +116,18 @@ struct CourseBundleManifestTests {
 
         let course = try decoder.decode(BundledCourse.self, from: json)
         #expect(course.enrollmentMode == .auto)
-        #expect(course.openEnrollment == nil)
     }
 
-    // MARK: - bundledCourseEnrollmentMode resolver
-    //
-    // Pin the resolver so v0.6.0 can drop the `openEnrollment` branch with
-    // confidence — when the deprecation lands, only the legacy-bundle cases
-    // below need updating (or deleting).
-
-    @Test func enrollmentModeResolver_prefersExplicitMode() {
+    @Test func enrollmentModeResolver_returnsExplicitMode() {
         let course = BundledCourse(
-            code: "CS101", name: "Intro CS",
-            enrollmentMode: .auto, openEnrollment: false
+            code: "CS101", name: "Intro CS", enrollmentMode: .auto
         )
         #expect(bundledCourseEnrollmentMode(course) == .auto)
     }
 
-    @Test func enrollmentModeResolver_legacyOpenEnrollmentFalseMapsToClosed() {
+    @Test func enrollmentModeResolver_nilDefaultsToOpen() {
         let course = BundledCourse(
-            code: "CS101", name: "Intro CS",
-            enrollmentMode: nil, openEnrollment: false
-        )
-        #expect(bundledCourseEnrollmentMode(course) == .closed)
-    }
-
-    @Test func enrollmentModeResolver_legacyOpenEnrollmentTrueMapsToOpen() {
-        let course = BundledCourse(
-            code: "CS101", name: "Intro CS",
-            enrollmentMode: nil, openEnrollment: true
-        )
-        #expect(bundledCourseEnrollmentMode(course) == .open)
-    }
-
-    @Test func enrollmentModeResolver_bothFieldsMissingDefaultsToOpen() {
-        let course = BundledCourse(
-            code: "CS101", name: "Intro CS",
-            enrollmentMode: nil, openEnrollment: nil
+            code: "CS101", name: "Intro CS", enrollmentMode: nil
         )
         #expect(bundledCourseEnrollmentMode(course) == .open)
     }
