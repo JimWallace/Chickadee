@@ -708,15 +708,16 @@ model quickly.
 
 - **v0.5.0 / v0.6.0 runway (PR #505).**  Migration consolidation (#502):
   the 13 historical `Add*` migrations except `AddSessionsCreatedAt`
-  have been folded into the corresponding `Create*` files.  The
-  `Add*` structs and their `registerMigrations(...)` calls are kept
-  as no-ops so existing production DBs (with these migrations already
-  marked applied) see no change at runtime; fresh deploys produce the
-  same final schema in fewer steps.  Actual deletion of the no-op
-  files is deferred to **v0.5.0**.  Separately (#501), the inline
-  enrollment-mode fallback in `CourseBundleRoutes.swift` was extracted
-  to a Core helper `bundledCourseEnrollmentMode(_:)` to give **v0.6.0**
-  a single resolver to update when dropping the `openEnrollment`
+  were folded into the corresponding `Create*` files; their no-op
+  stubs and `registerMigrations(...)` entries have now been deleted
+  (v0.5.0 cleanup).  Production DBs that already have those names
+  marked applied in `_fluent_migrations` are unaffected — Fluent
+  ignores history rows whose struct names are no longer registered.
+  Fresh deploys produce the same final schema from the `Create*`
+  files alone.  Separately (#501), the inline enrollment-mode
+  fallback in `CourseBundleRoutes.swift` was extracted to a Core
+  helper `bundledCourseEnrollmentMode(_:)` to give **v0.6.0** a
+  single resolver to update when dropping the `openEnrollment`
   back-compat field.  The two remaining DEPRECATED back-compat sites
   ([Sources/Core/NotebookFunctionScanner.swift:80](Sources/Core/NotebookFunctionScanner.swift:80)
   and [Sources/Core/CourseBundleManifest.swift:76](Sources/Core/CourseBundleManifest.swift:76))
@@ -724,8 +725,6 @@ model quickly.
 
 **Near-term roadmap:**
 
-- **v0.5.0** — Delete the no-op `Add*` migration files folded in #502
-  once production has been observed tolerant of the consolidation.
 - **v0.6.0** — Drop the two DEPRECATED back-compat shims
   (`NotebookFunctionScanner` `isShadowed` decode fallback,
   `CourseBundleManifest` `openEnrollment` field).  Likely
