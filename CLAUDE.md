@@ -342,6 +342,35 @@ updating kernel versions or config.
 
 ---
 
+## Vendored browser libraries
+
+Pyodide, jszip, and CodeMirror are vendored under `Public/` rather than
+pulled from third-party CDNs at runtime, so student / instructor IPs
+aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
+(FIPPA / PIPEDA concern surfaced in the v0.4.171 audit).
+
+```
+Public/pyodide/              — full Pyodide distribution (~1.4 GB on disk)
+Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
+Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
+```
+
+Source-of-truth is the version pinned in `scripts/setup-vendor.sh`
+(Pyodide, jszip) and `Tools/vendor/{package.json, codemirror-entry.js}`
+(CodeMirror).  Rebuild:
+
+```bash
+scripts/setup-vendor.sh
+```
+
+This downloads the Pyodide release tarball, fetches jszip, and bundles
+CodeMirror via `npm` + `esbuild`.  Rebuild only when bumping versions.
+`Public/pyodide` and `Public/vendor` are checked in for the same reason
+`Public/jupyterlite` is — every contributor and every CI runner sees the
+same bytes without a build-time network fetch.
+
+---
+
 ## Coding Conventions
 
 - Swift 6, strict concurrency. No `@unchecked Sendable` without a comment explaining why.

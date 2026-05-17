@@ -629,7 +629,7 @@ sys.stderr = sys.__stderr__
     async function loadPyodideOnce() {
         if (_pyodide) return _pyodide;
         if (!window.loadPyodide) {
-            await loadScript('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
+            await loadScript('/pyodide/pyodide.js');
         }
         _pyodide = await window.loadPyodide();
         return _pyodide;
@@ -644,7 +644,7 @@ sys.stderr = sys.__stderr__
     async function loadJSZip() {
         if (_JSZip) return _JSZip;
         if (!window.JSZip) {
-            await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+            await loadScript('/vendor/jszip.min.js');
         }
         _JSZip = window.JSZip;
         return _JSZip;

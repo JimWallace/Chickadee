@@ -95,7 +95,7 @@
     async function loadPyodideOnce() {
         if (pyodide) return pyodide;
         if (!window.loadPyodide) {
-            await loadScript('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
+            await loadScript('/pyodide/pyodide.js');
         }
         pyodide = await window.loadPyodide();
         return pyodide;
