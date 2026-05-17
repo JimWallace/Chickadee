@@ -102,7 +102,6 @@ services:
       # Docker already provides container-level process isolation.
       # To enable OS-level sandboxing (Linux unshare namespaces),
       # add "--sandbox" here and "cap_add: [SYS_ADMIN]" to this service.
-    environment:
     networks:
       - chickadee
     depends_on:
