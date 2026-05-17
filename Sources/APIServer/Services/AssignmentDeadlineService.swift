@@ -136,6 +136,14 @@ func requireOpenStudentAssignment(
         return nil
     }
 
+    // Enforce course enrollment before any open/closed check.  Without this,
+    // a student in course A who learns a testSetupID belonging to course B
+    // (UUIDs are exposed in submission URLs, shared instructor pages, and
+    // vanity-URL resolutions) can submit to that assignment and pollute
+    // foreign instructors' queues.  Instructors and admins bypass via
+    // `requireCourseEnrollment`'s own short-circuit.
+    try await requireCourseEnrollment(caller: user, courseID: assignment.courseID, db: req.db)
+
     _ = try await closeAssignmentIfExpired(assignment, on: req.db, logger: req.logger, now: now)
     let open = try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db, now: now)
     guard open else {

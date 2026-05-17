@@ -373,6 +373,9 @@ func readWorkerSecretFromDisk(workerSecretFilePath: String) -> String? {
     else {
         return nil
     }
+    // Harden permissions on files written by older builds that ran before
+    // writeWorkerSecretToDisk set the mode explicitly.
+    restrictWorkerSecretFilePermissions(at: workerSecretFilePath)
     return text
 }
 
@@ -381,6 +384,17 @@ func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
     guard !value.isEmpty else { return }
     let url = URL(fileURLWithPath: workerSecretFilePath)
     try? value.write(to: url, atomically: true, encoding: .utf8)
+    // The runner shared secret is the HMAC signing key for every worker
+    // request.  Default umask (typically 0644 on Linux) lets any local user
+    // read it and forge worker traffic; restrict to owner read/write only.
+    restrictWorkerSecretFilePermissions(at: workerSecretFilePath)
+}
+
+private func restrictWorkerSecretFilePermissions(at path: String) {
+    try? FileManager.default.setAttributes(
+        [.posixPermissions: NSNumber(value: 0o600)],
+        ofItemAtPath: path
+    )
 }
 
 func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {

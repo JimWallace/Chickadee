@@ -182,6 +182,38 @@ final class AdminRoutesTests: XCTestCase {
         )
     }
 
+    func testWriteWorkerSecretToDiskSetsOwnerOnlyPermissions() throws {
+        // The worker secret is the HMAC signing key for runner↔server
+        // requests; default umask leaves it world-readable on Linux, so
+        // writeWorkerSecretToDisk must enforce 0o600.
+        let path = app.workerSecretFilePath
+        writeWorkerSecretToDisk(secret: "mode-check-secret", workerSecretFilePath: path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: path)
+        let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        XCTAssertEqual(
+            perms & 0o777, 0o600,
+            "Expected .worker-secret to be 0600; got \(String(perms, radix: 8))")
+    }
+
+    func testReadWorkerSecretFromDiskTightensExistingPermissions() throws {
+        // Files written by older builds may be world-readable; read-time
+        // hardening ensures upgraded installs converge on 0o600.
+        let path = app.workerSecretFilePath
+        try "legacy-secret".write(
+            toFile: path, atomically: true, encoding: .utf8
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: 0o644)], ofItemAtPath: path
+        )
+
+        _ = readWorkerSecretFromDisk(workerSecretFilePath: path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: path)
+        let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        XCTAssertEqual(perms & 0o777, 0o600)
+    }
+
     func testUpdateWorkerSecretBlankRestoresPersistedValue() async throws {
         let cookie = try await loginAsAdmin()
         writeWorkerSecretToDisk(secret: "persisted-secret", workerSecretFilePath: app.workerSecretFilePath)

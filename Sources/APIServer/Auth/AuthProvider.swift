@@ -26,17 +26,41 @@ protocol AuthProvider: Sendable {
 /// BCrypt-backed credential verification against the local user table.
 struct LocalAuthProvider: AuthProvider {
     func authenticate(username: String, password: String, on req: Request) async throws -> APIUser? {
-        guard
-            let user = try await APIUser.query(on: req.db)
-                .filter(\.$username == username)
-                .first()
-        else {
-            return nil
+        let user = try await APIUser.query(on: req.db)
+            .filter(\.$username == username)
+            .first()
+        // Always run a bcrypt verify — even on user-not-found, against a
+        // cached dummy hash — so the wall-clock time of "no such user" and
+        // "user found, password wrong" are indistinguishable to a remote
+        // observer.  Skipping the verify on miss is a textbook account-
+        // enumeration timing leak (~150ms bcrypt cost is easily measured).
+        let hash: String
+        if let user {
+            hash = user.passwordHash
+        } else {
+            hash = try await timingEqualizerHashCache.hash(using: req.password.async)
         }
-        let verified = try await req.password.async.verify(password, created: user.passwordHash)
+        let verified = try await req.password.async.verify(password, created: hash)
         return verified ? user : nil
     }
 }
+
+/// One-shot cache of a bcrypt hash used to equalize verify timing on the
+/// user-not-found path.  Computed lazily on the first miss via the same
+/// `AsyncPasswordHasher` the real verify uses, so the cost factor (and
+/// therefore verify time) is identical to a real account.
+private actor TimingEqualizerHashCache {
+    private var cached: String?
+
+    func hash(using hasher: AsyncPasswordHasher) async throws -> String {
+        if let cached { return cached }
+        let value = try await hasher.hash("chickadee-login-timing-equalizer-not-a-real-password")
+        cached = value
+        return value
+    }
+}
+
+private let timingEqualizerHashCache = TimingEqualizerHashCache()
 
 // MARK: - Application storage
 
