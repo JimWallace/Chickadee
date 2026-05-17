@@ -30,6 +30,25 @@
 //     Nothing in Chickadee uses camera, microphone, or geolocation —
 //     explicitly deny them so a future XSS can't escalate to media capture.
 //
+//   Cross-Origin-Opener-Policy: same-origin
+//     Severs the `window.opener` reference when our pages are opened from a
+//     third-party origin, mitigating tab-nabbing attacks and isolating our
+//     browsing-context group.  Chickadee's auth flows are redirects, not
+//     popups, so cutting the opener reference does not break anything.
+//
+//   Cross-Origin-Resource-Policy: same-origin
+//     Stops third-party origins from embedding our resources (scripts,
+//     stylesheets, images) via `<script src=...>` / `<img src=...>` etc.
+//     Chickadee assets are only consumed by Chickadee pages, so this is
+//     pure defence-in-depth.
+//
+//   Cross-Origin-Embedder-Policy is intentionally NOT set here.
+//     `require-corp` blocks the JupyterLite iframe (its service worker
+//     synthesises responses without CORP headers) and breaks Pyodide /
+//     CodeMirror CDN imports.  `COEPMiddleware` opts the narrow set of
+//     pages that genuinely need cross-origin isolation (currently just
+//     `/validate`) into the strict policy.
+//
 //   Strict-Transport-Security
 //     Set only when HTTPS enforcement is enabled.  Pinning HSTS during
 //     local-http development would break dev workflows; the gate via
@@ -122,6 +141,16 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         "gyroscope=()",
     ].joined(separator: ", ")
 
+    /// Cross-Origin-Opener-Policy default. `same-origin` is the strictest
+    /// value supported by every modern browser and is safe whenever the app
+    /// does not need to talk to popups it opens. Chickadee's OIDC + logout
+    /// flows are redirects, not popups, so this is universally applicable.
+    static let defaultCrossOriginOpenerPolicy: String = "same-origin"
+
+    /// Cross-Origin-Resource-Policy default. `same-origin` prevents third
+    /// parties from embedding our scripts, stylesheets, images, etc.
+    static let defaultCrossOriginResourcePolicy: String = "same-origin"
+
     /// Two-year HSTS with subdomain coverage. Preload is intentionally NOT
     /// asserted — operators must explicitly opt in to preload separately,
     /// since it's near-impossible to undo.
@@ -129,15 +158,21 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
 
     let cspBaseDirectives: [String]
     let permissionsPolicy: String
+    let crossOriginOpenerPolicy: String
+    let crossOriginResourcePolicy: String
     let strictTransportSecurity: String?
 
     init(
         cspBaseDirectives: [String] = Self.defaultContentSecurityPolicyBase,
         permissionsPolicy: String = Self.defaultPermissionsPolicy,
+        crossOriginOpenerPolicy: String = Self.defaultCrossOriginOpenerPolicy,
+        crossOriginResourcePolicy: String = Self.defaultCrossOriginResourcePolicy,
         strictTransportSecurity: String? = nil
     ) {
         self.cspBaseDirectives = cspBaseDirectives
         self.permissionsPolicy = permissionsPolicy
+        self.crossOriginOpenerPolicy = crossOriginOpenerPolicy
+        self.crossOriginResourcePolicy = crossOriginResourcePolicy
         self.strictTransportSecurity = strictTransportSecurity
     }
 
@@ -155,6 +190,11 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         response.headers.replaceOrAdd(name: "Referrer-Policy", value: "strict-origin-when-cross-origin")
         response.headers.replaceOrAdd(name: "Content-Security-Policy", value: csp)
         response.headers.replaceOrAdd(name: "Permissions-Policy", value: permissionsPolicy)
+        // COOP is set unconditionally; COEPMiddleware may override it for the
+        // narrow set of pages that need cross-origin isolation, but its value
+        // is `same-origin` too so the replaceOrAdd is a no-op there.
+        response.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: crossOriginOpenerPolicy)
+        response.headers.replaceOrAdd(name: "Cross-Origin-Resource-Policy", value: crossOriginResourcePolicy)
         if let hsts = strictTransportSecurity {
             response.headers.replaceOrAdd(name: "Strict-Transport-Security", value: hsts)
         }

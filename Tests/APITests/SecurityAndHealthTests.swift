@@ -121,6 +121,8 @@ final class SecurityAndHealthTests: XCTestCase {
                 XCTAssertEqual(res.headers.first(name: "X-Content-Type-Options"), "nosniff")
                 XCTAssertEqual(res.headers.first(name: "X-Frame-Options"), "SAMEORIGIN")
                 XCTAssertEqual(res.headers.first(name: "Referrer-Policy"), "strict-origin-when-cross-origin")
+                XCTAssertEqual(res.headers.first(name: "Cross-Origin-Opener-Policy"), "same-origin")
+                XCTAssertEqual(res.headers.first(name: "Cross-Origin-Resource-Policy"), "same-origin")
             }
         }
     }
