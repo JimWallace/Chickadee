@@ -9,8 +9,14 @@ jobs:
   format-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # noble (Ubuntu 24.04) rather than jammy (22.04) because SwiftLintBinary
+    # 0.63.2 — shipped by the SwiftLintPlugins package and downloaded on
+    # demand — is linked against GLIBC 2.38, which jammy's glibc 2.35 cannot
+    # satisfy.  The test/build jobs below stay on jammy because they don't
+    # invoke the swiftlint plugin.  Re-unify when SwiftLintBinary publishes
+    # a jammy-compatible release or when the project moves all jobs to noble.
     container:
-      image: swift:6.3-jammy
+      image: swift:6.3-noble
 
     steps:
       - uses: actions/checkout@v6
