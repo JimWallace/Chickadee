@@ -13,11 +13,13 @@
 // pipe audit_log to an external sink and want to manage retention there).
 //
 // Pattern mirrors `SessionReaperService` and `StuckSubmissionReaperService`
-// for consistency.
+// for consistency.  Uses Fluent's typed query instead of raw SQL so the
+// `Date < timestamptz` comparison works on both SQLite and Postgres (raw
+// SQL would need a `::timestamptz` cast on Postgres for Fluent's
+// `.datetime` columns).
 
 import Fluent
 import Foundation
-import SQLKit
 import Vapor
 
 /// Default audit-log retention.  90 days covers the usual "what happened
@@ -36,16 +38,11 @@ func reapStaleAuditLogEntries(
     now: Date = Date()
 ) async throws {
     guard maxAge > 0 else { return }
-    guard let sql = db as? SQLDatabase else { return }
     let cutoff = now.addingTimeInterval(-maxAge)
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    let cutoffString = formatter.string(from: cutoff)
-
-    try await sql.raw(
-        "DELETE FROM audit_log WHERE created_at < \(bind: cutoffString)"
-    ).run()
-    logger.debug("Audit-log reaper sweep complete (cutoff=\(cutoffString))")
+    try await APIAuditLogEntry.query(on: db)
+        .filter(\.$createdAt < cutoff)
+        .delete()
+    logger.debug("Audit-log reaper sweep complete (cutoff=\(cutoff))")
 }
 
 final class AuditLogReaperMonitor: @unchecked Sendable {

@@ -4,7 +4,6 @@
 
 import Fluent
 import Foundation
-import SQLKit
 import XCTVapor
 import XCTest
 
@@ -23,25 +22,17 @@ final class AuditLogReaperServiceTests: XCTestCase {
     }
 
     /// Inserts an audit_log row and back-dates its `created_at` to `daysOld`
-    /// days ago.  Fluent's @Timestamp(.create) populates created_at to "now"
-    /// on save, so we explicitly UPDATE afterwards.
+    /// days ago.  `@Timestamp(on: .create)` only fires on first insert, so a
+    /// second save with an explicit `createdAt` preserves the override —
+    /// portable across SQLite and Postgres (a raw SQL UPDATE binding the
+    /// timestamp as text trips Postgres's strict timestamptz typing).
     @discardableResult
     private func seedEntry(action: String, daysOld: Int) async throws -> UUID {
         let entry = APIAuditLogEntry(action: action)
         try await entry.save(on: app.db)
         let id = try XCTUnwrap(entry.id)
-
-        let cutoff = Date().addingTimeInterval(-Double(daysOld) * 86_400)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        let backdated = formatter.string(from: cutoff)
-        guard let sql = app.db as? SQLDatabase else {
-            XCTFail("Expected SQLDatabase")
-            return id
-        }
-        try await sql.raw(
-            "UPDATE audit_log SET created_at = \(bind: backdated) WHERE id = \(bind: id.uuidString)"
-        ).run()
+        entry.createdAt = Date().addingTimeInterval(-Double(daysOld) * 86_400)
+        try await entry.save(on: app.db)
         return id
     }
 
