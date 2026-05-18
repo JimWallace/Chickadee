@@ -326,9 +326,10 @@ final class AdminRoutesTests: XCTestCase {
             metricValue: 42
         )
         try await achievement.save(on: app.db)
-        XCTAssertEqual(
-            try await APIClassAchievement.query(on: app.db).filter(\.$userID == studentID).count(),
-            1)
+        let preDeleteCount = try await APIClassAchievement.query(on: app.db)
+            .filter(\.$userID == studentID)
+            .count()
+        XCTAssertEqual(preDeleteCount, 1)
 
         let (boundCookie, token) = try await csrfCookieAndToken(cookie)
         try await app.asyncTest(
@@ -342,10 +343,13 @@ final class AdminRoutesTests: XCTestCase {
             }
         )
 
-        XCTAssertNil(try await APIUser.find(studentID, on: app.db))
+        let reloadedUser = try await APIUser.find(studentID, on: app.db)
+        XCTAssertNil(reloadedUser)
+        let postDeleteCount = try await APIClassAchievement.query(on: app.db)
+            .filter(\.$userID == studentID)
+            .count()
         XCTAssertEqual(
-            try await APIClassAchievement.query(on: app.db).filter(\.$userID == studentID).count(),
-            0,
+            postDeleteCount, 0,
             "class_achievements rows referencing the deleted user must be removed")
     }
 
@@ -378,7 +382,8 @@ final class AdminRoutesTests: XCTestCase {
             }
         )
 
-        XCTAssertNil(try await APIUser.find(instructorID, on: app.db))
+        let reloadedInstructor = try await APIUser.find(instructorID, on: app.db)
+        XCTAssertNil(reloadedInstructor)
         let reloaded = try await APISubmission.find("fk_null_sub", on: app.db)
         XCTAssertNotNil(reloaded, "Submission row must be preserved as immutable grade history")
         XCTAssertNil(
