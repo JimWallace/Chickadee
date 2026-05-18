@@ -13,20 +13,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class DraftNotebookChecksRoutesTests: XCTestCase {
+@Suite(.serialized) final class DraftNotebookChecksRoutesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-dnct")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-dnct")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     private func makeDraft() async throws -> String {
@@ -62,11 +64,11 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
             let data = setup.manifest.data(using: .utf8),
             let props = try? JSONDecoder().decode(TestProperties.self, from: data)
-        else { throw XCTSkip("manifest load failed") }
+        else { throw IssueRecorded("manifest load failed") }
         return props
     }
 
-    func testPutDraftChecks_persistsAppliedChecks() async throws {
+    @Test func putDraftChecks_persistsAppliedChecks() async throws {
         let draftID = try await makeDraft()
         let cookie = try await loginUser(username: "dnct_inst1", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -92,18 +94,18 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
                 try req.content.encode(body, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let props = try await loadManifestProps(setupID: draftID)
-        XCTAssertEqual(props.notebookChecks.count, 2)
-        XCTAssertEqual(props.notebookChecks.map(\.id), ["df_shape", "fn_classify"])
-        XCTAssertEqual(props.notebookChecks[0].variable, "df")
-        XCTAssertEqual(props.notebookChecks[0].expectedRows, 250)
-        XCTAssertEqual(props.notebookChecks[1].kind, .functionExists)
+        #expect(props.notebookChecks.count == 2)
+        #expect(props.notebookChecks.map(\.id) == ["df_shape", "fn_classify"])
+        #expect(props.notebookChecks[0].variable == "df")
+        #expect(props.notebookChecks[0].expectedRows == 250)
+        #expect(props.notebookChecks[1].kind == .functionExists)
     }
 
-    func testPutDraftChecks_replacesExistingList() async throws {
+    @Test func putDraftChecks_replacesExistingList() async throws {
         let draftID = try await makeDraft()
         let cookie = try await loginUser(username: "dnct_inst2", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -121,7 +123,7 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
                 try req.content.encode(firstBody, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         // Second save: replace with one different check.
@@ -136,14 +138,14 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
                 try req.content.encode(secondBody, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let props = try await loadManifestProps(setupID: draftID)
-        XCTAssertEqual(props.notebookChecks.map(\.id), ["c"], "PUT must atomically replace the full list")
+        #expect(props.notebookChecks.map(\.id) == ["c"], "PUT must atomically replace the full list")
     }
 
-    func testPutDraftChecks_missingDraftIDReturns400() async throws {
+    @Test func putDraftChecks_missingDraftIDReturns400() async throws {
         _ = try await makeDraft()
         let cookie = try await loginUser(username: "dnct_inst3", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -156,11 +158,11 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
                 try req.content.encode([NotebookCheck](), as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testPutDraftChecks_unknownDraftIDReturns404() async throws {
+    @Test func putDraftChecks_unknownDraftIDReturns404() async throws {
         let cookie = try await loginUser(username: "dnct_inst4", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
@@ -172,11 +174,11 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
                 try req.content.encode([NotebookCheck](), as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testPutDraftChecks_emptyListClearsManifest() async throws {
+    @Test func putDraftChecks_emptyListClearsManifest() async throws {
         let draftID = try await makeDraft()
         let cookie = try await loginUser(username: "dnct_inst5", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -189,10 +191,10 @@ final class DraftNotebookChecksRoutesTests: XCTestCase {
                 try req.content.encode([NotebookCheck](), as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let props = try await loadManifestProps(setupID: draftID)
-        XCTAssertEqual(props.notebookChecks.count, 0)
+        #expect(props.notebookChecks.isEmpty)
     }
 }

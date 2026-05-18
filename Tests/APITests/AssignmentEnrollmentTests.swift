@@ -8,20 +8,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AssignmentEnrollmentTests: XCTestCase {
+@Suite(.serialized) final class AssignmentEnrollmentTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-enroll")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-enroll")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -49,7 +51,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
 
     // MARK: - POST /courses/:courseID/enrollment-mode
 
-    func testSetEnrollmentMode_instructorCanSetToOpen() async throws {
+    @Test func setEnrollmentMode_instructorCanSetToOpen() async throws {
         let course = try await makeCourse(code: "OE_TOGGLE1", mode: .closed)
         let cookie = try await loginUser(
             username: "oe_instructor1", password: "pw",
@@ -64,14 +66,14 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourse.find(course.id, on: app.db)
-        XCTAssertEqual(updated?.enrollmentMode, .open)
+        #expect(updated?.enrollmentMode == .open)
     }
 
-    func testSetEnrollmentMode_instructorCanSetToClosed() async throws {
+    @Test func setEnrollmentMode_instructorCanSetToClosed() async throws {
         let course = try await makeCourse(code: "OE_TOGGLE2", mode: .open)
         let cookie = try await loginUser(
             username: "oe_instructor2", password: "pw",
@@ -86,14 +88,14 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 try req.content.encode(["enrollmentMode": "closed", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourse.find(course.id, on: app.db)
-        XCTAssertEqual(updated?.enrollmentMode, .closed)
+        #expect(updated?.enrollmentMode == .closed)
     }
 
-    func testSetEnrollmentMode_studentForbidden() async throws {
+    @Test func setEnrollmentMode_studentForbidden() async throws {
         let course = try await makeCourse(code: "OE_TOGGLE3")
         let cookie = try await loginUser(
             username: "oe_student1", password: "pw",
@@ -108,11 +110,11 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
-    func testSetEnrollmentMode_notFound() async throws {
+    @Test func setEnrollmentMode_notFound() async throws {
         let cookie = try await loginUser(
             username: "oe_instructor3", password: "pw",
             role: "instructor", on: app)
@@ -126,13 +128,13 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 try req.content.encode(["enrollmentMode": "open", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
     // MARK: - POST /courses/:courseID/enroll-csv
 
-    func testEnrollCSVFormShowsDedicatedUploadPage() async throws {
+    @Test func enrollCSVFormShowsDedicatedUploadPage() async throws {
         let course = try await makeCourse(code: "CSV_FORM1")
         let cookie = try await loginUser(
             username: "csv_instructor_form", password: "pw",
@@ -140,7 +142,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let instructorQueryResult = try await APIUser.query(on: app.db)
             .filter(\.$username == "csv_instructor_form")
             .first()
-        let instructor = try XCTUnwrap(instructorQueryResult)
+        let instructor = try #require(instructorQueryResult)
         try await enroll(user: instructor, in: course)
         let courseID = try course.requireID().uuidString
 
@@ -150,16 +152,16 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let html = res.body.string
-                XCTAssertTrue(html.contains("Enrol from CSV"))
-                XCTAssertTrue(html.contains("/courses/\(courseID)/enroll-csv"))
-                XCTAssertTrue(html.contains("type=\"file\""))
-                XCTAssertTrue(html.contains("Cancel"))
+                #expect(html.contains("Enrol from CSV"))
+                #expect(html.contains("/courses/\(courseID)/enroll-csv"))
+                #expect(html.contains("type=\"file\""))
+                #expect(html.contains("Cancel"))
             })
     }
 
-    func testBulkEnrollCSV_enrollsMatchedUsers() async throws {
+    @Test func bulkEnrollCSV_enrollsMatchedUsers() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL1")
         _ = try await makeStudent(username: "csv_alice")
         _ = try await makeStudent(username: "csv_bob")
@@ -188,10 +190,10 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let html = res.body.string
                 // The result page shows enrolled count and notFound usernames
-                XCTAssertTrue(
+                #expect(
                     html.contains("csv_notexist") || html.contains("2") || html.contains("enrolled"),
                     "Result page should report enrollment results")
             })
@@ -199,10 +201,10 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$course.$id == course.requireID())
             .all()
-        XCTAssertEqual(enrollments.count, 2, "Both existing users should be enrolled")
+        #expect(enrollments.count == 2, "Both existing users should be enrolled")
     }
 
-    func testBulkEnrollCSV_skipsAlreadyEnrolled() async throws {
+    @Test func bulkEnrollCSV_skipsAlreadyEnrolled() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL2")
         let student = try await makeStudent(username: "csv_charlie")
         // Pre-enroll charlie
@@ -232,18 +234,18 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$course.$id == course.requireID())
             .all()
-        XCTAssertEqual(enrollments.count, 1, "Should still be exactly one enrollment (no duplicate)")
+        #expect(enrollments.count == 1, "Should still be exactly one enrollment (no duplicate)")
     }
 
     // MARK: - Pre-enrollment (no APIUser yet)
 
-    func testBulkEnrollCSV_recordsPreEnrollmentForUnknownUsernames() async throws {
+    @Test func bulkEnrollCSV_recordsPreEnrollmentForUnknownUsernames() async throws {
         let course = try await makeCourse(code: "CSV_PRE1")
         // alice exists; carol does not
         _ = try await makeStudent(username: "csv_pre_alice")
@@ -270,24 +272,24 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         // alice was enrolled directly.
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$course.$id == course.requireID())
             .all()
-        XCTAssertEqual(enrollments.count, 1)
+        #expect(enrollments.count == 1)
 
         // carol got recorded as a pre-enrollment.
         let preEnrollments = try await APIPreEnrollment.query(on: app.db)
             .filter(\.$course.$id == course.requireID())
             .all()
-        XCTAssertEqual(preEnrollments.count, 1)
-        XCTAssertEqual(preEnrollments.first?.username, "csv_pre_carol")
+        #expect(preEnrollments.count == 1)
+        #expect(preEnrollments.first?.username == "csv_pre_carol")
     }
 
-    func testResolvePendingPreEnrollments_promotesPendingToActiveOnLogin() async throws {
+    @Test func resolvePendingPreEnrollments_promotesPendingToActiveOnLogin() async throws {
         let course = try await makeCourse(code: "CSV_PRE2")
         let courseID = try course.requireID()
 
@@ -304,16 +306,16 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let remainingPending = try await APIPreEnrollment.query(on: app.db)
             .filter(\.$username == "csv_pre_promote")
             .count()
-        XCTAssertEqual(remainingPending, 0)
+        #expect(remainingPending == 0)
 
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$course.$id == courseID)
             .filter(\.$userID == user.requireID())
             .count()
-        XCTAssertEqual(enrollments, 1)
+        #expect(enrollments == 1)
     }
 
-    func testResolvePendingPreEnrollments_isIdempotent() async throws {
+    @Test func resolvePendingPreEnrollments_isIdempotent() async throws {
         let course = try await makeCourse(code: "CSV_PRE3")
         let courseID = try course.requireID()
 
@@ -330,10 +332,10 @@ final class AssignmentEnrollmentTests: XCTestCase {
             .filter(\.$course.$id == courseID)
             .filter(\.$userID == user.requireID())
             .count()
-        XCTAssertEqual(enrollments, 1)
+        #expect(enrollments == 1)
     }
 
-    func testBulkEnrollCSV_isIdempotentOnReupload() async throws {
+    @Test func bulkEnrollCSV_isIdempotentOnReupload() async throws {
         let course = try await makeCourse(code: "CSV_PRE4")
         let cookie = try await loginUser(
             username: "csv_pre_instructor4", password: "pw",
@@ -359,7 +361,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
                     req.body = .init(buffer: body)
                 },
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .ok)
+                    #expect(res.status == .ok)
                 })
         }
 
@@ -369,10 +371,10 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let preEnrollments = try await APIPreEnrollment.query(on: app.db)
             .filter(\.$course.$id == course.requireID())
             .all()
-        XCTAssertEqual(preEnrollments.count, 1, "Re-uploading should not create a duplicate pre_enrollment")
+        #expect(preEnrollments.count == 1, "Re-uploading should not create a duplicate pre_enrollment")
     }
 
-    func testPreUnenroll_removesPendingRow() async throws {
+    @Test func preUnenroll_removesPendingRow() async throws {
         let course = try await makeCourse(code: "CSV_PRE5")
         let courseID = try course.requireID()
 
@@ -393,17 +395,17 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let pendingID = try pending.requireID()
         let remaining = try await APIPreEnrollment.query(on: app.db)
             .filter(\.$id == pendingID)
             .count()
-        XCTAssertEqual(remaining, 0)
+        #expect(remaining == 0)
     }
 
-    func testPreUnenroll_studentForbidden() async throws {
+    @Test func preUnenroll_studentForbidden() async throws {
         let course = try await makeCourse(code: "CSV_PRE6")
         let courseID = try course.requireID()
 
@@ -423,7 +425,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
 
         // Pending row still exists.
@@ -431,10 +433,10 @@ final class AssignmentEnrollmentTests: XCTestCase {
         let remaining = try await APIPreEnrollment.query(on: app.db)
             .filter(\.$id == pendingID)
             .count()
-        XCTAssertEqual(remaining, 1)
+        #expect(remaining == 1)
     }
 
-    func testBulkEnrollCSV_studentForbidden() async throws {
+    @Test func bulkEnrollCSV_studentForbidden() async throws {
         let course = try await makeCourse(code: "CSV_ENROLL3")
         let cookie = try await loginUser(
             username: "csv_student1", password: "pw",
@@ -458,7 +460,7 @@ final class AssignmentEnrollmentTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 }

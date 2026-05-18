@@ -9,14 +9,13 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class NotebookDownloadTests: XCTestCase {
+@Suite(.serialized) final class NotebookDownloadTests {
 
-    private var app: Application!
     // A notebook with 4 cells: public test, secret test, release test, solution.
     private let mixedNotebookJSON = """
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[
@@ -27,12 +26,15 @@ final class NotebookDownloadTests: XCTestCase {
         ]}
         """
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-dl")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-dl")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Auth helpers
@@ -66,7 +68,7 @@ final class NotebookDownloadTests: XCTestCase {
 
     // MARK: - GET /api/v1/testsetups/:id/assignment — role-aware filtering
 
-    func testStudentGetsFilteredNotebook() async throws {
+    @Test func studentGetsFilteredNotebook() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
 
@@ -76,16 +78,16 @@ final class NotebookDownloadTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = res.body.string
-                XCTAssertFalse(body.contains("tier=secret"), "secret cell must be stripped for students")
-                XCTAssertFalse(body.contains("tier=release"), "release cell must be stripped for students")
-                XCTAssertTrue(body.contains("tier=public"), "public cell must be present for students")
-                XCTAssertTrue(body.contains("x = 42"), "solution cell must be present")
+                #expect(body.contains("tier=secret") == false, "secret cell must be stripped for students")
+                #expect(body.contains("tier=release") == false, "release cell must be stripped for students")
+                #expect(body.contains("tier=public"), "public cell must be present for students")
+                #expect(body.contains("x = 42"), "solution cell must be present")
             })
     }
 
-    func testInstructorGetsFullNotebook() async throws {
+    @Test func instructorGetsFullNotebook() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsInstructor()
 
@@ -95,18 +97,18 @@ final class NotebookDownloadTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = res.body.string
-                XCTAssertTrue(body.contains("tier=secret"), "secret cell must be present for instructors")
-                XCTAssertTrue(body.contains("tier=release"), "release cell must be present for instructors")
-                XCTAssertTrue(body.contains("tier=public"), "public cell must be present for instructors")
-                XCTAssertTrue(body.contains("x = 42"), "solution cell must be present")
+                #expect(body.contains("tier=secret"), "secret cell must be present for instructors")
+                #expect(body.contains("tier=release"), "release cell must be present for instructors")
+                #expect(body.contains("tier=public"), "public cell must be present for instructors")
+                #expect(body.contains("x = 42"), "solution cell must be present")
             })
     }
 
     // MARK: - GET /api/v1/testsetups/:id/assignment/download
 
-    func testDownloadStripsHiddenCells() async throws {
+    @Test func downloadStripsHiddenCells() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
 
@@ -116,15 +118,15 @@ final class NotebookDownloadTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = res.body.string
-                XCTAssertFalse(body.contains("tier=secret"), "secret cell must not appear in download")
-                XCTAssertFalse(body.contains("tier=release"), "release cell must not appear in download")
-                XCTAssertTrue(body.contains("tier=public"), "public cell must appear in download")
+                #expect(body.contains("tier=secret") == false, "secret cell must not appear in download")
+                #expect(body.contains("tier=release") == false, "release cell must not appear in download")
+                #expect(body.contains("tier=public"), "public cell must appear in download")
             })
     }
 
-    func testDownloadContentDispositionHeader() async throws {
+    @Test func downloadContentDispositionHeader() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
 
@@ -134,13 +136,13 @@ final class NotebookDownloadTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let cd = res.headers.first(name: .contentDisposition) ?? ""
-                XCTAssertTrue(cd.hasPrefix("attachment"), "response must have attachment disposition, got: \(cd)")
+                #expect(cd.hasPrefix("attachment"), "response must have attachment disposition, got: \(cd)")
             })
     }
 
-    func testDownloadFilenameUsesTitle() async throws {
+    @Test func downloadFilenameUsesTitle() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
 
@@ -155,15 +157,15 @@ final class NotebookDownloadTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let cd = res.headers.first(name: .contentDisposition) ?? ""
-                XCTAssertTrue(
+                #expect(
                     cd.contains("Lab 1 Warmup.ipynb"),
                     "filename should be assignment title, got: \(cd)")
             })
     }
 
-    func testDownloadFilenameFallsBackToSetupID() async throws {
+    @Test func downloadFilenameFallsBackToSetupID() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
         // No assignment record — filename falls back to setupID.
@@ -174,28 +176,28 @@ final class NotebookDownloadTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let cd = res.headers.first(name: .contentDisposition) ?? ""
-                XCTAssertTrue(
+                #expect(
                     cd.contains("\(setupID).ipynb"),
                     "filename should fall back to setupID, got: \(cd)")
             })
     }
 
-    func testUnauthenticatedCannotDownload() async throws {
+    @Test func unauthenticatedCannotDownload() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
 
         try await app.asyncTest(
             .GET, "/api/v1/testsetups/\(setupID)/assignment/download",
             afterResponse: { res in
                 // Should redirect to login or return 401.
-                XCTAssertTrue(
+                #expect(
                     res.status == .unauthorized || res.status == .seeOther,
                     "unauthenticated download should be rejected, got \(res.status)")
             })
     }
 
-    func testStudentCannotUploadTestSetup() async throws {
+    @Test func studentCannotUploadTestSetup() async throws {
         let cookie = try await loginAsStudent()
         // Obtain a valid CSRF token so the middleware passes and the role check fires.
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -218,13 +220,13 @@ final class NotebookDownloadTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
     // MARK: - POST /api/v1/submissions/browser-result — merge hidden test cells
 
-    func testBrowserSubmitMergesTestCells() async throws {
+    @Test func browserSubmitMergesTestCells() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -283,7 +285,7 @@ final class NotebookDownloadTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok, "browser-result POST should succeed, body: \(res.body.string)")
+                #expect(res.status == .ok, "browser-result POST should succeed, body: \(res.body.string)")
                 if let json = try? JSONSerialization.jsonObject(with: Data(res.body.readableBytesView))
                     as? [String: String]
                 {
@@ -291,25 +293,25 @@ final class NotebookDownloadTests: XCTestCase {
                 }
             })
 
-        XCTAssertFalse(savedSubID.isEmpty, "should have received a submissionID")
+        #expect(savedSubID.isEmpty == false, "should have received a submissionID")
 
         // Find the saved .ipynb on disk and verify it contains the secret cell.
         let submission = try await APISubmission.find(savedSubID, on: app.db)
-        let subPath = try XCTUnwrap(submission?.zipPath)
+        let subPath = try #require(submission?.zipPath)
         let savedData = try Data(contentsOf: URL(fileURLWithPath: subPath))
         let savedJSON = String(data: savedData, encoding: .utf8) ?? ""
 
-        XCTAssertTrue(
+        #expect(
             savedJSON.contains("tier=secret"),
             "server must re-inject secret test cell into saved notebook")
-        XCTAssertTrue(
+        #expect(
             savedJSON.contains("x = 99"),
             "student's solution cell must be present in saved notebook")
     }
 
     // MARK: - POST /api/v1/submissions/browser-result — single submission, no worker re-queue
 
-    func testBrowserSubmitCreatesSingleBrowserCompleteSubmission() async throws {
+    @Test func browserSubmitCreatesSingleBrowserCompleteSubmission() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         let cookie = try await loginAsStudent()
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -354,35 +356,30 @@ final class NotebookDownloadTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok, "browser-result POST should succeed")
+                #expect(res.status == .ok, "browser-result POST should succeed")
                 if let json = try? JSONSerialization.jsonObject(with: Data(res.body.readableBytesView))
                     as? [String: String]
                 {
                     savedSubID = json["submissionID"] ?? ""
                     // Verify no workerSubmissionID is returned — we no longer re-queue.
-                    XCTAssertNil(
-                        json["workerSubmissionID"],
-                        "browser-result must not return a workerSubmissionID")
+                    #expect(json["workerSubmissionID"] == nil, "browser-result must not return a workerSubmissionID")
                 }
             })
 
-        XCTAssertFalse(savedSubID.isEmpty)
+        #expect(savedSubID.isEmpty == false)
 
         // Exactly ONE submission must exist in the DB (complete), no pending re-run.
         let allSubs = try await APISubmission.query(on: app.db).all()
-        XCTAssertEqual(allSubs.count, 1, "Only one submission record should be created")
-        XCTAssertEqual(
-            allSubs[0].status, "complete",
-            "The single submission should have status 'complete'")
-        XCTAssertFalse(
-            allSubs.contains(where: { $0.status == "pending" }),
-            "No pending worker re-run submission should exist"
-        )
+        #expect(allSubs.count == 1, "Only one submission record should be created")
+        #expect(allSubs[0].status == "complete", "The single submission should have status 'complete'")
+        #expect(
+            allSubs.contains(where: { $0.status == "pending" }) == false,
+            "No pending worker re-run submission should exist")
     }
 
     // MARK: - POST /api/v1/submissions/file — merge hidden test cells
 
-    func testFileUploadMergesTestCells() async throws {
+    @Test func fileUploadMergesTestCells() async throws {
         let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
         // submissions/file is instructor-tier (defensive endpoint, no student UI);
         // use an instructor cookie for this test.
@@ -432,7 +429,7 @@ final class NotebookDownloadTests: XCTestCase {
                 req.body = .init(buffer: body)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok, "file upload should succeed, body: \(res.body.string)")
+                #expect(res.status == .ok, "file upload should succeed, body: \(res.body.string)")
                 if let json = try? JSONSerialization.jsonObject(with: Data(res.body.readableBytesView))
                     as? [String: String]
                 {
@@ -440,17 +437,17 @@ final class NotebookDownloadTests: XCTestCase {
                 }
             })
 
-        XCTAssertFalse(savedSubID.isEmpty, "should have received a submissionID")
+        #expect(savedSubID.isEmpty == false, "should have received a submissionID")
 
         let submission = try await APISubmission.find(savedSubID, on: app.db)
-        let subPath = try XCTUnwrap(submission?.zipPath)
+        let subPath = try #require(submission?.zipPath)
         let savedData = try Data(contentsOf: URL(fileURLWithPath: subPath))
         let savedJSON = String(data: savedData, encoding: .utf8) ?? ""
 
-        XCTAssertTrue(
+        #expect(
             savedJSON.contains("tier=secret"),
             "server must re-inject secret test cell into uploaded notebook")
-        XCTAssertTrue(
+        #expect(
             savedJSON.contains("y = 77"),
             "student's solution cell must be present in saved notebook")
     }

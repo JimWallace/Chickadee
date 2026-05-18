@@ -1,21 +1,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AdminRoutesTests: XCTestCase {
+@Suite(.serialized) final class AdminRoutesTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-admin")
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-admin")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     private func loginAsAdmin() async throws -> String {
@@ -138,7 +139,7 @@ final class AdminRoutesTests: XCTestCase {
         return result
     }
 
-    func testChangeRoleUpdatesUserRole() async throws {
+    @Test func changeRoleUpdatesUserRole() async throws {
         let cookie = try await loginAsAdmin()
         let target = try await makeUser(username: "role_target", role: "student")
         let userID = try target.requireID()
@@ -151,15 +152,15 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["role": "instructor", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin")
             })
 
         let updated = try await APIUser.find(userID, on: app.db)
-        XCTAssertEqual(updated?.role, "instructor")
+        #expect(updated?.role == "instructor")
     }
 
-    func testUpdateWorkerSecretPersistsRuntimeOverride() async throws {
+    @Test func updateWorkerSecretPersistsRuntimeOverride() async throws {
         let cookie = try await loginAsAdmin()
         let (boundCookie, token) = try await csrfCookieAndToken(cookie)
 
@@ -170,19 +171,16 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["secret": " new-runner-secret ", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin")
             })
 
         let runtime = await app.workerSecretStore.runtimeOverrideValue()
-        XCTAssertEqual(runtime, "new-runner-secret")
-        XCTAssertEqual(
-            readWorkerSecretFromDisk(workerSecretFilePath: app.workerSecretFilePath),
-            "new-runner-secret"
-        )
+        #expect(runtime == "new-runner-secret")
+        #expect(readWorkerSecretFromDisk(workerSecretFilePath: app.workerSecretFilePath) == "new-runner-secret")
     }
 
-    func testWriteWorkerSecretToDiskSetsOwnerOnlyPermissions() throws {
+    @Test func writeWorkerSecretToDiskSetsOwnerOnlyPermissions() throws {
         // The worker secret is the HMAC signing key for runner↔server
         // requests; default umask leaves it world-readable on Linux, so
         // writeWorkerSecretToDisk must enforce 0o600.
@@ -191,12 +189,10 @@ final class AdminRoutesTests: XCTestCase {
 
         let attrs = try FileManager.default.attributesOfItem(atPath: path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
-        XCTAssertEqual(
-            perms & 0o777, 0o600,
-            "Expected .worker-secret to be 0600; got \(String(perms, radix: 8))")
+        #expect(perms & 0o777 == 0o600, "Expected .worker-secret to be 0600; got \(String(perms, radix: 8))")
     }
 
-    func testReadWorkerSecretFromDiskTightensExistingPermissions() throws {
+    @Test func readWorkerSecretFromDiskTightensExistingPermissions() throws {
         // Files written by older builds may be world-readable; read-time
         // hardening ensures upgraded installs converge on 0o600.
         let path = app.workerSecretFilePath
@@ -211,10 +207,10 @@ final class AdminRoutesTests: XCTestCase {
 
         let attrs = try FileManager.default.attributesOfItem(atPath: path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
-        XCTAssertEqual(perms & 0o777, 0o600)
+        #expect(perms & 0o777 == 0o600)
     }
 
-    func testUpdateWorkerSecretBlankRestoresPersistedValue() async throws {
+    @Test func updateWorkerSecretBlankRestoresPersistedValue() async throws {
         let cookie = try await loginAsAdmin()
         writeWorkerSecretToDisk(secret: "persisted-secret", workerSecretFilePath: app.workerSecretFilePath)
         await app.workerSecretStore.setRuntimeOverride("runtime-secret")
@@ -227,14 +223,14 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["secret": "   ", "_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let runtime = await app.workerSecretStore.runtimeOverrideValue()
-        XCTAssertEqual(runtime, "persisted-secret")
+        #expect(runtime == "persisted-secret")
     }
 
-    func testUpdateLocalRunnerAutoStartPersistsSetting() async throws {
+    @Test func updateLocalRunnerAutoStartPersistsSetting() async throws {
         let cookie = try await loginAsAdmin()
         let (boundCookie, token) = try await csrfCookieAndToken(cookie)
 
@@ -246,16 +242,16 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.replaceOrAdd(name: .contentType, value: "application/x-www-form-urlencoded")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin")
             })
 
         let isEnabled = await app.localRunnerAutoStartStore.isEnabled()
-        XCTAssertTrue(isEnabled)
-        XCTAssertEqual(readLocalRunnerAutoStartFromDisk(filePath: app.localRunnerAutoStartFilePath), true)
+        #expect(isEnabled)
+        #expect(readLocalRunnerAutoStartFromDisk(filePath: app.localRunnerAutoStartFilePath) == true)
     }
 
-    func testAdminDashboardShowsJobsProcessedCardLabel() async throws {
+    @Test func adminDashboardShowsJobsProcessedCardLabel() async throws {
         let cookie = try await loginAsAdmin()
 
         try await app.asyncTest(
@@ -264,14 +260,14 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = String(buffer: res.body)
-                XCTAssertTrue(body.contains("24h Jobs Processed"))
-                XCTAssertFalse(body.contains("24h Peak Util"))
+                #expect(body.contains("24h Jobs Processed"))
+                #expect(body.contains("24h Peak Util") == false)
             })
     }
 
-    func testAdminDashboardDefaultsUsersToMostRecentLastSeenFirst() async throws {
+    @Test func adminDashboardDefaultsUsersToMostRecentLastSeenFirst() async throws {
         let cookie = try await loginAsAdmin()
         let now = Date()
         _ = try await makeUser(username: "never_seen")
@@ -288,13 +284,13 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = String(buffer: res.body)
-                XCTAssertTrue(body.contains("data-sort-key=\"last-seen\""))
-                XCTAssertTrue(body.contains("sortUsersByHeader(defaultUserHeader, 'desc');"))
-                let recentIndex = try XCTUnwrap(body.range(of: "recent_seen")?.lowerBound)
-                let olderIndex = try XCTUnwrap(body.range(of: "older_seen")?.lowerBound)
-                let neverIndex = try XCTUnwrap(body.range(of: "never_seen")?.lowerBound)
+                #expect(body.contains("data-sort-key=\"last-seen\""))
+                #expect(body.contains("sortUsersByHeader(defaultUserHeader, 'desc');"))
+                let recentIndex = try #require(body.range(of: "recent_seen")?.lowerBound)
+                let olderIndex = try #require(body.range(of: "older_seen")?.lowerBound)
+                let neverIndex = try #require(body.range(of: "never_seen")?.lowerBound)
                 XCTAssertLessThan(recentIndex, olderIndex)
                 XCTAssertLessThan(olderIndex, neverIndex)
             })
@@ -307,7 +303,7 @@ final class AdminRoutesTests: XCTestCase {
     /// `AddUserFKConstraints` covers Postgres; the admin handler enforces
     /// the same semantics in application code so SQLite (which can't add
     /// FK constraints to existing columns) behaves identically.
-    func testDeleteUserCascadesClassAchievements() async throws {
+    @Test func deleteUserCascadesClassAchievements() async throws {
         let cookie = try await loginAsAdmin()
         let student = try await makeUser(username: "fk_cascade_student", role: "student")
         let studentID = try student.requireID()
@@ -329,7 +325,7 @@ final class AdminRoutesTests: XCTestCase {
         let preDeleteCount = try await APIClassAchievement.query(on: app.db)
             .filter(\.$userID == studentID)
             .count()
-        XCTAssertEqual(preDeleteCount, 1)
+        #expect(preDeleteCount == 1)
 
         let (boundCookie, token) = try await csrfCookieAndToken(cookie)
         try await app.asyncTest(
@@ -339,24 +335,22 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             }
         )
 
         let reloadedUser = try await APIUser.find(studentID, on: app.db)
-        XCTAssertNil(reloadedUser)
+        #expect(reloadedUser == nil)
         let postDeleteCount = try await APIClassAchievement.query(on: app.db)
             .filter(\.$userID == studentID)
             .count()
-        XCTAssertEqual(
-            postDeleteCount, 0,
-            "class_achievements rows referencing the deleted user must be removed")
+        #expect(postDeleteCount == 0, "class_achievements rows referencing the deleted user must be removed")
     }
 
     /// Deleting an instructor who has retested submissions must NULL out
     /// `submissions.retested_by_user_id` — the submission row stays
     /// (immutable grade history) but the retest attribution drops.
-    func testDeleteUserNullsRetestedByReferences() async throws {
+    @Test func deleteUserNullsRetestedByReferences() async throws {
         let cookie = try await loginAsAdmin()
         let student = try await makeUser(username: "fk_null_student", role: "student")
         let studentID = try student.requireID()
@@ -378,20 +372,18 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             }
         )
 
         let reloadedInstructor = try await APIUser.find(instructorID, on: app.db)
-        XCTAssertNil(reloadedInstructor)
+        #expect(reloadedInstructor == nil)
         let reloaded = try await APISubmission.find("fk_null_sub", on: app.db)
-        XCTAssertNotNil(reloaded, "Submission row must be preserved as immutable grade history")
-        XCTAssertNil(
-            reloaded?.retestedByUserID,
-            "retested_by_user_id must clear when the referenced user is deleted")
+        #expect(reloaded != nil, "Submission row must be preserved as immutable grade history")
+        #expect(reloaded?.retestedByUserID == nil, "retested_by_user_id must clear when the referenced user is deleted")
     }
 
-    func testAdminUserActionsRenderDeleteInUsersTableOnly() async throws {
+    @Test func adminUserActionsRenderDeleteInUsersTableOnly() async throws {
         let cookie = try await loginAsAdmin()
         let managedUser = try await makeUser(username: "managed_for_actions", role: "student")
         let userID = try managedUser.requireID()
@@ -402,12 +394,12 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = String(buffer: res.body)
-                XCTAssertTrue(body.contains("<th>Actions</th>"))
-                XCTAssertFalse(body.contains("<th>Courses</th>"))
-                XCTAssertTrue(body.contains("/admin/users/\(userID.uuidString)/delete"))
-                XCTAssertTrue(body.contains("aria-label=\"Delete user\""))
+                #expect(body.contains("<th>Actions</th>"))
+                #expect(body.contains("<th>Courses</th>") == false)
+                #expect(body.contains("/admin/users/\(userID.uuidString)/delete"))
+                #expect(body.contains("aria-label=\"Delete user\""))
             })
 
         try await app.asyncTest(
@@ -416,14 +408,14 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = String(buffer: res.body)
-                XCTAssertFalse(body.contains(">Delete User<"))
-                XCTAssertFalse(body.contains("/admin/users/\(userID.uuidString)/delete"))
+                #expect(body.contains(">Delete User<") == false)
+                #expect(body.contains("/admin/users/\(userID.uuidString)/delete") == false)
             })
     }
 
-    func testEditCourseUpdatesFields() async throws {
+    @Test func editCourseUpdatesFields() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "EDIT101", name: "Original Name")
         let courseID = try course.requireID()
@@ -439,16 +431,16 @@ final class AdminRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin/courses/\(courseID.uuidString)")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin/courses/\(courseID.uuidString)")
             })
 
         let updated = try await APICourse.find(courseID, on: app.db)
-        XCTAssertEqual(updated?.code, "EDIT201")
-        XCTAssertEqual(updated?.name, "Updated Name")
+        #expect(updated?.code == "EDIT201")
+        #expect(updated?.name == "Updated Name")
     }
 
-    func testToggleCourseArchiveFlipsArchivedState() async throws {
+    @Test func toggleCourseArchiveFlipsArchivedState() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "ARCH101", name: "Archive Me", archived: false)
         let courseID = try course.requireID()
@@ -461,14 +453,14 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourse.find(courseID, on: app.db)
-        XCTAssertEqual(updated?.isArchived, true)
+        #expect(updated?.isArchived == true)
     }
 
-    func testDeleteCourseRemovesRecordsAndFilesForArchivedCourse() async throws {
+    @Test func deleteCourseRemovesRecordsAndFilesForArchivedCourse() async throws {
         let cookie = try await loginAsAdmin()
         let student = try await makeUser(username: "delete_student", role: "student")
         let studentID = try student.requireID()
@@ -489,8 +481,8 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin")
             })
 
         let deletedCourse = try await APICourse.find(courseID, on: app.db)
@@ -500,19 +492,19 @@ final class AdminRoutesTests: XCTestCase {
         let submissionCount = try await APISubmission.query(on: app.db).filter(\.$testSetupID == "setup_delete_admin")
             .count()
         let resultCount = try await APIResult.query(on: app.db).count()
-        XCTAssertNil(deletedCourse)
-        XCTAssertEqual(assignmentCount, 0)
-        XCTAssertEqual(setupCount, 0)
-        XCTAssertEqual(enrollmentCount, 0)
-        XCTAssertEqual(submissionCount, 0)
-        XCTAssertEqual(resultCount, 0)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: app.testSetupsDirectory + "setup_delete_admin.zip"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: app.testSetupsDirectory + "setup_delete_admin.ipynb"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: submission.zipPath))
+        #expect(deletedCourse == nil)
+        #expect(assignmentCount == 0)
+        #expect(setupCount == 0)
+        #expect(enrollmentCount == 0)
+        #expect(submissionCount == 0)
+        #expect(resultCount == 0)
+        #expect(FileManager.default.fileExists(atPath: app.testSetupsDirectory + "setup_delete_admin.zip") == false)
+        #expect(FileManager.default.fileExists(atPath: app.testSetupsDirectory + "setup_delete_admin.ipynb") == false)
+        #expect(FileManager.default.fileExists(atPath: submission.zipPath) == false)
         _ = setup
     }
 
-    func testAdminEnrollAndUnenrollUserMutatesEnrollment() async throws {
+    @Test func adminEnrollAndUnenrollUserMutatesEnrollment() async throws {
         let cookie = try await loginAsAdmin()
         let user = try await makeUser(username: "managed_student", role: "student")
         let userID = try user.requireID()
@@ -531,15 +523,15 @@ final class AdminRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin/users/\(userID.uuidString)")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin/users/\(userID.uuidString)")
             })
 
         let enrollmentCountAfterEnroll = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == userID)
             .filter(\.$course.$id == courseID)
             .count()
-        XCTAssertEqual(enrollmentCountAfterEnroll, 1)
+        #expect(enrollmentCountAfterEnroll == 1)
 
         let (unenrollCookie, unenrollToken) = try await csrfCookieAndToken(
             cookie, path: "/admin/users/\(userID.uuidString)")
@@ -550,18 +542,18 @@ final class AdminRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": unenrollToken], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/admin/users/\(userID.uuidString)")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/admin/users/\(userID.uuidString)")
             })
 
         let enrollmentCountAfterUnenroll = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == userID)
             .filter(\.$course.$id == courseID)
             .count()
-        XCTAssertEqual(enrollmentCountAfterUnenroll, 0)
+        #expect(enrollmentCountAfterUnenroll == 0)
     }
 
-    func testAdminRunnersUsesScaledAvgWaitUnits() async throws {
+    @Test func adminRunnersUsesScaledAvgWaitUnits() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "WAIT101", name: "Wait Course")
         let courseID = try course.requireID()
@@ -610,14 +602,14 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let json = try JSONSerialization.jsonObject(with: Data(buffer: res.body)) as? [[String: Any]]
-                let row = try XCTUnwrap(json?.first(where: { ($0["workerID"] as? String) == "runner-wait" }))
-                XCTAssertEqual(row["avgQueueWaitFormatted"] as? String, "1m 5s")
+                let row = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-wait" }))
+                #expect(row["avgQueueWaitFormatted"] as? String == "1m 5s")
             })
     }
 
-    func testRunnerDetailShowsStageTimingBreakdownWhenAvailable() async throws {
+    @Test func runnerDetailShowsStageTimingBreakdownWhenAvailable() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeCourse(code: "RUN101", name: "Runner Detail")
         let courseID = try course.requireID()
@@ -691,25 +683,25 @@ final class AdminRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = String(buffer: res.body)
-                XCTAssertTrue(body.contains("Avg cache acquire:"))
-                XCTAssertTrue(body.contains("200ms"))
-                XCTAssertTrue(body.contains("Avg download:"))
-                XCTAssertTrue(body.contains("150ms"))
-                XCTAssertTrue(body.contains("Avg prep:"))
-                XCTAssertTrue(body.contains("100ms"))
-                XCTAssertTrue(body.contains("sortable-table"))
-                XCTAssertTrue(body.contains("Active Jobs"))
-                XCTAssertTrue(body.contains("1 / 2"))
-                XCTAssertTrue(body.contains("Utilization %"))
-                XCTAssertFalse(body.contains(">Max Jobs<"))
-                XCTAssertFalse(body.contains(">Available<"))
+                #expect(body.contains("Avg cache acquire:"))
+                #expect(body.contains("200ms"))
+                #expect(body.contains("Avg download:"))
+                #expect(body.contains("150ms"))
+                #expect(body.contains("Avg prep:"))
+                #expect(body.contains("100ms"))
+                #expect(body.contains("sortable-table"))
+                #expect(body.contains("Active Jobs"))
+                #expect(body.contains("1 / 2"))
+                #expect(body.contains("Utilization %"))
+                #expect(body.contains(">Max Jobs<") == false)
+                #expect(body.contains(">Available<") == false)
                 // Peak Disk column shows the formatted bytes; Setup/Other column
                 // was removed in favour of it.
-                XCTAssertTrue(body.contains("Peak Disk"))
-                XCTAssertTrue(body.contains("12.0 MB"))
-                XCTAssertFalse(body.contains(">Setup/Other<"))
+                #expect(body.contains("Peak Disk"))
+                #expect(body.contains("12.0 MB"))
+                #expect(body.contains(">Setup/Other<") == false)
             })
     }
 }
