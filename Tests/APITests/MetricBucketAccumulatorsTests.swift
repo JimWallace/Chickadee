@@ -1,73 +1,73 @@
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_server
 
-final class MetricBucketAccumulatorsTests: XCTestCase {
+@Suite struct MetricBucketAccumulatorsTests {
 
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     // MARK: - BucketWindow.resolve
 
-    func testResolveClampsHoursToOneToSeventyTwoRange() {
+    @Test func resolveClampsHoursToOneToSeventyTwoRange() {
         let low = BucketWindow.resolve(hours: 0, bucketMinutes: 15, defaultHours: 24, now: now)
-        XCTAssertEqual(low.hours, 1)
+        #expect(low.hours == 1)
 
         let high = BucketWindow.resolve(hours: 200, bucketMinutes: 15, defaultHours: 24, now: now)
-        XCTAssertEqual(high.hours, 72)
+        #expect(high.hours == 72)
     }
 
-    func testResolveClampsBucketMinutesToOneToSixtyRange() {
+    @Test func resolveClampsBucketMinutesToOneToSixtyRange() {
         let low = BucketWindow.resolve(hours: 1, bucketMinutes: 0, defaultHours: 24, now: now)
-        XCTAssertEqual(low.bucketMinutes, 1)
-        XCTAssertEqual(low.window.bucketSeconds, 60)
+        #expect(low.bucketMinutes == 1)
+        #expect(low.window.bucketSeconds == 60)
 
         let high = BucketWindow.resolve(hours: 1, bucketMinutes: 600, defaultHours: 24, now: now)
-        XCTAssertEqual(high.bucketMinutes, 60)
-        XCTAssertEqual(high.window.bucketSeconds, 3600)
+        #expect(high.bucketMinutes == 60)
+        #expect(high.window.bucketSeconds == 3600)
     }
 
-    func testResolveFallsBackToDefaultsWhenNothingProvided() {
+    @Test func resolveFallsBackToDefaultsWhenNothingProvided() {
         let resolved = BucketWindow.resolve(hours: nil, bucketMinutes: nil, defaultHours: 6, now: now)
-        XCTAssertEqual(resolved.hours, 6)
-        XCTAssertEqual(resolved.bucketMinutes, 15)
-        XCTAssertEqual(resolved.window.bucketSeconds, 900)
-        XCTAssertEqual(resolved.window.bucketCount, (6 * 3600) / 900)
-        XCTAssertEqual(resolved.window.windowStart, now.addingTimeInterval(-6 * 3600))
+        #expect(resolved.hours == 6)
+        #expect(resolved.bucketMinutes == 15)
+        #expect(resolved.window.bucketSeconds == 900)
+        #expect(resolved.window.bucketCount == (6 * 3600) / 900)
+        #expect(resolved.window.windowStart == now.addingTimeInterval(-6 * 3600))
     }
 
-    func testResolveBucketCountRoundsUpWhenWindowIsNotEvenlyDivisible() {
+    @Test func resolveBucketCountRoundsUpWhenWindowIsNotEvenlyDivisible() {
         // 1h with 17-minute buckets -> ceil(3600 / 1020) = 4 buckets
         let resolved = BucketWindow.resolve(hours: 1, bucketMinutes: 17, defaultHours: 24, now: now)
-        XCTAssertEqual(resolved.window.bucketCount, 4)
+        #expect(resolved.window.bucketCount == 4)
     }
 
     // MARK: - bucketIndex
 
-    func testBucketIndexReturnsNilForDateBeforeWindowStart() {
+    @Test func bucketIndexReturnsNilForDateBeforeWindowStart() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 15, defaultHours: 24, now: now).window
-        XCTAssertNil(window.bucketIndex(for: window.windowStart.addingTimeInterval(-1)))
+        #expect(window.bucketIndex(for: window.windowStart.addingTimeInterval(-1)) == nil)
     }
 
-    func testBucketIndexReturnsNilForDateAtOrBeyondWindowEnd() {
+    @Test func bucketIndexReturnsNilForDateAtOrBeyondWindowEnd() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 15, defaultHours: 24, now: now).window
         let windowEnd = window.windowStart.addingTimeInterval(Double(window.bucketSeconds * window.bucketCount))
-        XCTAssertNil(window.bucketIndex(for: windowEnd))
-        XCTAssertNil(window.bucketIndex(for: windowEnd.addingTimeInterval(60)))
+        #expect(window.bucketIndex(for: windowEnd) == nil)
+        #expect(window.bucketIndex(for: windowEnd.addingTimeInterval(60)) == nil)
     }
 
-    func testBucketIndexReturnsCorrectIndexForDatesInsideWindow() {
+    @Test func bucketIndexReturnsCorrectIndexForDatesInsideWindow() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 15, defaultHours: 24, now: now).window
 
-        XCTAssertEqual(window.bucketIndex(for: window.windowStart), 0)
-        XCTAssertEqual(window.bucketIndex(for: window.windowStart.addingTimeInterval(15 * 60 - 1)), 0)
-        XCTAssertEqual(window.bucketIndex(for: window.windowStart.addingTimeInterval(15 * 60)), 1)
-        XCTAssertEqual(window.bucketIndex(for: window.windowStart.addingTimeInterval(45 * 60)), 3)
+        #expect(window.bucketIndex(for: window.windowStart) == 0)
+        #expect(window.bucketIndex(for: window.windowStart.addingTimeInterval(15 * 60 - 1)) == 0)
+        #expect(window.bucketIndex(for: window.windowStart.addingTimeInterval(15 * 60)) == 1)
+        #expect(window.bucketIndex(for: window.windowStart.addingTimeInterval(45 * 60)) == 3)
     }
 
     // MARK: - accumulateRunnerSnapshots
 
-    func testAccumulateRunnerSnapshotsSkipsOutOfRangeSamples() {
+    @Test func accumulateRunnerSnapshotsSkipsOutOfRangeSamples() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 30, defaultHours: 24, now: now).window
         let inWindow = RunnerSnapshot(
             runnerID: "r1",
@@ -111,14 +111,14 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
             window: window
         )
 
-        XCTAssertEqual(buckets.count, window.bucketCount)
-        XCTAssertEqual(buckets[0].sampleCount, 1)
-        XCTAssertEqual(buckets[0].activeRunnerTotal, 1)
-        XCTAssertEqual(buckets[0].utilizationValues, [25])
-        XCTAssertEqual(buckets[1].sampleCount, 0)
+        #expect(buckets.count == window.bucketCount)
+        #expect(buckets[0].sampleCount == 1)
+        #expect(buckets[0].activeRunnerTotal == 1)
+        #expect(buckets[0].utilizationValues == [25])
+        #expect(buckets[1].sampleCount == 0)
     }
 
-    func testAccumulateRunnerSnapshotsClampsUtilizationToHundred() {
+    @Test func accumulateRunnerSnapshotsClampsUtilizationToHundred() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
         let snapshot = RunnerSnapshot(
             runnerID: "overloaded",
@@ -135,10 +135,10 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
 
         let buckets = MetricBucketAccumulators.accumulateRunnerSnapshots([snapshot], window: window)
 
-        XCTAssertEqual(buckets[0].utilizationValues, [100])
+        #expect(buckets[0].utilizationValues == [100])
     }
 
-    func testAccumulateRunnerSnapshotsSkipsUtilizationWhenMaxJobsIsZero() {
+    @Test func accumulateRunnerSnapshotsSkipsUtilizationWhenMaxJobsIsZero() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
         let snapshot = RunnerSnapshot(
             runnerID: "idle",
@@ -155,14 +155,14 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
 
         let buckets = MetricBucketAccumulators.accumulateRunnerSnapshots([snapshot], window: window)
 
-        XCTAssertEqual(buckets[0].sampleCount, 1)
-        XCTAssertEqual(buckets[0].activeRunnerTotal, 1)
-        XCTAssertTrue(buckets[0].utilizationValues.isEmpty)
+        #expect(buckets[0].sampleCount == 1)
+        #expect(buckets[0].activeRunnerTotal == 1)
+        #expect(buckets[0].utilizationValues.isEmpty)
     }
 
     // MARK: - accumulateRequestMetrics
 
-    func testAccumulateRequestMetricsCollectsDurations() {
+    @Test func accumulateRequestMetricsCollectsDurations() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 30, defaultHours: 24, now: now).window
         let bucket0 = makeRequestMetric(at: window.windowStart, durationMs: 50)
         let bucket0Again = makeRequestMetric(at: window.windowStart.addingTimeInterval(60), durationMs: 75)
@@ -174,15 +174,15 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
             window: window
         )
 
-        XCTAssertEqual(buckets[0].requestCount, 2)
-        XCTAssertEqual(buckets[0].durationValues.sorted(), [50, 75])
-        XCTAssertEqual(buckets[1].requestCount, 1)
-        XCTAssertEqual(buckets[1].durationValues, [200])
+        #expect(buckets[0].requestCount == 2)
+        #expect(buckets[0].durationValues.sorted() == [50, 75])
+        #expect(buckets[1].requestCount == 1)
+        #expect(buckets[1].durationValues == [200])
     }
 
     // MARK: - accumulateJobMetrics
 
-    func testAccumulateJobMetricsRoutesEachStatusToTheCorrectCounter() {
+    @Test func accumulateJobMetricsRoutesEachStatusToTheCorrectCounter() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
         let metrics = [
             makeJobMetric(completedAt: window.windowStart, status: JobFinalStatus.passed.rawValue),
@@ -195,24 +195,24 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
 
         let buckets = MetricBucketAccumulators.accumulateJobMetrics(metrics, window: window)
 
-        XCTAssertEqual(buckets[0].completedJobs, 6)
-        XCTAssertEqual(buckets[0].passedCount, 1)
-        XCTAssertEqual(buckets[0].failedCount, 1)
-        XCTAssertEqual(buckets[0].errorCount, 1)
-        XCTAssertEqual(buckets[0].timeoutCount, 1)
+        #expect(buckets[0].completedJobs == 6)
+        #expect(buckets[0].passedCount == 1)
+        #expect(buckets[0].failedCount == 1)
+        #expect(buckets[0].errorCount == 1)
+        #expect(buckets[0].timeoutCount == 1)
     }
 
-    func testAccumulateJobMetricsSkipsRowsWithoutCompletedAt() {
+    @Test func accumulateJobMetricsSkipsRowsWithoutCompletedAt() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
         let metric = makeJobMetric(completedAt: nil, status: JobFinalStatus.passed.rawValue)
 
         let buckets = MetricBucketAccumulators.accumulateJobMetrics([metric], window: window)
 
-        XCTAssertEqual(buckets[0].completedJobs, 0)
-        XCTAssertEqual(buckets[0].passedCount, 0)
+        #expect(buckets[0].completedJobs == 0)
+        #expect(buckets[0].passedCount == 0)
     }
 
-    func testAccumulateJobMetricsCollectsTimingValues() {
+    @Test func accumulateJobMetricsCollectsTimingValues() {
         let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
         let metric = makeJobMetric(
             completedAt: window.windowStart,
@@ -227,13 +227,13 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
 
         let buckets = MetricBucketAccumulators.accumulateJobMetrics([metric, metricNoTimings], window: window)
 
-        XCTAssertEqual(buckets[0].queueWaitValues, [250])
-        XCTAssertEqual(buckets[0].executionValues, [1_750])
+        #expect(buckets[0].queueWaitValues == [250])
+        #expect(buckets[0].executionValues == [1_750])
     }
 
     // MARK: - buildBucketResponses
 
-    func testBuildBucketResponsesProducesExpectedBucketStartsAndAggregates() {
+    @Test func buildBucketResponsesProducesExpectedBucketStartsAndAggregates() {
         let resolved = BucketWindow.resolve(hours: 1, bucketMinutes: 30, defaultHours: 24, now: now)
         let window = resolved.window
 
@@ -260,46 +260,46 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
             jobs: jobs
         )
 
-        XCTAssertEqual(buckets.count, window.bucketCount)
-        XCTAssertEqual(buckets[0].bucketStart, window.windowStart)
-        XCTAssertEqual(buckets[1].bucketStart, window.windowStart.addingTimeInterval(Double(window.bucketSeconds)))
+        #expect(buckets.count == window.bucketCount)
+        #expect(buckets[0].bucketStart == window.windowStart)
+        #expect(buckets[1].bucketStart == window.windowStart.addingTimeInterval(Double(window.bucketSeconds)))
 
-        XCTAssertEqual(buckets[0].avgActiveRunners, 3)
-        XCTAssertEqual(buckets[0].avgRunnerUtilizationPercent, 60)  // average(40, 60, 80) = 60
-        XCTAssertEqual(buckets[0].maxRunnerUtilizationPercent, 80)
-        XCTAssertEqual(buckets[0].completedJobs, 4)
-        XCTAssertEqual(buckets[0].passedCount, 3)
-        XCTAssertEqual(buckets[0].failedCount, 1)
-        XCTAssertNotNil(buckets[0].queueWaitP95Ms)
-        XCTAssertNotNil(buckets[0].executionP95Ms)
+        #expect(buckets[0].avgActiveRunners == 3)
+        #expect(buckets[0].avgRunnerUtilizationPercent == 60)  // average(40, 60, 80) = 60
+        #expect(buckets[0].maxRunnerUtilizationPercent == 80)
+        #expect(buckets[0].completedJobs == 4)
+        #expect(buckets[0].passedCount == 3)
+        #expect(buckets[0].failedCount == 1)
+        #expect(buckets[0].queueWaitP95Ms != nil)
+        #expect(buckets[0].executionP95Ms != nil)
 
-        XCTAssertEqual(buckets[1].requestCount, 1)
-        XCTAssertEqual(buckets[1].requestP95Ms, 123)
-        XCTAssertEqual(buckets[1].avgActiveRunners, 0)  // sampleCount == 0
-        XCTAssertNil(buckets[1].avgRunnerUtilizationPercent)
-        XCTAssertNil(buckets[1].queueWaitP95Ms)
+        #expect(buckets[1].requestCount == 1)
+        #expect(buckets[1].requestP95Ms == 123)
+        #expect(buckets[1].avgActiveRunners == 0)  // sampleCount == 0
+        #expect(buckets[1].avgRunnerUtilizationPercent == nil)
+        #expect(buckets[1].queueWaitP95Ms == nil)
     }
 
     // MARK: - percentile / average / percentile95
 
-    func testPercentile95ReturnsNilForEmptyInput() {
-        XCTAssertNil(MetricBucketAccumulators.percentile95([]))
+    @Test func percentile95ReturnsNilForEmptyInput() {
+        #expect(MetricBucketAccumulators.percentile95([]) == nil)
     }
 
-    func testPercentile95UsesNearestRankOnSortedCopy() {
+    @Test func percentile95UsesNearestRankOnSortedCopy() {
         // values sorted: [10, 20, 30, 40, 50] -> idx = floor(4 * 0.95) = 3 -> value 40
-        XCTAssertEqual(MetricBucketAccumulators.percentile95([30, 50, 10, 40, 20]), 40)
+        #expect(MetricBucketAccumulators.percentile95([30, 50, 10, 40, 20]) == 40)
     }
 
-    func testAverageReturnsIntegerMeanOrNil() {
-        XCTAssertNil(MetricBucketAccumulators.average([]))
-        XCTAssertEqual(MetricBucketAccumulators.average([10, 20, 30]), 20)
-        XCTAssertEqual(MetricBucketAccumulators.average([1, 2]), 1)  // integer division
+    @Test func averageReturnsIntegerMeanOrNil() {
+        #expect(MetricBucketAccumulators.average([]) == nil)
+        #expect(MetricBucketAccumulators.average([10, 20, 30]) == 20)
+        #expect(MetricBucketAccumulators.average([1, 2]) == 1)  // integer division
     }
 
     // MARK: - End-to-end pinned scenario
 
-    func testEndToEndScenarioPinsBucketContents() {
+    @Test func endToEndScenarioPinsBucketContents() {
         let resolved = BucketWindow.resolve(hours: 1, bucketMinutes: 30, defaultHours: 24, now: now)
         let window = resolved.window
         let bucket0Start = window.windowStart
@@ -350,24 +350,24 @@ final class MetricBucketAccumulatorsTests: XCTestCase {
             jobs: jobBuckets
         )
 
-        XCTAssertEqual(response.count, 2)
-        XCTAssertEqual(response[0].avgActiveRunners, 1)  // 1 sample, total 1
-        XCTAssertEqual(response[0].avgRunnerUtilizationPercent, 50)
-        XCTAssertEqual(response[0].requestCount, 1)
-        XCTAssertEqual(response[0].requestP95Ms, 100)
-        XCTAssertEqual(response[0].completedJobs, 1)
-        XCTAssertEqual(response[0].passedCount, 1)
-        XCTAssertEqual(response[0].queueWaitP95Ms, 500)
-        XCTAssertEqual(response[0].executionP95Ms, 2_000)
+        #expect(response.count == 2)
+        #expect(response[0].avgActiveRunners == 1)  // 1 sample, total 1
+        #expect(response[0].avgRunnerUtilizationPercent == 50)
+        #expect(response[0].requestCount == 1)
+        #expect(response[0].requestP95Ms == 100)
+        #expect(response[0].completedJobs == 1)
+        #expect(response[0].passedCount == 1)
+        #expect(response[0].queueWaitP95Ms == 500)
+        #expect(response[0].executionP95Ms == 2_000)
 
-        XCTAssertEqual(response[1].avgActiveRunners, 1)
-        XCTAssertEqual(response[1].avgRunnerUtilizationPercent, 50)
-        XCTAssertEqual(response[1].requestCount, 1)
-        XCTAssertEqual(response[1].requestP95Ms, 800)
-        XCTAssertEqual(response[1].completedJobs, 1)
-        XCTAssertEqual(response[1].timeoutCount, 1)
-        XCTAssertNil(response[1].queueWaitP95Ms)
-        XCTAssertNil(response[1].executionP95Ms)
+        #expect(response[1].avgActiveRunners == 1)
+        #expect(response[1].avgRunnerUtilizationPercent == 50)
+        #expect(response[1].requestCount == 1)
+        #expect(response[1].requestP95Ms == 800)
+        #expect(response[1].completedJobs == 1)
+        #expect(response[1].timeoutCount == 1)
+        #expect(response[1].queueWaitP95Ms == nil)
+        #expect(response[1].executionP95Ms == nil)
     }
 
     // MARK: - Helpers

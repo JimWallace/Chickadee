@@ -1,8 +1,8 @@
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
-final class NotebookExtractorTests: XCTestCase {
+@Suite struct NotebookExtractorTests {
     private let extractor = NotebookExtractor()
 
     // MARK: - Helpers
@@ -23,183 +23,183 @@ final class NotebookExtractorTests: XCTestCase {
 
     // MARK: - Safe: definitions
 
-    func testFunctionDefPreserved() {
+    @Test func functionDefPreserved() {
         let output = extractor.sanitizeCellForModule("def add(a, b):\n    return a + b")
-        XCTAssertTrue(moduleLevel(in: output).contains("def add(a, b):"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("def add(a, b):"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testAsyncFunctionDefPreserved() {
+    @Test func asyncFunctionDefPreserved() {
         let output = extractor.sanitizeCellForModule("async def fetch():\n    pass")
-        XCTAssertTrue(moduleLevel(in: output).contains("async def fetch():"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("async def fetch():"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testClassDefPreserved() {
+    @Test func classDefPreserved() {
         let output = extractor.sanitizeCellForModule("class Foo:\n    pass")
-        XCTAssertTrue(moduleLevel(in: output).contains("class Foo:"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("class Foo:"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testImportPreserved() {
+    @Test func importPreserved() {
         let output = extractor.sanitizeCellForModule("import math")
-        XCTAssertTrue(moduleLevel(in: output).contains("import math"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("import math"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testFromImportPreserved() {
+    @Test func fromImportPreserved() {
         let output = extractor.sanitizeCellForModule("from math import sqrt")
-        XCTAssertTrue(moduleLevel(in: output).contains("from math import sqrt"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("from math import sqrt"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testDecoratorPreserved() {
+    @Test func decoratorPreserved() {
         let output = extractor.sanitizeCellForModule("@property\ndef value(self):\n    return self._v")
-        XCTAssertTrue(moduleLevel(in: output).contains("@property"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("@property"))
+        #expect(output.contains("if __name__") == false)
     }
 
     // MARK: - Safe: constants and simple assignments
 
-    func testIntegerConstantPreserved() {
+    @Test func integerConstantPreserved() {
         let output = extractor.sanitizeCellForModule("MAX = 100")
-        XCTAssertTrue(moduleLevel(in: output).contains("MAX = 100"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("MAX = 100"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testFloatConstantPreserved() {
+    @Test func floatConstantPreserved() {
         let output = extractor.sanitizeCellForModule("BMI_UNDERWEIGHT_MAX = 18.5")
-        XCTAssertTrue(moduleLevel(in: output).contains("BMI_UNDERWEIGHT_MAX = 18.5"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("BMI_UNDERWEIGHT_MAX = 18.5"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testAnnotatedConstantPreserved() {
+    @Test func annotatedConstantPreserved() {
         let output = extractor.sanitizeCellForModule("BMI_NORMAL_MAX: float = 25.0")
-        XCTAssertTrue(moduleLevel(in: output).contains("BMI_NORMAL_MAX: float = 25.0"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("BMI_NORMAL_MAX: float = 25.0"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testSimpleArithmeticPreserved() {
+    @Test func simpleArithmeticPreserved() {
         let output = extractor.sanitizeCellForModule("result = 2 + 3")
-        XCTAssertTrue(moduleLevel(in: output).contains("result = 2 + 3"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("result = 2 + 3"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testTupleAssignmentPreserved() {
+    @Test func tupleAssignmentPreserved() {
         let output = extractor.sanitizeCellForModule("a, b = 1, 2")
-        XCTAssertTrue(moduleLevel(in: output).contains("a, b = 1, 2"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("a, b = 1, 2"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testListLiteralPreserved() {
+    @Test func listLiteralPreserved() {
         let output = extractor.sanitizeCellForModule("items = [1, 2, 3]")
-        XCTAssertTrue(moduleLevel(in: output).contains("items = [1, 2, 3]"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("items = [1, 2, 3]"))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testDictLiteralPreserved() {
+    @Test func dictLiteralPreserved() {
         let output = extractor.sanitizeCellForModule(#"mapping = {"a": 1, "b": 2}"#)
-        XCTAssertTrue(moduleLevel(in: output).contains("mapping ="))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("mapping ="))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testStringConstantPreserved() {
+    @Test func stringConstantPreserved() {
         let output = extractor.sanitizeCellForModule(#"GREETING = "hello""#)
-        XCTAssertTrue(moduleLevel(in: output).contains("GREETING ="))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("GREETING ="))
+        #expect(output.contains("if __name__") == false)
     }
 
-    func testDocstringPreserved() {
+    @Test func docstringPreserved() {
         let output = extractor.sanitizeCellForModule("\"\"\"Module docstring.\"\"\"")
-        XCTAssertTrue(moduleLevel(in: output).contains("Module docstring"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("Module docstring"))
+        #expect(output.contains("if __name__") == false)
     }
 
     // MARK: - Safe: multi-line bracket continuation
 
-    func testMultiLineBracketedListPreserved() {
+    @Test func multiLineBracketedListPreserved() {
         // The closing `]` is flush-left; bracket depth tracking must prevent
         // it from being treated as a new top-level statement.
         let source = "PRIMES = [\n1,\n2,\n3\n]"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertTrue(moduleLevel(in: output).contains("PRIMES = ["))
-        XCTAssertFalse(guardBlock(in: output).contains("PRIMES"))
+        #expect(moduleLevel(in: output).contains("PRIMES = ["))
+        #expect(guardBlock(in: output).contains("PRIMES") == false)
     }
 
     // MARK: - Quarantined: control flow and side effects
 
-    func testAssertQuarantined() {
+    @Test func assertQuarantined() {
         let output = extractor.sanitizeCellForModule("assert x > 0")
-        XCTAssertTrue(guardBlock(in: output).contains("assert x > 0"))
-        XCTAssertFalse(moduleLevel(in: output).contains("assert"))
+        #expect(guardBlock(in: output).contains("assert x > 0"))
+        #expect(moduleLevel(in: output).contains("assert") == false)
     }
 
-    func testPrintCallQuarantined() {
+    @Test func printCallQuarantined() {
         let output = extractor.sanitizeCellForModule("print(result)")
-        XCTAssertTrue(guardBlock(in: output).contains("print(result)"))
-        XCTAssertFalse(moduleLevel(in: output).contains("print("))
+        #expect(guardBlock(in: output).contains("print(result)"))
+        #expect(!moduleLevel(in: output).contains("print("))
     }
 
-    func testInputCallQuarantined() {
+    @Test func inputCallQuarantined() {
         let output = extractor.sanitizeCellForModule(#"name = input("Enter name: ")"#)
-        XCTAssertTrue(guardBlock(in: output).contains("input("))
+        #expect(guardBlock(in: output).contains("input("))
     }
 
-    func testForLoopQuarantined() {
+    @Test func forLoopQuarantined() {
         let source = "for i in range(10):\n    print(i)"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertTrue(guardBlock(in: output).contains("for i in range(10):"))
-        XCTAssertFalse(moduleLevel(in: output).contains("for i"))
+        #expect(guardBlock(in: output).contains("for i in range(10):"))
+        #expect(!moduleLevel(in: output).contains("for i"))
     }
 
-    func testWhileLoopQuarantined() {
+    @Test func whileLoopQuarantined() {
         let source = "while True:\n    break"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertTrue(guardBlock(in: output).contains("while True:"))
+        #expect(guardBlock(in: output).contains("while True:"))
     }
 
-    func testIfNameMainQuarantined() {
+    @Test func ifNameMainQuarantined() {
         let source = "if __name__ == \"__main__\":\n    print(\"running\")"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertTrue(guardBlock(in: output).contains("if __name__ == \"__main__\":"))
+        #expect(guardBlock(in: output).contains("if __name__ == \"__main__\":"))
     }
 
-    func testBareIfStatementQuarantined() {
+    @Test func bareIfStatementQuarantined() {
         let source = "if x > 0:\n    print(x)"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertTrue(guardBlock(in: output).contains("if x > 0:"))
+        #expect(guardBlock(in: output).contains("if x > 0:"))
     }
 
-    func testAssignmentWithCallRHSQuarantined() {
+    @Test func assignmentWithCallRHSQuarantined() {
         let output = extractor.sanitizeCellForModule("patient0 = Patient(name=\"Alice\")")
-        XCTAssertTrue(guardBlock(in: output).contains("patient0 = Patient"))
-        XCTAssertFalse(moduleLevel(in: output).contains("patient0"))
+        #expect(guardBlock(in: output).contains("patient0 = Patient"))
+        #expect(!moduleLevel(in: output).contains("patient0"))
     }
 
-    func testMethodCallAssignmentQuarantined() {
+    @Test func methodCallAssignmentQuarantined() {
         let output = extractor.sanitizeCellForModule("data = df.read_csv(\"file.csv\")")
-        XCTAssertTrue(guardBlock(in: output).contains("data = df"))
+        #expect(guardBlock(in: output).contains("data = df"))
     }
 
     // MARK: - Magic/shell stripping
 
-    func testMagicLineStripped() {
+    @Test func magicLineStripped() {
         let source = "%matplotlib inline\nimport matplotlib.pyplot as plt"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertFalse(output.contains("%matplotlib"))
-        XCTAssertTrue(output.contains("import matplotlib"))
+        #expect(!output.contains("%matplotlib"))
+        #expect(output.contains("import matplotlib"))
     }
 
-    func testShellCommandStripped() {
+    @Test func shellCommandStripped() {
         let source = "!pip install numpy\nimport numpy as np"
         let output = extractor.sanitizeCellForModule(source)
-        XCTAssertFalse(output.contains("!pip"))
-        XCTAssertTrue(output.contains("import numpy"))
+        #expect(!output.contains("!pip"))
+        #expect(output.contains("import numpy"))
     }
 
     // MARK: - Mixed cells
 
-    func testMixedCellBMIExample() {
+    @Test func mixedCellBMIExample() {
         // Mirrors the motivating example from the issue.
         let source = """
             BMI_UNDERWEIGHT_MAX: float = 18.5
@@ -222,16 +222,16 @@ final class NotebookExtractorTests: XCTestCase {
         let modLevel = moduleLevel(in: output)
 
         // Constants and function definition at module level.
-        XCTAssertTrue(modLevel.contains("BMI_UNDERWEIGHT_MAX: float = 18.5"))
-        XCTAssertTrue(modLevel.contains("BMI_NORMAL_MAX: float = 25.0"))
-        XCTAssertTrue(modLevel.contains("def bmi_category"))
+        #expect(modLevel.contains("BMI_UNDERWEIGHT_MAX: float = 18.5"))
+        #expect(modLevel.contains("BMI_NORMAL_MAX: float = 25.0"))
+        #expect(modLevel.contains("def bmi_category"))
 
         // Assert quarantined.
-        XCTAssertFalse(modLevel.contains("assert"))
-        XCTAssertTrue(guardBlock(in: output).contains("assert BMI_NORMAL_MAX > BMI_UNDERWEIGHT_MAX"))
+        #expect(!modLevel.contains("assert"))
+        #expect(guardBlock(in: output).contains("assert BMI_NORMAL_MAX > BMI_UNDERWEIGHT_MAX"))
     }
 
-    func testConstantsRemainingAccessibleToFunction() {
+    @Test func constantsRemainingAccessibleToFunction() {
         // Both constants and function at module level: the function can reference
         // the constants when the module is imported by the test runner.
         let source = """
@@ -243,13 +243,13 @@ final class NotebookExtractorTests: XCTestCase {
             """
         let output = extractor.sanitizeCellForModule(source)
         let modLevel = moduleLevel(in: output)
-        XCTAssertTrue(modLevel.contains("MAX_VALUE = 100"))
-        XCTAssertTrue(modLevel.contains("MIN_VALUE = 0"))
-        XCTAssertTrue(modLevel.contains("def clamp(x):"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(modLevel.contains("MAX_VALUE = 100"))
+        #expect(modLevel.contains("MIN_VALUE = 0"))
+        #expect(modLevel.contains("def clamp(x):"))
+        #expect(!output.contains("if __name__"))
     }
 
-    func testSafeAndUnsafeStatementsSeparated() {
+    @Test func safeAndUnsafeStatementsSeparated() {
         // Safe assignments and function defs should remain at module level even
         // when interspersed with quarantined calls.
         let source = """
@@ -260,25 +260,25 @@ final class NotebookExtractorTests: XCTestCase {
             """
         let output = extractor.sanitizeCellForModule(source)
         let modLevel = moduleLevel(in: output)
-        XCTAssertTrue(modLevel.contains("X = 10"))
-        XCTAssertTrue(modLevel.contains("Y = 20"))
-        XCTAssertTrue(guardBlock(in: output).contains("print(X)"))
-        XCTAssertTrue(guardBlock(in: output).contains("print(Y)"))
+        #expect(modLevel.contains("X = 10"))
+        #expect(modLevel.contains("Y = 20"))
+        #expect(guardBlock(in: output).contains("print(X)"))
+        #expect(guardBlock(in: output).contains("print(Y)"))
     }
 
     // MARK: - False-positive guard (variable names sharing keyword prefixes)
 
-    func testVariableNamedFormat() {
+    @Test func variableNamedFormat() {
         // `format` starts with `for` — must not be quarantined.
         let output = extractor.sanitizeCellForModule("format = \"%.2f\"")
-        XCTAssertTrue(moduleLevel(in: output).contains("format ="))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("format ="))
+        #expect(!output.contains("if __name__"))
     }
 
-    func testVariableNamedElseResult() {
+    @Test func variableNamedElseResult() {
         // `else_result` starts with `else` — must not be quarantined.
         let output = extractor.sanitizeCellForModule("else_result = 0")
-        XCTAssertTrue(moduleLevel(in: output).contains("else_result = 0"))
-        XCTAssertFalse(output.contains("if __name__"))
+        #expect(moduleLevel(in: output).contains("else_result = 0"))
+        #expect(!output.contains("if __name__"))
     }
 }

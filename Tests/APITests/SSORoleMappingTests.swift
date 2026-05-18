@@ -1,13 +1,13 @@
 import Fluent
-import XCTest
+import Testing
 
 @testable import chickadee_server
 
-final class SSORoleMappingTests: XCTestCase {
+@Suite struct SSORoleMappingTests {
 
     private let routes = SSOAuthRoutes(configuredCallbackPath: "/auth/sso/callback")
 
-    func testNoAllowlistsReturnsNil() {
+    @Test func noAllowlistsReturnsNil() {
         let role = routes.mappedSSORole(
             username: "alice",
             userIdentifier: "alice123",
@@ -15,10 +15,10 @@ final class SSORoleMappingTests: XCTestCase {
             adminAllowlist: [],
             instructorAllowlist: []
         )
-        XCTAssertNil(role)
+        #expect(role == nil)
     }
 
-    func testAdminAllowlistMatchesUsernameCaseInsensitive() {
+    @Test func adminAllowlistMatchesUsernameCaseInsensitive() {
         let role = routes.mappedSSORole(
             username: "Alice",
             userIdentifier: "alice123",
@@ -26,10 +26,10 @@ final class SSORoleMappingTests: XCTestCase {
             adminAllowlist: ["alice"],
             instructorAllowlist: []
         )
-        XCTAssertEqual(role, "admin")
+        #expect(role == "admin")
     }
 
-    func testInstructorAllowlistMatchesUserIdentifierWhenNotAdmin() {
+    @Test func instructorAllowlistMatchesUserIdentifierWhenNotAdmin() {
         let role = routes.mappedSSORole(
             username: "bob",
             userIdentifier: "B12345",
@@ -37,10 +37,10 @@ final class SSORoleMappingTests: XCTestCase {
             adminAllowlist: [],
             instructorAllowlist: ["b12345"]
         )
-        XCTAssertEqual(role, "instructor")
+        #expect(role == "instructor")
     }
 
-    func testAdminAllowlistBeatsInstructorAllowlist() {
+    @Test func adminAllowlistBeatsInstructorAllowlist() {
         let role = routes.mappedSSORole(
             username: "carol",
             userIdentifier: "c999",
@@ -48,10 +48,10 @@ final class SSORoleMappingTests: XCTestCase {
             adminAllowlist: ["carol@example.edu"],
             instructorAllowlist: ["carol", "c999"]
         )
-        XCTAssertEqual(role, "admin")
+        #expect(role == "admin")
     }
 
-    func testBlankValuesAreIgnored() {
+    @Test func blankValuesAreIgnored() {
         let role = routes.mappedSSORole(
             username: "   ",
             userIdentifier: "   ",
@@ -59,6 +59,6 @@ final class SSORoleMappingTests: XCTestCase {
             adminAllowlist: [],
             instructorAllowlist: ["instructor@example.edu"]
         )
-        XCTAssertEqual(role, "instructor")
+        #expect(role == "instructor")
     }
 }

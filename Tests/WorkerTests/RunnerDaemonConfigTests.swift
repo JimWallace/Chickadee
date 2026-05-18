@@ -1,15 +1,15 @@
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
-final class RunnerDaemonConfigTests: XCTestCase {
+@Suite struct RunnerDaemonConfigTests {
 
-    func testEmptyEnvironmentUsesDefaults() {
+    @Test func emptyEnvironmentUsesDefaults() {
         let config = RunnerDaemonConfig.loadFromEnvironment([:])
-        XCTAssertEqual(config, .defaults)
+        #expect(config == .defaults)
     }
 
-    func testValidEnvVarsParsedAsExpected() {
+    @Test func validEnvVarsParsedAsExpected() {
         let env: [String: String] = [
             "RUNNER_CAPABILITY_DISCOVERY_ENABLED": "false",
             "RUNNER_TEST_SETUP_CACHE_DIR": "/var/cache/chickadee",
@@ -22,67 +22,67 @@ final class RunnerDaemonConfigTests: XCTestCase {
             "RUNNER_MIN_FREE_DISK_MB": "1024",
         ]
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
-        XCTAssertEqual(config.capabilityDiscoveryEnabled, false)
-        XCTAssertEqual(config.testSetupCacheDir, "/var/cache/chickadee")
-        XCTAssertEqual(config.networkRetryEnabled, false)
-        XCTAssertEqual(config.retryBaseDelayMs, 250)
-        XCTAssertEqual(config.retryMaxDelayMs, 60_000)
-        XCTAssertEqual(config.heartbeatRetryMaxAttempts, 9)
-        XCTAssertEqual(config.resultUploadRetryMaxAttempts, 12)
-        XCTAssertEqual(config.downloadRetryMaxAttempts, 3)
-        XCTAssertEqual(config.minFreeDiskMB, 1024)
+        #expect(config.capabilityDiscoveryEnabled == false)
+        #expect(config.testSetupCacheDir == "/var/cache/chickadee")
+        #expect(config.networkRetryEnabled == false)
+        #expect(config.retryBaseDelayMs == 250)
+        #expect(config.retryMaxDelayMs == 60_000)
+        #expect(config.heartbeatRetryMaxAttempts == 9)
+        #expect(config.resultUploadRetryMaxAttempts == 12)
+        #expect(config.downloadRetryMaxAttempts == 3)
+        #expect(config.minFreeDiskMB == 1024)
     }
 
-    func testMinFreeDiskZeroDisablesPrecheck() {
+    @Test func minFreeDiskZeroDisablesPrecheck() {
         let config = RunnerDaemonConfig.loadFromEnvironment([
             "RUNNER_MIN_FREE_DISK_MB": "0"
         ])
-        XCTAssertEqual(config.minFreeDiskMB, 0)
+        #expect(config.minFreeDiskMB == 0)
     }
 
-    func testMinFreeDiskInvalidFallsBackToDefault() {
+    @Test func minFreeDiskInvalidFallsBackToDefault() {
         let config = RunnerDaemonConfig.loadFromEnvironment([
             "RUNNER_MIN_FREE_DISK_MB": "not-a-number"
         ])
-        XCTAssertEqual(config.minFreeDiskMB, RunnerDaemonConfig.defaults.minFreeDiskMB)
+        #expect(config.minFreeDiskMB == RunnerDaemonConfig.defaults.minFreeDiskMB)
     }
 
-    func testBoolAcceptsCommonAliases() {
+    @Test func boolAcceptsCommonAliases() {
         for trueWord in ["1", "true", "True", "TRUE", "yes", "YES", "on", "ON"] {
             let config = RunnerDaemonConfig.loadFromEnvironment([
                 "RUNNER_NETWORK_RETRY_ENABLED": trueWord
             ])
-            XCTAssertTrue(config.networkRetryEnabled, "expected true for \(trueWord)")
+            #expect(config.networkRetryEnabled, "expected true for \(trueWord)")
         }
         for falseWord in ["0", "false", "False", "no", "NO", "off", "OFF"] {
             let config = RunnerDaemonConfig.loadFromEnvironment([
                 "RUNNER_NETWORK_RETRY_ENABLED": falseWord
             ])
-            XCTAssertFalse(config.networkRetryEnabled, "expected false for \(falseWord)")
+            #expect(!config.networkRetryEnabled, "expected false for \(falseWord)")
         }
     }
 
-    func testInvalidValuesFallBackToDefaults() {
+    @Test func invalidValuesFallBackToDefaults() {
         let config = RunnerDaemonConfig.loadFromEnvironment([
             "RUNNER_CAPABILITY_DISCOVERY_ENABLED": "maybe",
             "RUNNER_NETWORK_RETRY_ENABLED": "",
             "RUNNER_RETRY_BASE_DELAY_MS": "not-a-number",
             "RUNNER_HEARTBEAT_RETRY_MAX_ATTEMPTS": "  ",
         ])
-        XCTAssertEqual(config.capabilityDiscoveryEnabled, RunnerDaemonConfig.defaults.capabilityDiscoveryEnabled)
-        XCTAssertEqual(config.networkRetryEnabled, RunnerDaemonConfig.defaults.networkRetryEnabled)
-        XCTAssertEqual(config.retryBaseDelayMs, RunnerDaemonConfig.defaults.retryBaseDelayMs)
-        XCTAssertEqual(config.heartbeatRetryMaxAttempts, RunnerDaemonConfig.defaults.heartbeatRetryMaxAttempts)
+        #expect(config.capabilityDiscoveryEnabled == RunnerDaemonConfig.defaults.capabilityDiscoveryEnabled)
+        #expect(config.networkRetryEnabled == RunnerDaemonConfig.defaults.networkRetryEnabled)
+        #expect(config.retryBaseDelayMs == RunnerDaemonConfig.defaults.retryBaseDelayMs)
+        #expect(config.heartbeatRetryMaxAttempts == RunnerDaemonConfig.defaults.heartbeatRetryMaxAttempts)
     }
 
-    func testEmptyCacheDirTreatedAsAbsent() {
+    @Test func emptyCacheDirTreatedAsAbsent() {
         let config = RunnerDaemonConfig.loadFromEnvironment([
             "RUNNER_TEST_SETUP_CACHE_DIR": "   "
         ])
-        XCTAssertNil(config.testSetupCacheDir)
+        #expect(config.testSetupCacheDir == nil)
     }
 
-    func testRetryPolicyFactoriesUseConfigValues() {
+    @Test func retryPolicyFactoriesUseConfigValues() {
         let config = RunnerDaemonConfig(
             capabilityDiscoveryEnabled: true,
             testSetupCacheDir: nil,
@@ -95,18 +95,18 @@ final class RunnerDaemonConfigTests: XCTestCase {
             minFreeDiskMB: 128
         )
         let heartbeat = RunnerRetryPolicy.heartbeat(config: config)
-        XCTAssertEqual(heartbeat.maxAttempts, 7)
-        XCTAssertEqual(heartbeat.baseDelayMs, 500)
-        XCTAssertEqual(heartbeat.maxDelayMs, 45_000)
+        #expect(heartbeat.maxAttempts == 7)
+        #expect(heartbeat.baseDelayMs == 500)
+        #expect(heartbeat.maxDelayMs == 45_000)
 
         let resultUpload = RunnerRetryPolicy.resultUpload(config: config)
-        XCTAssertEqual(resultUpload.maxAttempts, 11)
+        #expect(resultUpload.maxAttempts == 11)
 
         let download = RunnerRetryPolicy.download(config: config)
-        XCTAssertEqual(download.maxAttempts, 5)
+        #expect(download.maxAttempts == 5)
 
         let poll = RunnerRetryPolicy.poll(config: config)
-        XCTAssertEqual(poll.maxAttempts, .max)
-        XCTAssertEqual(poll.baseDelayMs, 500)
+        #expect(poll.maxAttempts == .max)
+        #expect(poll.baseDelayMs == 500)
     }
 }

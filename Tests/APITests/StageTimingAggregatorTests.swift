@@ -1,27 +1,27 @@
-import XCTest
+import Testing
 
 @testable import Core
 @testable import chickadee_server
 
-final class StageTimingAggregatorTests: XCTestCase {
+@Suite struct StageTimingAggregatorTests {
 
-    func testInitFromNilLeavesEveryStageNil() {
+    @Test func initFromNilLeavesEveryStageNil() {
         let aggregator = StageTimingAggregator(from: nil)
 
-        XCTAssertNil(aggregator.workdirSetupMs)
-        XCTAssertNil(aggregator.submissionDirSetupMs)
-        XCTAssertNil(aggregator.submissionDownloadMs)
-        XCTAssertNil(aggregator.testSetupAcquireMs)
-        XCTAssertNil(aggregator.submissionUnpackMs)
-        XCTAssertNil(aggregator.starterCleanupMs)
-        XCTAssertNil(aggregator.submissionPrepareMs)
-        XCTAssertNil(aggregator.makeStepMs)
-        XCTAssertNil(aggregator.runtimeHelperSetupMs)
-        XCTAssertNil(aggregator.testExecutionMs)
-        XCTAssertNil(aggregator.totalKnownStageMs)
+        #expect(aggregator.workdirSetupMs == nil)
+        #expect(aggregator.submissionDirSetupMs == nil)
+        #expect(aggregator.submissionDownloadMs == nil)
+        #expect(aggregator.testSetupAcquireMs == nil)
+        #expect(aggregator.submissionUnpackMs == nil)
+        #expect(aggregator.starterCleanupMs == nil)
+        #expect(aggregator.submissionPrepareMs == nil)
+        #expect(aggregator.makeStepMs == nil)
+        #expect(aggregator.runtimeHelperSetupMs == nil)
+        #expect(aggregator.testExecutionMs == nil)
+        #expect(aggregator.totalKnownStageMs == nil)
     }
 
-    func testInitFromPopulatedTimingsCopiesEveryField() {
+    @Test func initFromPopulatedTimingsCopiesEveryField() {
         let timings = WorkerExecutionStageTimings(
             workdirSetupMs: 1,
             submissionDirSetupMs: 2,
@@ -37,19 +37,19 @@ final class StageTimingAggregatorTests: XCTestCase {
 
         let aggregator = StageTimingAggregator(from: timings)
 
-        XCTAssertEqual(aggregator.workdirSetupMs, 1)
-        XCTAssertEqual(aggregator.submissionDirSetupMs, 2)
-        XCTAssertEqual(aggregator.submissionDownloadMs, 3)
-        XCTAssertEqual(aggregator.testSetupAcquireMs, 4)
-        XCTAssertEqual(aggregator.submissionUnpackMs, 5)
-        XCTAssertEqual(aggregator.starterCleanupMs, 6)
-        XCTAssertEqual(aggregator.submissionPrepareMs, 7)
-        XCTAssertEqual(aggregator.makeStepMs, 8)
-        XCTAssertEqual(aggregator.runtimeHelperSetupMs, 9)
-        XCTAssertEqual(aggregator.testExecutionMs, 10)
+        #expect(aggregator.workdirSetupMs == 1)
+        #expect(aggregator.submissionDirSetupMs == 2)
+        #expect(aggregator.submissionDownloadMs == 3)
+        #expect(aggregator.testSetupAcquireMs == 4)
+        #expect(aggregator.submissionUnpackMs == 5)
+        #expect(aggregator.starterCleanupMs == 6)
+        #expect(aggregator.submissionPrepareMs == 7)
+        #expect(aggregator.makeStepMs == 8)
+        #expect(aggregator.runtimeHelperSetupMs == 9)
+        #expect(aggregator.testExecutionMs == 10)
     }
 
-    func testApplyToMetricCopiesPopulatedFields() {
+    @Test func applyToMetricCopiesPopulatedFields() {
         let timings = WorkerExecutionStageTimings(
             workdirSetupMs: 11,
             submissionDirSetupMs: 12,
@@ -77,19 +77,19 @@ final class StageTimingAggregatorTests: XCTestCase {
 
         StageTimingAggregator(from: timings).apply(to: metric)
 
-        XCTAssertEqual(metric.workdirSetupMs, 11)
-        XCTAssertEqual(metric.submissionDirSetupMs, 12)
-        XCTAssertEqual(metric.submissionDownloadMs, 13)
-        XCTAssertEqual(metric.testSetupAcquireMs, 14)
-        XCTAssertEqual(metric.submissionUnpackMs, 15)
-        XCTAssertEqual(metric.starterCleanupMs, 16)
-        XCTAssertEqual(metric.submissionPrepareMs, 17)
-        XCTAssertEqual(metric.makeStepMs, 18)
-        XCTAssertEqual(metric.runtimeHelperSetupMs, 19)
-        XCTAssertEqual(metric.testExecutionMs, 20)
+        #expect(metric.workdirSetupMs == 11)
+        #expect(metric.submissionDirSetupMs == 12)
+        #expect(metric.submissionDownloadMs == 13)
+        #expect(metric.testSetupAcquireMs == 14)
+        #expect(metric.submissionUnpackMs == 15)
+        #expect(metric.starterCleanupMs == 16)
+        #expect(metric.submissionPrepareMs == 17)
+        #expect(metric.makeStepMs == 18)
+        #expect(metric.runtimeHelperSetupMs == 19)
+        #expect(metric.testExecutionMs == 20)
     }
 
-    func testApplyFromNilTimingsClearsExistingStageFields() {
+    @Test func applyFromNilTimingsClearsExistingStageFields() {
         let metric = JobExecutionMetric(
             submissionID: "sub_y",
             jobID: "sub_y",
@@ -107,19 +107,19 @@ final class StageTimingAggregatorTests: XCTestCase {
 
         StageTimingAggregator(from: nil).apply(to: metric)
 
-        XCTAssertNil(metric.workdirSetupMs)
-        XCTAssertNil(metric.submissionDirSetupMs)
-        XCTAssertNil(metric.submissionDownloadMs)
-        XCTAssertNil(metric.testSetupAcquireMs)
-        XCTAssertNil(metric.submissionUnpackMs)
-        XCTAssertNil(metric.starterCleanupMs)
-        XCTAssertNil(metric.submissionPrepareMs)
-        XCTAssertNil(metric.makeStepMs)
-        XCTAssertNil(metric.runtimeHelperSetupMs)
-        XCTAssertNil(metric.testExecutionMs)
+        #expect(metric.workdirSetupMs == nil)
+        #expect(metric.submissionDirSetupMs == nil)
+        #expect(metric.submissionDownloadMs == nil)
+        #expect(metric.testSetupAcquireMs == nil)
+        #expect(metric.submissionUnpackMs == nil)
+        #expect(metric.starterCleanupMs == nil)
+        #expect(metric.submissionPrepareMs == nil)
+        #expect(metric.makeStepMs == nil)
+        #expect(metric.runtimeHelperSetupMs == nil)
+        #expect(metric.testExecutionMs == nil)
     }
 
-    func testTotalKnownStageMsSumsPopulatedStagesIgnoringNils() {
+    @Test func totalKnownStageMsSumsPopulatedStagesIgnoringNils() {
         let timings = WorkerExecutionStageTimings(
             workdirSetupMs: 12,
             submissionDownloadMs: 45,
@@ -130,12 +130,12 @@ final class StageTimingAggregatorTests: XCTestCase {
 
         let aggregator = StageTimingAggregator(from: timings)
 
-        XCTAssertEqual(aggregator.totalKnownStageMs, 12 + 45 + 67 + 89 + 100)
+        #expect(aggregator.totalKnownStageMs == 12 + 45 + 67 + 89 + 100)
     }
 
-    func testTotalKnownStageMsIsNilWhenEveryStageIsNil() {
+    @Test func totalKnownStageMsIsNilWhenEveryStageIsNil() {
         let aggregator = StageTimingAggregator(from: WorkerExecutionStageTimings())
 
-        XCTAssertNil(aggregator.totalKnownStageMs)
+        #expect(aggregator.totalKnownStageMs == nil)
     }
 }

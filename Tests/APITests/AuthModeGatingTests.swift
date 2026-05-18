@@ -6,12 +6,16 @@
 //   - .dual  → same as .sso; local login routes still present
 
 import Fluent
+import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AuthModeGatingTests: XCTestCase {
+// `.serialized` until the migration is complete (Phase 4) and we audit which
+// suites need it — one test mutates `OIDC_CALLBACK` and each test brings up a
+// real Vapor `Application` + DB.  TODO(migration): relax after Phase 4.
+@Suite(.serialized) struct AuthModeGatingTests {
 
     private func makeApp(authMode: AuthMode) async throws -> Application {
         let app = try await Application.make(.testing)
@@ -28,88 +32,93 @@ final class AuthModeGatingTests: XCTestCase {
 
     // MARK: - Local mode: SSO routes absent
 
-    func testLocalMode_ssoStartReturns404() async throws {
+    @Test func localMode_ssoStartReturns404() async throws {
         try await withApp(try await makeApp(authMode: .local)) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/start",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .notFound)
+                    #expect(res.status == .notFound)
                 })
         }
     }
 
-    func testLocalMode_ssoCallbackReturns404() async throws {
+    @Test func localMode_ssoCallbackReturns404() async throws {
         try await withApp(try await makeApp(authMode: .local)) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/callback",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .notFound)
+                    #expect(res.status == .notFound)
                 })
         }
     }
 
     // MARK: - SSO mode: routes present (redirect to error page when oidcConfig not loaded)
 
-    func testSSOMode_ssoStartRedirectsWhenNotConfigured() async throws {
+    @Test func ssoMode_ssoStartRedirectsWhenNotConfigured() async throws {
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/start",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(
+                    #expect(res.status == .seeOther)
+                    #expect(
                         res.headers.first(name: .location)?.contains("sso_not_configured") == true
                     )
                 })
         }
     }
 
-    func testSSOMode_ssoCallbackRedirectsWhenNotConfigured() async throws {
+    @Test func ssoMode_ssoCallbackRedirectsWhenNotConfigured() async throws {
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/callback",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(
+                    #expect(res.status == .seeOther)
+                    #expect(
                         res.headers.first(name: .location)?.contains("sso_not_configured") == true
                     )
                 })
         }
     }
 
-    func testSSOMode_localLoginPostNotRegistered() async throws {
+    @Test func ssoMode_localLoginPostNotRegistered() async throws {
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .POST, "/login",
                 afterResponse: { res in
-                    XCTAssertTrue(
+                    #expect(
                         res.status == .forbidden || res.status == .notFound,
                         "POST /login must be inaccessible in SSO mode, got \(res.status)")
                 })
         }
     }
 
-    func testSSOMode_registerNotRegistered() async throws {
+    @Test func ssoMode_registerNotRegistered() async throws {
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .GET, "/register",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .notFound)
+                    #expect(res.status == .notFound)
                 })
         }
     }
 
-    func testSSOMode_loginAutoRedirectsToSSOStart() async throws {
+    @Test func ssoMode_loginAutoRedirectsToSSOStart() async throws {
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .GET, "/login",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertEqual(res.headers.first(name: .location), "/auth/sso/start")
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/auth/sso/start")
                 })
         }
     }
 
-    func testSSOMode_customCallbackRouteRegisteredFromEnv() async throws {
+    @Test func ssoMode_customCallbackRouteRegisteredFromEnv() async throws {
+        // NOTE: EnvTestLock.shared.lock() can't be taken from async context
+        // under Swift 6 strict concurrency.  The suite-level `.serialized`
+        // gates within-suite parallelism; cross-suite env races during the
+        // migration window are mitigated by the 3× repeat-run CI job.
+        // TODO(migration): replace `setenv` with direct config injection.
         setenv("OIDC_CALLBACK", "/oidc/duo/callback/", 1)
         defer { unsetenv("OIDC_CALLBACK") }
 
@@ -117,8 +126,8 @@ final class AuthModeGatingTests: XCTestCase {
             try await app.asyncTest(
                 .GET, "/oidc/duo/callback",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(
+                    #expect(res.status == .seeOther)
+                    #expect(
                         res.headers.first(name: .location)?.contains("sso_not_configured") == true
                     )
                 })
@@ -127,33 +136,33 @@ final class AuthModeGatingTests: XCTestCase {
 
     // MARK: - Dual mode: SSO routes present alongside local login
 
-    func testDualMode_ssoStartRedirectsWhenNotConfigured() async throws {
+    @Test func dualMode_ssoStartRedirectsWhenNotConfigured() async throws {
         try await withApp(try await makeApp(authMode: .dual)) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/start",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertNotEqual(res.status, .notFound)
+                    #expect(res.status == .seeOther)
+                    #expect(res.status != .notFound)
                 })
         }
     }
 
-    func testDualMode_localLoginStillWorks() async throws {
+    @Test func dualMode_localLoginStillWorks() async throws {
         try await withApp(try await makeApp(authMode: .dual)) { app in
             try await app.asyncTest(
                 .GET, "/login",
                 afterResponse: { res in
-                    XCTAssertNotEqual(res.status, .notFound)
+                    #expect(res.status != .notFound)
                 })
         }
     }
 
-    func testDualMode_localLoginPostStillRegistered() async throws {
+    @Test func dualMode_localLoginPostStillRegistered() async throws {
         try await withApp(try await makeApp(authMode: .dual)) { app in
             try await app.asyncTest(
                 .POST, "/login",
                 afterResponse: { res in
-                    XCTAssertNotEqual(res.status, .notFound)
+                    #expect(res.status != .notFound)
                 })
         }
     }
