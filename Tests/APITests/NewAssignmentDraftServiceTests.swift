@@ -33,11 +33,6 @@ import XCTVapor
         self.app = try await makeTestApp(prefix: "chickadee-draft-svc")
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     // MARK: - Fixture helpers
 
     private func makeSyntheticRequest() -> Request {
@@ -125,188 +120,210 @@ import XCTVapor
     // MARK: - createAssignmentNotebook
 
     @Test func createAssignmentNotebookWritesFileAndUpdatesFormState() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_create_an1")
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "create-assignment-notebook"))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_create_an1")
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "create-assignment-notebook"))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .applied)
-        #expect(service.formState.assignmentNotebookName == "assignment.ipynb")
-        #expect(setup.notebookPath != nil)
-        if let path = setup.notebookPath {
-            #expect(
-                FileManager.default.fileExists(atPath: path),
-                "expected default notebook on disk at \(path)")
+            #expect(outcome == .applied)
+            #expect(service.formState.assignmentNotebookName == "assignment.ipynb")
+            #expect(setup.notebookPath != nil)
+            if let path = setup.notebookPath {
+                #expect(
+                    FileManager.default.fileExists(atPath: path),
+                    "expected default notebook on disk at \(path)")
+            }
+
         }
-
     }
 
     // MARK: - uploadAssignmentNotebook (validation branches)
 
     @Test func uploadAssignmentNotebookReturnsValidationFailedWhenFileMissing() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_missing")
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "upload-assignment-notebook"))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_missing")
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "upload-assignment-notebook"))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .validationFailed("Select an assignment notebook to upload"))
-        #expect(service.formState.assignmentNotebookName == nil)
-        #expect(setup.notebookPath == nil)
+            #expect(outcome == .validationFailed("Select an assignment notebook to upload"))
+            #expect(service.formState.assignmentNotebookName == nil)
+            #expect(setup.notebookPath == nil)
 
+        }
     }
 
     @Test func uploadAssignmentNotebookReturnsValidationFailedWhenJSONInvalid() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_badjson")
-        let badFile = makeFile(named: "garbage.ipynb", contents: Data("not json at all".utf8))
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "upload-assignment-notebook", assignmentNotebookFile: badFile))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_badjson")
+            let badFile = makeFile(named: "garbage.ipynb", contents: Data("not json at all".utf8))
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "upload-assignment-notebook", assignmentNotebookFile: badFile))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .validationFailed("Assignment notebook must be valid JSON (.ipynb)"))
-        #expect(setup.notebookPath == nil)
+            #expect(outcome == .validationFailed("Assignment notebook must be valid JSON (.ipynb)"))
+            #expect(setup.notebookPath == nil)
 
+        }
     }
 
     @Test func uploadAssignmentNotebookPersistsValidNotebook() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_ok")
-        let nb = sampleNotebookData(marker: "uploaded-marker")
-        let file = makeFile(named: "my-lab.ipynb", contents: nb)
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "upload-assignment-notebook", assignmentNotebookFile: file))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_ok")
+            let nb = sampleNotebookData(marker: "uploaded-marker")
+            let file = makeFile(named: "my-lab.ipynb", contents: nb)
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "upload-assignment-notebook", assignmentNotebookFile: file))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .applied)
-        #expect(service.formState.assignmentNotebookName == "my-lab.ipynb")
-        #expect(setup.notebookPath != nil)
-        if let path = setup.notebookPath {
-            let onDisk = try Data(contentsOf: URL(fileURLWithPath: path))
-            #expect(
-                String(data: onDisk, encoding: .utf8)?.contains("uploaded-marker") == true,
-                "expected uploaded marker to survive normalization")
+            #expect(outcome == .applied)
+            #expect(service.formState.assignmentNotebookName == "my-lab.ipynb")
+            #expect(setup.notebookPath != nil)
+            if let path = setup.notebookPath {
+                let onDisk = try Data(contentsOf: URL(fileURLWithPath: path))
+                #expect(
+                    String(data: onDisk, encoding: .utf8)?.contains("uploaded-marker") == true,
+                    "expected uploaded marker to survive normalization")
+            }
+
         }
-
     }
 
     // MARK: - clearAssignmentNotebook
 
     @Test func clearAssignmentNotebookResetsNotebookPath() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_clear_an")
-        // First create the notebook so there's something to clear.
-        let createPayload = makePayload(action: "create-assignment-notebook")
-        var createSvc = makeService(courseID: courseID, setup: setup, payload: createPayload)
-        _ = try await createSvc.perform()
-        #expect(setup.notebookPath != nil, "preconditions: notebook must exist before clear")
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_clear_an")
+            // First create the notebook so there's something to clear.
+            let createPayload = makePayload(action: "create-assignment-notebook")
+            var createSvc = makeService(courseID: courseID, setup: setup, payload: createPayload)
+            _ = try await createSvc.perform()
+            #expect(setup.notebookPath != nil, "preconditions: notebook must exist before clear")
 
-        // Now clear.
-        var clearSvc = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "clear-assignment-notebook"))
-        let outcome = try await clearSvc.perform()
+            // Now clear.
+            var clearSvc = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "clear-assignment-notebook"))
+            let outcome = try await clearSvc.perform()
 
-        #expect(outcome == .applied)
-        #expect(setup.notebookPath == nil)
-        #expect(clearSvc.formState.assignmentNotebookName == nil)
+            #expect(outcome == .applied)
+            #expect(setup.notebookPath == nil)
+            #expect(clearSvc.formState.assignmentNotebookName == nil)
 
+        }
     }
 
     // MARK: - uploadSolutionNotebook (validation branches)
 
     @Test func uploadSolutionNotebookReturnsValidationFailedWhenFileMissing() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_sn_missing")
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "upload-solution-notebook"))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_sn_missing")
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "upload-solution-notebook"))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .validationFailed("Select a solution notebook to upload"))
+            #expect(outcome == .validationFailed("Select a solution notebook to upload"))
 
+        }
     }
 
     @Test func uploadSolutionNotebookReturnsValidationFailedWhenJSONInvalid() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_sn_badjson")
-        let badFile = makeFile(named: "junk.ipynb", contents: Data("nope".utf8))
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "upload-solution-notebook", solutionNotebookFile: badFile))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_sn_badjson")
+            let badFile = makeFile(named: "junk.ipynb", contents: Data("nope".utf8))
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "upload-solution-notebook", solutionNotebookFile: badFile))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .validationFailed("Solution notebook must be valid JSON (.ipynb)"))
+            #expect(outcome == .validationFailed("Solution notebook must be valid JSON (.ipynb)"))
 
+        }
     }
 
     // MARK: - Unknown / empty action
 
     @Test func unknownActionIsNoOpReturningApplied() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_unknown")
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: "totally-not-a-real-action"))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_unknown")
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: "totally-not-a-real-action"))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .applied)
-        #expect(setup.notebookPath == nil)
-        #expect(service.formState.assignmentNotebookName == nil)
+            #expect(outcome == .applied)
+            #expect(setup.notebookPath == nil)
+            #expect(service.formState.assignmentNotebookName == nil)
 
+        }
     }
 
     @Test func emptyActionIsNoOpReturningApplied() async throws {
-        let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_empty")
-        var service = makeService(
-            courseID: courseID, setup: setup,
-            payload: makePayload(action: ""))
+        try await withApp(app) { _ in
+            let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_empty")
+            var service = makeService(
+                courseID: courseID, setup: setup,
+                payload: makePayload(action: ""))
 
-        let outcome = try await service.perform()
+            let outcome = try await service.perform()
 
-        #expect(outcome == .applied)
+            #expect(outcome == .applied)
 
+        }
     }
 
     // MARK: - notebookTitle derivation
 
     @Test func notebookTitleFallsBackToPlaceholderWhenAssignmentNameEmpty() async throws {
-        let payload = NewAssignmentDraftPayload(
-            assignmentName: "  ", dueAt: "", sectionIDRaw: "",
-            draftIDRaw: nil, action: "",
-            assignmentNotebookFile: nil, solutionNotebookFile: nil,
-            suiteFiles: [], suiteConfigRaw: nil,
-            requiredPlatform: "", requiredArchitecture: "",
-            requiredLanguagesCSV: "", requiredCapabilitiesCSV: "")
-        let service = NewAssignmentDraftService(
-            req: makeSyntheticRequest(),
-            setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
-            setupID: "x", userID: UUID(), courseID: UUID(),
-            formState: NewAssignmentDraftFormState.empty, payload: payload)
+        try await withApp(app) { _ in
+            let payload = NewAssignmentDraftPayload(
+                assignmentName: "  ", dueAt: "", sectionIDRaw: "",
+                draftIDRaw: nil, action: "",
+                assignmentNotebookFile: nil, solutionNotebookFile: nil,
+                suiteFiles: [], suiteConfigRaw: nil,
+                requiredPlatform: "", requiredArchitecture: "",
+                requiredLanguagesCSV: "", requiredCapabilitiesCSV: "")
+            let service = NewAssignmentDraftService(
+                req: makeSyntheticRequest(),
+                setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
+                setupID: "x", userID: UUID(), courseID: UUID(),
+                formState: NewAssignmentDraftFormState.empty, payload: payload)
 
-        #expect(service.notebookTitle == "New Assignment")
+            #expect(service.notebookTitle == "New Assignment")
 
+        }
     }
 
     @Test func notebookTitleUsesTrimmedAssignmentNameWhenSet() async throws {
-        let payload = NewAssignmentDraftPayload(
-            assignmentName: "  Linked Lists  ", dueAt: "", sectionIDRaw: "",
-            draftIDRaw: nil, action: "",
-            assignmentNotebookFile: nil, solutionNotebookFile: nil,
-            suiteFiles: [], suiteConfigRaw: nil,
-            requiredPlatform: "", requiredArchitecture: "",
-            requiredLanguagesCSV: "", requiredCapabilitiesCSV: "")
-        let service = NewAssignmentDraftService(
-            req: makeSyntheticRequest(),
-            setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
-            setupID: "x", userID: UUID(), courseID: UUID(),
-            formState: NewAssignmentDraftFormState.empty, payload: payload)
+        try await withApp(app) { _ in
+            let payload = NewAssignmentDraftPayload(
+                assignmentName: "  Linked Lists  ", dueAt: "", sectionIDRaw: "",
+                draftIDRaw: nil, action: "",
+                assignmentNotebookFile: nil, solutionNotebookFile: nil,
+                suiteFiles: [], suiteConfigRaw: nil,
+                requiredPlatform: "", requiredArchitecture: "",
+                requiredLanguagesCSV: "", requiredCapabilitiesCSV: "")
+            let service = NewAssignmentDraftService(
+                req: makeSyntheticRequest(),
+                setup: APITestSetup(id: "x", manifest: "{}", zipPath: "/tmp/x", courseID: UUID()),
+                setupID: "x", userID: UUID(), courseID: UUID(),
+                formState: NewAssignmentDraftFormState.empty, payload: payload)
 
-        #expect(service.notebookTitle == "Linked Lists")
+            #expect(service.notebookTitle == "Linked Lists")
 
+        }
     }
 }

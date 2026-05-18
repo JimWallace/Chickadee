@@ -47,60 +47,61 @@ import XCTVapor
         try app.register(collection: JupyterLiteContentsRoutes())
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     @Test func allJSONListsNotebook() async throws {
-        let notebookName = "setup_test-assignment.ipynb"
-        let notebookData = """
-            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}
-            """.data(using: .utf8)!
-        try notebookData.write(to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName))
+        try await withApp(app) { _ in
+            let notebookName = "setup_test-assignment.ipynb"
+            let notebookData = """
+                {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}
+                """.data(using: .utf8)!
+            try notebookData.write(to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName))
 
-        try await app.asyncTest(
-            .GET, "/jupyterlite/lab/api/contents/all.json",
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let bodyData = Data(res.body.string.utf8)
-                let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-                #expect(object["type"] as? String == "directory")
-                let content = try #require(object["content"] as? [[String: Any]])
-                #expect(content.contains { ($0["name"] as? String) == notebookName })
-            })
+            try await app.asyncTest(
+                .GET, "/jupyterlite/lab/api/contents/all.json",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let bodyData = Data(res.body.string.utf8)
+                    let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                    #expect(object["type"] as? String == "directory")
+                    let content = try #require(object["content"] as? [[String: Any]])
+                    #expect(content.contains { ($0["name"] as? String) == notebookName })
+                })
+
+        }
     }
 
     @Test func notebookMetadataAndContent() async throws {
-        let notebookName = "setup_test-assignment.ipynb"
-        let notebookJSON = """
-            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["hello"]}]}
-            """
-        try notebookJSON.data(using: .utf8)!.write(
-            to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName)
-        )
+        try await withApp(app) { _ in
+            let notebookName = "setup_test-assignment.ipynb"
+            let notebookJSON = """
+                {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["hello"]}]}
+                """
+            try notebookJSON.data(using: .utf8)!.write(
+                to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName)
+            )
 
-        try await app.asyncTest(
-            .GET, "/jupyterlite/lab/api/contents/\(notebookName)",
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let bodyData = Data(res.body.string.utf8)
-                let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-                #expect(object["type"] as? String == "notebook")
-                #expect(object["format"] as? String == "json")
-                #expect(object["content"] is NSNull)
-            })
+            try await app.asyncTest(
+                .GET, "/jupyterlite/lab/api/contents/\(notebookName)",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let bodyData = Data(res.body.string.utf8)
+                    let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                    #expect(object["type"] as? String == "notebook")
+                    #expect(object["format"] as? String == "json")
+                    #expect(object["content"] is NSNull)
+                })
 
-        try await app.asyncTest(
-            .GET, "/jupyterlite/lab/api/contents/\(notebookName)?content=1",
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let bodyData = Data(res.body.string.utf8)
-                let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-                #expect(object["type"] as? String == "notebook")
-                let content = try #require(object["content"] as? [String: Any])
-                let cells = try #require(content["cells"] as? [[String: Any]])
-                #expect(cells.count == 1)
-            })
+            try await app.asyncTest(
+                .GET, "/jupyterlite/lab/api/contents/\(notebookName)?content=1",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let bodyData = Data(res.body.string.utf8)
+                    let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                    #expect(object["type"] as? String == "notebook")
+                    let content = try #require(object["content"] as? [String: Any])
+                    let cells = try #require(content["cells"] as? [[String: Any]])
+                    #expect(cells.count == 1)
+                })
+
+        }
     }
 }
