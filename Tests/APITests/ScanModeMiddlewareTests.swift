@@ -1,10 +1,10 @@
 import Fluent
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class ScanModeMiddlewareTests: XCTestCase {
+@Suite struct ScanModeMiddlewareTests {
 
     private func makeApp(scanEnabled: Bool) async throws -> Application {
         let app = try await Application.make(.testing)
@@ -27,7 +27,7 @@ final class ScanModeMiddlewareTests: XCTestCase {
         return app
     }
 
-    func testGatedRoutesReturn503WhenEnabled() async throws {
+    @Test func gatedRoutesReturn503WhenEnabled() async throws {
         try await withApp(try await makeApp(scanEnabled: true)) { app in
             let gated: [(method: HTTPMethod, path: String)] = [
                 (.POST, "/api/v1/submissions"),
@@ -40,34 +40,34 @@ final class ScanModeMiddlewareTests: XCTestCase {
             ]
             for (method, path) in gated {
                 try await app.testable().test(method, path) { res async in
-                    XCTAssertEqual(
-                        res.status, .serviceUnavailable,
+                    #expect(
+                        res.status == .serviceUnavailable,
                         "expected 503 for \(method.rawValue) \(path), got \(res.status)"
                     )
-                    XCTAssertTrue(res.body.string.contains("scan_mode"))
+                    #expect(res.body.string.contains("scan_mode"))
                 }
             }
         }
     }
 
-    func testNonGatedRoutesStillWorkWhenEnabled() async throws {
+    @Test func nonGatedRoutesStillWorkWhenEnabled() async throws {
         try await withApp(try await makeApp(scanEnabled: true)) { app in
             try await app.testable().test(.POST, "/login") { res async in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
             try await app.testable().test(.GET, "/dashboard") { res async in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
         }
     }
 
-    func testGatedRoutesPassThroughWhenDisabled() async throws {
+    @Test func gatedRoutesPassThroughWhenDisabled() async throws {
         try await withApp(try await makeApp(scanEnabled: false)) { app in
             try await app.testable().test(.POST, "/api/v1/submissions") { res async in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
             try await app.testable().test(.POST, "/admin/users/x/delete") { res async in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
         }
     }
