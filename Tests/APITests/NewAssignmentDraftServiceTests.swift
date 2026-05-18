@@ -19,22 +19,23 @@
 
 import Fluent
 import Foundation
+import Testing
 import Vapor
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class NewAssignmentDraftServiceTests: XCTestCase {
+@Suite(.serialized) final class NewAssignmentDraftServiceTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-draft-svc")
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-draft-svc")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Fixture helpers
@@ -123,7 +124,7 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
     // MARK: - createAssignmentNotebook
 
-    func testCreateAssignmentNotebookWritesFileAndUpdatesFormState() async throws {
+    @Test func createAssignmentNotebookWritesFileAndUpdatesFormState() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_create_an1")
         var service = makeService(
             courseID: courseID, setup: setup,
@@ -131,19 +132,20 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(outcome, .applied)
-        XCTAssertEqual(service.formState.assignmentNotebookName, "assignment.ipynb")
-        XCTAssertNotNil(setup.notebookPath)
+        #expect(outcome == .applied)
+        #expect(service.formState.assignmentNotebookName == "assignment.ipynb")
+        #expect(setup.notebookPath != nil)
         if let path = setup.notebookPath {
-            XCTAssertTrue(
+            #expect(
                 FileManager.default.fileExists(atPath: path),
                 "expected default notebook on disk at \(path)")
         }
+
     }
 
     // MARK: - uploadAssignmentNotebook (validation branches)
 
-    func testUploadAssignmentNotebookReturnsValidationFailedWhenFileMissing() async throws {
+    @Test func uploadAssignmentNotebookReturnsValidationFailedWhenFileMissing() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_missing")
         var service = makeService(
             courseID: courseID, setup: setup,
@@ -151,12 +153,13 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(outcome, .validationFailed("Select an assignment notebook to upload"))
-        XCTAssertNil(service.formState.assignmentNotebookName)
-        XCTAssertNil(setup.notebookPath)
+        #expect(outcome == .validationFailed("Select an assignment notebook to upload"))
+        #expect(service.formState.assignmentNotebookName == nil)
+        #expect(setup.notebookPath == nil)
+
     }
 
-    func testUploadAssignmentNotebookReturnsValidationFailedWhenJSONInvalid() async throws {
+    @Test func uploadAssignmentNotebookReturnsValidationFailedWhenJSONInvalid() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_badjson")
         let badFile = makeFile(named: "garbage.ipynb", contents: Data("not json at all".utf8))
         var service = makeService(
@@ -165,12 +168,12 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(
-            outcome, .validationFailed("Assignment notebook must be valid JSON (.ipynb)"))
-        XCTAssertNil(setup.notebookPath)
+        #expect(outcome == .validationFailed("Assignment notebook must be valid JSON (.ipynb)"))
+        #expect(setup.notebookPath == nil)
+
     }
 
-    func testUploadAssignmentNotebookPersistsValidNotebook() async throws {
+    @Test func uploadAssignmentNotebookPersistsValidNotebook() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_an_ok")
         let nb = sampleNotebookData(marker: "uploaded-marker")
         let file = makeFile(named: "my-lab.ipynb", contents: nb)
@@ -180,26 +183,27 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(outcome, .applied)
-        XCTAssertEqual(service.formState.assignmentNotebookName, "my-lab.ipynb")
-        XCTAssertNotNil(setup.notebookPath)
+        #expect(outcome == .applied)
+        #expect(service.formState.assignmentNotebookName == "my-lab.ipynb")
+        #expect(setup.notebookPath != nil)
         if let path = setup.notebookPath {
             let onDisk = try Data(contentsOf: URL(fileURLWithPath: path))
-            XCTAssertTrue(
+            #expect(
                 String(data: onDisk, encoding: .utf8)?.contains("uploaded-marker") == true,
                 "expected uploaded marker to survive normalization")
         }
+
     }
 
     // MARK: - clearAssignmentNotebook
 
-    func testClearAssignmentNotebookResetsNotebookPath() async throws {
+    @Test func clearAssignmentNotebookResetsNotebookPath() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_clear_an")
         // First create the notebook so there's something to clear.
         let createPayload = makePayload(action: "create-assignment-notebook")
         var createSvc = makeService(courseID: courseID, setup: setup, payload: createPayload)
         _ = try await createSvc.perform()
-        XCTAssertNotNil(setup.notebookPath, "preconditions: notebook must exist before clear")
+        #expect(setup.notebookPath != nil, "preconditions: notebook must exist before clear")
 
         // Now clear.
         var clearSvc = makeService(
@@ -207,14 +211,15 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
             payload: makePayload(action: "clear-assignment-notebook"))
         let outcome = try await clearSvc.perform()
 
-        XCTAssertEqual(outcome, .applied)
-        XCTAssertNil(setup.notebookPath)
-        XCTAssertNil(clearSvc.formState.assignmentNotebookName)
+        #expect(outcome == .applied)
+        #expect(setup.notebookPath == nil)
+        #expect(clearSvc.formState.assignmentNotebookName == nil)
+
     }
 
     // MARK: - uploadSolutionNotebook (validation branches)
 
-    func testUploadSolutionNotebookReturnsValidationFailedWhenFileMissing() async throws {
+    @Test func uploadSolutionNotebookReturnsValidationFailedWhenFileMissing() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_sn_missing")
         var service = makeService(
             courseID: courseID, setup: setup,
@@ -222,10 +227,11 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(outcome, .validationFailed("Select a solution notebook to upload"))
+        #expect(outcome == .validationFailed("Select a solution notebook to upload"))
+
     }
 
-    func testUploadSolutionNotebookReturnsValidationFailedWhenJSONInvalid() async throws {
+    @Test func uploadSolutionNotebookReturnsValidationFailedWhenJSONInvalid() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_upload_sn_badjson")
         let badFile = makeFile(named: "junk.ipynb", contents: Data("nope".utf8))
         var service = makeService(
@@ -234,13 +240,13 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(
-            outcome, .validationFailed("Solution notebook must be valid JSON (.ipynb)"))
+        #expect(outcome == .validationFailed("Solution notebook must be valid JSON (.ipynb)"))
+
     }
 
     // MARK: - Unknown / empty action
 
-    func testUnknownActionIsNoOpReturningApplied() async throws {
+    @Test func unknownActionIsNoOpReturningApplied() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_unknown")
         var service = makeService(
             courseID: courseID, setup: setup,
@@ -248,12 +254,13 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(outcome, .applied)
-        XCTAssertNil(setup.notebookPath)
-        XCTAssertNil(service.formState.assignmentNotebookName)
+        #expect(outcome == .applied)
+        #expect(setup.notebookPath == nil)
+        #expect(service.formState.assignmentNotebookName == nil)
+
     }
 
-    func testEmptyActionIsNoOpReturningApplied() async throws {
+    @Test func emptyActionIsNoOpReturningApplied() async throws {
         let (courseID, setup) = try await insertCourseAndDraftSetup(id: "svc_empty")
         var service = makeService(
             courseID: courseID, setup: setup,
@@ -261,12 +268,13 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
 
         let outcome = try await service.perform()
 
-        XCTAssertEqual(outcome, .applied)
+        #expect(outcome == .applied)
+
     }
 
     // MARK: - notebookTitle derivation
 
-    func testNotebookTitleFallsBackToPlaceholderWhenAssignmentNameEmpty() {
+    @Test func notebookTitleFallsBackToPlaceholderWhenAssignmentNameEmpty() async throws {
         let payload = NewAssignmentDraftPayload(
             assignmentName: "  ", dueAt: "", sectionIDRaw: "",
             draftIDRaw: nil, action: "",
@@ -280,10 +288,11 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
             setupID: "x", userID: UUID(), courseID: UUID(),
             formState: NewAssignmentDraftFormState.empty, payload: payload)
 
-        XCTAssertEqual(service.notebookTitle, "New Assignment")
+        #expect(service.notebookTitle == "New Assignment")
+
     }
 
-    func testNotebookTitleUsesTrimmedAssignmentNameWhenSet() {
+    @Test func notebookTitleUsesTrimmedAssignmentNameWhenSet() async throws {
         let payload = NewAssignmentDraftPayload(
             assignmentName: "  Linked Lists  ", dueAt: "", sectionIDRaw: "",
             draftIDRaw: nil, action: "",
@@ -297,6 +306,7 @@ final class NewAssignmentDraftServiceTests: XCTestCase {
             setupID: "x", userID: UUID(), courseID: UUID(),
             formState: NewAssignmentDraftFormState.empty, payload: payload)
 
-        XCTAssertEqual(service.notebookTitle, "Linked Lists")
+        #expect(service.notebookTitle == "Linked Lists")
+
     }
 }

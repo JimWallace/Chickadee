@@ -13,20 +13,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class DraftSupportFilesTests: XCTestCase {
+@Suite(.serialized) final class DraftSupportFilesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-dsft")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-dsft")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // Creates a course + draft test setup with a real zip file containing
@@ -63,7 +65,7 @@ final class DraftSupportFilesTests: XCTestCase {
 
     // MARK: - GET /instructor/new/draft/files/item
 
-    func testDownloadDraftItem_returnsFileBytes() async throws {
+    @Test func downloadDraftItem_returnsFileBytes() async throws {
         let payload = "name,age\nAlice,30\nBob,25\n"
         let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: payload))
         let cookie = try await loginUser(username: "dsft_inst1", password: "pw", role: "instructor", on: app)
@@ -75,12 +77,13 @@ final class DraftSupportFilesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: sessionCookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.body.string, payload)
+                #expect(res.status == .ok)
+                #expect(res.body.string == payload)
             })
+
     }
 
-    func testDownloadDraftItem_unknownFileReturns404() async throws {
+    @Test func downloadDraftItem_unknownFileReturns404() async throws {
         let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "x"))
         let cookie = try await loginUser(username: "dsft_inst2", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -91,11 +94,12 @@ final class DraftSupportFilesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: sessionCookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
+
     }
 
-    func testDownloadDraftItem_pathTraversalRejected() async throws {
+    @Test func downloadDraftItem_pathTraversalRejected() async throws {
         let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "x"))
         let cookie = try await loginUser(username: "dsft_inst3", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -106,11 +110,12 @@ final class DraftSupportFilesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: sessionCookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
+
     }
 
-    func testDownloadDraftItem_missingDraftIDReturns400() async throws {
+    @Test func downloadDraftItem_missingDraftIDReturns400() async throws {
         _ = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "x"))
         let cookie = try await loginUser(username: "dsft_inst4", password: "pw", role: "instructor", on: app)
         let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -121,13 +126,14 @@ final class DraftSupportFilesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: sessionCookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
+
     }
 
     // MARK: - End-to-end: upload via /draft/scripts, download via /draft/files/item
 
-    func testUploadThenDownload_supportFile_roundTripsContent() async throws {
+    @Test func uploadThenDownload_supportFile_roundTripsContent() async throws {
         let draftID = try await makeDraft()
         let cookie = try await loginUser(username: "dsft_inst5", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -148,7 +154,7 @@ final class DraftSupportFilesTests: XCTestCase {
                 try req.content.encode(body, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .created)
+                #expect(res.status == .created)
             })
 
         // Download via the new draft files/item endpoint.
@@ -158,8 +164,8 @@ final class DraftSupportFilesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: sessionCookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.body.string, #"{"k": 1}"#)
+                #expect(res.status == .ok)
+                #expect(res.body.string == #"{"k": 1}"#)
             })
 
         // Confirm the support file is NOT in the manifest's testSuites
@@ -170,6 +176,7 @@ final class DraftSupportFilesTests: XCTestCase {
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return XCTFail("manifest load failed") }
         let entries = dict["testSuites"] as? [[String: Any]] ?? []
-        XCTAssertTrue(entries.isEmpty, "Support file uploads must not add a testSuites entry")
+        #expect(entries.isEmpty, "Support file uploads must not add a testSuites entry")
+
     }
 }

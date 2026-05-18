@@ -7,20 +7,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class PatternFamilyRouteTests: XCTestCase {
+@Suite(.serialized) final class PatternFamilyRouteTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-pf-routes")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-pf-routes")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Test fixture
@@ -70,7 +72,7 @@ final class PatternFamilyRouteTests: XCTestCase {
         zip.standardError = Pipe()
         try zip.run()
         zip.waitUntilExit()
-        XCTAssertEqual(zip.terminationStatus, 0)
+        #expect(zip.terminationStatus == 0)
     }
 
     private func sampleFamilyJSON() -> String {
@@ -94,7 +96,7 @@ final class PatternFamilyRouteTests: XCTestCase {
 
     // MARK: - Tests
 
-    func testGetFamilies_emptyByDefault() async throws {
+    @Test func getFamilies_emptyByDefault() async throws {
         let id = try await makeAssignment()
         let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
         try await app.asyncTest(
@@ -103,13 +105,14 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let body = res.body.string
-                XCTAssertEqual(body, "[]")
+                #expect(body == "[]")
             })
+
     }
 
-    func testPutFamilies_acceptsValidSpecAndRendersScripts() async throws {
+    @Test func putFamilies_acceptsValidSpecAndRendersScripts() async throws {
         let id = try await makeAssignment()
         let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -123,9 +126,9 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.body = ByteBuffer(string: sampleFamilyJSON())
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 // Response echoes the applied list.
-                XCTAssertTrue(res.body.string.contains("bmi_category"))
+                #expect(res.body.string.contains("bmi_category"))
             })
 
         // Confirm via GET that state is persistent.
@@ -135,9 +138,9 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.headers.add(name: .cookie, value: sessionCookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains("\"id\":\"bmi_category\""))
-                XCTAssertTrue(res.body.string.contains("\"key\":\"01\""))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("\"id\":\"bmi_category\""))
+                #expect(res.body.string.contains("\"key\":\"01\""))
             })
 
         // The zip now contains the generated .py files.
@@ -145,11 +148,12 @@ final class PatternFamilyRouteTests: XCTestCase {
             .filter(\.$publicID == id).first()!
         let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
         let entries = Set(listZipEntries(zipPath: setup.zipPath))
-        XCTAssertTrue(entries.contains("publictest_bmi_category_01.py"))
-        XCTAssertTrue(entries.contains("publictest_bmi_category_02.py"))
+        #expect(entries.contains("publictest_bmi_category_01.py"))
+        #expect(entries.contains("publictest_bmi_category_02.py"))
+
     }
 
-    func testPutFamilies_rejectsInvalidFunctionName() async throws {
+    @Test func putFamilies_rejectsInvalidFunctionName() async throws {
         let id = try await makeAssignment()
         let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -169,11 +173,12 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.body = ByteBuffer(string: bad)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .unprocessableEntity)
+                #expect(res.status == .unprocessableEntity)
             })
+
     }
 
-    func testPutFamilies_studentCannotEdit() async throws {
+    @Test func putFamilies_studentCannotEdit() async throws {
         let id = try await makeAssignment()
         let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: studentCookie, on: app)
@@ -188,13 +193,14 @@ final class PatternFamilyRouteTests: XCTestCase {
             },
             afterResponse: { res in
                 // Students are blocked at the role middleware before the handler runs.
-                XCTAssertTrue(
+                #expect(
                     res.status == .forbidden || res.status == .seeOther || res.status == .notFound,
                     "Expected forbidden/redirect for student PUT, got \(res.status)")
             })
+
     }
 
-    func testPutScript_rejectsEditOfGeneratedFile() async throws {
+    @Test func putScript_rejectsEditOfGeneratedFile() async throws {
         let id = try await makeAssignment()
         let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -209,7 +215,7 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.body = ByteBuffer(string: sampleFamilyJSON())
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         // Attempting to edit a generated file via the raw-script endpoint must fail.
@@ -223,8 +229,8 @@ final class PatternFamilyRouteTests: XCTestCase {
                 try req.content.encode(["content": "# tampered\npassed('x')\n"])
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .conflict)
-                XCTAssertTrue(
+                #expect(res.status == .conflict)
+                #expect(
                     res.body.string.contains("Edit the family"),
                     "Expected hint to edit the family, got: \(res.body.string)")
             })
@@ -238,7 +244,8 @@ final class PatternFamilyRouteTests: XCTestCase {
                 req.headers.add(name: "x-csrf-token", value: csrf)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .conflict)
+                #expect(res.status == .conflict)
             })
+
     }
 }
