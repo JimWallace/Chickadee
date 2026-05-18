@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Parallelise the 5 sequential queries on `exportGradesCSV`.**
+  Follows the `async let` pattern from PR #590 on the second-worst
+  N+1 offender flagged in the architecture review:
+    * Phase 1 (independent): `students` + `assignments` in parallel
+      — both need only `activeCourseUUID`.
+    * Phase 2 (depends on phase 1, independent of each other):
+      `setupsByID` + `submissions` in parallel — both consume
+      `setupIDs` / `studentIDs` but are otherwise independent.
+    * Serial follow-on: `preferredResultsBySubmissionID` (needs
+      submission IDs from phase 2).
+  Latency goes from ~5×N round-trip to ~3×N.  No behaviour change;
+  25 adjacent route tests (`AssignmentRoutesDashboardTests`,
+  `AssignmentRoutesLifecycleTests`, `AssignmentRoutesRetestTests`,
+  `AssignmentExtensionsTests`) pass unchanged.
+
 - **Typed throws on `WorkerJobRoutes.buildJobPayload`.**  The
   function only throws `WorkerJobError.internalInconsistency` (two
   sites: missing id, malformed URL).  Signature tightens from
