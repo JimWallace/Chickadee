@@ -8,15 +8,15 @@
 
 import Core
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_server
 
-final class SectionInputsTests: XCTestCase {
+@Suite struct SectionInputsTests {
 
     // MARK: - Schema round-trip
 
-    func testSection_expressionsRoundTrip() throws {
+    @Test func section_expressionsRoundTrip() throws {
         let section = TestSuiteSection(
             id: "sec1",
             name: "Question 1",
@@ -28,23 +28,21 @@ final class SectionInputsTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(section)
         let decoded = try JSONDecoder().decode(TestSuiteSection.self, from: data)
-        XCTAssertEqual(decoded.variables.count, 1)
-        XCTAssertEqual(decoded.expressions.count, 2)
-        XCTAssertEqual(decoded.expressions[0].name, "shift")
-        XCTAssertEqual(decoded.expressions[1].expression, "f'shift is {shift}'")
+        #expect(decoded.variables.count == 1)
+        #expect(decoded.expressions.count == 2)
+        #expect(decoded.expressions[0].name == "shift")
+        #expect(decoded.expressions[1].expression == "f'shift is {shift}'")
     }
 
-    func testSection_missingExpressionsDecodesAsEmpty() throws {
-        let json = #"""
-            {"id":"abc","name":"Sec","variables":[]}
-            """#.data(using: .utf8)!
+    @Test func section_missingExpressionsDecodesAsEmpty() throws {
+        let json = Data(#"{"id":"abc","name":"Sec","variables":[]}"#.utf8)
         let decoded = try JSONDecoder().decode(TestSuiteSection.self, from: json)
-        XCTAssertEqual(decoded.expressions.count, 0)
+        #expect(decoded.expressions.isEmpty)
     }
 
     // MARK: - Manifest-level encoding
 
-    func testTestProperties_sectionExpressionsRoundTripThroughManifest() throws {
+    @Test func testProperties_sectionExpressionsRoundTripThroughManifest() throws {
         let section = TestSuiteSection(
             id: "s1", name: "Q1",
             expressions: [PersonalizationExpression(name: "shift", expression: "seed % 13")]
@@ -52,12 +50,12 @@ final class SectionInputsTests: XCTestCase {
         let props = TestProperties(sections: [section])
         let data = try JSONEncoder().encode(props)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
-        XCTAssertEqual(decoded.sections.count, 1)
-        XCTAssertEqual(decoded.sections[0].expressions.count, 1)
-        XCTAssertEqual(decoded.sections[0].expressions[0].name, "shift")
+        #expect(decoded.sections.count == 1)
+        #expect(decoded.sections[0].expressions.count == 1)
+        #expect(decoded.sections[0].expressions[0].name == "shift")
     }
 
-    func testTestProperties_runnerSanitizedKeepsSectionExpressions() {
+    @Test func testProperties_runnerSanitizedKeepsSectionExpressions() {
         // Section expressions are kept on the runner-facing manifest
         // because the runner doesn't choke on them (FamilyVariable +
         // PersonalizationExpression are stable Codable types).  This
@@ -68,13 +66,13 @@ final class SectionInputsTests: XCTestCase {
         )
         let props = TestProperties(sections: [section])
         let sanitized = props.runnerSanitized()
-        XCTAssertEqual(sanitized.sections.count, 1)
-        XCTAssertEqual(sanitized.sections[0].expressions.count, 1)
+        #expect(sanitized.sections.count == 1)
+        #expect(sanitized.sections[0].expressions.count == 1)
     }
 
     // MARK: - End-to-end evaluator integration
 
-    func testEvaluator_acceptsSectionExpressions() async throws {
+    @Test func evaluator_acceptsSectionExpressions() async throws {
         // The evaluator is kind-agnostic — section + global expressions
         // are concatenated and evaluated as one ordered list before
         // notebook substitution.  This test confirms a section
@@ -93,6 +91,6 @@ final class SectionInputsTests: XCTestCase {
             ]
         )
         // seed = 0x0010 = 16; 16 % 3 = 1; quotes[1] = "beta".
-        XCTAssertEqual(result["pick"], "'beta'")
+        #expect(result["pick"] == "'beta'")
     }
 }

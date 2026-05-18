@@ -1,6 +1,6 @@
 import Core
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
@@ -20,18 +20,18 @@ import XCTest
 // ONE grading target (the student or canonical submission) and zero template
 // notebooks that could confuse grading scripts.
 
-final class RunnerWorkDirTests: XCTestCase {
+@Suite final class RunnerWorkDirTests {
 
-    private var workDir: URL!
+    private let workDir: URL
     private let fm = FileManager.default
 
-    override func setUp() async throws {
-        workDir = fm.temporaryDirectory
+    init() throws {
+        self.workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-workdir-tests-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
     }
 
-    override func tearDown() async throws {
+    deinit {
         try? fm.removeItem(at: workDir)
     }
 
@@ -155,7 +155,7 @@ final class RunnerWorkDirTests: XCTestCase {
 
     /// Initial validation: solution.ipynb submitted against setup containing assignment.ipynb.
     /// After setup, only solution.py should exist — no assignment.ipynb or assignment.py.
-    func testNormalAssignment_validationWithSolutionNotebook() throws {
+    @Test func normalAssignment_validationWithSolutionNotebook() throws {
         let manifest = try makeManifest(
             """
             {
@@ -178,37 +178,33 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Starter must be removed
-        XCTAssertFalse(
-            fileExists("assignment.ipynb"),
-            "Starter notebook must be removed before test execution")
-        XCTAssertFalse(
-            fileExists("assignment.py"),
-            "Starter should not be extracted to .py")
+        #expect(fileExists("assignment.ipynb") == false, "Starter notebook must be removed before test execution")
+        #expect(fileExists("assignment.py") == false, "Starter should not be extracted to .py")
 
         // Solution notebook should be converted to .py
-        XCTAssertTrue(
+        #expect(
             fileExists("solution.ipynb"),
             "Solution notebook file should still be present")
-        XCTAssertTrue(
+        #expect(
             fileExists("solution.py"),
             "Solution notebook must be extracted to solution.py")
         let pyContent = try readFile("solution.py")
-        XCTAssertTrue(
+        #expect(
             pyContent.contains("def solve()"),
             "Extracted .py must contain the solution code")
 
         // Module hint should point to solution.py
-        XCTAssertTrue(fileExists(".chickadee_student_module"))
+        #expect(fileExists(".chickadee_student_module"))
         let hint = try readFile(".chickadee_student_module")
-        XCTAssertEqual(hint, "solution.py")
+        #expect(hint == "solution.py")
 
         // Test scripts and support files still present
-        XCTAssertTrue(fileExists("test_public.py"))
-        XCTAssertTrue(fileExists("chickadee.py"))
+        #expect(fileExists("test_public.py"))
+        #expect(fileExists("chickadee.py"))
     }
 
     /// Edit/save re-validation is the same runner flow — verify it still works.
-    func testNormalAssignment_editSaveRevalidation() throws {
+    @Test func normalAssignment_editSaveRevalidation() throws {
         // Identical to initial validation — the runner doesn't know the difference.
         let manifest = try makeManifest(
             """
@@ -230,13 +226,13 @@ final class RunnerWorkDirTests: XCTestCase {
             manifest: manifest
         )
 
-        XCTAssertFalse(fileExists("assignment.ipynb"))
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("assignment.ipynb") == false)
+        #expect(fileExists("solution.py"))
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def my_func()"))
+        #expect(py.contains("def my_func()"))
     }
 
-    func testValidationSubmissionFilenameIsSanitizedToBasename() throws {
+    @Test func validationSubmissionFilenameIsSanitizedToBasename() throws {
         let manifest = try makeManifest(
             """
             {
@@ -257,15 +253,13 @@ final class RunnerWorkDirTests: XCTestCase {
             manifest: manifest
         )
 
-        XCTAssertTrue(
+        #expect(
             fileExists("solution.ipynb"),
             "Single-file submissions should be staged by basename")
-        XCTAssertTrue(
+        #expect(
             fileExists("solution.py"),
             "Sanitized notebook submissions must still extract to Python")
-        XCTAssertFalse(
-            fileExists("nested"),
-            "The runner should not recreate client-provided path segments")
+        #expect(fileExists("nested") == false, "The runner should not recreate client-provided path segments")
     }
 
     // =========================================================================
@@ -274,7 +268,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Starter should NOT be removed (submission IS the starter name)
     // =========================================================================
 
-    func testStudentSubmission_namedSameAsStarter() throws {
+    @Test func studentSubmission_namedSameAsStarter() throws {
         let manifest = try makeManifest(
             """
             {
@@ -296,22 +290,22 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Starter was overwritten by submission, NOT removed
-        XCTAssertTrue(
+        #expect(
             fileExists("assignment.ipynb"),
             "Student's submission should be present as assignment.ipynb")
 
         // Should be extracted to .py
-        XCTAssertTrue(
+        #expect(
             fileExists("assignment.py"),
             "Student's notebook must be extracted to assignment.py")
         let py = try readFile("assignment.py")
-        XCTAssertTrue(
+        #expect(
             py.contains("def student_func()"),
             "Extracted .py must contain the student's code, not the template")
 
         // Module hint should point to assignment.py
         let hint = try readFile(".chickadee_student_module")
-        XCTAssertEqual(hint, "assignment.py")
+        #expect(hint == "assignment.py")
     }
 
     // =========================================================================
@@ -321,7 +315,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Test scripts: publictest_load.py, chickadee.py, notebook_grade.py
     // =========================================================================
 
-    func testMarmosetImport_ipynbCanonicalSolution_initialValidation() throws {
+    @Test func marmosetImport_ipynbCanonicalSolution_initialValidation() throws {
         let manifest = try makeManifest(
             """
             {
@@ -350,24 +344,22 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Starter removed
-        XCTAssertFalse(
-            fileExists("assignment.ipynb"),
-            "Starter must be removed so notebook_grade.py sees only one .ipynb")
+        #expect(
+            fileExists("assignment.ipynb") == false, "Starter must be removed so notebook_grade.py sees only one .ipynb"
+        )
 
         // Only one .ipynb should remain: the solution
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertEqual(
-            ipynbFiles.count, 1,
-            "Exactly one .ipynb should remain (the solution), got: \(ipynbFiles)")
-        XCTAssertTrue(ipynbFiles.contains("solution.ipynb"))
+        #expect(ipynbFiles.count == 1, "Exactly one .ipynb should remain (the solution), got: \(ipynbFiles)")
+        #expect(ipynbFiles.contains("solution.ipynb"))
 
         // solution.py extracted
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("solution.py"))
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def load_and_describe()"))
+        #expect(py.contains("def load_and_describe()"))
     }
 
-    func testMarmosetImport_ipynbCanonicalSolution_editSaveRevalidation() throws {
+    @Test func marmosetImport_ipynbCanonicalSolution_editSaveRevalidation() throws {
         // Same scenario but represents an edit/save cycle — runner behavior is identical
         let manifest = try makeManifest(
             """
@@ -390,9 +382,9 @@ final class RunnerWorkDirTests: XCTestCase {
             manifest: manifest
         )
 
-        XCTAssertFalse(fileExists("assignment.ipynb"))
-        XCTAssertEqual(try listFiles().filter { $0.hasSuffix(".ipynb") }.count, 1)
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("assignment.ipynb") == false)
+        #expect(try listFiles().filter { $0.hasSuffix(".ipynb") }.count == 1)
+        #expect(fileExists("solution.py"))
     }
 
     // =========================================================================
@@ -401,7 +393,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Canonical: solution.py (Python file, not notebook)
     // =========================================================================
 
-    func testMarmosetImport_pyCanonicalSolution() throws {
+    @Test func marmosetImport_pyCanonicalSolution() throws {
         let manifest = try makeManifest(
             """
             {
@@ -424,22 +416,22 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Starter removed
-        XCTAssertFalse(fileExists("assignment.ipynb"))
+        #expect(fileExists("assignment.ipynb") == false)
 
         // No .ipynb files at all
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertTrue(
+        #expect(
             ipynbFiles.isEmpty,
             "No .ipynb should remain when solution is .py, got: \(ipynbFiles)")
 
         // solution.py is a raw Python file — should NOT be overwritten by extraction
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("solution.py"))
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def solve()"))
+        #expect(py.contains("def solve()"))
 
         // Module hint
         let hint = try readFile(".chickadee_student_module")
-        XCTAssertEqual(hint, "solution.py")
+        #expect(hint == "solution.py")
     }
 
     // =========================================================================
@@ -448,7 +440,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Canonical solution: solution.ipynb
     // =========================================================================
 
-    func testMarmosetImport_noStarterNotebook() throws {
+    @Test func marmosetImport_noStarterNotebook() throws {
         let manifest = try makeManifest(
             """
             {
@@ -472,16 +464,16 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // No assignment.ipynb to remove — should be a no-op
-        XCTAssertFalse(fileExists("assignment.ipynb"))
+        #expect(fileExists("assignment.ipynb") == false)
 
         // Only the solution .ipynb
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertEqual(ipynbFiles, ["solution.ipynb"])
+        #expect(ipynbFiles == ["solution.ipynb"])
 
         // solution.py extracted
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("solution.py"))
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def process_data()"))
+        #expect(py.contains("def process_data()"))
     }
 
     // =========================================================================
@@ -490,7 +482,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Should not remove any files
     // =========================================================================
 
-    func testLegacyManifest_noStarterNotebookField() throws {
+    @Test func legacyManifest_noStarterNotebookField() throws {
         let manifest = try makeManifest(
             """
             {
@@ -500,9 +492,7 @@ final class RunnerWorkDirTests: XCTestCase {
             }
             """)
 
-        XCTAssertNil(
-            manifest.starterNotebook,
-            "Legacy manifests should have nil starterNotebook")
+        #expect(manifest.starterNotebook == nil, "Legacy manifests should have nil starterNotebook")
 
         try simulateRunnerSetup(
             setupFiles: [
@@ -515,12 +505,12 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Everything should remain untouched
-        XCTAssertTrue(fileExists("test_public.sh"))
-        XCTAssertTrue(fileExists("helper.py"))
-        XCTAssertTrue(fileExists("submission.py"))
+        #expect(fileExists("test_public.sh"))
+        #expect(fileExists("helper.py"))
+        #expect(fileExists("submission.py"))
 
         let hint = try readFile(".chickadee_student_module")
-        XCTAssertEqual(hint, "submission.py")
+        #expect(hint == "submission.py")
     }
 
     // =========================================================================
@@ -529,7 +519,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Must still remove assignment.ipynb (default fallback)
     // =========================================================================
 
-    func testLegacyManifest_notebookAssignment_starterStillRemoved() throws {
+    @Test func legacyManifest_notebookAssignment_starterStillRemoved() throws {
         let manifest = try makeManifest(
             """
             {
@@ -539,7 +529,7 @@ final class RunnerWorkDirTests: XCTestCase {
             }
             """)
 
-        XCTAssertNil(manifest.starterNotebook)
+        #expect(manifest.starterNotebook == nil)
 
         try simulateRunnerSetup(
             setupFiles: [
@@ -552,21 +542,18 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Even without starterNotebook in manifest, assignment.ipynb is removed
-        XCTAssertFalse(
-            fileExists("assignment.ipynb"),
-            "Legacy manifests must still remove assignment.ipynb by default")
-        XCTAssertFalse(
-            fileExists("assignment.py"),
-            "Starter should not be extracted to .py")
+        #expect(
+            fileExists("assignment.ipynb") == false, "Legacy manifests must still remove assignment.ipynb by default")
+        #expect(fileExists("assignment.py") == false, "Starter should not be extracted to .py")
 
         // Solution extracted correctly
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("solution.py"))
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def solve()"))
+        #expect(py.contains("def solve()"))
     }
 
     /// Legacy manifest, student submits assignment.ipynb — should NOT be removed.
-    func testLegacyManifest_studentSubmitsAssignment_notRemoved() throws {
+    @Test func legacyManifest_studentSubmitsAssignment_notRemoved() throws {
         let manifest = try makeManifest(
             """
             {
@@ -586,10 +573,10 @@ final class RunnerWorkDirTests: XCTestCase {
             manifest: manifest
         )
 
-        XCTAssertTrue(fileExists("assignment.ipynb"))
-        XCTAssertTrue(fileExists("assignment.py"))
+        #expect(fileExists("assignment.ipynb"))
+        #expect(fileExists("assignment.py"))
         let py = try readFile("assignment.py")
-        XCTAssertTrue(py.contains("def student_work()"))
+        #expect(py.contains("def student_work()"))
     }
 
     // =========================================================================
@@ -597,7 +584,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Pure shell-script test suite, no .ipynb files anywhere
     // =========================================================================
 
-    func testShellScriptAssignment_noNotebooks() throws {
+    @Test func shellScriptAssignment_noNotebooks() throws {
         let manifest = try makeManifest(
             """
             {
@@ -620,10 +607,10 @@ final class RunnerWorkDirTests: XCTestCase {
             manifest: manifest
         )
 
-        XCTAssertTrue(fileExists("test_01.sh"))
-        XCTAssertTrue(fileExists("test_02.sh"))
+        #expect(fileExists("test_01.sh"))
+        #expect(fileExists("test_02.sh"))
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertTrue(ipynbFiles.isEmpty, "No notebooks should exist")
+        #expect(ipynbFiles.isEmpty, "No notebooks should exist")
     }
 
     // =========================================================================
@@ -633,7 +620,7 @@ final class RunnerWorkDirTests: XCTestCase {
     // =========================================================================
 
     /// If the starter were NOT removed, notebook_grade.py would find two .ipynb files.
-    func testNoDuplicateNotebooks_afterSetup() throws {
+    @Test func noDuplicateNotebooks_afterSetup() throws {
         let manifest = try makeManifest(
             """
             {
@@ -660,19 +647,17 @@ final class RunnerWorkDirTests: XCTestCase {
 
         // Only one .ipynb, only one .py with "def compute"
         let ipynbFiles = try listFiles().filter { $0.hasSuffix(".ipynb") }
-        XCTAssertEqual(ipynbFiles.count, 1, "Only solution.ipynb should remain")
+        #expect(ipynbFiles.count == 1, "Only solution.ipynb should remain")
 
         let pyFiles = try listFiles().filter {
             $0.hasSuffix(".py") && !$0.hasPrefix("test") && $0 != "chickadee.py"
                 && $0 != "notebook_grade.py"
         }
-        XCTAssertEqual(
-            pyFiles.count, 1,
-            "Only one extracted .py file (solution.py) should exist, got: \(pyFiles)")
+        #expect(pyFiles.count == 1, "Only one extracted .py file (solution.py) should exist, got: \(pyFiles)")
     }
 
     /// Verify no .py collision when solution is .py and setup has .ipynb starter.
-    func testNoDuplicatePy_whenSolutionIsPyAndStarterIsNotebook() throws {
+    @Test func noDuplicatePy_whenSolutionIsPyAndStarterIsNotebook() throws {
         let manifest = try makeManifest(
             """
             {
@@ -694,13 +679,13 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // assignment.ipynb removed, no assignment.py generated
-        XCTAssertFalse(fileExists("assignment.ipynb"))
-        XCTAssertFalse(fileExists("assignment.py"))
+        #expect(fileExists("assignment.ipynb") == false)
+        #expect(fileExists("assignment.py") == false)
 
         // Only solution.py
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("solution.py"))
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def solve()"))
+        #expect(py.contains("def solve()"))
     }
 
     // =========================================================================
@@ -711,50 +696,50 @@ final class RunnerWorkDirTests: XCTestCase {
     //     the student's differently-named notebook
     // =========================================================================
 
-    func testExtractNotebooksToCode_extractsSolutionNotebook() throws {
+    @Test func extractNotebooksToCode_extractsSolutionNotebook() throws {
         // solution.ipynb should be extracted to solution.py
         try writeFile(notebook(defining: "my_solution"), name: "solution.ipynb")
 
         try extractNotebooksToCode(in: workDir)
 
-        XCTAssertTrue(
+        #expect(
             fileExists("solution.py"),
             "solution.ipynb must be extracted to solution.py")
         let py = try readFile("solution.py")
-        XCTAssertTrue(py.contains("def my_solution()"))
+        #expect(py.contains("def my_solution()"))
     }
 
-    func testExtractNotebooksToCode_extractsAssignmentNotebook() throws {
+    @Test func extractNotebooksToCode_extractsAssignmentNotebook() throws {
         // assignment.ipynb should also be extracted (if still present after
         // starter removal, e.g. when the student submitted assignment.ipynb)
         try writeFile(notebook(defining: "student_work"), name: "assignment.ipynb")
 
         try extractNotebooksToCode(in: workDir)
 
-        XCTAssertTrue(
+        #expect(
             fileExists("assignment.py"),
             "assignment.ipynb must be extracted to assignment.py")
         let py = try readFile("assignment.py")
-        XCTAssertTrue(py.contains("def student_work()"))
+        #expect(py.contains("def student_work()"))
     }
 
-    func testExtractNotebooksToCode_extractsArbitrarilyNamedNotebook() throws {
+    @Test func extractNotebooksToCode_extractsArbitrarilyNamedNotebook() throws {
         try writeFile(notebook(defining: "lab_work"), name: "Lab3_Analysis.ipynb")
 
         try extractNotebooksToCode(in: workDir)
 
-        XCTAssertTrue(
+        #expect(
             fileExists("Lab3_Analysis.py"),
             "Arbitrarily-named notebook must be extracted")
         let py = try readFile("Lab3_Analysis.py")
-        XCTAssertTrue(py.contains("def lab_work()"))
+        #expect(py.contains("def lab_work()"))
     }
 
     // =========================================================================
     // MARK: - starterNotebook manifest field tests
     // =========================================================================
 
-    func testManifestWithStarterNotebook_decodesCorrectly() throws {
+    @Test func manifestWithStarterNotebook_decodesCorrectly() throws {
         let m = try makeManifest(
             """
             {
@@ -764,10 +749,10 @@ final class RunnerWorkDirTests: XCTestCase {
                 "starterNotebook": "my_starter.ipynb"
             }
             """)
-        XCTAssertEqual(m.starterNotebook, "my_starter.ipynb")
+        #expect(m.starterNotebook == "my_starter.ipynb")
     }
 
-    func testManifestWithoutStarterNotebook_defaultsToNil() throws {
+    @Test func manifestWithoutStarterNotebook_defaultsToNil() throws {
         let m = try makeManifest(
             """
             {
@@ -776,7 +761,7 @@ final class RunnerWorkDirTests: XCTestCase {
                 "timeLimitSeconds": 10
             }
             """)
-        XCTAssertNil(m.starterNotebook)
+        #expect(m.starterNotebook == nil)
     }
 
     // =========================================================================
@@ -784,7 +769,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Verify the manifest-driven removal works with non-default names
     // =========================================================================
 
-    func testCustomStarterName_removedBeforeTests() throws {
+    @Test func customStarterName_removedBeforeTests() throws {
         let manifest = try makeManifest(
             """
             {
@@ -805,17 +790,13 @@ final class RunnerWorkDirTests: XCTestCase {
             manifest: manifest
         )
 
-        XCTAssertFalse(
-            fileExists("Lab3_Starter.ipynb"),
-            "Custom starter must be removed")
-        XCTAssertFalse(
-            fileExists("Lab3_Starter.py"),
-            "Custom starter must not be extracted to .py")
-        XCTAssertTrue(fileExists("solution.py"))
+        #expect(fileExists("Lab3_Starter.ipynb") == false, "Custom starter must be removed")
+        #expect(fileExists("Lab3_Starter.py") == false, "Custom starter must not be extracted to .py")
+        #expect(fileExists("solution.py"))
     }
 
     /// Student submission named same as custom starter — should NOT be removed.
-    func testCustomStarterName_studentSubmitsSameName() throws {
+    @Test func customStarterName_studentSubmitsSameName() throws {
         let manifest = try makeManifest(
             """
             {
@@ -837,10 +818,10 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // Student's file overwrote the template; should NOT be deleted
-        XCTAssertTrue(fileExists("Lab3_Starter.ipynb"))
-        XCTAssertTrue(fileExists("Lab3_Starter.py"))
+        #expect(fileExists("Lab3_Starter.ipynb"))
+        #expect(fileExists("Lab3_Starter.py"))
         let py = try readFile("Lab3_Starter.py")
-        XCTAssertTrue(
+        #expect(
             py.contains("def student_analysis()"),
             "Extracted .py must have the student's code, not the template")
     }
@@ -850,7 +831,7 @@ final class RunnerWorkDirTests: XCTestCase {
     //   - Test scripts, helper libraries, data files must survive setup
     // =========================================================================
 
-    func testSupportFilesPreserved() throws {
+    @Test func supportFilesPreserved() throws {
         let manifest = try makeManifest(
             """
             {
@@ -876,16 +857,14 @@ final class RunnerWorkDirTests: XCTestCase {
         )
 
         // All support files must survive
-        XCTAssertTrue(fileExists("publictest_load.py"))
-        XCTAssertTrue(fileExists("notebook_grade.py"))
-        XCTAssertTrue(fileExists("chickadee.py"))
-        XCTAssertTrue(fileExists("mini_data_lib.py"))
-        XCTAssertTrue(fileExists("test_data.csv"))
+        #expect(fileExists("publictest_load.py"))
+        #expect(fileExists("notebook_grade.py"))
+        #expect(fileExists("chickadee.py"))
+        #expect(fileExists("mini_data_lib.py"))
+        #expect(fileExists("test_data.csv"))
 
         // Support .py files must NOT be overwritten by extraction
         let chickadee = try readFile("chickadee.py")
-        XCTAssertEqual(
-            chickadee, "# framework",
-            "Support .py files must not be modified by notebook extraction")
+        #expect(chickadee == "# framework", "Support .py files must not be modified by notebook extraction")
     }
 }
