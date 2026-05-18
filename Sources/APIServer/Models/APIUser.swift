@@ -44,6 +44,17 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "display_name")
     var displayName: String?
 
+    /// Opaque 8-character token used in instructor-facing per-student
+    /// URL paths (e.g. `/:courseCode/students/:urlToken/submissions`)
+    /// so usernames stop leaking into request logs and Referer headers
+    /// (#556).  Declared optional only because Fluent + SQLite can't
+    /// add a NOT NULL column post-hoc; in practice every row carries a
+    /// token — fresh users get one from `init` below, and the
+    /// `AddUrlTokenToUsers` migration backfills pre-existing rows.
+    /// Uniqueness is enforced by `idx_users_url_token`.
+    @OptionalField(key: "url_token")
+    var urlToken: String?
+
     @OptionalField(key: "last_login_at")
     var lastLoginAt: Date?
 
@@ -79,6 +90,7 @@ final class APIUser: Model, Content, @unchecked Sendable {
         userIdentifier: String? = nil,
         studentID: String? = nil,
         displayName: String? = nil,
+        urlToken: String? = nil,
         lastLoginAt: Date? = nil,
         lastSeenAt: Date? = nil
     ) {
@@ -92,9 +104,22 @@ final class APIUser: Model, Content, @unchecked Sendable {
         self.userIdentifier = userIdentifier
         self.studentID = studentID
         self.displayName = displayName
+        self.urlToken = urlToken ?? APIUser.generateURLToken()
         self.lastLoginAt = lastLoginAt
         self.lastSeenAt = lastSeenAt
         self.role = role
+    }
+
+    /// Generates a fresh 8-character lowercase alphanumeric URL token.
+    /// 36^8 ≈ 2.8 × 10^12 combinations leaves a comfortable margin even
+    /// at institution-scale enrollment.  Uniqueness is enforced at the
+    /// DB layer via `idx_users_url_token`; callers that need a
+    /// guaranteed-unused token (e.g. the `AddUrlTokenToUsers` migration)
+    /// retry on collision.
+    static func generateURLToken(length: Int = 8) -> String {
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+        var rng = SystemRandomNumberGenerator()
+        return String((0..<length).compactMap { _ in alphabet.randomElement(using: &rng) })
     }
 }
 
@@ -103,6 +128,26 @@ final class APIUser: Model, Content, @unchecked Sendable {
 extension APIUser {
     var isAdmin: Bool { role == "admin" }
     var isInstructor: Bool { role == "instructor" || role == "admin" }
+}
+
+// MARK: - URL token
+
+extension APIUser {
+    /// Non-optional accessor for `urlToken`.  The column is technically
+    /// nullable so the `AddUrlTokenToUsers` migration could add it as a
+    /// post-hoc field on SQLite (which can't add NOT NULL to an existing
+    /// column), but every row is expected to carry a token — fresh users
+    /// get one from `init` and the migration backfills the rest.  Throw
+    /// rather than silently emit a broken URL if the invariant breaks.
+    func requireURLToken() throws -> String {
+        guard let token = urlToken, !token.isEmpty else {
+            throw Abort(
+                .internalServerError,
+                reason: "APIUser \(id?.uuidString ?? "?") is missing urlToken"
+            )
+        }
+        return token
+    }
 }
 
 // MARK: - Vapor session authentication

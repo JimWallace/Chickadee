@@ -1,7 +1,7 @@
 // Tests/APITests/AssignmentExtensionsTests.swift
 //
 // Coverage for the per-student deadline extension feature introduced
-// alongside the grouped /:courseCode/students/:username/submissions page.
+// alongside the grouped /:courseCode/students/:urlToken/submissions page.
 //
 //  * Extension upsert (POST extension)            → row exists with new date.
 //  * Extension upsert (overwrite)                 → row updated, no duplicate.
@@ -47,7 +47,7 @@ final class AssignmentExtensionsTests: AssignmentRoutesTestCase {
 
         try await app.asyncTest(
             .POST,
-            "/TEST101/students/ext_student/assignments/\(assignment.publicID)/extension",
+            "/TEST101/students/\(try student.requireURLToken())/assignments/\(assignment.publicID)/extension",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 try req.content.encode(
@@ -76,7 +76,7 @@ final class AssignmentExtensionsTests: AssignmentRoutesTestCase {
         let furtherInput = fmt.string(from: further)
         try await app.asyncTest(
             .POST,
-            "/TEST101/students/ext_student/assignments/\(assignment.publicID)/extension",
+            "/TEST101/students/\(try student.requireURLToken())/assignments/\(assignment.publicID)/extension",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 try req.content.encode(
@@ -118,7 +118,7 @@ final class AssignmentExtensionsTests: AssignmentRoutesTestCase {
 
         try await app.asyncTest(
             .POST,
-            "/TEST101/students/ext_delete_student/assignments/\(assignment.publicID)/extension/delete",
+            "/TEST101/students/\(try student.requireURLToken())/assignments/\(assignment.publicID)/extension/delete",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
@@ -221,7 +221,7 @@ final class AssignmentExtensionsTests: AssignmentRoutesTestCase {
 
         try await app.asyncTest(
             .POST,
-            "/TEST101/students/scoped_target/assignments/\(assignment.publicID)/retest",
+            "/TEST101/students/\(try targetStudent.requireURLToken())/assignments/\(assignment.publicID)/retest",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
@@ -269,7 +269,7 @@ final class AssignmentExtensionsTests: AssignmentRoutesTestCase {
         )
 
         try await app.asyncTest(
-            .GET, "/TEST101/students/grp_student/submissions",
+            .GET, "/TEST101/students/\(try student.requireURLToken())/submissions",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: cookie)
             },
