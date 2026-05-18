@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Parallelise the 7 sequential DB queries on
+  `courseStudentSubmissionsPage`.**  The
+  `/:courseCode/students/:username/submissions` handler in
+  `AssignmentRoutes+StudentCourse.swift` was running every query
+  in series — assignments, setups, submissions, preferred-results,
+  extensions, class-badges, sections — even though only one pair
+  has a real data dependency.  Restructured into two parallel
+  batches via structured `async let`:
+    * Phase 1 (independent): `assignments` + `allSections` in
+      parallel.  Sections only need `courseID`.
+    * Phase 2 (depends on assignments): `setupsByID` + `submissions`
+      + `extensionByAssignmentID` + `classBadgesBySetupID` in
+      parallel.  All four take the assignment list / setupIDs as
+      input but are otherwise independent.
+    * Serial follow-on: `preferredResultsBySubmissionID` (genuinely
+      depends on submission IDs from phase 2).
+
+  Latency goes from ~7×N round-trip to ~3×N, no JOIN gymnastics
+  — Fluent's connection pool already supports parallel queries.
+  Behaviour is unchanged; the 10 tests in
+  `AssignmentRoutesNotebookTests` and `AssignmentExtensionsTests`
+  that exercise this page pass unchanged.
+
 - **Round-2 coverage for `WorkerDaemon`: job-claim concurrency +
   terminal download failure.**  Closes the two architecture-review
   follow-ups that PR #582 (`RunnerNetworkResilienceTests`)
