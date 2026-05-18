@@ -513,7 +513,7 @@ extension AssignmentRoutes {
             .filter(\.$userID == student.id ?? UUID())
             .count() > 0
         guard isEnrolled else {
-            throw WebAssignmentError.notFound(resource: "Enrolled student '\(usernameRaw)'")
+            throw WebAssignmentError.notFound(resource: "Enrolled student")
         }
         return (course, student)
     }
