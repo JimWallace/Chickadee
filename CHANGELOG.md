@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Add `AssignmentRoutesEditorTests` to plug the coverage gap on
+  `AssignmentRoutes+Editor.swift` (881 LOC).**  The script CRUD
+  endpoints (`getScript` / `updateScript` / `createScript` /
+  `deleteScript`) were already covered by `ScriptEditRoutesTests`,
+  and `saveEditedAssignment` is exercised end-to-end by
+  `AssignmentRoutesPublishTests`, but the three file-download
+  endpoints and the `create-solution` helper had zero direct test
+  coverage.  New test file adds 12 cases covering:
+    * `GET /instructor/:id/files/notebook` — happy path, student 403,
+      unknown-assignment 404
+    * `GET /instructor/:id/files/item?name=…` — happy path,
+      missing-file 404, path-traversal 400, student 403
+    * `GET /instructor/:id/files/solution` — solution-from-zip-entry
+      happy path, no-solution 404, student 403
+    * `POST /instructor/:id/create-solution` — student 403,
+      unknown-assignment 404 (with valid CSRF token so the test
+      reaches the handler, not the CSRF middleware)
+  All 12 tests pass against in-memory SQLite.  The path-traversal
+  test pins the existing `name == NSString.lastPathComponent` guard
+  in `downloadCurrentSetupItem` (`AssignmentRoutes+Editor.swift:50`).
+
 - **Unify error rendering for bare `Abort(...)` and typed
   `WebAssignmentError` throws.**  Both have always funneled through
   `LeafErrorMiddleware` and rendered the same Leaf `error` template,
