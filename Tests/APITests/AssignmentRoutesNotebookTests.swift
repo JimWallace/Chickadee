@@ -178,7 +178,7 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
             }
         )
     }
-    // MARK: - GET /:courseCode/students/:username/submissions
+    // MARK: - GET /:courseCode/students/:urlToken/submissions
 
     /// The dashboard roster lists every enrolled user (students, plus
     /// instructors/admins enrolled for testing).  Clicking any of them used
@@ -213,7 +213,7 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
             userID: try otherInstructor.requireID()
         )
 
-        let url = "/TEST101/students/other_instructor/submissions"
+        let url = "/TEST101/students/\(try otherInstructor.requireURLToken())/submissions"
         try await app.asyncTest(
             .GET, url,
             beforeRequest: { req in
@@ -232,19 +232,46 @@ final class AssignmentRoutesNotebookTests: AssignmentRoutesTestCase {
             })
     }
 
+    /// #556: the old `/students/<username>/...` URL shape no longer routes
+    /// after the switch to opaque `urlToken`s.  Bookmarks against the
+    /// legacy URL must 404 cleanly instead of resolving by username — that
+    /// would defeat the privacy goal (usernames in logs / Referer headers).
+    func testCourseStudentSubmissionsPage404sForLegacyUsernameURL() async throws {
+        _ = try await app.testCourseID(enrollmentMode: .auto)
+        let cookie = try await loginAsInstructor()
+
+        let student = try await insertStudent(username: "legacy_url_student")
+        try await enrollStudentInTestCourse(student)
+
+        // The username happens to be alphanumeric-only so it satisfies the
+        // urlToken character set.  The route should still 404 because the
+        // resolver looks up by `urlToken`, not by `username`.
+        let url = "/TEST101/students/legacy_url_student/submissions"
+        try await app.asyncTest(
+            .GET, url,
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(
+                    res.status, .notFound,
+                    "Legacy `/students/<username>` URL must 404 — only the urlToken shape is valid")
+            })
+    }
+
     /// Non-enrolled users (in any role) still 404 — the page is course-scoped
     /// and must not leak submissions for users outside the active course.
     func testCourseStudentSubmissionsPage404sForNonEnrolledUser() async throws {
         _ = try await app.testCourseID(enrollmentMode: .auto)
         let cookie = try await loginAsInstructor()
 
-        _ = try await insertUser(
+        let stranger = try await insertUser(
             username: "stranger_user",
             role: "student",
             displayName: "Stranger"
         )
 
-        let url = "/TEST101/students/stranger_user/submissions"
+        let url = "/TEST101/students/\(try stranger.requireURLToken())/submissions"
         try await app.asyncTest(
             .GET, url,
             beforeRequest: { req in

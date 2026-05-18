@@ -179,6 +179,11 @@ extension AssignmentRoutes {
     ) -> [EnrolledStudentRow] {
         enrolledUsers.compactMap { u in
             guard let id = u.id else { return nil }
+            // Skip rows that somehow lack a urlToken instead of failing
+            // the whole roster render — the invariant says every user has
+            // one (init default + AddUrlTokenToUsers backfill), so this
+            // branch is unreachable in practice but kept for safety.
+            guard let token = u.urlToken, !token.isEmpty else { return nil }
             return EnrolledStudentRow(
                 id: id.uuidString,
                 username: u.username,
@@ -188,7 +193,7 @@ extension AssignmentRoutes {
                 lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
                 submissionsURL: studentSubmissionsURL(
                     courseCode: activeCourseCode,
-                    username: u.username
+                    urlToken: token
                 ),
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
                 isPending: false

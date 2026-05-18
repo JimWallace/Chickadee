@@ -362,7 +362,7 @@ struct AssignmentSubmissionHistoryRow: Encodable {
 }
 
 /// View context for the per-student, grouped-by-assignment view at
-/// `/:courseCode/students/:username/submissions`.  Each `StudentAssignmentRow`
+/// `/:courseCode/students/:urlToken/submissions`.  Each `StudentAssignmentRow`
 /// mirrors `TestSetupRow` from the student dashboard so the same per-row
 /// chrome (status / due / grade / latest submission / badges) renders the
 /// same way, with an extra Actions column carrying instructor-only
