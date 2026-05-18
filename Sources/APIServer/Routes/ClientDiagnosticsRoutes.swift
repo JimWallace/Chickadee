@@ -29,14 +29,14 @@ struct ClientDiagnosticsRoutes: RouteCollection {
     func submit(req: Request) async throws -> HTTPStatus {
         let caller = try req.auth.require(APIUser.self)
         guard let userID = caller.id else {
-            throw Abort(.internalServerError, reason: "Authenticated user has no ID")
+            throw AppError.internalFailure(reason: "Authenticated user has no ID")
         }
 
         let body = try req.content.decode(ClientDiagnosticBody.self)
 
         let allowedKinds: Set<String> = ["preflight_fail", "watchdog_timeout"]
         guard allowedKinds.contains(body.kind) else {
-            throw Abort(.badRequest, reason: "Unknown kind")
+            throw AppError.badRequest(reason: "Unknown kind")
         }
 
         // De-duplicate within an hour so reloads don't multiply rows.

@@ -40,7 +40,7 @@ struct MarmosetImportRoutes: RouteCollection {
 
         let courseState = try await req.resolveActiveCourse(for: caller)
         guard let course = courseState.active else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw AppError.badRequest(reason: "No active course selected.")
         }
 
         let sectionIDRaw = req.query[String.self, at: "sectionID"]
@@ -75,7 +75,7 @@ struct MarmosetImportRoutes: RouteCollection {
         guard courseState.active != nil,
             let courseUUID = courseState.activeCourseUUID
         else {
-            throw Abort(.badRequest, reason: "No active course selected.")
+            throw AppError.badRequest(reason: "No active course selected.")
         }
 
         // ── 1. Receive uploaded zip + optional sectionID ───────────────
@@ -89,7 +89,7 @@ struct MarmosetImportRoutes: RouteCollection {
         guard buffer.readableBytes > 0,
             let fileBytes = buffer.readBytes(length: buffer.readableBytes)
         else {
-            throw Abort(.badRequest, reason: "Empty file uploaded")
+            throw AppError.badRequest(reason: "Empty file uploaded")
         }
 
         let resolvedSectionID: UUID? = try await resolveSectionID(
@@ -117,12 +117,11 @@ struct MarmosetImportRoutes: RouteCollection {
         do {
             (projectsDir, projects) = try parseMarmosetExport(from: extractDir)
         } catch {
-            throw Abort(.badRequest, reason: "Failed to parse Marmoset export: \(error)")
+            throw AppError.unprocessable(reason: "Failed to parse Marmoset export: \(error)")
         }
 
         guard !projects.isEmpty else {
-            throw Abort(
-                .badRequest,
+            throw AppError.badRequest(
                 reason: "No projects found in the Marmoset export. Expected files named <n>-test-setup.zip.")
         }
 

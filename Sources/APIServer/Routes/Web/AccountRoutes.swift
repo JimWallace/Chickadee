@@ -125,7 +125,7 @@ struct AccountRoutes: RouteCollection {
             throw Abort(.notFound)
         }
         guard course.enrollmentMode == .open else {
-            throw Abort(.forbidden, reason: "You cannot leave a \(course.enrollmentMode.rawValue)-enrolment course.")
+            throw AppError.forbidden(action: "leave a \(course.enrollmentMode.rawValue)-enrolment course")
         }
 
         try await APICourseEnrollment.query(on: req.db)

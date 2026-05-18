@@ -254,10 +254,10 @@ struct TestSetupRoutes: RouteCollection {
         do {
             manifest = try ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         } catch {
-            throw Abort(.unprocessableEntity, reason: "Invalid manifest JSON: \(error)")
+            throw AppError.unprocessable(reason: "Invalid manifest JSON: \(error)")
         }
         guard manifest.schemaVersion == 1 else {
-            throw Abort(.unprocessableEntity, reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1")
+            throw AppError.unprocessable(reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1")
         }
 
         // Validate the dependency graph (reference integrity + cycle detection).
@@ -272,7 +272,7 @@ struct TestSetupRoutes: RouteCollection {
             }
         case .worker:
             guard !manifest.testSuites.isEmpty else {
-                throw Abort(.unprocessableEntity, reason: "Worker-mode test setup must contain at least one test suite")
+                throw AppError.unprocessable(reason: "Worker-mode test setup must contain at least one test suite")
             }
         }
 
@@ -292,7 +292,7 @@ struct TestSetupRoutes: RouteCollection {
             try validateZipUploadSize(zipPath: zipPath)
         } catch let error as ZipUploadValidationError {
             try? FileManager.default.removeItem(atPath: zipPath)
-            throw Abort(.unprocessableEntity, reason: String(describing: error))
+            throw AppError.unprocessable(reason: String(describing: error))
         }
 
         // Store metadata in DB.
@@ -429,7 +429,10 @@ struct TestSetupRoutes: RouteCollection {
         guard !filename.isEmpty,
             !filename.contains("/"), !filename.contains("\\"),
             !filename.contains("..")
-        else { throw Abort(.badRequest, reason: "Invalid filename") }
+        else {
+            throw AppError.invalidParameter(
+                name: "filename", reason: "must not contain path separators or empty segments")
+        }
 
         // Confirm the file is classified as a support file: must exist
         // in the zip, must not be in `testSuites`, must not be a
@@ -445,7 +448,7 @@ struct TestSetupRoutes: RouteCollection {
         }()
         let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
         guard !testScripts.contains(filename), !reservedNames.contains(filename) else {
-            throw Abort(.forbidden, reason: "'\(filename)' is not a support file")
+            throw AppError.forbidden(action: "download '\(filename)' (not a support file)")
         }
 
         guard let bytes = extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
@@ -480,13 +483,13 @@ struct TestSetupRoutes: RouteCollection {
         guard let bodyBuffer = req.body.data,
             bodyBuffer.readableBytes > 0
         else {
-            throw Abort(.badRequest, reason: "Request body is empty")
+            throw AppError.badRequest(reason: "Request body is empty")
         }
         let notebookBytes = Data(bodyBuffer.readableBytesView)
 
         // Basic JSON validation — reject obviously non-JSON bodies.
         guard (try? JSONSerialization.jsonObject(with: notebookBytes)) != nil else {
-            throw Abort(.unprocessableEntity, reason: "Body is not valid JSON")
+            throw AppError.unprocessable(reason: "Body is not valid JSON")
         }
 
         // Determine the save path: reuse existing notebookPath or derive from setupID.

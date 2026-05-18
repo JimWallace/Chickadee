@@ -8,6 +8,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Introduce general-purpose `AppError` typed error + migrate 45
+  `Abort(.X, reason: "msg")` sites to it.**  PR #579 unified the
+  *rendering* of bare `Abort(...)` and typed `WebAssignmentError`
+  via `LeafErrorMiddleware.friendlyReason`, but the source-side
+  split — `WebAssignmentError` for assignment routes, bare `Abort`
+  elsewhere — remained.  This PR adds an `AppError` enum in
+  `Sources/APIServer/Errors/APIErrors.swift` with the
+  general-purpose case shapes (`.notFound(resource:)`,
+  `.badRequest(reason:)`, `.invalidParameter(name:reason:)`,
+  `.forbidden(action:)`, `.conflict(reason:)`,
+  `.unprocessable(reason:)`, `.internalFailure(reason:)`), then
+  migrates every `Abort` site that already had an explicit
+  `reason:` string to the matching typed case.
+
+  Files touched:
+    * `ClientDiagnosticsRoutes`, `SubmissionRoutes`,
+      `SubmissionQueryRoutes`, `TestSetupRoutes` (8 sites),
+      `BrowserResultRoutes` (5 sites), `WebRoutes`, `WebRoutes+Notebook`
+      (5 sites), `AdminRoutes+Courses` (3 sites),
+      `MarmosetImportRoutes` (4 sites), `AdminRoutes`,
+      `CourseBundleRoutes` (7 sites), `AccountRoutes`.
+    * `Sources/APIServer/Errors/APIErrors.swift` — new `AppError`
+      enum.
+
+  Bare-`Abort(.X)` sites (no explicit reason) were intentionally
+  left alone — `LeafErrorMiddleware.friendlyReason` already produces
+  a humane default per status code for those, and fabricating
+  contextual `resource:` / `action:` strings just to satisfy the
+  typed constructor would have been busywork without UX benefit.
+
+  Existing tests pass unchanged: 111 cases across the touched
+  routes (BrowserResultRoutes, SubmissionRoutes, TestSetupRoutes,
+  WebRoutes, AdminRoutes, CourseBundleRoutes, MarmosetImportRoutes,
+  AccountRoutes, NotebookWebRoutes, AssignmentRoutesNotebook,
+  AssignmentExtensions, etc.) — the `AbortError` protocol means
+  `AppError.X` and the prior `Abort(.X, reason: …)` produce the
+  same `(status, reason)` tuple, so the HTTP shape is preserved.
+
 - **Parallelise the 5 sequential queries on `exportGradesCSV`.**
   Follows the `async let` pattern from PR #590 on the second-worst
   N+1 offender flagged in the architecture review:
