@@ -4,42 +4,49 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class VanityURLRoutesTests: XCTestCase {
+@Suite(.serialized) final class VanityURLRoutesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-vanity")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-vanity")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - slugify
 
-    func testSlugify_stripsSpaces() {
-        XCTAssertEqual(VanityURLRoutes.slugify("Lab 1"), "lab-1")
+    @Test func slugify_stripsSpaces() async throws {
+        #expect(VanityURLRoutes.slugify("Lab 1") == "lab-1")
+
     }
 
-    func testSlugify_stripsSpecialChars() {
-        XCTAssertEqual(VanityURLRoutes.slugify("Lab 1: Intro"), "lab-1-intro")
+    @Test func slugify_stripsSpecialChars() async throws {
+        #expect(VanityURLRoutes.slugify("Lab 1: Intro") == "lab-1-intro")
+
     }
 
-    func testSlugify_lowercases() {
-        XCTAssertEqual(VanityURLRoutes.slugify("Assignment2"), "assignment2")
+    @Test func slugify_lowercases() async throws {
+        #expect(VanityURLRoutes.slugify("Assignment2") == "assignment2")
+
     }
 
-    func testSlugify_handlesHyphensAndSlashes() {
-        XCTAssertEqual(VanityURLRoutes.slugify("A2 - Sorting/Searching"), "a2-sorting-searching")
+    @Test func slugify_handlesHyphensAndSlashes() async throws {
+        #expect(VanityURLRoutes.slugify("A2 - Sorting/Searching") == "a2-sorting-searching")
+
     }
 
-    func testSlugify_emptyString() {
-        XCTAssertEqual(VanityURLRoutes.slugify(""), "")
+    @Test func slugify_emptyString() async throws {
+        #expect(VanityURLRoutes.slugify("").isEmpty)
+
     }
 
     // MARK: - Route helpers
@@ -93,20 +100,21 @@ final class VanityURLRoutesTests: XCTestCase {
 
     // MARK: - Unauthenticated
 
-    func testVanityURL_unauthenticated_redirectsToLogin() async throws {
+    @Test func vanityURL_unauthenticated_redirectsToLogin() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van01")
 
         try await app.asyncTest(.GET, "/hlth230/lab-1") { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/login")
+            #expect(res.status == .seeOther)
+            #expect(res.headers.first(name: .location) == "/login")
         }
+
     }
 
     // MARK: - Authenticated
 
-    func testVanityURL_redirectsToNotebook() async throws {
+    @Test func vanityURL_redirectsToNotebook() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van02")
@@ -121,12 +129,13 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van02/notebook")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van02/notebook")
             })
+
     }
 
-    func testVanityURL_caseInsensitiveCourseCode() async throws {
+    @Test func vanityURL_caseInsensitiveCourseCode() async throws {
         // Course code stored as "CS246"; URL uses lowercase "cs246".
         let course = try await seedCourse(code: "cs246")
         let courseID = try course.requireID()
@@ -142,12 +151,13 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van03/notebook")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van03/notebook")
             })
+
     }
 
-    func testVanityURL_slugStripsSpecialChars() async throws {
+    @Test func vanityURL_slugStripsSpecialChars() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         // Title "Lab 1: Intro" should match slug "lab-1-intro"
@@ -163,12 +173,13 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van04/notebook")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van04/notebook")
             })
+
     }
 
-    func testVanityURL_archivedCourse_returns404() async throws {
+    @Test func vanityURL_archivedCourse_returns404() async throws {
         let course = try await seedCourse(code: "HLTH230", archived: true)
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van05")
@@ -182,11 +193,12 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
+
     }
 
-    func testVanityURL_unknownCourse_returns404() async throws {
+    @Test func vanityURL_unknownCourse_returns404() async throws {
         let cookie = try await loginUser(
             username: "vanity_student5", password: "pw",
             role: "student", on: app)
@@ -196,11 +208,12 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
+
     }
 
-    func testVanityURL_unknownAssignment_returns404() async throws {
+    @Test func vanityURL_unknownAssignment_returns404() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van06")
@@ -215,11 +228,12 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
+
     }
 
-    func testVanityURL_activeCourseShadowsArchived() async throws {
+    @Test func vanityURL_activeCourseShadowsArchived() async throws {
         // Two courses with the same code — only the active one should match.
         let archived = try await seedCourse(code: "HLTH230", archived: true)
         let archivedID = try archived.requireID()
@@ -239,12 +253,13 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van08/notebook")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van08/notebook")
             })
+
     }
 
-    func testVanityURL_usesPersistedSlugAfterTitleRename() async throws {
+    @Test func vanityURL_usesPersistedSlugAfterTitleRename() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         let assignment = try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van09")
@@ -261,8 +276,8 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van09/notebook")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van09/notebook")
             })
 
         try await app.asyncTest(
@@ -271,22 +286,24 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
+
     }
 
-    func testUniqueAssignmentSlug_suffixesDuplicateTitlesInCourse() async throws {
+    @Test func uniqueAssignmentSlug_suffixesDuplicateTitlesInCourse() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van10")
 
         let slug = try await uniqueAssignmentSlug(title: "Lab 1", courseID: courseID, db: app.db)
-        XCTAssertEqual(slug, "lab-1-2")
+        #expect(slug == "lab-1-2")
+
     }
 
     // MARK: - Enrollment gate (issue #561)
 
-    func testVanityURL_unenrolledStudent_returns404() async throws {
+    @Test func vanityURL_unenrolledStudent_returns404() async throws {
         // Regression for issue #561: vanity URLs leaked the existence of
         // a (courseCode, assignmentSlug) pair to any authenticated user
         // by redirecting unenrolled students into the access-denied page
@@ -304,13 +321,14 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(
-                    res.status, .notFound,
+                #expect(
+                    res.status == .notFound,
                     "Unenrolled student must see 404 (matching no-such-course response), got \(res.status)")
             })
+
     }
 
-    func testVanityURL_instructor_bypassesEnrollment() async throws {
+    @Test func vanityURL_instructor_bypassesEnrollment() async throws {
         // Instructors and admins skip the enrollment check so they can
         // QA assignments in courses they aren't formally enrolled in.
         let course = try await seedCourse(code: "HLTH230")
@@ -326,12 +344,13 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van_enr02/notebook")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van_enr02/notebook")
             })
+
     }
 
-    func testVanityURL_submitAndHistoryRoutesRedirectToCanonicalStudentRoutes() async throws {
+    @Test func vanityURL_submitAndHistoryRoutesRedirectToCanonicalStudentRoutes() async throws {
         let course = try await seedCourse(code: "HLTH230")
         let courseID = try course.requireID()
         try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van11")
@@ -346,8 +365,8 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van11/submit")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van11/submit")
             })
 
         try await app.asyncTest(
@@ -356,8 +375,9 @@ final class VanityURLRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/testsetups/setup_van11/history")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/testsetups/setup_van11/history")
             })
+
     }
 }

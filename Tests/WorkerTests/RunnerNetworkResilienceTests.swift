@@ -9,82 +9,66 @@
 // tests so individual status-code behaviours don't have to be inferred
 // from end-to-end HTTP stubs.
 
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
-final class RunnerNetworkResilienceTests: XCTestCase {
+@Suite struct RunnerNetworkResilienceTests {
 
     // MARK: - classifyHTTPRetry
 
-    func testClassifyHTTPRetryMarksGatewayErrorsRetryable() {
+    @Test func classifyHTTPRetryMarksGatewayErrorsRetryable() {
         for code in [500, 502, 503, 504] {
-            XCTAssertEqual(
-                classifyHTTPRetry(statusCode: code, body: "x"),
-                .retryable("HTTP \(code): x"),
+            #expect(
+                classifyHTTPRetry(statusCode: code, body: "x") == .retryable("HTTP \(code): x"),
                 "expected \(code) to be retryable")
         }
     }
 
-    func testClassifyHTTPRetryMarksRateLimitAndTimeoutCodesRetryable() {
+    @Test func classifyHTTPRetryMarksRateLimitAndTimeoutCodesRetryable() {
         for code in [408, 425, 429] {
-            XCTAssertEqual(
-                classifyHTTPRetry(statusCode: code, body: "rl"),
-                .retryable("HTTP \(code): rl"),
+            #expect(
+                classifyHTTPRetry(statusCode: code, body: "rl") == .retryable("HTTP \(code): rl"),
                 "expected \(code) to be retryable")
         }
     }
 
-    func testClassifyHTTPRetryTerminatesOnAuthFailures() {
-        XCTAssertEqual(
-            classifyHTTPRetry(statusCode: 401, body: "unauth"),
-            .terminal("HTTP 401: unauth"))
-        XCTAssertEqual(
-            classifyHTTPRetry(statusCode: 403, body: "forbidden"),
-            .terminal("HTTP 403: forbidden"))
+    @Test func classifyHTTPRetryTerminatesOnAuthFailures() {
+        #expect(classifyHTTPRetry(statusCode: 401, body: "unauth") == .terminal("HTTP 401: unauth"))
+        #expect(classifyHTTPRetry(statusCode: 403, body: "forbidden") == .terminal("HTTP 403: forbidden"))
     }
 
-    func testClassifyHTTPRetryTerminatesOnConflict() {
+    @Test func classifyHTTPRetryTerminatesOnConflict() {
         // 409 — duplicate worker ID claim — is terminal so the worker
         // can re-roll its ID rather than spin.
-        XCTAssertEqual(
-            classifyHTTPRetry(statusCode: 409, body: "duplicate worker"),
-            .terminal("HTTP 409: duplicate worker"))
+        #expect(classifyHTTPRetry(statusCode: 409, body: "duplicate worker") == .terminal("HTTP 409: duplicate worker"))
     }
 
-    func testClassifyHTTPRetryTerminatesOnUnknownClientErrors() {
+    @Test func classifyHTTPRetryTerminatesOnUnknownClientErrors() {
         // 400-range responses other than the explicitly retryable codes
         // are treated as client bugs — no point retrying.
         for code in [400, 404, 422] {
-            XCTAssertEqual(
-                classifyHTTPRetry(statusCode: code, body: "bad"),
-                .terminal("HTTP \(code): bad"),
+            #expect(
+                classifyHTTPRetry(statusCode: code, body: "bad") == .terminal("HTTP \(code): bad"),
                 "expected \(code) to be terminal")
         }
     }
 
     // MARK: - classifyPollHTTPRetry
 
-    func testClassifyPollHTTPRetryUpgrades401And403ToRetryable() {
+    @Test func classifyPollHTTPRetryUpgrades401And403ToRetryable() {
         // Poll-path-specific: long-lived runners should recover through
         // server-side auth reconfiguration windows rather than terminating.
-        XCTAssertEqual(
-            classifyPollHTTPRetry(statusCode: 401, body: "rotating-secret"),
-            .retryable("HTTP 401: rotating-secret"))
-        XCTAssertEqual(
-            classifyPollHTTPRetry(statusCode: 403, body: "tmp"),
-            .retryable("HTTP 403: tmp"))
+        #expect(
+            classifyPollHTTPRetry(statusCode: 401, body: "rotating-secret") == .retryable("HTTP 401: rotating-secret"))
+        #expect(classifyPollHTTPRetry(statusCode: 403, body: "tmp") == .retryable("HTTP 403: tmp"))
     }
 
-    func testClassifyPollHTTPRetryDelegatesNonAuthCodesToBaseClassifier() {
+    @Test func classifyPollHTTPRetryDelegatesNonAuthCodesToBaseClassifier() {
         // Everything except 401/403 falls through to the standard
         // classifier — confirm by spot-checking a retryable and a terminal.
-        XCTAssertEqual(
-            classifyPollHTTPRetry(statusCode: 503, body: "down"),
-            .retryable("HTTP 503: down"))
-        XCTAssertEqual(
-            classifyPollHTTPRetry(statusCode: 409, body: "dup"),
-            .terminal("HTTP 409: dup"))
+        #expect(classifyPollHTTPRetry(statusCode: 503, body: "down") == .retryable("HTTP 503: down"))
+        #expect(classifyPollHTTPRetry(statusCode: 409, body: "dup") == .terminal("HTTP 409: dup"))
     }
 
     // MARK: - withRunnerRetry
@@ -103,7 +87,7 @@ final class RunnerNetworkResilienceTests: XCTestCase {
 
     private struct StubError: Error {}
 
-    func testWithRunnerRetryReturnsImmediatelyOnSuccess() async throws {
+    @Test func withRunnerRetryReturnsImmediatelyOnSuccess() async throws {
         actor Counter { var n = 0; func incr() { n += 1 } }
         let calls = Counter()
 
@@ -117,12 +101,12 @@ final class RunnerNetworkResilienceTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(result, 42)
+        #expect(result == 42)
         let n = await calls.n
-        XCTAssertEqual(n, 1, "operation should run exactly once on success")
+        #expect(n == 1, "operation should run exactly once on success")
     }
 
-    func testWithRunnerRetryRetriesUntilSuccess() async throws {
+    @Test func withRunnerRetryRetriesUntilSuccess() async throws {
         actor Counter { var n = 0; func incr() { n += 1 }; func value() -> Int { n } }
         let calls = Counter()
 
@@ -137,12 +121,12 @@ final class RunnerNetworkResilienceTests: XCTestCase {
             }
         )
 
-        XCTAssertEqual(result, 7)
+        #expect(result == 7)
         let n = await calls.n
-        XCTAssertEqual(n, 3, "operation should run until the 3rd attempt succeeds")
+        #expect(n == 3, "operation should run until the 3rd attempt succeeds")
     }
 
-    func testWithRunnerRetryShortCircuitsOnTerminalDisposition() async {
+    @Test func withRunnerRetryShortCircuitsOnTerminalDisposition() async {
         actor Counter { var n = 0; func incr() { n += 1 } }
         let calls = Counter()
 
@@ -156,18 +140,18 @@ final class RunnerNetworkResilienceTests: XCTestCase {
                     throw StubError()
                 }
             )
-            XCTFail("expected StubError to be thrown")
+            Issue.record("expected StubError to be thrown")
         } catch is StubError {
             // expected
         } catch {
-            XCTFail("expected StubError, got \(error)")
+            Issue.record("expected StubError, got \(error)")
         }
 
         let n = await calls.n
-        XCTAssertEqual(n, 1, "terminal disposition must not trigger a retry")
+        #expect(n == 1, "terminal disposition must not trigger a retry")
     }
 
-    func testWithRunnerRetryRespectsMaxAttemptsAndRethrows() async {
+    @Test func withRunnerRetryRespectsMaxAttemptsAndRethrows() async {
         actor Counter { var n = 0; func incr() { n += 1 } }
         let calls = Counter()
 
@@ -181,18 +165,18 @@ final class RunnerNetworkResilienceTests: XCTestCase {
                     throw StubError()
                 }
             )
-            XCTFail("expected the operation to exhaust its retries")
+            Issue.record("expected the operation to exhaust its retries")
         } catch is StubError {
             // expected
         } catch {
-            XCTFail("expected StubError, got \(error)")
+            Issue.record("expected StubError, got \(error)")
         }
 
         let n = await calls.n
-        XCTAssertEqual(n, 3, "operation should run exactly maxAttempts times")
+        #expect(n == 3, "operation should run exactly maxAttempts times")
     }
 
-    func testWithRunnerRetryThrowsImmediatelyWhenPolicyDisabled() async {
+    @Test func withRunnerRetryThrowsImmediatelyWhenPolicyDisabled() async {
         actor Counter { var n = 0; func incr() { n += 1 } }
         let calls = Counter()
 
@@ -206,18 +190,18 @@ final class RunnerNetworkResilienceTests: XCTestCase {
                     throw StubError()
                 }
             )
-            XCTFail("expected throw")
+            Issue.record("expected throw")
         } catch is StubError {
             // expected
         } catch {
-            XCTFail("expected StubError, got \(error)")
+            Issue.record("expected StubError, got \(error)")
         }
 
         let n = await calls.n
-        XCTAssertEqual(n, 1, "policy.enabled=false should disable retry entirely")
+        #expect(n == 1, "policy.enabled=false should disable retry entirely")
     }
 
-    func testWithRunnerRetryInvokesOnRetryForEachRetryButNotForFinalThrow() async {
+    @Test func withRunnerRetryInvokesOnRetryForEachRetryButNotForFinalThrow() async {
         actor RetryLog {
             var contexts: [RunnerRetryContext] = []
             func append(_ c: RunnerRetryContext) { contexts.append(c) }
@@ -233,20 +217,21 @@ final class RunnerNetworkResilienceTests: XCTestCase {
                 onRetry: { ctx in await log.append(ctx) },
                 operation: { throw StubError() }
             )
-            XCTFail("expected throw")
+            Issue.record("expected throw")
         } catch is StubError {
             // expected
         } catch {
-            XCTFail("expected StubError, got \(error)")
+            Issue.record("expected StubError, got \(error)")
         }
 
         let recorded = await log.snapshot()
         // 3 attempts total → 2 retries scheduled before the final throw.
-        XCTAssertEqual(recorded.count, 2)
-        XCTAssertEqual(recorded.map(\.attempt), [1, 2])
-        XCTAssertEqual(recorded.map(\.stage), [.resultUpload, .resultUpload])
-        XCTAssertEqual(recorded.map(\.message), ["try again", "try again"])
-        XCTAssertTrue(recorded.allSatisfy(\.retryable))
+        #expect(recorded.count == 2)
+        #expect(recorded.map(\.attempt) == [1, 2])
+        #expect(recorded.map(\.stage) == [.resultUpload, .resultUpload])
+        #expect(recorded.map(\.message) == ["try again", "try again"])
+        let allRetryable = recorded.allSatisfy(\.retryable)
+        #expect(allRetryable)
     }
 
     // MARK: - ExponentialBackoff
@@ -258,7 +243,7 @@ final class RunnerNetworkResilienceTests: XCTestCase {
     // tests below pin what callers actually rely on: bounded delay,
     // never-zero so the loop doesn't spin, and a working reset.
 
-    func testExponentialBackoffStaysWithinCap() {
+    @Test func exponentialBackoffStaysWithinCap() {
         var backoff = ExponentialBackoff(
             initial: .milliseconds(10),
             max: .milliseconds(50)
@@ -267,13 +252,11 @@ final class RunnerNetworkResilienceTests: XCTestCase {
         // the cap.
         for _ in 0..<20 {
             let next = backoff.next()
-            XCTAssertLessThanOrEqual(
-                seconds(next), 0.050 + 0.001,
-                "next must respect the cap")
+            #expect(seconds(next) <= 0.050 + 0.001, "next must respect the cap")
         }
     }
 
-    func testExponentialBackoffNeverReturnsZero() {
+    @Test func exponentialBackoffNeverReturnsZero() {
         // Regression: an early version returned a zero-duration delay when
         // jitter bottomed out, defeating the purpose of backing off.
         var backoff = ExponentialBackoff(
@@ -282,11 +265,11 @@ final class RunnerNetworkResilienceTests: XCTestCase {
         )
         for _ in 0..<10 {
             let next = backoff.next()
-            XCTAssertGreaterThan(seconds(next), 0, "next must never return zero")
+            #expect(seconds(next) > 0, "next must never return zero")
         }
     }
 
-    func testExponentialBackoffResetReturnsToInitial() {
+    @Test func exponentialBackoffResetReturnsToInitial() {
         var backoff = ExponentialBackoff(
             initial: .milliseconds(10),
             max: .milliseconds(1000)
@@ -297,9 +280,7 @@ final class RunnerNetworkResilienceTests: XCTestCase {
         // After reset, the next draw should be in roughly the initial
         // band (jitter spans [initial, doubled-from-initial]).
         let first = backoff.next()
-        XCTAssertLessThanOrEqual(
-            seconds(first), 0.020 + 0.001,
-            "first draw after reset should be within 2× initial")
+        #expect(seconds(first) <= 0.020 + 0.001, "first draw after reset should be within 2× initial")
     }
 
     // MARK: - Helpers

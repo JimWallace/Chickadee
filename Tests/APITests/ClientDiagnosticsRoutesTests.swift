@@ -7,21 +7,22 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class ClientDiagnosticsRoutesTests: XCTestCase {
+@Suite(.serialized) final class ClientDiagnosticsRoutesTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-cdr")
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-cdr")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -70,69 +71,74 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
 
     // MARK: - Auth
 
-    func testRequiresAuthentication() async throws {
+    @Test func requiresAuthentication() async throws {
         let res = try await app.asyncSendRequest(.POST, "/api/v1/client-diagnostics") { req in
             req.headers.contentType = .json
             req.body = ByteBuffer(string: #"{"kind":"watchdog_timeout"}"#)
         }
-        XCTAssertEqual(res.status, .unauthorized)
+        #expect(res.status == .unauthorized)
+
     }
 
     // MARK: - Validation
 
-    func testRejectsUnknownKind() async throws {
+    @Test func rejectsUnknownKind() async throws {
         let auth = try await loginAsStudent()
         let res = try await postJSON(#"{"kind":"hacker_stuff"}"#, auth: auth)
-        XCTAssertEqual(res.status, .badRequest)
+        #expect(res.status == .badRequest)
+
     }
 
     // MARK: - Persistence
 
-    func testPersistsWatchdogTimeoutRecord() async throws {
+    @Test func persistsWatchdogTimeoutRecord() async throws {
         let auth = try await loginAsStudent()
         try await insertSetup(id: "setup_abc")
         let body = #"{"kind":"watchdog_timeout","testSetupID":"setup_abc"}"#
         let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
-        XCTAssertEqual(res.status, .accepted)
+        #expect(res.status == .accepted)
 
         let records = try await APIClientDiagnostic.query(on: app.db).all()
-        XCTAssertEqual(records.count, 1)
-        XCTAssertEqual(records.first?.kind, "watchdog_timeout")
-        XCTAssertEqual(records.first?.testSetupID, "setup_abc")
-        XCTAssertEqual(records.first?.userAgent, "Mozilla/5.0 (TestRunner)")
-        XCTAssertNil(records.first?.failedChecks)
+        #expect(records.count == 1)
+        #expect(records.first?.kind == "watchdog_timeout")
+        #expect(records.first?.testSetupID == "setup_abc")
+        #expect(records.first?.userAgent == "Mozilla/5.0 (TestRunner)")
+        #expect(records.first?.failedChecks == nil)
+
     }
 
-    func testPersistsPreflightFailRecord() async throws {
+    @Test func persistsPreflightFailRecord() async throws {
         let auth = try await loginAsStudent()
         try await insertSetup(id: "setup_xyz")
         let body = #"""
             {"kind":"preflight_fail","testSetupID":"setup_xyz","failedChecks":["serviceWorker","indexedDB"]}
             """#
         let res = try await postJSON(body, auth: auth, userAgent: "TestUA/1.0")
-        XCTAssertEqual(res.status, .accepted)
+        #expect(res.status == .accepted)
 
         let records = try await APIClientDiagnostic.query(on: app.db).all()
-        XCTAssertEqual(records.count, 1)
-        XCTAssertEqual(records.first?.kind, "preflight_fail")
-        XCTAssertEqual(records.first?.failedChecks, "serviceWorker,indexedDB")
+        #expect(records.count == 1)
+        #expect(records.first?.kind == "preflight_fail")
+        #expect(records.first?.failedChecks == "serviceWorker,indexedDB")
+
     }
 
-    func testStaleSetupIDIsNullified() async throws {
+    @Test func staleSetupIDIsNullified() async throws {
         // If the supplied setup doesn't exist (e.g. it was deleted between
         // the page load and the diagnostic post), the row is still recorded
         // but with testSetupID = nil — no FK violation, no 500.
         let auth = try await loginAsStudent()
         let body = #"{"kind":"watchdog_timeout","testSetupID":"setup_does_not_exist"}"#
         let res = try await postJSON(body, auth: auth)
-        XCTAssertEqual(res.status, .accepted)
+        #expect(res.status == .accepted)
 
         let records = try await APIClientDiagnostic.query(on: app.db).all()
-        XCTAssertEqual(records.count, 1)
-        XCTAssertNil(records.first?.testSetupID)
+        #expect(records.count == 1)
+        #expect(records.first?.testSetupID == nil)
+
     }
 
-    func testPersistsWatchdogKernelUnhealthySubtype() async throws {
+    @Test func persistsWatchdogKernelUnhealthySubtype() async throws {
         // The watchdog distinguishes two failure modes by populating
         // failedChecks=["kernel-unhealthy"] when the JupyterLite app shell
         // mounted but the Pyodide kernel never reached idle/busy.  Both
@@ -144,28 +150,30 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
             {"kind":"watchdog_timeout","testSetupID":"setup_kernel_unhealthy","failedChecks":["kernel-unhealthy"]}
             """#
         let res = try await postJSON(body, auth: auth, userAgent: "TestUA/2.0")
-        XCTAssertEqual(res.status, .accepted)
+        #expect(res.status == .accepted)
 
         let records = try await APIClientDiagnostic.query(on: app.db).all()
-        XCTAssertEqual(records.count, 1)
-        XCTAssertEqual(records.first?.kind, "watchdog_timeout")
-        XCTAssertEqual(records.first?.failedChecks, "kernel-unhealthy")
+        #expect(records.count == 1)
+        #expect(records.first?.kind == "watchdog_timeout")
+        #expect(records.first?.failedChecks == "kernel-unhealthy")
+
     }
 
-    func testAcceptsMissingTestSetupID() async throws {
+    @Test func acceptsMissingTestSetupID() async throws {
         let auth = try await loginAsStudent()
         let body = #"{"kind":"watchdog_timeout"}"#
         let res = try await postJSON(body, auth: auth)
-        XCTAssertEqual(res.status, .accepted)
+        #expect(res.status == .accepted)
 
         let records = try await APIClientDiagnostic.query(on: app.db).all()
-        XCTAssertEqual(records.count, 1)
-        XCTAssertNil(records.first?.testSetupID)
+        #expect(records.count == 1)
+        #expect(records.first?.testSetupID == nil)
+
     }
 
     // MARK: - Rate limiting
 
-    func testDeduplicatesRepeatedFailuresInWindow() async throws {
+    @Test func deduplicatesRepeatedFailuresInWindow() async throws {
         let auth = try await loginAsStudent()
         let body = #"{"kind":"watchdog_timeout","testSetupID":"setup_dup"}"#
 
@@ -174,38 +182,40 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
         // diagnostic was accepted, just deduplicated).
         for _ in 0..<3 {
             let res = try await postJSON(body, auth: auth)
-            XCTAssertEqual(res.status, .accepted)
+            #expect(res.status == .accepted)
         }
 
         let count = try await APIClientDiagnostic.query(on: app.db).count()
-        XCTAssertEqual(count, 1, "Repeated diagnostics within cooldown should not produce additional rows")
+        #expect(count == 1, "Repeated diagnostics within cooldown should not produce additional rows")
+
     }
 
-    func testDifferentSetupOrKindAreNotDeduplicated() async throws {
+    @Test func differentSetupOrKindAreNotDeduplicated() async throws {
         let auth = try await loginAsStudent()
 
         let res1 = try await postJSON(
             #"{"kind":"watchdog_timeout","testSetupID":"setup_a"}"#, auth: auth)
-        XCTAssertEqual(res1.status, .accepted)
+        #expect(res1.status == .accepted)
 
         // Different setup → distinct rate-limit key.
         let res2 = try await postJSON(
             #"{"kind":"watchdog_timeout","testSetupID":"setup_b"}"#, auth: auth)
-        XCTAssertEqual(res2.status, .accepted)
+        #expect(res2.status == .accepted)
 
         // Different kind on same setup → also distinct.
         let res3 = try await postJSON(
             #"{"kind":"preflight_fail","testSetupID":"setup_a","failedChecks":["worker"]}"#,
             auth: auth)
-        XCTAssertEqual(res3.status, .accepted)
+        #expect(res3.status == .accepted)
 
         let count = try await APIClientDiagnostic.query(on: app.db).count()
-        XCTAssertEqual(count, 3)
+        #expect(count == 3)
+
     }
 
     // MARK: - Rate limiter unit tests
 
-    func testRateLimiterAdmitsOnceWithinCooldown() async {
+    @Test func rateLimiterAdmitsOnceWithinCooldown() async throws {
         let limiter = ClientDiagnosticsRateLimiter(cooldown: 60)
         let userID = UUID()
         let key = ClientDiagnosticsRateLimiter.Key(
@@ -214,11 +224,12 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
         let t0 = Date()
         let first = await limiter.admit(key: key, now: t0)
         let second = await limiter.admit(key: key, now: t0.addingTimeInterval(30))
-        XCTAssertTrue(first)
-        XCTAssertFalse(second)
+        #expect(first)
+        #expect(second == false)
+
     }
 
-    func testRateLimiterReadmitsAfterCooldown() async {
+    @Test func rateLimiterReadmitsAfterCooldown() async throws {
         let limiter = ClientDiagnosticsRateLimiter(cooldown: 60)
         let userID = UUID()
         let key = ClientDiagnosticsRateLimiter.Key(
@@ -227,6 +238,7 @@ final class ClientDiagnosticsRoutesTests: XCTestCase {
         let t0 = Date()
         _ = await limiter.admit(key: key, now: t0)
         let third = await limiter.admit(key: key, now: t0.addingTimeInterval(61))
-        XCTAssertTrue(third)
+        #expect(third)
+
     }
 }

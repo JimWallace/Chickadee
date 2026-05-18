@@ -13,20 +13,22 @@ import Core
 import Crypto
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AccountRoutesTests: XCTestCase {
+@Suite(.serialized) final class AccountRoutesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-acct")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-acct")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -61,18 +63,19 @@ final class AccountRoutesTests: XCTestCase {
 
     // MARK: - Unauthenticated access
 
-    func testLeaveCourse_unauthenticated_redirectsToLogin() async throws {
+    @Test func leaveCourse_unauthenticated_redirectsToLogin() async throws {
         let course = try await makeCourse(code: "UNAUTH_LEAVE")
         let courseID = try course.requireID().uuidString
         try await app.asyncTest(.POST, "/account/unenroll/\(courseID)") { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/login")
+            #expect(res.status == .seeOther)
+            #expect(res.headers.first(name: .location) == "/login")
         }
+
     }
 
     // MARK: - Invalid / missing course
 
-    func testLeaveCourse_invalidCourseID_returns400() async throws {
+    @Test func leaveCourse_invalidCourseID_returns400() async throws {
         let cookie = try await loginUser(
             username: "leave_bad_id", password: "pw",
             role: "student", on: app)
@@ -84,11 +87,12 @@ final class AccountRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
+
     }
 
-    func testLeaveCourse_unknownCourseID_returns404() async throws {
+    @Test func leaveCourse_unknownCourseID_returns404() async throws {
         let cookie = try await loginUser(
             username: "leave_unknown", password: "pw",
             role: "student", on: app)
@@ -101,13 +105,14 @@ final class AccountRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
+
     }
 
     // MARK: - Mode enforcement
 
-    func testLeaveCourse_openMode_removesEnrollment() async throws {
+    @Test func leaveCourse_openMode_removesEnrollment() async throws {
         let course = try await makeCourse(code: "LEAVE_OPEN", mode: .open)
         let student = try await makeStudent(username: "leave_open_s1")
         try await enroll(user: student, in: course)
@@ -125,14 +130,15 @@ final class AccountRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let count = try await enrollmentCount(user: student, in: course)
-        XCTAssertEqual(count, 0, "Enrollment should be removed after leaving an open course")
+        #expect(count == 0, "Enrollment should be removed after leaving an open course")
+
     }
 
-    func testLeaveCourse_closedMode_returns403() async throws {
+    @Test func leaveCourse_closedMode_returns403() async throws {
         let course = try await makeCourse(code: "LEAVE_CLOSED", mode: .closed)
         let student = try await makeStudent(username: "leave_closed_s1")
         try await enroll(user: student, in: course)
@@ -150,16 +156,15 @@ final class AccountRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(
-                    res.status, .forbidden,
-                    "Closed-mode course: student should not be able to self-leave")
+                #expect(res.status == .forbidden, "Closed-mode course: student should not be able to self-leave")
             })
 
         let count = try await enrollmentCount(user: student, in: course)
-        XCTAssertEqual(count, 1, "Enrollment should remain after forbidden leave attempt")
+        #expect(count == 1, "Enrollment should remain after forbidden leave attempt")
+
     }
 
-    func testLeaveCourse_autoMode_returns403() async throws {
+    @Test func leaveCourse_autoMode_returns403() async throws {
         let course = try await makeCourse(code: "LEAVE_AUTO", mode: .auto)
         let student = try await makeStudent(username: "leave_auto_s1")
         try await enroll(user: student, in: course)
@@ -177,18 +182,17 @@ final class AccountRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(
-                    res.status, .forbidden,
-                    "Auto-mode course: student should not be able to self-leave")
+                #expect(res.status == .forbidden, "Auto-mode course: student should not be able to self-leave")
             })
 
         let count = try await enrollmentCount(user: student, in: course)
-        XCTAssertEqual(count, 1, "Enrollment should remain after forbidden leave attempt")
+        #expect(count == 1, "Enrollment should remain after forbidden leave attempt")
+
     }
 
     // MARK: - Submissions preserved
 
-    func testLeaveCourse_preservesSubmissions() async throws {
+    @Test func leaveCourse_preservesSubmissions() async throws {
         // Create a course and a test setup so we can create a submission.
         let course = try await makeCourse(code: "LEAVE_SUBS", mode: .open)
         let student = try await makeStudent(username: "leave_subs_s1")
@@ -229,15 +233,16 @@ final class AccountRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         // Enrollment removed.
         let enrollCount = try await enrollmentCount(user: student, in: course)
-        XCTAssertEqual(enrollCount, 0, "Enrollment should be removed")
+        #expect(enrollCount == 0, "Enrollment should be removed")
 
         // Submission still exists.
         let subStillExists = try await APISubmission.find(subID, on: app.db)
-        XCTAssertNotNil(subStillExists, "Submission must not be deleted when leaving a course")
+        #expect(subStillExists != nil, "Submission must not be deleted when leaving a course")
+
     }
 }

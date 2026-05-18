@@ -4,22 +4,23 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AssignmentSeedStoreTests: XCTestCase {
+@Suite(.serialized) final class AssignmentSeedStoreTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
+    init() async throws {
         app = try await Application.make(.testing)
         try await configureTestDatabase(app)
     }
 
-    override func tearDown() async throws {
-        try await app.asyncShutdown()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -58,7 +59,7 @@ final class AssignmentSeedStoreTests: XCTestCase {
 
     // MARK: - Tests
 
-    func testEnsureSeed_createsRowOnFirstCall() async throws {
+    @Test func ensureSeed_createsRowOnFirstCall() async throws {
         let user = try await makeUser(username: "alice")
         let course = try await makeCourse()
         let assignment = try await makeAssignment(courseID: course.id!)
@@ -69,15 +70,16 @@ final class AssignmentSeedStoreTests: XCTestCase {
             on: app.db
         )
 
-        XCTAssertEqual(seed.count, 2 * AssignmentSeedStore.seedByteCount)
-        XCTAssertTrue(seed.allSatisfy { "0123456789abcdef".contains($0) })
+        #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
+        #expect(seed.allSatisfy { "0123456789abcdef".contains($0) })
 
         let rows = try await APIAssignmentPersonalizationSeed.query(on: app.db).all()
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].seedValue, seed)
+        #expect(rows.count == 1)
+        #expect(rows[0].seedValue == seed)
+
     }
 
-    func testEnsureSeed_isIdempotentForSamePair() async throws {
+    @Test func ensureSeed_isIdempotentForSamePair() async throws {
         let user = try await makeUser(username: "bob")
         let course = try await makeCourse()
         let assignment = try await makeAssignment(courseID: course.id!)
@@ -92,13 +94,14 @@ final class AssignmentSeedStoreTests: XCTestCase {
             userID: user.id!, assignmentID: assignment.id!, on: app.db
         )
 
-        XCTAssertEqual(first, second)
-        XCTAssertEqual(second, third)
+        #expect(first == second)
+        #expect(second == third)
         let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
-        XCTAssertEqual(rowCount, 1)
+        #expect(rowCount == 1)
+
     }
 
-    func testEnsureSeed_differentUsersGetDifferentSeeds() async throws {
+    @Test func ensureSeed_differentUsersGetDifferentSeeds() async throws {
         let alice = try await makeUser(username: "alice2")
         let bob = try await makeUser(username: "bob2")
         let course = try await makeCourse()
@@ -111,12 +114,13 @@ final class AssignmentSeedStoreTests: XCTestCase {
             userID: bob.id!, assignmentID: assignment.id!, on: app.db
         )
 
-        XCTAssertNotEqual(aliceSeed, bobSeed)
+        #expect(aliceSeed != bobSeed)
         let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
-        XCTAssertEqual(rowCount, 2)
+        #expect(rowCount == 2)
+
     }
 
-    func testEnsureSeed_differentAssignmentsGetDifferentSeeds() async throws {
+    @Test func ensureSeed_differentAssignmentsGetDifferentSeeds() async throws {
         let user = try await makeUser(username: "carol")
         let course = try await makeCourse()
         let a1 = try await makeAssignment(courseID: course.id!)
@@ -129,10 +133,11 @@ final class AssignmentSeedStoreTests: XCTestCase {
             userID: user.id!, assignmentID: a2.id!, on: app.db
         )
 
-        XCTAssertNotEqual(seed1, seed2)
+        #expect(seed1 != seed2)
+
     }
 
-    func testEnsureSeed_survivesConcurrentFirstAccess() async throws {
+    @Test func ensureSeed_survivesConcurrentFirstAccess() async throws {
         let user = try await makeUser(username: "dave")
         let course = try await makeCourse()
         let assignment = try await makeAssignment(courseID: course.id!)
@@ -153,19 +158,21 @@ final class AssignmentSeedStoreTests: XCTestCase {
             return collected
         }
 
-        XCTAssertEqual(seeds.count, 3)
-        XCTAssertEqual(Set(seeds).count, 1, "All concurrent ensureSeed calls must observe the same winner")
+        #expect(seeds.count == 3)
+        #expect(Set(seeds).count == 1, "All concurrent ensureSeed calls must observe the same winner")
         let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
-        XCTAssertEqual(rowCount, 1, "UNIQUE(user_id, assignment_id) must collapse races to a single row")
+        #expect(rowCount == 1, "UNIQUE(user_id, assignment_id) must collapse races to a single row")
+
     }
 
-    func testGenerateSeedHex_isLowercaseHexOfExpectedLength() {
+    @Test func generateSeedHex_isLowercaseHexOfExpectedLength() async throws {
         for _ in 0..<32 {
             let seed = AssignmentSeedStore.generateSeedHex()
-            XCTAssertEqual(seed.count, 2 * AssignmentSeedStore.seedByteCount)
-            XCTAssertTrue(
+            #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
+            #expect(
                 seed.allSatisfy { "0123456789abcdef".contains($0) },
                 "seed must be lowercase hex; got \(seed)")
         }
+
     }
 }

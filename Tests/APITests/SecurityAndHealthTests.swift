@@ -1,12 +1,12 @@
 import Fluent
 import Foundation
+import Testing
 import Vapor
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class SecurityAndHealthTests: XCTestCase {
+@Suite struct SecurityAndHealthTests {
 
     private struct InjectAuthMiddleware: AsyncMiddleware {
         let user: APIUser?
@@ -78,69 +78,69 @@ final class SecurityAndHealthTests: XCTestCase {
         return app
     }
 
-    func testUserFileNamespaceAllowsStudentOwnNamespace() async throws {
+    @Test func userFileNamespaceAllowsStudentOwnNamespace() async throws {
         let userID = UUID()
         try await withApp(try await makeNamespaceApp(user: makeUser(id: userID, role: "student"))) { app in
             try await app.asyncTest(.GET, "/jupyterlite/files/users/\(userID.uuidString.lowercased())/assignment.ipynb")
             { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
         }
     }
 
-    func testUserFileNamespaceRejectsDifferentStudentNamespace() async throws {
+    @Test func userFileNamespaceRejectsDifferentStudentNamespace() async throws {
         try await withApp(try await makeNamespaceApp(user: makeUser(role: "student"))) { app in
             try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
             { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             }
         }
     }
 
-    func testUserFileNamespaceAllowsInstructorAcrossNamespaces() async throws {
+    @Test func userFileNamespaceAllowsInstructorAcrossNamespaces() async throws {
         try await withApp(try await makeNamespaceApp(user: makeUser(role: "instructor"))) { app in
             try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
             { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
         }
     }
 
-    func testUserFileNamespaceRequiresAuthenticationForGuardedPaths() async throws {
+    @Test func userFileNamespaceRequiresAuthenticationForGuardedPaths() async throws {
         try await withApp(try await makeNamespaceApp(user: nil)) { app in
             try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
             { res in
-                XCTAssertEqual(res.status, .unauthorized)
+                #expect(res.status == .unauthorized)
             }
         }
     }
 
-    func testUserFileNamespaceIgnoresUnguardedPaths() async throws {
+    @Test func userFileNamespaceIgnoresUnguardedPaths() async throws {
         try await withApp(try await makeNamespaceApp(user: nil)) { app in
             try await app.asyncTest(.GET, "/ok") { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             }
         }
     }
 
-    func testSecurityHeadersMiddlewareAddsExpectedHeaders() async throws {
+    @Test func securityHeadersMiddlewareAddsExpectedHeaders() async throws {
         try await withApp(try await makeSecurityHeadersApp()) { app in
             try await app.asyncTest(.GET, "/headers") { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.headers.first(name: "X-Content-Type-Options"), "nosniff")
-                XCTAssertEqual(res.headers.first(name: "X-Frame-Options"), "SAMEORIGIN")
-                XCTAssertEqual(res.headers.first(name: "Referrer-Policy"), "strict-origin-when-cross-origin")
-                XCTAssertEqual(res.headers.first(name: "Cross-Origin-Opener-Policy"), "same-origin")
-                XCTAssertEqual(res.headers.first(name: "Cross-Origin-Resource-Policy"), "same-origin")
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "X-Content-Type-Options") == "nosniff")
+                #expect(res.headers.first(name: "X-Frame-Options") == "SAMEORIGIN")
+                #expect(res.headers.first(name: "Referrer-Policy") == "strict-origin-when-cross-origin")
+                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
+                #expect(res.headers.first(name: "Cross-Origin-Resource-Policy") == "same-origin")
             }
         }
     }
 
-    func testCSPFormActionDefaultsToSelfOnly() async throws {
+    @Test func cSPFormActionDefaultsToSelfOnly() async throws {
         try await withApp(try await makeSecurityHeadersApp()) { app in
             try await app.asyncTest(.GET, "/headers") { res in
                 let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
-                XCTAssertTrue(
+                #expect(
                     csp.contains("form-action 'self'"),
                     "expected form-action 'self' in CSP, got: \(csp)"
                 )
@@ -148,7 +148,7 @@ final class SecurityAndHealthTests: XCTestCase {
         }
     }
 
-    func testCSPFormActionIncludesIdPOriginWhenSSOConfigured() async throws {
+    @Test func cSPFormActionIncludesIdPOriginWhenSSOConfigured() async throws {
         // Regression: CSP form-action 'self' alone blocks the SSO logout
         // redirect chain (POST /logout → 303 → end_session_endpoint), which
         // Chrome and recent Firefox enforce across redirects.  Loading an
@@ -171,7 +171,7 @@ final class SecurityAndHealthTests: XCTestCase {
             )
             try await app.asyncTest(.GET, "/headers") { res in
                 let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
-                XCTAssertTrue(
+                #expect(
                     csp.contains("form-action 'self' https://idp.example.com"),
                     "expected end_session_endpoint origin in form-action, got: \(csp)"
                 )
@@ -179,43 +179,40 @@ final class SecurityAndHealthTests: XCTestCase {
         }
     }
 
-    func testCSPOriginExtractionHandlesSchemeHostPort() {
-        XCTAssertEqual(
-            SecurityHeadersMiddleware.cspOrigin(of: "https://idp.example.com/oauth/logout"),
-            "https://idp.example.com"
+    @Test func cSPOriginExtractionHandlesSchemeHostPort() {
+        #expect(
+            SecurityHeadersMiddleware.cspOrigin(of: "https://idp.example.com/oauth/logout") == "https://idp.example.com"
         )
-        XCTAssertEqual(
-            SecurityHeadersMiddleware.cspOrigin(of: "http://127.0.0.1:9001/logout?foo=bar"),
-            "http://127.0.0.1:9001"
-        )
-        XCTAssertNil(SecurityHeadersMiddleware.cspOrigin(of: "not a url"))
-        XCTAssertNil(SecurityHeadersMiddleware.cspOrigin(of: "mailto:nobody@example.com"))
+        #expect(
+            SecurityHeadersMiddleware.cspOrigin(of: "http://127.0.0.1:9001/logout?foo=bar") == "http://127.0.0.1:9001")
+        #expect(SecurityHeadersMiddleware.cspOrigin(of: "not a url") == nil)
+        #expect(SecurityHeadersMiddleware.cspOrigin(of: "mailto:nobody@example.com") == nil)
     }
 
-    func testLeafErrorMiddlewareReturnsJSONForAPIRoutes() async throws {
+    @Test func leafErrorMiddlewareReturnsJSONForAPIRoutes() async throws {
         try await withApp(try await makeLeafErrorApp(configureViews: false)) { app in
             try await app.asyncTest(.GET, "/api/boom") { res in
-                XCTAssertEqual(res.status, .badRequest)
-                XCTAssertEqual(res.headers.contentType?.description, "application/json; charset=utf-8")
-                XCTAssertTrue(res.body.string.contains(#""reason":"api exploded""#))
+                #expect(res.status == .badRequest)
+                #expect(res.headers.contentType?.description == "application/json; charset=utf-8")
+                #expect(res.body.string.contains(#""reason":"api exploded""#))
                 // Status code is now included in the JSON envelope for symmetry
                 // with the HTML page (where the user sees the big "400" tile).
-                XCTAssertTrue(res.body.string.contains(#""status":400"#))
+                #expect(res.body.string.contains(#""status":400"#))
             }
         }
     }
 
-    func testLeafErrorMiddlewareRendersHTMLForBrowserRoutes() async throws {
+    @Test func leafErrorMiddlewareRendersHTMLForBrowserRoutes() async throws {
         try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
             try await app.asyncTest(.GET, "/boom") { res in
-                XCTAssertEqual(res.status, .notFound)
-                XCTAssertEqual(res.headers.contentType, .html)
+                #expect(res.status == .notFound)
+                #expect(res.headers.contentType == .html)
                 // Explicit reason from `Abort(.notFound, reason: "page missing")`
                 // is rendered verbatim — the old template hard-coded a canned
                 // 404 message that clobbered typed-error context.  The
                 // middleware's friendlyReason() only fills in when the reason
                 // is empty or matches the generic status reasonPhrase.
-                XCTAssertTrue(
+                #expect(
                     res.body.string.contains("page missing"),
                     "Explicit Abort reason should render verbatim: \(res.body.string.prefix(400))"
                 )
@@ -223,28 +220,28 @@ final class SecurityAndHealthTests: XCTestCase {
         }
     }
 
-    func testLeafErrorMiddlewareSubstitutesFriendlyDefaultsForBareAborts() async throws {
+    @Test func leafErrorMiddlewareSubstitutesFriendlyDefaultsForBareAborts() async throws {
         // `#(message)` in the Leaf template HTML-escapes the apostrophe in
         // "couldn't" / "don't" to `&#39;`, so the assertions look for the
         // apostrophe-free portion of each canonical message.
         try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
             try await app.asyncTest(.GET, "/bare-404") { res in
-                XCTAssertEqual(res.status, .notFound)
-                XCTAssertTrue(
+                #expect(res.status == .notFound)
+                #expect(
                     res.body.string.contains("find that page"),
                     "Bare 404 should get the friendly default; body did not contain expected substring."
                 )
             }
             try await app.asyncTest(.GET, "/bare-403") { res in
-                XCTAssertEqual(res.status, .forbidden)
-                XCTAssertTrue(
+                #expect(res.status == .forbidden)
+                #expect(
                     res.body.string.contains("have permission to view this page"),
                     "Bare 403 should get the friendly default; body did not contain expected substring."
                 )
             }
             try await app.asyncTest(.GET, "/bare-400") { res in
-                XCTAssertEqual(res.status, .badRequest)
-                XCTAssertTrue(
+                #expect(res.status == .badRequest)
+                #expect(
                     res.body.string.contains("understand that request"),
                     "Bare 400 should get the friendly default; body did not contain expected substring."
                 )
@@ -252,12 +249,12 @@ final class SecurityAndHealthTests: XCTestCase {
         }
     }
 
-    func testLeafErrorMiddlewareJSONEnvelopeIncludesFriendlyDefaultForBareAbort() async throws {
+    @Test func leafErrorMiddlewareJSONEnvelopeIncludesFriendlyDefaultForBareAbort() async throws {
         try await withApp(try await makeLeafErrorApp(configureViews: false)) { app in
             try await app.asyncTest(.GET, "/api/bare-500") { res in
-                XCTAssertEqual(res.status, .internalServerError)
-                XCTAssertTrue(res.body.string.contains(#""status":500"#))
-                XCTAssertTrue(
+                #expect(res.status == .internalServerError)
+                #expect(res.body.string.contains(#""status":500"#))
+                #expect(
                     res.body.string.contains("Something went wrong on our end"),
                     "Bare 500 JSON should get the friendly default: \(res.body.string)"
                 )
@@ -265,56 +262,43 @@ final class SecurityAndHealthTests: XCTestCase {
         }
     }
 
-    func testFriendlyReasonPreservesExplicitContextualReason() {
+    @Test func friendlyReasonPreservesExplicitContextualReason() {
         // Typed errors like `WebAssignmentError.notFound(resource: "Assignment 'foo'")`
         // produce a contextual reason ("Assignment 'foo' not found").  The
         // middleware must NOT replace those with the generic default.
-        XCTAssertEqual(
-            friendlyReason(status: .notFound, reason: "Assignment 'foo' not found"),
-            "Assignment 'foo' not found"
-        )
-        XCTAssertEqual(
-            friendlyReason(status: .forbidden, reason: "You do not have permission to edit assignments."),
-            "You do not have permission to edit assignments."
-        )
+        #expect(friendlyReason(status: .notFound, reason: "Assignment 'foo' not found") == "Assignment 'foo' not found")
+        #expect(
+            friendlyReason(status: .forbidden, reason: "You do not have permission to edit assignments.")
+                == "You do not have permission to edit assignments.")
         // But a reason that matches the HTTP reasonPhrase exactly (i.e., a
         // bare `Abort(.notFound)`) gets the friendly substitution.
-        XCTAssertEqual(
-            friendlyReason(status: .notFound, reason: "Not Found"),
-            "We couldn't find that page."
-        )
+        #expect(friendlyReason(status: .notFound, reason: "Not Found") == "We couldn't find that page.")
         // Empty reasons get the friendly substitution too.
-        XCTAssertEqual(
-            friendlyReason(status: .forbidden, reason: ""),
-            "You don't have permission to view this page."
-        )
+        #expect(friendlyReason(status: .forbidden, reason: "") == "You don't have permission to view this page.")
         // Whitespace-only reasons are treated as empty.
-        XCTAssertEqual(
-            friendlyReason(status: .badRequest, reason: "   "),
-            "We couldn't understand that request."
-        )
+        #expect(friendlyReason(status: .badRequest, reason: "   ") == "We couldn't understand that request.")
     }
 
-    func testHealthRouteReturnsOKWhenDatabaseIsReachable() async throws {
+    @Test func healthRouteReturnsOKWhenDatabaseIsReachable() async throws {
         try await withApp(try await makeHealthApp(withDatabase: true)) { app in
             await app.workerActivityStore.markActive(workerID: "worker-1", hostname: "test-host")
 
             try await app.asyncTest(.GET, "/health") { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains(#""status":"ok""#))
-                XCTAssertTrue(res.body.string.contains(#""db":"ok""#))
-                XCTAssertTrue(res.body.string.contains(#""recentActivity":true"#))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains(#""status":"ok""#))
+                #expect(res.body.string.contains(#""db":"ok""#))
+                #expect(res.body.string.contains(#""recentActivity":true"#))
             }
         }
     }
 
-    func testHealthRouteReportsNoRecentRunnerActivityWhenIdle() async throws {
+    @Test func healthRouteReportsNoRecentRunnerActivityWhenIdle() async throws {
         try await withApp(try await makeHealthApp(withDatabase: true)) { app in
             try await app.asyncTest(.GET, "/health") { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains(#""status":"ok""#))
-                XCTAssertTrue(res.body.string.contains(#""db":"ok""#))
-                XCTAssertTrue(res.body.string.contains(#""recentActivity":false"#))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains(#""status":"ok""#))
+                #expect(res.body.string.contains(#""db":"ok""#))
+                #expect(res.body.string.contains(#""recentActivity":false"#))
             }
         }
     }

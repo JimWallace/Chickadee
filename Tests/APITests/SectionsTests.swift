@@ -13,15 +13,15 @@
 
 import Core
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_server
 
-final class SectionsTests: XCTestCase {
+@Suite struct SectionsTests {
 
     // MARK: - TestProperties coding
 
-    func testTestPropertiesRoundTripsWithSectionsAndSectionIDs() throws {
+    @Test func testPropertiesRoundTripsWithSectionsAndSectionIDs() throws {
         let props = TestProperties(
             schemaVersion: 1,
             testSuites: [
@@ -39,12 +39,12 @@ final class SectionsTests: XCTestCase {
         let data = try encoder.encode(props)
         let back = try JSONDecoder().decode(TestProperties.self, from: data)
 
-        XCTAssertEqual(back.sections.map(\.id), ["sec-x", "sec-y"])
-        XCTAssertEqual(back.sections.map(\.name), ["Question 1", "Question 2"])
-        XCTAssertEqual(back.testSuites.map(\.sectionID), ["sec-x", "sec-y", nil])
+        #expect(back.sections.map(\.id) == ["sec-x", "sec-y"])
+        #expect(back.sections.map(\.name) == ["Question 1", "Question 2"])
+        #expect(back.testSuites.map(\.sectionID) == ["sec-x", "sec-y", nil])
     }
 
-    func testTestPropertiesDecodesLegacyManifestWithNoSectionsField() throws {
+    @Test func testPropertiesDecodesLegacyManifestWithNoSectionsField() throws {
         // Manifest shape from before v0.4.96 — no `sections` key, no
         // per-entry sectionID.  Must decode cleanly with empty / nil
         // defaults so the student page and editor behave identically
@@ -66,17 +66,15 @@ final class SectionsTests: XCTestCase {
         let props = try JSONDecoder().decode(
             TestProperties.self, from: Data(legacyJSON.utf8)
         )
-        XCTAssertTrue(
+        #expect(
             props.sections.isEmpty,
             "Legacy manifest (no `sections` field) must decode to an empty sections array.")
         for entry in props.testSuites {
-            XCTAssertNil(
-                entry.sectionID,
-                "Legacy entry must decode with sectionID == nil.")
+            #expect(entry.sectionID == nil, "Legacy entry must decode with sectionID == nil.")
         }
     }
 
-    func testRunnerSanitizedPreservesSectionsAndSectionIDs() {
+    @Test func runnerSanitizedPreservesSectionsAndSectionIDs() {
         let props = TestProperties(
             testSuites: [
                 TestSuiteEntry(tier: .pub, script: "a.py", sectionID: "s1")
@@ -84,16 +82,16 @@ final class SectionsTests: XCTestCase {
             sections: [TestSuiteSection(id: "s1", name: "One")]
         )
         let sanitized = props.runnerSanitized()
-        XCTAssertEqual(sanitized.sections.map(\.id), ["s1"])
-        XCTAssertEqual(sanitized.testSuites.first?.sectionID, "s1")
-        XCTAssertTrue(
+        #expect(sanitized.sections.map(\.id) == ["s1"])
+        #expect(sanitized.testSuites.first?.sectionID == "s1")
+        #expect(
             sanitized.patternFamilies.isEmpty,
             "runnerSanitized must still strip patternFamilies.")
     }
 
     // MARK: - buildSuitePayload
 
-    func testBuildSuitePayloadEmitsSectionsAndStampsSectionIDs() throws {
+    @Test func buildSuitePayloadEmitsSectionsAndStampsSectionIDs() throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let props = TestProperties(
@@ -110,12 +108,12 @@ final class SectionsTests: XCTestCase {
         let manifest = String(data: try encoder.encode(props), encoding: .utf8)!
 
         let payload = buildSuitePayload(fromManifest: manifest)
-        XCTAssertEqual(payload.sections.map(\.id), ["s1", "s2"])
-        XCTAssertEqual(payload.sections.map(\.name), ["One", "Two"])
-        XCTAssertEqual(payload.items.count, 3)
-        XCTAssertEqual(payload.items[0].sectionID, "s1")
-        XCTAssertEqual(payload.items[1].sectionID, "s1")
-        XCTAssertEqual(payload.items[2].sectionID, "s2")
+        #expect(payload.sections.map(\.id) == ["s1", "s2"])
+        #expect(payload.sections.map(\.name) == ["One", "Two"])
+        #expect(payload.items.count == 3)
+        #expect(payload.items[0].sectionID == "s1")
+        #expect(payload.items[1].sectionID == "s1")
+        #expect(payload.items[2].sectionID == "s2")
     }
 
     // Regression for v0.4.157→0.4.158: notebook-check entries in the
@@ -123,7 +121,7 @@ final class SectionsTests: XCTestCase {
     // which made the suite-editor drag-and-drop round-trip fail with a
     // bogus "hand-written file already exists" collision.  After the fix
     // they emit as kind:"check" rows carrying the check spec + sectionID.
-    func testBuildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() throws {
+    @Test func buildSuitePayloadEmitsCheckRowsForNotebookCheckEntries() throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let check = NotebookCheck(
@@ -151,18 +149,18 @@ final class SectionsTests: XCTestCase {
         let manifest = String(data: try encoder.encode(props), encoding: .utf8)!
 
         let payload = buildSuitePayload(fromManifest: manifest)
-        XCTAssertEqual(payload.items.count, 2)
-        XCTAssertEqual(payload.items[0].kind, "script")
-        XCTAssertEqual(payload.items[0].sectionID, "s1")
-        XCTAssertEqual(payload.items[1].kind, "check")
-        XCTAssertEqual(payload.items[1].check?.id, "var_exists_x")
-        XCTAssertEqual(payload.items[1].check?.kind, .variableExists)
-        XCTAssertNil(payload.items[1].sectionID)
+        #expect(payload.items.count == 2)
+        #expect(payload.items[0].kind == "script")
+        #expect(payload.items[0].sectionID == "s1")
+        #expect(payload.items[1].kind == "check")
+        #expect(payload.items[1].check?.id == "var_exists_x")
+        #expect(payload.items[1].check?.kind == .variableExists)
+        #expect(payload.items[1].sectionID == nil)
         // The script's filename must not leak into a check row's script DTO.
-        XCTAssertNil(payload.items[1].script)
+        #expect(payload.items[1].script == nil)
     }
 
-    func testBuildSuitePayloadLegacyManifestReturnsEmptySections() throws {
+    @Test func buildSuitePayloadLegacyManifestReturnsEmptySections() throws {
         let legacyJSON = """
             {
               "schemaVersion": 1,
@@ -170,9 +168,9 @@ final class SectionsTests: XCTestCase {
             }
             """
         let payload = buildSuitePayload(fromManifest: legacyJSON)
-        XCTAssertTrue(payload.sections.isEmpty)
-        XCTAssertEqual(payload.items.count, 1)
-        XCTAssertNil(payload.items.first?.sectionID)
+        #expect(payload.sections.isEmpty)
+        #expect(payload.items.count == 1)
+        #expect(payload.items.first?.sectionID == nil)
     }
 
     // MARK: - groupOutcomesBySection
@@ -188,7 +186,7 @@ final class SectionsTests: XCTestCase {
         )
     }
 
-    func testGroupOutcomesEmitsSectionsInOrderWithTrailingUngrouped() {
+    @Test func groupOutcomesEmitsSectionsInOrderWithTrailingUngrouped() {
         let sections = [
             TestSuiteSection(id: "s1", name: "One"),
             TestSuiteSection(id: "s2", name: "Two"),
@@ -197,27 +195,27 @@ final class SectionsTests: XCTestCase {
         // outcomes[i] → sectionIDPerOutcome[i].  d.py has nil → Ungrouped.
         let perOutcome: [String?] = ["s1", "s2", "s1", nil]
         let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
-        XCTAssertEqual(grouped.count, 3)
-        XCTAssertEqual(grouped[0].sectionName, "One")
-        XCTAssertEqual(grouped[0].outcomes.map(\.testName), ["a.py", "c.py"])
-        XCTAssertEqual(grouped[1].sectionName, "Two")
-        XCTAssertEqual(grouped[1].outcomes.map(\.testName), ["b.py"])
-        XCTAssertEqual(grouped[2].sectionName, "Ungrouped")
-        XCTAssertEqual(grouped[2].outcomes.map(\.testName), ["d.py"])
+        #expect(grouped.count == 3)
+        #expect(grouped[0].sectionName == "One")
+        #expect(grouped[0].outcomes.map(\.testName) == ["a.py", "c.py"])
+        #expect(grouped[1].sectionName == "Two")
+        #expect(grouped[1].outcomes.map(\.testName) == ["b.py"])
+        #expect(grouped[2].sectionName == "Ungrouped")
+        #expect(grouped[2].outcomes.map(\.testName) == ["d.py"])
     }
 
-    func testGroupOutcomesLegacyManifestProducesSingleUnlabelledBucket() {
+    @Test func groupOutcomesLegacyManifestProducesSingleUnlabelledBucket() {
         let outcomes = [row("a.py"), row("b.py")]
         let grouped = groupOutcomesBySection(outcomes, sections: [], sectionIDPerOutcome: [nil, nil])
-        XCTAssertEqual(grouped.count, 1)
-        XCTAssertNil(
-            grouped[0].sectionName,
+        #expect(grouped.count == 1)
+        #expect(
+            grouped[0].sectionName == nil,
             "Legacy (no sections, no mapping) must render as one unlabelled bucket, identical to the pre-sections page."
         )
-        XCTAssertEqual(grouped[0].outcomes.count, 2)
+        #expect(grouped[0].outcomes.count == 2)
     }
 
-    func testGroupOutcomesStaleSectionIDFallsThroughToUngrouped() {
+    @Test func groupOutcomesStaleSectionIDFallsThroughToUngrouped() {
         let sections = [TestSuiteSection(id: "s1", name: "One")]
         let outcomes = [row("a.py"), row("b.py")]
         // outcomes[1] points at a section that's been deleted from the
@@ -225,20 +223,20 @@ final class SectionsTests: XCTestCase {
         // silently misplacing the row.
         let perOutcome: [String?] = ["s1", "s-gone"]
         let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
-        XCTAssertEqual(grouped.count, 2)
-        XCTAssertEqual(grouped[0].sectionName, "One")
-        XCTAssertEqual(grouped[0].outcomes.map(\.testName), ["a.py"])
-        XCTAssertEqual(grouped[1].sectionName, "Ungrouped")
-        XCTAssertEqual(grouped[1].outcomes.map(\.testName), ["b.py"])
+        #expect(grouped.count == 2)
+        #expect(grouped[0].sectionName == "One")
+        #expect(grouped[0].outcomes.map(\.testName) == ["a.py"])
+        #expect(grouped[1].sectionName == "Ungrouped")
+        #expect(grouped[1].outcomes.map(\.testName) == ["b.py"])
     }
 
-    func testGroupOutcomesEmptyOutcomesStillYieldsOneBucket() {
+    @Test func groupOutcomesEmptyOutcomesStillYieldsOneBucket() {
         // Template loop needs at least one bucket to iterate over;
         // helper returns a single empty bucket on empty input.
         let grouped = groupOutcomesBySection([], sections: [], sectionIDPerOutcome: [])
-        XCTAssertEqual(grouped.count, 1)
-        XCTAssertNil(grouped[0].sectionName)
-        XCTAssertTrue(grouped[0].outcomes.isEmpty)
+        #expect(grouped.count == 1)
+        #expect(grouped[0].sectionName == nil)
+        #expect(grouped[0].outcomes.isEmpty)
     }
 
     /// Regression for the v0.4.105 bug: two pattern families in
@@ -249,7 +247,7 @@ final class SectionsTests: XCTestCase {
     /// Warm Up II.  Index correlation makes this impossible: the
     /// first "Test 1" outcome lines up with bmi's manifest entry, the
     /// second with age's, even though the displayName is identical.
-    func testGroupOutcomesDistinguishesIdenticalDisplayNamesAcrossSections() {
+    @Test func groupOutcomesDistinguishesIdenticalDisplayNamesAcrossSections() {
         let sections = [
             TestSuiteSection(id: "warmup", name: "Warm Up"),
             TestSuiteSection(id: "warmup2", name: "Warm Up II"),
@@ -260,12 +258,12 @@ final class SectionsTests: XCTestCase {
         ]
         let perOutcome: [String?] = ["warmup", "warmup2"]
         let grouped = groupOutcomesBySection(outcomes, sections: sections, sectionIDPerOutcome: perOutcome)
-        XCTAssertEqual(grouped.count, 2)
-        XCTAssertEqual(grouped[0].sectionName, "Warm Up")
-        XCTAssertEqual(
-            grouped[0].outcomes.count, 1,
+        #expect(grouped.count == 2)
+        #expect(grouped[0].sectionName == "Warm Up")
+        #expect(
+            grouped[0].outcomes.count == 1,
             "First 'Test 1' outcome must stay in Warm Up — not silently moved by name collision.")
-        XCTAssertEqual(grouped[1].sectionName, "Warm Up II")
-        XCTAssertEqual(grouped[1].outcomes.count, 1)
+        #expect(grouped[1].sectionName == "Warm Up II")
+        #expect(grouped[1].outcomes.count == 1)
     }
 }
