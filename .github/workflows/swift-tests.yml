@@ -146,41 +146,17 @@ jobs:
             sleep 15
           done
 
-      - name: Bump Postgres max_connections to absorb parallel test load
-        # Vapor `Application.make(.testing)` spins up a per-test
-        # EventLoopGroup with up to `System.coreCount` event loops, each
-        # potentially holding a Postgres connection.  With `swift test
-        # --parallel` and the @Suite(.serialized) final-class lifecycle,
-        # several apps overlap briefly during the deinit handoff and the
-        # default cap of 100 is occasionally exceeded ("too many clients").
-        # Bumping to 400 absorbs the transient pile-up; revisit (and
-        # probably lower) once the Phase 4 cleanup lets us trim the
-        # leftover .serialized markers and adopt a shared ELG in test.
-        env:
-          PGPASSWORD: postgres
-        run: |
-          psql -h postgres -U postgres -d chickadee_test \
-            -c "ALTER SYSTEM SET max_connections = 400;"
-          # max_connections is a static GUC — needs a restart to take effect.
-          # GH Actions runs services as sibling containers; we identify the
-          # postgres container by image and restart it from the runner.
-          POSTGRES_CONTAINER=$(docker ps --filter "ancestor=postgres:16" --format "{{.ID}}" | head -n1)
-          if [ -z "$POSTGRES_CONTAINER" ]; then
-            echo "Could not locate postgres service container; skipping bump"
-            exit 0
-          fi
-          docker restart "$POSTGRES_CONTAINER"
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if pg_isready -h postgres -U postgres -d chickadee_test >/dev/null 2>&1; then
-              echo "Postgres healthy after restart"
-              psql -h postgres -U postgres -d chickadee_test -c "SHOW max_connections;"
-              break
-            fi
-            sleep 2
-          done
-
       - name: Run APITests against PostgreSQL
-        run: swift test --parallel --filter APITests
+        # Sequential (not --parallel) intentionally: the Swift Testing
+        # migration's @Suite(.serialized) final-class fixtures each open a
+        # Vapor app with its own Postgres connection pool, and with
+        # --parallel the transient pile-up during deinit handoff exceeds
+        # Postgres's default 100-connection cap ("too many clients").
+        # Restoring parallelism here needs either a shared NIO ELG across
+        # test apps or a CI-side max_connections bump (the docker-restart
+        # approach failed because the runner container has no docker.sock
+        # access).  Tracked as a Phase 4 cleanup item.
+        run: swift test --filter APITests
 
   browser-runner-tests:
     runs-on: ubuntu-latest
