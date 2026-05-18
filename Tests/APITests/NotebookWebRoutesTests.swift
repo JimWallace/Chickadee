@@ -51,11 +51,6 @@ import XCTVapor
         try routes(app)
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     private func loginAsStudent(username: String) async throws -> String {
         try await loginUser(
             username: username,
@@ -201,500 +196,540 @@ import XCTVapor
     }
 
     @Test func notebookPageSeedsWorkingCopyAndRendersEditorFrame() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_page"
-        let seedNotebook = notebookJSON(markdown: "Notebook seed")
-        _ = try await insertSetup(id: setupID, notebookJSON: seedNotebook)
-        _ = try await insertAssignment(testSetupID: setupID, title: "Notebook Lab")
+            let setupID = "setup_nb_page"
+            let seedNotebook = notebookJSON(markdown: "Notebook seed")
+            _ = try await insertSetup(id: setupID, notebookJSON: seedNotebook)
+            _ = try await insertAssignment(testSetupID: setupID, title: "Notebook Lab")
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let html = res.body.string
-                #expect(html.contains("data-setup-id=\"\(setupID)\""))
-                #expect(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
-                #expect(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
-                #expect(html.contains("&amp;path=users/"))
-                // v0.4.153 cache-bust: the iframe is stamped with the
-                // working-copy mtime so notebook.js can force-reseed when the
-                // server overwrites the file (instructor "Reset" action).
-                // Extract the value and assert it's a positive integer.
-                let mtimeRegex = try NSRegularExpression(pattern: #"data-working-copy-mtime="(\d+)""#)
-                let nsr = NSRange(html.startIndex..., in: html)
-                guard let match = mtimeRegex.firstMatch(in: html, range: nsr),
-                    let valueRange = Range(match.range(at: 1), in: html),
-                    let mtime = Int(html[valueRange])
-                else {
-                    XCTFail("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
-                }
-                XCTAssertGreaterThan(mtime, 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("data-setup-id=\"\(setupID)\""))
+                    #expect(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
+                    #expect(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
+                    #expect(html.contains("&amp;path=users/"))
+                    // v0.4.153 cache-bust: the iframe is stamped with the
+                    // working-copy mtime so notebook.js can force-reseed when the
+                    // server overwrites the file (instructor "Reset" action).
+                    // Extract the value and assert it's a positive integer.
+                    let mtimeRegex = try NSRegularExpression(pattern: #"data-working-copy-mtime="(\d+)""#)
+                    let nsr = NSRange(html.startIndex..., in: html)
+                    guard let match = mtimeRegex.firstMatch(in: html, range: nsr),
+                        let valueRange = Range(match.range(at: 1), in: html),
+                        let mtime = Int(html[valueRange])
+                    else {
+                        XCTFail("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
+                    }
+                    XCTAssertGreaterThan(mtime, 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
+                })
 
-        let workingCopy = try String(
-            contentsOfFile: workingCopyPath(setupID: setupID, userID: try user.requireID()),
-            encoding: .utf8
-        )
-        #expect(workingCopy.contains("Notebook seed"))
-        #expect(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
+            let workingCopy = try String(
+                contentsOfFile: workingCopyPath(setupID: setupID, userID: try user.requireID()),
+                encoding: .utf8
+            )
+            #expect(workingCopy.contains("Notebook seed"))
+            #expect(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
+
+        }
     }
 
     @Test func notebookPageOpenAssignmentRendersSubmitAndEditableIframe() async throws {
-        // Open assignment: data-read-only="false", Submit button rendered,
-        // no "closed" notice.
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            // Open assignment: data-read-only="false", Submit button rendered,
+            // no "closed" notice.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_open"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Open"))
-        _ = try await insertAssignment(testSetupID: setupID, title: "Open Lab", dueAt: nil, isOpen: true)
+            let setupID = "setup_nb_open"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Open"))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Open Lab", dueAt: nil, isOpen: true)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let html = res.body.string
-                #expect(
-                    html.contains(#"data-read-only="false""#),
-                    "Open assignment iframe must carry data-read-only=\"false\"")
-                #expect(
-                    html.contains(#"id="nb-submit""#),
-                    "Open assignment must render the Submit button")
-                #expect(
-                    html.contains("This assignment is closed") == false,
-                    "Open assignment must not render the closed-view notice")
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"data-read-only="false""#),
+                        "Open assignment iframe must carry data-read-only=\"false\"")
+                    #expect(
+                        html.contains(#"id="nb-submit""#),
+                        "Open assignment must render the Submit button")
+                    #expect(
+                        html.contains("This assignment is closed") == false,
+                        "Open assignment must not render the closed-view notice")
+                })
+
+        }
     }
 
     @Test func notebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
-        // Closed assignment (deadline past, no override): the iframe must
-        // carry data-read-only="true", the Submit button must disappear,
-        // and the closed-view notice must appear.  This is the core
-        // contract for the closed-assignment read-only view.
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            // Closed assignment (deadline past, no override): the iframe must
+            // carry data-read-only="true", the Submit button must disappear,
+            // and the closed-view notice must appear.  This is the core
+            // contract for the closed-assignment read-only view.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_closed"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Closed"))
-        _ = try await insertAssignment(
-            testSetupID: setupID,
-            title: "Closed Lab",
-            dueAt: Date(timeIntervalSinceNow: -3600),  // due 1h ago
-            isOpen: true  // not explicitly closed; deadline carries it
-        )
+            let setupID = "setup_nb_closed"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Closed"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),  // due 1h ago
+                isOpen: true  // not explicitly closed; deadline carries it
+            )
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let html = res.body.string
-                #expect(
-                    html.contains(#"data-read-only="true""#),
-                    "Closed assignment iframe must carry data-read-only=\"true\"")
-                #expect(
-                    html.contains(#"id="nb-submit""#) == false, "Closed assignment must NOT render the Submit button")
-                #expect(
-                    html.contains("This assignment is closed"),
-                    "Closed assignment must render the view-only notice")
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"data-read-only="true""#),
+                        "Closed assignment iframe must carry data-read-only=\"true\"")
+                    #expect(
+                        html.contains(#"id="nb-submit""#) == false,
+                        "Closed assignment must NOT render the Submit button")
+                    #expect(
+                        html.contains("This assignment is closed"),
+                        "Closed assignment must render the view-only notice")
+                })
+
+        }
     }
 
     @Test func notebookSourceReturnsExistingWorkingCopy() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_source"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Original notebook"))
+            let setupID = "setup_nb_source"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Original notebook"))
 
-        let workingCopy = workingCopyPath(setupID: setupID, userID: try user.requireID())
-        try FileManager.default.createDirectory(
-            atPath: (workingCopy as NSString).deletingLastPathComponent,
-            withIntermediateDirectories: true
-        )
-        try notebookJSON(markdown: "Saved working copy")
-            .data(using: .utf8)!
-            .write(to: URL(fileURLWithPath: workingCopy))
+            let workingCopy = workingCopyPath(setupID: setupID, userID: try user.requireID())
+            try FileManager.default.createDirectory(
+                atPath: (workingCopy as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try notebookJSON(markdown: "Saved working copy")
+                .data(using: .utf8)!
+                .write(to: URL(fileURLWithPath: workingCopy))
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook/source",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                #expect(res.headers.contentType?.description == "application/json; charset=utf-8")
-                #expect(res.body.string.contains("Saved working copy"))
-                #expect(res.body.string.contains("Original notebook") == false)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.contentType?.description == "application/json; charset=utf-8")
+                    #expect(res.body.string.contains("Saved working copy"))
+                    #expect(res.body.string.contains("Original notebook") == false)
+                })
+
+        }
     }
 
     @Test func notebookPageSubmissionIDRestoresSelectedSubmission() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        let userID = try user.requireID()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            let userID = try user.requireID()
+            try await enroll(user)
 
-        let setupID = "setup_nb_history"
-        let submissionID = "sub_nb_history"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
-        _ = try await insertNotebookSubmission(
-            id: submissionID,
-            testSetupID: setupID,
-            userID: userID,
-            notebookJSON: notebookJSON(markdown: "History selection"),
-            attemptNumber: 2
-        )
+            let setupID = "setup_nb_history"
+            let submissionID = "sub_nb_history"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+            _ = try await insertNotebookSubmission(
+                id: submissionID,
+                testSetupID: setupID,
+                userID: userID,
+                notebookJSON: notebookJSON(markdown: "History selection"),
+                attemptNumber: 2
+            )
 
-        // Plant a stale working copy at the regular assignment path.
-        // With the fix, viewing a submission must NOT overwrite this file —
-        // the submission is written to a separate view-{submissionID}.ipynb path.
-        let staleCopyPath = workingCopyPath(setupID: setupID, userID: userID)
-        try FileManager.default.createDirectory(
-            atPath: (staleCopyPath as NSString).deletingLastPathComponent,
-            withIntermediateDirectories: true
-        )
-        try notebookJSON(markdown: "Stale working copy")
-            .data(using: .utf8)!
-            .write(to: URL(fileURLWithPath: staleCopyPath))
+            // Plant a stale working copy at the regular assignment path.
+            // With the fix, viewing a submission must NOT overwrite this file —
+            // the submission is written to a separate view-{submissionID}.ipynb path.
+            let staleCopyPath = workingCopyPath(setupID: setupID, userID: userID)
+            try FileManager.default.createDirectory(
+                atPath: (staleCopyPath as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try notebookJSON(markdown: "Stale working copy")
+                .data(using: .utf8)!
+                .write(to: URL(fileURLWithPath: staleCopyPath))
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook?submissionID=\(submissionID)",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?submissionID=\(submissionID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        // The submission-specific view file should contain the student's content.
-        let userSlug = userID.uuidString.lowercased()
-        let viewPath = publicDir + "jupyterlite/files/users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
-        let viewContent = try String(contentsOfFile: viewPath, encoding: .utf8)
-        #expect(viewContent.contains("History selection"), "view file should contain submission content")
+            // The submission-specific view file should contain the student's content.
+            let userSlug = userID.uuidString.lowercased()
+            let viewPath = publicDir + "jupyterlite/files/users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
+            let viewContent = try String(contentsOfFile: viewPath, encoding: .utf8)
+            #expect(viewContent.contains("History selection"), "view file should contain submission content")
 
-        // The regular working copy must be left untouched.
-        let staleCopyAfter = try String(contentsOfFile: staleCopyPath, encoding: .utf8)
-        #expect(staleCopyAfter.contains("Stale working copy"), "regular working copy must not be overwritten")
+            // The regular working copy must be left untouched.
+            let staleCopyAfter = try String(contentsOfFile: staleCopyPath, encoding: .utf8)
+            #expect(staleCopyAfter.contains("Stale working copy"), "regular working copy must not be overwritten")
+
+        }
     }
 
     @Test func notebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        let userID = try user.requireID()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            let userID = try user.requireID()
+            try await enroll(user)
 
-        let setupID = "setup_nb_support"
-        let manifest = """
-            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
-            """
-        _ = try await insertSetup(
-            id: setupID,
-            notebookJSON: notebookJSON(markdown: "Support seed"),
-            manifest: manifest,
-            zipEntries: [
-                ("assignment.ipynb", notebookJSON(markdown: "Support seed")),
-                ("test.sh", "#!/bin/sh\nexit 0\n"),
-                ("bmi.py", "def bmi():\n    return 22\n"),
+            let setupID = "setup_nb_support"
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
+                """
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(markdown: "Support seed"),
+                manifest: manifest,
+                zipEntries: [
+                    ("assignment.ipynb", notebookJSON(markdown: "Support seed")),
+                    ("test.sh", "#!/bin/sh\nexit 0\n"),
+                    ("bmi.py", "def bmi():\n    return 22\n"),
+                ]
+            )
+
+            let sharedDir = tmpDir + "testsetups/shared/\(setupID)/"
+            try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
+            try "def bmi():\n    return 22\n".data(using: .utf8)!.write(
+                to: URL(fileURLWithPath: sharedDir + "bmi.py")
+            )
+
+            let legacyRoots = [
+                publicDir + "files/",
+                publicDir + "jupyterlite/files/",
+                publicDir + "jupyterlite/lab/files/",
+                publicDir + "jupyterlite/notebooks/files/",
             ]
-        )
+            for (index, root) in legacyRoots.enumerated() {
+                let userDir = root + "users/\(userID.uuidString.lowercased())/"
+                try FileManager.default.createDirectory(atPath: userDir, withIntermediateDirectories: true)
+                let filename = index.isMultiple(of: 2) ? "assignment.ipynb" : "sub_old.ipynb"
+                try Data("legacy".utf8).write(to: URL(fileURLWithPath: userDir + filename))
+            }
 
-        let sharedDir = tmpDir + "testsetups/shared/\(setupID)/"
-        try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
-        try "def bmi():\n    return 22\n".data(using: .utf8)!.write(
-            to: URL(fileURLWithPath: sharedDir + "bmi.py")
-        )
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let legacyRoots = [
-            publicDir + "files/",
-            publicDir + "jupyterlite/files/",
-            publicDir + "jupyterlite/lab/files/",
-            publicDir + "jupyterlite/notebooks/files/",
-        ]
-        for (index, root) in legacyRoots.enumerated() {
-            let userDir = root + "users/\(userID.uuidString.lowercased())/"
-            try FileManager.default.createDirectory(atPath: userDir, withIntermediateDirectories: true)
-            let filename = index.isMultiple(of: 2) ? "assignment.ipynb" : "sub_old.ipynb"
-            try Data("legacy".utf8).write(to: URL(fileURLWithPath: userDir + filename))
-        }
+            let studentDir = (workingCopyPath(setupID: setupID, userID: userID) as NSString).deletingLastPathComponent
+            let supportPath = studentDir + "/bmi.py"
+            #expect(FileManager.default.fileExists(atPath: supportPath))
+            #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
+            #expect(FileManager.default.fileExists(atPath: studentDir + "/test.sh") == false)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            for root in legacyRoots {
+                let userDir = root + "users/\(userID.uuidString.lowercased())/"
+                let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
+                #expect(
+                    contents.contains { $0.hasSuffix(".ipynb") } == false,
+                    "Legacy notebooks should be removed from \(userDir)")
+            }
 
-        let studentDir = (workingCopyPath(setupID: setupID, userID: userID) as NSString).deletingLastPathComponent
-        let supportPath = studentDir + "/bmi.py"
-        #expect(FileManager.default.fileExists(atPath: supportPath))
-        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
-        #expect(FileManager.default.fileExists(atPath: studentDir + "/test.sh") == false)
-
-        for root in legacyRoots {
-            let userDir = root + "users/\(userID.uuidString.lowercased())/"
-            let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
-            #expect(
-                contents.contains { $0.hasSuffix(".ipynb") } == false,
-                "Legacy notebooks should be removed from \(userDir)")
         }
     }
 
     @Test func notebookSourceReplacesCorruptWorkingCopyWithLatestNotebookSubmission() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        let userID = try user.requireID()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            let userID = try user.requireID()
+            try await enroll(user)
 
-        let setupID = "setup_nb_corrupt"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
-        _ = try await insertNotebookSubmission(
-            id: "sub_nb_latest",
-            testSetupID: setupID,
-            userID: userID,
-            notebookJSON: notebookJSON(markdown: "Recovered notebook"),
-            attemptNumber: 3
-        )
+            let setupID = "setup_nb_corrupt"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_latest",
+                testSetupID: setupID,
+                userID: userID,
+                notebookJSON: notebookJSON(markdown: "Recovered notebook"),
+                attemptNumber: 3
+            )
 
-        let workingCopy = workingCopyPath(setupID: setupID, userID: userID)
-        try FileManager.default.createDirectory(
-            atPath: (workingCopy as NSString).deletingLastPathComponent,
-            withIntermediateDirectories: true
-        )
-        try Data("not json".utf8).write(to: URL(fileURLWithPath: workingCopy))
+            let workingCopy = workingCopyPath(setupID: setupID, userID: userID)
+            try FileManager.default.createDirectory(
+                atPath: (workingCopy as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try Data("not json".utf8).write(to: URL(fileURLWithPath: workingCopy))
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook/source",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                #expect(res.body.string.contains("Recovered notebook"))
-                #expect(res.body.string.contains("Instructor baseline") == false)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("Recovered notebook"))
+                    #expect(res.body.string.contains("Instructor baseline") == false)
+                })
 
-        let replaced = try String(contentsOfFile: workingCopy, encoding: .utf8)
-        #expect(replaced.contains("Recovered notebook"))
-        #expect(replaced.contains("not json") == false)
+            let replaced = try String(contentsOfFile: workingCopy, encoding: .utf8)
+            #expect(replaced.contains("Recovered notebook"))
+            #expect(replaced.contains("not json") == false)
+
+        }
     }
 
     @Test func notebookPageRejectsHistorySelectionFromDifferentAssignment() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        let userID = try user.requireID()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            let userID = try user.requireID()
+            try await enroll(user)
 
-        let setupID = "setup_nb_mismatch"
-        let otherSetupID = "setup_nb_other"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Primary setup"))
-        _ = try await insertSetup(id: otherSetupID, notebookJSON: notebookJSON(markdown: "Other setup"))
-        _ = try await insertNotebookSubmission(
-            id: "sub_nb_other_setup",
-            testSetupID: otherSetupID,
-            userID: userID,
-            notebookJSON: notebookJSON(markdown: "Wrong assignment"),
-            attemptNumber: 1
-        )
+            let setupID = "setup_nb_mismatch"
+            let otherSetupID = "setup_nb_other"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Primary setup"))
+            _ = try await insertSetup(id: otherSetupID, notebookJSON: notebookJSON(markdown: "Other setup"))
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_other_setup",
+                testSetupID: otherSetupID,
+                userID: userID,
+                notebookJSON: notebookJSON(markdown: "Wrong assignment"),
+                attemptNumber: 1
+            )
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_setup",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     @Test func notebookPageRejectsNonNotebookHistorySelection() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        let userID = try user.requireID()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            let userID = try user.requireID()
+            try await enroll(user)
 
-        let setupID = "setup_nb_non_ipynb"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+            let setupID = "setup_nb_non_ipynb"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
 
-        let plainTextPath = tmpDir + "submissions/sub_nb_text.txt"
-        try Data("hello world".utf8).write(to: URL(fileURLWithPath: plainTextPath))
-        let submission = APISubmission(
-            id: "sub_nb_text",
-            testSetupID: setupID,
-            zipPath: plainTextPath,
-            attemptNumber: 1,
-            status: "complete",
-            filename: "sub_nb_text.txt",
-            userID: userID,
-            kind: APISubmission.Kind.student
-        )
-        try await submission.save(on: app.db)
+            let plainTextPath = tmpDir + "submissions/sub_nb_text.txt"
+            try Data("hello world".utf8).write(to: URL(fileURLWithPath: plainTextPath))
+            let submission = APISubmission(
+                id: "sub_nb_text",
+                testSetupID: setupID,
+                zipPath: plainTextPath,
+                attemptNumber: 1,
+                status: "complete",
+                filename: "sub_nb_text.txt",
+                userID: userID,
+                kind: APISubmission.Kind.student
+            )
+            try await submission.save(on: app.db)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_text",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     @Test func notebookPageRejectsHistorySelectionOwnedByAnotherStudent() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let otherCookie = try await loginAsStudent(username: "notebook_student_other")
-        #expect(otherCookie.isEmpty == false)
-        let fetchedOtherUser = try await APIUser.query(on: app.db)
-            .filter(\.$username == "notebook_student_other")
-            .first()
-        let otherUser = try #require(fetchedOtherUser)
-        try await enroll(otherUser)
+            let otherCookie = try await loginAsStudent(username: "notebook_student_other")
+            #expect(otherCookie.isEmpty == false)
+            let fetchedOtherUser = try await APIUser.query(on: app.db)
+                .filter(\.$username == "notebook_student_other")
+                .first()
+            let otherUser = try #require(fetchedOtherUser)
+            try await enroll(otherUser)
 
-        let setupID = "setup_nb_other_user"
-        _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
-        _ = try await insertNotebookSubmission(
-            id: "sub_nb_other_user",
-            testSetupID: setupID,
-            userID: try otherUser.requireID(),
-            notebookJSON: notebookJSON(markdown: "Other student's notebook"),
-            attemptNumber: 1
-        )
+            let setupID = "setup_nb_other_user"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Instructor baseline"))
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_other_user",
+                testSetupID: setupID,
+                userID: try otherUser.requireID(),
+                notebookJSON: notebookJSON(markdown: "Other student's notebook"),
+                attemptNumber: 1
+            )
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .forbidden)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?submissionID=sub_nb_other_user",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+        }
     }
 
     @Test func notebookPageReturns404WhenSetupHasNoStarterNotebook() async throws {
-        // A setup with no .ipynb file (no notebookPath, zip contains only non-notebook
-        // files) should return 404 rather than silently serving an empty notebook.
-        // This prevents students from opening a blank notebook when the instructor
-        // hasn't uploaded an assignment notebook yet.
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            // A setup with no .ipynb file (no notebookPath, zip contains only non-notebook
+            // files) should return 404 rather than silently serving an empty notebook.
+            // This prevents students from opening a blank notebook when the instructor
+            // hasn't uploaded an assignment notebook yet.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_empty_seed"
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
-        try makeZipAt(zipPath: zipPath, entries: [("readme.txt", "starter files pending")])
+            let setupID = "setup_nb_empty_seed"
+            let zipPath = tmpDir + "testsetups/\(setupID).zip"
+            try makeZipAt(zipPath: zipPath, entries: [("readme.txt", "starter files pending")])
 
-        let setup = APITestSetup(
-            id: setupID,
-            manifest:
-                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
-            zipPath: zipPath,
-            notebookPath: nil,
-            courseID: try await makeCourse().requireID()
-        )
-        try await setup.save(on: app.db)
+            let setup = APITestSetup(
+                id: setupID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+                zipPath: zipPath,
+                notebookPath: nil,
+                courseID: try await makeCourse().requireID()
+            )
+            try await setup.save(on: app.db)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook/source",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .notFound)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
     }
 
     @Test func notebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_nested_manifest"
-        let nestedNotebook = notebookJSON(markdown: "Nested manifest starter")
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
-        try makeZipAt(
-            zipPath: zipPath,
-            entries: [
-                ("materials/starter.ipynb", nestedNotebook),
-                ("readme.txt", "nested zip"),
-            ]
-        )
+            let setupID = "setup_nb_nested_manifest"
+            let nestedNotebook = notebookJSON(markdown: "Nested manifest starter")
+            let zipPath = tmpDir + "testsetups/\(setupID).zip"
+            try makeZipAt(
+                zipPath: zipPath,
+                entries: [
+                    ("materials/starter.ipynb", nestedNotebook),
+                    ("readme.txt", "nested zip"),
+                ]
+            )
 
-        let setup = APITestSetup(
-            id: setupID,
-            manifest:
-                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"starterNotebook":"starter.ipynb"}"#,
-            zipPath: zipPath,
-            notebookPath: nil,
-            courseID: try await makeCourse().requireID()
-        )
-        try await setup.save(on: app.db)
+            let setup = APITestSetup(
+                id: setupID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"starterNotebook":"starter.ipynb"}"#,
+                zipPath: zipPath,
+                notebookPath: nil,
+                courseID: try await makeCourse().requireID()
+            )
+            try await setup.save(on: app.db)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook/source",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                #expect(res.body.string.contains("Nested manifest starter"))
-                #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("Nested manifest starter"))
+                    #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+                })
+
+        }
     }
 
     @Test func notebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enroll(user)
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
 
-        let setupID = "setup_nb_nested_first"
-        let nestedNotebook = notebookJSON(markdown: "First nested notebook")
-        let zipPath = tmpDir + "testsetups/\(setupID).zip"
-        try makeZipAt(
-            zipPath: zipPath,
-            entries: [
-                ("nested/assignment.ipynb", nestedNotebook),
-                ("nested/support.py", "value = 1"),
-            ]
-        )
+            let setupID = "setup_nb_nested_first"
+            let nestedNotebook = notebookJSON(markdown: "First nested notebook")
+            let zipPath = tmpDir + "testsetups/\(setupID).zip"
+            try makeZipAt(
+                zipPath: zipPath,
+                entries: [
+                    ("nested/assignment.ipynb", nestedNotebook),
+                    ("nested/support.py", "value = 1"),
+                ]
+            )
 
-        let setup = APITestSetup(
-            id: setupID,
-            manifest:
-                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
-            zipPath: zipPath,
-            notebookPath: nil,
-            courseID: try await makeCourse().requireID()
-        )
-        try await setup.save(on: app.db)
+            let setup = APITestSetup(
+                id: setupID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#,
+                zipPath: zipPath,
+                notebookPath: nil,
+                courseID: try await makeCourse().requireID()
+            )
+            try await setup.save(on: app.db)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/\(setupID)/notebook/source",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                #expect(res.body.string.contains("First nested notebook"))
-                #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("First nested notebook"))
+                    #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+                })
+
+        }
     }
 }

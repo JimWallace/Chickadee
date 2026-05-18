@@ -16,199 +16,215 @@ import XCTVapor
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
+    @Test func versionComparatorSupportsMinimumAndExactMatches() async throws {
+        try await withApp(app) { _ in
+            let comparator = VersionComparator()
+            #expect(comparator.compare("3.11", "3.10") == .orderedDescending)
+            #expect(comparator.compare("3.9", "3.10") == .orderedAscending)
+            #expect(comparator.compare("6.0", "6.0") == .orderedSame)
+            #expect(comparator.compare("6.0", "6.1") == .orderedAscending)
+
+        }
     }
 
-    @Test func versionComparatorSupportsMinimumAndExactMatches() {
-        let comparator = VersionComparator()
-        #expect(comparator.compare("3.11", "3.10") == .orderedDescending)
-        #expect(comparator.compare("3.9", "3.10") == .orderedAscending)
-        #expect(comparator.compare("6.0", "6.0") == .orderedSame)
-        #expect(comparator.compare("6.0", "6.1") == .orderedAscending)
-    }
-
-    @Test func capabilityAndLanguageMatchingReportsDetailedFailures() {
-        let matcher = CompatibilityMatcher()
-        let runner = RunnerCapabilityProfile(
-            platform: "linux",
-            architecture: "x86_64",
-            languageVersions: [
-                LanguageVersion(language: "python", version: "3.9"),
-                LanguageVersion(language: "swift", version: "6.0"),
-            ],
-            capabilities: [RunnerCapability(name: "numpy")]
-        )
-        let requirements = AssignmentRequirementSpec(
-            requiredPlatform: "linux",
-            requiredArchitecture: "x86_64",
-            requiredLanguages: [
-                AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10"),
-                AssignmentLanguageRequirement(language: "swift", exactVersion: "6.1"),
-                AssignmentLanguageRequirement(language: "r", minimumVersion: "4.2"),
-            ],
-            requiredCapabilities: [
-                RunnerCapability(name: "numpy"),
-                RunnerCapability(name: "pandas"),
-            ]
-        )
-
-        let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
-        #expect(result.isCompatible == false)
-        #expect(result.reasons.contains("python version 3.9 < required 3.10"))
-        #expect(result.reasons.contains("swift version 6.0 != required 6.1"))
-        #expect(result.reasons.contains("missing language r"))
-        #expect(result.reasons.contains("missing capability pandas"))
-    }
-
-    @Test func platformAndArchitectureMatchingPassesWhenExactMatchExists() {
-        let matcher = CompatibilityMatcher()
-        let runner = RunnerCapabilityProfile(
-            platform: "linux",
-            architecture: "arm64",
-            languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
-            capabilities: [RunnerCapability(name: "numpy"), RunnerCapability(name: "pandas")]
-        )
-        let requirements = AssignmentRequirementSpec(
-            requiredPlatform: "linux",
-            requiredArchitecture: "arm64",
-            requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
-            requiredCapabilities: [RunnerCapability(name: "numpy")]
-        )
-
-        let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
-        #expect(result.isCompatible)
-        #expect(result.reasons.isEmpty)
-    }
-
-    @Test func runnerProfileInsertedAndUpdatedOnHeartbeat() async throws {
-        let initial = WorkerActivityPayload(
-            workerID: "runner-profile",
-            hostname: "runner-profile.local",
-            runnerVersion: "runner/1.0",
-            maxConcurrentJobs: 2,
-            activeJobs: 0,
-            profile: RunnerCapabilityProfile(
+    @Test func capabilityAndLanguageMatchingReportsDetailedFailures() async throws {
+        try await withApp(app) { _ in
+            let matcher = CompatibilityMatcher()
+            let runner = RunnerCapabilityProfile(
                 platform: "linux",
                 architecture: "x86_64",
-                languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
+                languageVersions: [
+                    LanguageVersion(language: "python", version: "3.9"),
+                    LanguageVersion(language: "swift", version: "6.0"),
+                ],
                 capabilities: [RunnerCapability(name: "numpy")]
             )
-        )
-        try await sendHeartbeat(initial)
-
-        let inserted = try await RunnerProfile.query(on: app.db)
-            .filter(\.$runnerID == "runner-profile")
-            .first()
-        #expect(inserted?.platform == "linux")
-        #expect(inserted?.capabilityProfile.capabilities.map(\.name) == ["numpy"])
-
-        let updatedPayload = WorkerActivityPayload(
-            workerID: "runner-profile",
-            hostname: "runner-profile.local",
-            runnerVersion: "runner/1.1",
-            maxConcurrentJobs: 2,
-            activeJobs: 1,
-            profile: RunnerCapabilityProfile(
-                platform: "linux",
-                architecture: "x86_64",
-                languageVersions: [LanguageVersion(language: "python", version: "3.12.0")],
-                capabilities: [RunnerCapability(name: "numpy"), RunnerCapability(name: "pandas")]
-            )
-        )
-        try await sendHeartbeat(updatedPayload)
-
-        let profiles = try await RunnerProfile.query(on: app.db)
-            .filter(\.$runnerID == "runner-profile")
-            .all()
-        #expect(profiles.count == 1)
-        #expect(profiles.first?.capabilityProfile.languageVersions.first?.version == "3.12.0")
-        #expect(profiles.first?.capabilityProfile.capabilities.map(\.name) == ["numpy", "pandas"])
-        #expect(profiles.first?.isActive == true)
-    }
-
-    @Test func assignmentWithNoRequirementsRemainsAssignableWithoutProfile() async throws {
-        let setup = try await makeSetup(id: "compat_setup_open")
-        let assignment = try await makeAssignment(setupID: setup.requireID(), title: "No Requirements")
-        _ = assignment
-        let submission = try await makeSubmission(id: "compat_sub_open", setupID: setup.requireID())
-
-        let response = try await requestJob(
-            workerID: "runner-no-profile",
-            profile: nil
-        )
-        #expect(response.status == .ok)
-        #expect(try response.content.decode(Job.self).submissionID == submission.id)
-    }
-
-    @Test func assignmentWithRequirementsBlockedOnIncompatibleRunner() async throws {
-        let setup = try await makeSetup(id: "compat_setup_blocked")
-        let assignment = try await makeAssignment(setupID: setup.requireID(), title: "Python Assignment")
-        try await addRequirement(
-            assignmentID: try assignment.requireID(),
-            spec: AssignmentRequirementSpec(
+            let requirements = AssignmentRequirementSpec(
                 requiredPlatform: "linux",
                 requiredArchitecture: "x86_64",
-                requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
-                requiredCapabilities: [RunnerCapability(name: "numpy")]
+                requiredLanguages: [
+                    AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10"),
+                    AssignmentLanguageRequirement(language: "swift", exactVersion: "6.1"),
+                    AssignmentLanguageRequirement(language: "r", minimumVersion: "4.2"),
+                ],
+                requiredCapabilities: [
+                    RunnerCapability(name: "numpy"),
+                    RunnerCapability(name: "pandas"),
+                ]
             )
-        )
-        let submission = try await makeSubmission(id: "compat_sub_blocked", setupID: setup.requireID())
 
-        let response = try await requestJob(
-            workerID: "runner-incompatible",
-            profile: RunnerCapabilityProfile(
-                platform: "linux",
-                architecture: "x86_64",
-                languageVersions: [LanguageVersion(language: "python", version: "3.9")],
-                capabilities: []
-            )
-        )
-        #expect(response.status == .noContent)
+            let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
+            #expect(result.isCompatible == false)
+            #expect(result.reasons.contains("python version 3.9 < required 3.10"))
+            #expect(result.reasons.contains("swift version 6.0 != required 6.1"))
+            #expect(result.reasons.contains("missing language r"))
+            #expect(result.reasons.contains("missing capability pandas"))
 
-        let reloaded = try await APISubmission.find(try submission.requireID(), on: app.db)
-        #expect(reloaded?.status == "pending")
+        }
     }
 
-    @Test func compatibleRunnerReceivesJobAfterIncompatibleRunnerSkipsIt() async throws {
-        let setup = try await makeSetup(id: "compat_setup_claim")
-        let assignment = try await makeAssignment(setupID: setup.requireID(), title: "Needs Pandas")
-        try await addRequirement(
-            assignmentID: try assignment.requireID(),
-            spec: AssignmentRequirementSpec(
+    @Test func platformAndArchitectureMatchingPassesWhenExactMatchExists() async throws {
+        try await withApp(app) { _ in
+            let matcher = CompatibilityMatcher()
+            let runner = RunnerCapabilityProfile(
+                platform: "linux",
+                architecture: "arm64",
+                languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
+                capabilities: [RunnerCapability(name: "numpy"), RunnerCapability(name: "pandas")]
+            )
+            let requirements = AssignmentRequirementSpec(
                 requiredPlatform: "linux",
                 requiredArchitecture: "arm64",
                 requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
-                requiredCapabilities: [RunnerCapability(name: "pandas")]
+                requiredCapabilities: [RunnerCapability(name: "numpy")]
             )
-        )
-        let submission = try await makeSubmission(id: "compat_sub_claim", setupID: setup.requireID())
 
-        let firstResponse = try await requestJob(
-            workerID: "runner-wrong-arch",
-            profile: RunnerCapabilityProfile(
-                platform: "linux",
-                architecture: "x86_64",
-                languageVersions: [LanguageVersion(language: "python", version: "3.11")],
-                capabilities: [RunnerCapability(name: "pandas")]
-            )
-        )
-        #expect(firstResponse.status == .noContent)
+            let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
+            #expect(result.isCompatible)
+            #expect(result.reasons.isEmpty)
 
-        let secondResponse = try await requestJob(
-            workerID: "runner-compatible",
-            profile: RunnerCapabilityProfile(
-                platform: "linux",
-                architecture: "arm64",
-                languageVersions: [LanguageVersion(language: "python", version: "3.11")],
-                capabilities: [RunnerCapability(name: "pandas")]
+        }
+    }
+
+    @Test func runnerProfileInsertedAndUpdatedOnHeartbeat() async throws {
+        try await withApp(app) { _ in
+            let initial = WorkerActivityPayload(
+                workerID: "runner-profile",
+                hostname: "runner-profile.local",
+                runnerVersion: "runner/1.0",
+                maxConcurrentJobs: 2,
+                activeJobs: 0,
+                profile: RunnerCapabilityProfile(
+                    platform: "linux",
+                    architecture: "x86_64",
+                    languageVersions: [LanguageVersion(language: "python", version: "3.11.8")],
+                    capabilities: [RunnerCapability(name: "numpy")]
+                )
             )
-        )
-        #expect(secondResponse.status == .ok)
-        let secondSubmissionID = try secondResponse.content.decode(Job.self).submissionID
-        let expectedID = try submission.requireID()
-        #expect(secondSubmissionID == expectedID)
+            try await sendHeartbeat(initial)
+
+            let inserted = try await RunnerProfile.query(on: app.db)
+                .filter(\.$runnerID == "runner-profile")
+                .first()
+            #expect(inserted?.platform == "linux")
+            #expect(inserted?.capabilityProfile.capabilities.map(\.name) == ["numpy"])
+
+            let updatedPayload = WorkerActivityPayload(
+                workerID: "runner-profile",
+                hostname: "runner-profile.local",
+                runnerVersion: "runner/1.1",
+                maxConcurrentJobs: 2,
+                activeJobs: 1,
+                profile: RunnerCapabilityProfile(
+                    platform: "linux",
+                    architecture: "x86_64",
+                    languageVersions: [LanguageVersion(language: "python", version: "3.12.0")],
+                    capabilities: [RunnerCapability(name: "numpy"), RunnerCapability(name: "pandas")]
+                )
+            )
+            try await sendHeartbeat(updatedPayload)
+
+            let profiles = try await RunnerProfile.query(on: app.db)
+                .filter(\.$runnerID == "runner-profile")
+                .all()
+            #expect(profiles.count == 1)
+            #expect(profiles.first?.capabilityProfile.languageVersions.first?.version == "3.12.0")
+            #expect(profiles.first?.capabilityProfile.capabilities.map(\.name) == ["numpy", "pandas"])
+            #expect(profiles.first?.isActive == true)
+
+        }
+    }
+
+    @Test func assignmentWithNoRequirementsRemainsAssignableWithoutProfile() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeSetup(id: "compat_setup_open")
+            let assignment = try await makeAssignment(setupID: setup.requireID(), title: "No Requirements")
+            _ = assignment
+            let submission = try await makeSubmission(id: "compat_sub_open", setupID: setup.requireID())
+
+            let response = try await requestJob(
+                workerID: "runner-no-profile",
+                profile: nil
+            )
+            #expect(response.status == .ok)
+            #expect(try response.content.decode(Job.self).submissionID == submission.id)
+
+        }
+    }
+
+    @Test func assignmentWithRequirementsBlockedOnIncompatibleRunner() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeSetup(id: "compat_setup_blocked")
+            let assignment = try await makeAssignment(setupID: setup.requireID(), title: "Python Assignment")
+            try await addRequirement(
+                assignmentID: try assignment.requireID(),
+                spec: AssignmentRequirementSpec(
+                    requiredPlatform: "linux",
+                    requiredArchitecture: "x86_64",
+                    requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
+                    requiredCapabilities: [RunnerCapability(name: "numpy")]
+                )
+            )
+            let submission = try await makeSubmission(id: "compat_sub_blocked", setupID: setup.requireID())
+
+            let response = try await requestJob(
+                workerID: "runner-incompatible",
+                profile: RunnerCapabilityProfile(
+                    platform: "linux",
+                    architecture: "x86_64",
+                    languageVersions: [LanguageVersion(language: "python", version: "3.9")],
+                    capabilities: []
+                )
+            )
+            #expect(response.status == .noContent)
+
+            let reloaded = try await APISubmission.find(try submission.requireID(), on: app.db)
+            #expect(reloaded?.status == "pending")
+
+        }
+    }
+
+    @Test func compatibleRunnerReceivesJobAfterIncompatibleRunnerSkipsIt() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeSetup(id: "compat_setup_claim")
+            let assignment = try await makeAssignment(setupID: setup.requireID(), title: "Needs Pandas")
+            try await addRequirement(
+                assignmentID: try assignment.requireID(),
+                spec: AssignmentRequirementSpec(
+                    requiredPlatform: "linux",
+                    requiredArchitecture: "arm64",
+                    requiredLanguages: [AssignmentLanguageRequirement(language: "python", minimumVersion: "3.10")],
+                    requiredCapabilities: [RunnerCapability(name: "pandas")]
+                )
+            )
+            let submission = try await makeSubmission(id: "compat_sub_claim", setupID: setup.requireID())
+
+            let firstResponse = try await requestJob(
+                workerID: "runner-wrong-arch",
+                profile: RunnerCapabilityProfile(
+                    platform: "linux",
+                    architecture: "x86_64",
+                    languageVersions: [LanguageVersion(language: "python", version: "3.11")],
+                    capabilities: [RunnerCapability(name: "pandas")]
+                )
+            )
+            #expect(firstResponse.status == .noContent)
+
+            let secondResponse = try await requestJob(
+                workerID: "runner-compatible",
+                profile: RunnerCapabilityProfile(
+                    platform: "linux",
+                    architecture: "arm64",
+                    languageVersions: [LanguageVersion(language: "python", version: "3.11")],
+                    capabilities: [RunnerCapability(name: "pandas")]
+                )
+            )
+            #expect(secondResponse.status == .ok)
+            let secondSubmissionID = try secondResponse.content.decode(Job.self).submissionID
+            let expectedID = try submission.requireID()
+            #expect(secondSubmissionID == expectedID)
+
+        }
     }
 
     private func requestJob(

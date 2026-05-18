@@ -18,11 +18,6 @@ import XCTVapor
         try await configureTestDatabase(app)
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     // MARK: - Helpers
 
     private func makeUser(username: String) async throws -> APIUser {
@@ -60,119 +55,131 @@ import XCTVapor
     // MARK: - Tests
 
     @Test func ensureSeed_createsRowOnFirstCall() async throws {
-        let user = try await makeUser(username: "alice")
-        let course = try await makeCourse()
-        let assignment = try await makeAssignment(courseID: course.id!)
+        try await withApp(app) { _ in
+            let user = try await makeUser(username: "alice")
+            let course = try await makeCourse()
+            let assignment = try await makeAssignment(courseID: course.id!)
 
-        let seed = try await AssignmentSeedStore.ensureSeed(
-            userID: user.id!,
-            assignmentID: assignment.id!,
-            on: app.db
-        )
+            let seed = try await AssignmentSeedStore.ensureSeed(
+                userID: user.id!,
+                assignmentID: assignment.id!,
+                on: app.db
+            )
 
-        #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
-        #expect(seed.allSatisfy { "0123456789abcdef".contains($0) })
+            #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
+            #expect(seed.allSatisfy { "0123456789abcdef".contains($0) })
 
-        let rows = try await APIAssignmentPersonalizationSeed.query(on: app.db).all()
-        #expect(rows.count == 1)
-        #expect(rows[0].seedValue == seed)
+            let rows = try await APIAssignmentPersonalizationSeed.query(on: app.db).all()
+            #expect(rows.count == 1)
+            #expect(rows[0].seedValue == seed)
 
+        }
     }
 
     @Test func ensureSeed_isIdempotentForSamePair() async throws {
-        let user = try await makeUser(username: "bob")
-        let course = try await makeCourse()
-        let assignment = try await makeAssignment(courseID: course.id!)
+        try await withApp(app) { _ in
+            let user = try await makeUser(username: "bob")
+            let course = try await makeCourse()
+            let assignment = try await makeAssignment(courseID: course.id!)
 
-        let first = try await AssignmentSeedStore.ensureSeed(
-            userID: user.id!, assignmentID: assignment.id!, on: app.db
-        )
-        let second = try await AssignmentSeedStore.ensureSeed(
-            userID: user.id!, assignmentID: assignment.id!, on: app.db
-        )
-        let third = try await AssignmentSeedStore.ensureSeed(
-            userID: user.id!, assignmentID: assignment.id!, on: app.db
-        )
+            let first = try await AssignmentSeedStore.ensureSeed(
+                userID: user.id!, assignmentID: assignment.id!, on: app.db
+            )
+            let second = try await AssignmentSeedStore.ensureSeed(
+                userID: user.id!, assignmentID: assignment.id!, on: app.db
+            )
+            let third = try await AssignmentSeedStore.ensureSeed(
+                userID: user.id!, assignmentID: assignment.id!, on: app.db
+            )
 
-        #expect(first == second)
-        #expect(second == third)
-        let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
-        #expect(rowCount == 1)
+            #expect(first == second)
+            #expect(second == third)
+            let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
+            #expect(rowCount == 1)
 
+        }
     }
 
     @Test func ensureSeed_differentUsersGetDifferentSeeds() async throws {
-        let alice = try await makeUser(username: "alice2")
-        let bob = try await makeUser(username: "bob2")
-        let course = try await makeCourse()
-        let assignment = try await makeAssignment(courseID: course.id!)
+        try await withApp(app) { _ in
+            let alice = try await makeUser(username: "alice2")
+            let bob = try await makeUser(username: "bob2")
+            let course = try await makeCourse()
+            let assignment = try await makeAssignment(courseID: course.id!)
 
-        let aliceSeed = try await AssignmentSeedStore.ensureSeed(
-            userID: alice.id!, assignmentID: assignment.id!, on: app.db
-        )
-        let bobSeed = try await AssignmentSeedStore.ensureSeed(
-            userID: bob.id!, assignmentID: assignment.id!, on: app.db
-        )
+            let aliceSeed = try await AssignmentSeedStore.ensureSeed(
+                userID: alice.id!, assignmentID: assignment.id!, on: app.db
+            )
+            let bobSeed = try await AssignmentSeedStore.ensureSeed(
+                userID: bob.id!, assignmentID: assignment.id!, on: app.db
+            )
 
-        #expect(aliceSeed != bobSeed)
-        let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
-        #expect(rowCount == 2)
+            #expect(aliceSeed != bobSeed)
+            let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
+            #expect(rowCount == 2)
 
+        }
     }
 
     @Test func ensureSeed_differentAssignmentsGetDifferentSeeds() async throws {
-        let user = try await makeUser(username: "carol")
-        let course = try await makeCourse()
-        let a1 = try await makeAssignment(courseID: course.id!)
-        let a2 = try await makeAssignment(courseID: course.id!)
+        try await withApp(app) { _ in
+            let user = try await makeUser(username: "carol")
+            let course = try await makeCourse()
+            let a1 = try await makeAssignment(courseID: course.id!)
+            let a2 = try await makeAssignment(courseID: course.id!)
 
-        let seed1 = try await AssignmentSeedStore.ensureSeed(
-            userID: user.id!, assignmentID: a1.id!, on: app.db
-        )
-        let seed2 = try await AssignmentSeedStore.ensureSeed(
-            userID: user.id!, assignmentID: a2.id!, on: app.db
-        )
+            let seed1 = try await AssignmentSeedStore.ensureSeed(
+                userID: user.id!, assignmentID: a1.id!, on: app.db
+            )
+            let seed2 = try await AssignmentSeedStore.ensureSeed(
+                userID: user.id!, assignmentID: a2.id!, on: app.db
+            )
 
-        #expect(seed1 != seed2)
+            #expect(seed1 != seed2)
 
+        }
     }
 
     @Test func ensureSeed_survivesConcurrentFirstAccess() async throws {
-        let user = try await makeUser(username: "dave")
-        let course = try await makeCourse()
-        let assignment = try await makeAssignment(courseID: course.id!)
-        let userID = user.id!
-        let assignmentID = assignment.id!
-        let db = app.db
+        try await withApp(app) { _ in
+            let user = try await makeUser(username: "dave")
+            let course = try await makeCourse()
+            let assignment = try await makeAssignment(courseID: course.id!)
+            let userID = user.id!
+            let assignmentID = assignment.id!
+            let db = app.db
 
-        let seeds = try await withThrowingTaskGroup(of: String.self) { group -> [String] in
-            for _ in 0..<3 {
-                group.addTask {
-                    try await AssignmentSeedStore.ensureSeed(
-                        userID: userID, assignmentID: assignmentID, on: db
-                    )
+            let seeds = try await withThrowingTaskGroup(of: String.self) { group -> [String] in
+                for _ in 0..<3 {
+                    group.addTask {
+                        try await AssignmentSeedStore.ensureSeed(
+                            userID: userID, assignmentID: assignmentID, on: db
+                        )
+                    }
                 }
+                var collected: [String] = []
+                for try await result in group { collected.append(result) }
+                return collected
             }
-            var collected: [String] = []
-            for try await result in group { collected.append(result) }
-            return collected
+
+            #expect(seeds.count == 3)
+            #expect(Set(seeds).count == 1, "All concurrent ensureSeed calls must observe the same winner")
+            let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
+            #expect(rowCount == 1, "UNIQUE(user_id, assignment_id) must collapse races to a single row")
+
         }
-
-        #expect(seeds.count == 3)
-        #expect(Set(seeds).count == 1, "All concurrent ensureSeed calls must observe the same winner")
-        let rowCount = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()
-        #expect(rowCount == 1, "UNIQUE(user_id, assignment_id) must collapse races to a single row")
-
     }
 
     @Test func generateSeedHex_isLowercaseHexOfExpectedLength() async throws {
-        for _ in 0..<32 {
-            let seed = AssignmentSeedStore.generateSeedHex()
-            #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
-            #expect(
-                seed.allSatisfy { "0123456789abcdef".contains($0) },
-                "seed must be lowercase hex; got \(seed)")
-        }
+        try await withApp(app) { _ in
+            for _ in 0..<32 {
+                let seed = AssignmentSeedStore.generateSeedHex()
+                #expect(seed.count == 2 * AssignmentSeedStore.seedByteCount)
+                #expect(
+                    seed.allSatisfy { "0123456789abcdef".contains($0) },
+                    "seed must be lowercase hex; got \(seed)")
+            }
 
+        }
     }
 }

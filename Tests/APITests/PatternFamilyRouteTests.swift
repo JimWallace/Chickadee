@@ -20,11 +20,6 @@ import XCTVapor
         self.app = try await makeTestApp(prefix: "chickadee-pf-routes")
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     // MARK: - Test fixture
 
     /// Sets up a minimal assignment with an empty test setup zip.  Returns
@@ -97,155 +92,165 @@ import XCTVapor
     // MARK: - Tests
 
     @Test func getFamilies_emptyByDefault() async throws {
-        let id = try await makeAssignment()
-        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
-        try await app.asyncTest(
-            .GET, "/instructor/\(id)/families",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                let body = res.body.string
-                #expect(body == "[]")
-            })
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/families",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body == "[]")
+                })
 
+        }
     }
 
     @Test func putFamilies_acceptsValidSpecAndRendersScripts() async throws {
-        let id = try await makeAssignment()
-        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .PUT, "/instructor/\(id)/families",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: "x-csrf-token", value: csrf)
-                req.headers.contentType = .json
-                req.body = ByteBuffer(string: sampleFamilyJSON())
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                // Response echoes the applied list.
-                #expect(res.body.string.contains("bmi_category"))
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/families",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: sampleFamilyJSON())
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    // Response echoes the applied list.
+                    #expect(res.body.string.contains("bmi_category"))
+                })
 
-        // Confirm via GET that state is persistent.
-        try await app.asyncTest(
-            .GET, "/instructor/\(id)/families",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-                #expect(res.body.string.contains("\"id\":\"bmi_category\""))
-                #expect(res.body.string.contains("\"key\":\"01\""))
-            })
+            // Confirm via GET that state is persistent.
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/families",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("\"id\":\"bmi_category\""))
+                    #expect(res.body.string.contains("\"key\":\"01\""))
+                })
 
-        // The zip now contains the generated .py files.
-        let assignment = try await APIAssignment.query(on: app.db)
-            .filter(\.$publicID == id).first()!
-        let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
-        let entries = Set(listZipEntries(zipPath: setup.zipPath))
-        #expect(entries.contains("publictest_bmi_category_01.py"))
-        #expect(entries.contains("publictest_bmi_category_02.py"))
+            // The zip now contains the generated .py files.
+            let assignment = try await APIAssignment.query(on: app.db)
+                .filter(\.$publicID == id).first()!
+            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let entries = Set(listZipEntries(zipPath: setup.zipPath))
+            #expect(entries.contains("publictest_bmi_category_01.py"))
+            #expect(entries.contains("publictest_bmi_category_02.py"))
 
+        }
     }
 
     @Test func putFamilies_rejectsInvalidFunctionName() async throws {
-        let id = try await makeAssignment()
-        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        let bad = #"""
-            [{"id":"f","name":"f","kind":"boundary_equality","functionName":"2bad",
-              "paramNames":["x"],"defaults":{"tier":"public","points":1},
-              "cases":[{"key":"01","label":"a","args":[1],"expected":1}]}]
-            """#
+            let bad = #"""
+                [{"id":"f","name":"f","kind":"boundary_equality","functionName":"2bad",
+                  "paramNames":["x"],"defaults":{"tier":"public","points":1},
+                  "cases":[{"key":"01","label":"a","args":[1],"expected":1}]}]
+                """#
 
-        try await app.asyncTest(
-            .PUT, "/instructor/\(id)/families",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: "x-csrf-token", value: csrf)
-                req.headers.contentType = .json
-                req.body = ByteBuffer(string: bad)
-            },
-            afterResponse: { res in
-                #expect(res.status == .unprocessableEntity)
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/families",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: bad)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .unprocessableEntity)
+                })
 
+        }
     }
 
     @Test func putFamilies_studentCannotEdit() async throws {
-        let id = try await makeAssignment()
-        let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: studentCookie, on: app)
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: studentCookie, on: app)
 
-        try await app.asyncTest(
-            .PUT, "/instructor/\(id)/families",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: "x-csrf-token", value: csrf)
-                req.headers.contentType = .json
-                req.body = ByteBuffer(string: sampleFamilyJSON())
-            },
-            afterResponse: { res in
-                // Students are blocked at the role middleware before the handler runs.
-                #expect(
-                    res.status == .forbidden || res.status == .seeOther || res.status == .notFound,
-                    "Expected forbidden/redirect for student PUT, got \(res.status)")
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/families",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: sampleFamilyJSON())
+                },
+                afterResponse: { res in
+                    // Students are blocked at the role middleware before the handler runs.
+                    #expect(
+                        res.status == .forbidden || res.status == .seeOther || res.status == .notFound,
+                        "Expected forbidden/redirect for student PUT, got \(res.status)")
+                })
 
+        }
     }
 
     @Test func putScript_rejectsEditOfGeneratedFile() async throws {
-        let id = try await makeAssignment()
-        let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        // First, create a family so the zip has a generated file.
-        try await app.asyncTest(
-            .PUT, "/instructor/\(id)/families",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: "x-csrf-token", value: csrf)
-                req.headers.contentType = .json
-                req.body = ByteBuffer(string: sampleFamilyJSON())
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            // First, create a family so the zip has a generated file.
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/families",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: sampleFamilyJSON())
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        // Attempting to edit a generated file via the raw-script endpoint must fail.
-        try await app.asyncTest(
-            .PUT,
-            "/instructor/\(id)/scripts/publictest_bmi_category_01.py",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: "x-csrf-token", value: csrf)
-                req.headers.contentType = .json
-                try req.content.encode(["content": "# tampered\npassed('x')\n"])
-            },
-            afterResponse: { res in
-                #expect(res.status == .conflict)
-                #expect(
-                    res.body.string.contains("Edit the family"),
-                    "Expected hint to edit the family, got: \(res.body.string)")
-            })
+            // Attempting to edit a generated file via the raw-script endpoint must fail.
+            try await app.asyncTest(
+                .PUT,
+                "/instructor/\(id)/scripts/publictest_bmi_category_01.py",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    try req.content.encode(["content": "# tampered\npassed('x')\n"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .conflict)
+                    #expect(
+                        res.body.string.contains("Edit the family"),
+                        "Expected hint to edit the family, got: \(res.body.string)")
+                })
 
-        // Deleting via the raw endpoint must also fail.
-        try await app.asyncTest(
-            .DELETE,
-            "/instructor/\(id)/scripts/publictest_bmi_category_01.py",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: "x-csrf-token", value: csrf)
-            },
-            afterResponse: { res in
-                #expect(res.status == .conflict)
-            })
+            // Deleting via the raw endpoint must also fail.
+            try await app.asyncTest(
+                .DELETE,
+                "/instructor/\(id)/scripts/publictest_bmi_category_01.py",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .conflict)
+                })
 
+        }
     }
 }

@@ -26,11 +26,6 @@ import XCTVapor
         self.app = try await makeTestApp(prefix: "chickadee-dnct")
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     private func makeDraft() async throws -> String {
         let courseID = UUID()
         let course = APICourse(id: courseID, code: "DNCT", name: "Draft Notebook Checks Test", enrollmentMode: .auto)
@@ -69,132 +64,147 @@ import XCTVapor
     }
 
     @Test func putDraftChecks_persistsAppliedChecks() async throws {
-        let draftID = try await makeDraft()
-        let cookie = try await loginUser(username: "dnct_inst1", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let draftID = try await makeDraft()
+            let cookie = try await loginUser(username: "dnct_inst1", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        let body = [
-            NotebookCheck(
-                id: "df_shape", name: "DataFrame shape",
-                kind: .dataFrameShape, tier: .pub, points: 1,
-                variable: "df", expectedRows: 250, expectedCols: 13
-            ),
-            NotebookCheck(
-                id: "fn_classify", name: nil,
-                kind: .functionExists, tier: .pub, points: 1,
-                variable: "classify_bmi", expectedArity: 1
-            ),
-        ]
+            let body = [
+                NotebookCheck(
+                    id: "df_shape", name: "DataFrame shape",
+                    kind: .dataFrameShape, tier: .pub, points: 1,
+                    variable: "df", expectedRows: 250, expectedCols: 13
+                ),
+                NotebookCheck(
+                    id: "fn_classify", name: nil,
+                    kind: .functionExists, tier: .pub, points: 1,
+                    variable: "classify_bmi", expectedArity: 1
+                ),
+            ]
 
-        try await app.asyncTest(
-            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: .init("x-csrf-token"), value: csrf)
-                try req.content.encode(body, as: .json)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(body, as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let props = try await loadManifestProps(setupID: draftID)
-        #expect(props.notebookChecks.count == 2)
-        #expect(props.notebookChecks.map(\.id) == ["df_shape", "fn_classify"])
-        #expect(props.notebookChecks[0].variable == "df")
-        #expect(props.notebookChecks[0].expectedRows == 250)
-        #expect(props.notebookChecks[1].kind == .functionExists)
+            let props = try await loadManifestProps(setupID: draftID)
+            #expect(props.notebookChecks.count == 2)
+            #expect(props.notebookChecks.map(\.id) == ["df_shape", "fn_classify"])
+            #expect(props.notebookChecks[0].variable == "df")
+            #expect(props.notebookChecks[0].expectedRows == 250)
+            #expect(props.notebookChecks[1].kind == .functionExists)
+
+        }
     }
 
     @Test func putDraftChecks_replacesExistingList() async throws {
-        let draftID = try await makeDraft()
-        let cookie = try await loginUser(username: "dnct_inst2", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let draftID = try await makeDraft()
+            let cookie = try await loginUser(username: "dnct_inst2", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        // First save: two checks.
-        let firstBody = [
-            NotebookCheck(id: "a", kind: .figureCount, minFigures: 1),
-            NotebookCheck(id: "b", kind: .figureCount, minFigures: 2),
-        ]
-        try await app.asyncTest(
-            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: .init("x-csrf-token"), value: csrf)
-                try req.content.encode(firstBody, as: .json)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            // First save: two checks.
+            let firstBody = [
+                NotebookCheck(id: "a", kind: .figureCount, minFigures: 1),
+                NotebookCheck(id: "b", kind: .figureCount, minFigures: 2),
+            ]
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(firstBody, as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        // Second save: replace with one different check.
-        let secondBody = [
-            NotebookCheck(id: "c", kind: .figureCount, minFigures: 3)
-        ]
-        try await app.asyncTest(
-            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: .init("x-csrf-token"), value: csrf)
-                try req.content.encode(secondBody, as: .json)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            // Second save: replace with one different check.
+            let secondBody = [
+                NotebookCheck(id: "c", kind: .figureCount, minFigures: 3)
+            ]
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode(secondBody, as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let props = try await loadManifestProps(setupID: draftID)
-        #expect(props.notebookChecks.map(\.id) == ["c"], "PUT must atomically replace the full list")
+            let props = try await loadManifestProps(setupID: draftID)
+            #expect(props.notebookChecks.map(\.id) == ["c"], "PUT must atomically replace the full list")
+
+        }
     }
 
     @Test func putDraftChecks_missingDraftIDReturns400() async throws {
-        _ = try await makeDraft()
-        let cookie = try await loginUser(username: "dnct_inst3", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            _ = try await makeDraft()
+            let cookie = try await loginUser(username: "dnct_inst3", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .PUT, "/instructor/new/draft/checks",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: .init("x-csrf-token"), value: csrf)
-                try req.content.encode([NotebookCheck](), as: .json)
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/checks",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode([NotebookCheck](), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     @Test func putDraftChecks_unknownDraftIDReturns404() async throws {
-        let cookie = try await loginUser(username: "dnct_inst4", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(username: "dnct_inst4", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .PUT, "/instructor/new/draft/checks?draftID=does-not-exist",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: .init("x-csrf-token"), value: csrf)
-                try req.content.encode([NotebookCheck](), as: .json)
-            },
-            afterResponse: { res in
-                #expect(res.status == .notFound)
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/checks?draftID=does-not-exist",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode([NotebookCheck](), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
     }
 
     @Test func putDraftChecks_emptyListClearsManifest() async throws {
-        let draftID = try await makeDraft()
-        let cookie = try await loginUser(username: "dnct_inst5", password: "pw", role: "instructor", on: app)
-        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let draftID = try await makeDraft()
+            let cookie = try await loginUser(username: "dnct_inst5", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.add(name: .init("x-csrf-token"), value: csrf)
-                try req.content.encode([NotebookCheck](), as: .json)
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/checks?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    try req.content.encode([NotebookCheck](), as: .json)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let props = try await loadManifestProps(setupID: draftID)
-        #expect(props.notebookChecks.isEmpty)
+            let props = try await loadManifestProps(setupID: draftID)
+            #expect(props.notebookChecks.isEmpty)
+
+        }
     }
 }

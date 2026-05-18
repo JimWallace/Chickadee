@@ -23,11 +23,6 @@ import XCTVapor
         self.app = try await makeTestApp(prefix: "chickadee-sect")
     }
 
-    deinit {
-        let appLocal = app
-        Task { try? await appLocal.asyncShutdown() }
-    }
-
     // MARK: - Helpers
 
     /// Creates an .auto course (auto-enrolls the instructor on login).
@@ -74,442 +69,487 @@ import XCTVapor
     // MARK: - POST /instructor/sections — create
 
     @Test func createSection_instructorCanCreateSection() async throws {
-        let course = try await makeCourse(code: "SECT_CREATE1")
-        let courseID = try course.requireID()
-        let cookie = try await loginUser(
-            username: "sect_instructor1", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_CREATE1")
+            let courseID = try course.requireID()
+            let cookie = try await loginUser(
+                username: "sect_instructor1", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "Labs", "defaultGradingMode": "browser", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .seeOther)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "Labs", "defaultGradingMode": "browser", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
 
-        let sections = try await APICourseSection.query(on: app.db)
-            .filter(\.$courseID == courseID)
-            .all()
-        #expect(sections.count == 1)
-        #expect(sections[0].name == "Labs")
-        #expect(sections[0].defaultGradingMode == "browser")
-        #expect(sections[0].sortOrder == 1)
+            let sections = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == courseID)
+                .all()
+            #expect(sections.count == 1)
+            #expect(sections[0].name == "Labs")
+            #expect(sections[0].defaultGradingMode == "browser")
+            #expect(sections[0].sortOrder == 1)
+
+        }
     }
 
     @Test func createSection_secondSectionGetsHigherSortOrder() async throws {
-        let course = try await makeCourse(code: "SECT_CREATE2")
-        let courseID = try course.requireID()
-        try await makeSection(name: "Existing", order: 1, courseID: courseID)
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_CREATE2")
+            let courseID = try course.requireID()
+            try await makeSection(name: "Existing", order: 1, courseID: courseID)
 
-        let cookie = try await loginUser(
-            username: "sect_instructor2", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor2", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "Exams", "defaultGradingMode": "worker", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .seeOther)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "Exams", "defaultGradingMode": "worker", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
 
-        let exams = try await APICourseSection.query(on: app.db)
-            .filter(\.$courseID == courseID)
-            .filter(\.$name == "Exams")
-            .first()
-        #expect(exams?.sortOrder == 2)
+            let exams = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == courseID)
+                .filter(\.$name == "Exams")
+                .first()
+            #expect(exams?.sortOrder == 2)
+
+        }
     }
 
     @Test func createSection_emptyNameRejected() async throws {
-        try await makeCourse(code: "SECT_EMPTY")
-        let cookie = try await loginUser(
-            username: "sect_instructor3", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            try await makeCourse(code: "SECT_EMPTY")
+            let cookie = try await loginUser(
+                username: "sect_instructor3", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "   ", "defaultGradingMode": "worker", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "   ", "defaultGradingMode": "worker", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     @Test func createSection_invalidGradingModeRejected() async throws {
-        try await makeCourse(code: "SECT_BADMODE")
-        let cookie = try await loginUser(
-            username: "sect_instructor4", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            try await makeCourse(code: "SECT_BADMODE")
+            let cookie = try await loginUser(
+                username: "sect_instructor4", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "Labs", "defaultGradingMode": "jupyter", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "Labs", "defaultGradingMode": "jupyter", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     @Test func createSection_studentForbidden() async throws {
-        try await makeCourse(code: "SECT_STUDENT1")
-        let cookie = try await loginUser(
-            username: "sect_student1", password: "pw",
-            role: "student", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            try await makeCourse(code: "SECT_STUDENT1")
+            let cookie = try await loginUser(
+                username: "sect_student1", password: "pw",
+                role: "student", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "Labs", "defaultGradingMode": "worker", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                // Redirected to login (role middleware) or 403.
-                #expect(res.status == .seeOther || res.status == .forbidden)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "Labs", "defaultGradingMode": "worker", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    // Redirected to login (role middleware) or 403.
+                    #expect(res.status == .seeOther || res.status == .forbidden)
+                })
+
+        }
     }
 
     // MARK: - POST /instructor/sections/reorder
 
     @Test func reorderSections_updatesOrder() async throws {
-        let course = try await makeCourse(code: "SECT_REORDER1")
-        let courseID = try course.requireID()
-        let s1 = try await makeSection(name: "A", order: 1, courseID: courseID)
-        let s2 = try await makeSection(name: "B", order: 2, courseID: courseID)
-        let s3 = try await makeSection(name: "C", order: 3, courseID: courseID)
-        let id1 = try s1.requireID().uuidString
-        let id2 = try s2.requireID().uuidString
-        let id3 = try s3.requireID().uuidString
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_REORDER1")
+            let courseID = try course.requireID()
+            let s1 = try await makeSection(name: "A", order: 1, courseID: courseID)
+            let s2 = try await makeSection(name: "B", order: 2, courseID: courseID)
+            let s3 = try await makeSection(name: "C", order: 3, courseID: courseID)
+            let id1 = try s1.requireID().uuidString
+            let id2 = try s2.requireID().uuidString
+            let id3 = try s3.requireID().uuidString
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_ro", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_ro", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        // Reverse the order: C, B, A
-        struct ReorderBody: Content { var sectionIDs: [String] }
-        try await app.asyncTest(
-            .POST, "/instructor/sections/reorder",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                req.headers.add(name: "x-csrf-token", value: token)
-                req.headers.contentType = .json
-                try req.content.encode(ReorderBody(sectionIDs: [id3, id2, id1]))
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            // Reverse the order: C, B, A
+            struct ReorderBody: Content { var sectionIDs: [String] }
+            try await app.asyncTest(
+                .POST, "/instructor/sections/reorder",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    req.headers.add(name: "x-csrf-token", value: token)
+                    req.headers.contentType = .json
+                    try req.content.encode(ReorderBody(sectionIDs: [id3, id2, id1]))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let updated = try await APICourseSection.query(on: app.db)
-            .filter(\.$courseID == courseID)
-            .sort(\.$sortOrder)
-            .all()
-        #expect(updated.map { $0.name } == ["C", "B", "A"])
+            let updated = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == courseID)
+                .sort(\.$sortOrder)
+                .all()
+            #expect(updated.map { $0.name } == ["C", "B", "A"])
+
+        }
     }
 
     @Test func reorderSections_invalidUUIDRejected() async throws {
-        try await makeCourse(code: "SECT_REORDER2")
-        let cookie = try await loginUser(
-            username: "sect_instructor_ri", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            try await makeCourse(code: "SECT_REORDER2")
+            let cookie = try await loginUser(
+                username: "sect_instructor_ri", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        struct ReorderBody: Content { var sectionIDs: [String] }
-        try await app.asyncTest(
-            .POST, "/instructor/sections/reorder",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                req.headers.add(name: "x-csrf-token", value: token)
-                req.headers.contentType = .json
-                try req.content.encode(ReorderBody(sectionIDs: ["not-a-uuid"]))
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            struct ReorderBody: Content { var sectionIDs: [String] }
+            try await app.asyncTest(
+                .POST, "/instructor/sections/reorder",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    req.headers.add(name: "x-csrf-token", value: token)
+                    req.headers.contentType = .json
+                    try req.content.encode(ReorderBody(sectionIDs: ["not-a-uuid"]))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     // MARK: - POST /instructor/sections/:sectionID/rename
 
     @Test func renameSection_updatesNameAndMode() async throws {
-        let course = try await makeCourse(code: "SECT_RENAME1")
-        let courseID = try course.requireID()
-        let section = try await makeSection(
-            name: "OldName", mode: "worker",
-            order: 1, courseID: courseID)
-        let sectionID = try section.requireID().uuidString
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_RENAME1")
+            let courseID = try course.requireID()
+            let section = try await makeSection(
+                name: "OldName", mode: "worker",
+                order: 1, courseID: courseID)
+            let sectionID = try section.requireID().uuidString
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_rn", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_rn", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections/\(sectionID)/rename",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "NewName", "defaultGradingMode": "browser", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .seeOther)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections/\(sectionID)/rename",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "NewName", "defaultGradingMode": "browser", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
 
-        let updated = try await APICourseSection.find(section.id, on: app.db)
-        #expect(updated?.name == "NewName")
-        #expect(updated?.defaultGradingMode == "browser")
+            let updated = try await APICourseSection.find(section.id, on: app.db)
+            #expect(updated?.name == "NewName")
+            #expect(updated?.defaultGradingMode == "browser")
+
+        }
     }
 
     @Test func renameSection_emptyNameRejected() async throws {
-        let course = try await makeCourse(code: "SECT_RENAME2")
-        let courseID = try course.requireID()
-        let section = try await makeSection(name: "Good", order: 1, courseID: courseID)
-        let sectionID = try section.requireID().uuidString
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_RENAME2")
+            let courseID = try course.requireID()
+            let section = try await makeSection(name: "Good", order: 1, courseID: courseID)
+            let sectionID = try section.requireID().uuidString
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_rne", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_rne", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections/\(sectionID)/rename",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "", "defaultGradingMode": "worker", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .badRequest)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections/\(sectionID)/rename",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "", "defaultGradingMode": "worker", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     @Test func renameSection_notFoundForUnknownID() async throws {
-        try await makeCourse(code: "SECT_RENAME3")
-        let cookie = try await loginUser(
-            username: "sect_instructor_rnf", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await withApp(app) { _ in
+            try await makeCourse(code: "SECT_RENAME3")
+            let cookie = try await loginUser(
+                username: "sect_instructor_rnf", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        let randomID = UUID().uuidString
-        try await app.asyncTest(
-            .POST, "/instructor/sections/\(randomID)/rename",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(
-                    ["name": "Anything", "defaultGradingMode": "worker", "_csrf": token],
-                    as: .urlEncodedForm
-                )
-            },
-            afterResponse: { res in
-                #expect(res.status == .notFound)
-            })
+            let randomID = UUID().uuidString
+            try await app.asyncTest(
+                .POST, "/instructor/sections/\(randomID)/rename",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        ["name": "Anything", "defaultGradingMode": "worker", "_csrf": token],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
     }
 
     // MARK: - POST /instructor/sections/:sectionID/delete
 
     @Test func deleteSection_removesSection() async throws {
-        let course = try await makeCourse(code: "SECT_DEL1")
-        let courseID = try course.requireID()
-        let section = try await makeSection(name: "ToDelete", order: 1, courseID: courseID)
-        let sectionID = try section.requireID()
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_DEL1")
+            let courseID = try course.requireID()
+            let section = try await makeSection(name: "ToDelete", order: 1, courseID: courseID)
+            let sectionID = try section.requireID()
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_del", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_del", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections/\(sectionID.uuidString)/delete",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-            },
-            afterResponse: { res in
-                #expect(res.status == .seeOther)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections/\(sectionID.uuidString)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
 
-        let deleted = try await APICourseSection.find(sectionID, on: app.db)
-        #expect(deleted == nil)
+            let deleted = try await APICourseSection.find(sectionID, on: app.db)
+            #expect(deleted == nil)
+
+        }
     }
 
     @Test func deleteSection_assignmentsBecomesUngrouped() async throws {
-        let course = try await makeCourse(code: "SECT_DEL2")
-        let courseID = try course.requireID()
-        let section = try await makeSection(name: "Doomed", order: 1, courseID: courseID)
-        let sectionID = try section.requireID()
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_DEL2")
+            let courseID = try course.requireID()
+            let section = try await makeSection(name: "Doomed", order: 1, courseID: courseID)
+            let sectionID = try section.requireID()
 
-        // Create an assignment in that section.
-        let assignment = try await makeAssignment(
-            setupID: "del_setup1",
-            title: "Assigned", courseID: courseID)
-        assignment.sectionID = sectionID
-        try await assignment.save(on: app.db)
+            // Create an assignment in that section.
+            let assignment = try await makeAssignment(
+                setupID: "del_setup1",
+                title: "Assigned", courseID: courseID)
+            assignment.sectionID = sectionID
+            try await assignment.save(on: app.db)
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_del2", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_del2", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        try await app.asyncTest(
-            .POST, "/instructor/sections/\(sectionID.uuidString)/delete",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-            },
-            afterResponse: { res in
-                #expect(res.status == .seeOther)
-            })
+            try await app.asyncTest(
+                .POST, "/instructor/sections/\(sectionID.uuidString)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
 
-        // The assignment should still exist but be ungrouped.
-        let updated = try await APIAssignment.find(assignment.id, on: app.db)
-        #expect(updated != nil)
-        #expect(updated?.sectionID == nil)
+            // The assignment should still exist but be ungrouped.
+            let updated = try await APIAssignment.find(assignment.id, on: app.db)
+            #expect(updated != nil)
+            #expect(updated?.sectionID == nil)
+
+        }
     }
 
     // MARK: - POST /instructor/:assignmentID/section
 
     @Test func moveToSection_setsSection() async throws {
-        let course = try await makeCourse(code: "SECT_MOVE1")
-        let courseID = try course.requireID()
-        let section = try await makeSection(name: "Target", order: 1, courseID: courseID)
-        let sectionID = try section.requireID()
-        let assignment = try await makeAssignment(
-            setupID: "move_setup1",
-            title: "Moveable", courseID: courseID)
-        let publicID = assignment.publicID
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_MOVE1")
+            let courseID = try course.requireID()
+            let section = try await makeSection(name: "Target", order: 1, courseID: courseID)
+            let sectionID = try section.requireID()
+            let assignment = try await makeAssignment(
+                setupID: "move_setup1",
+                title: "Moveable", courseID: courseID)
+            let publicID = assignment.publicID
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_mv", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_mv", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        struct MoveBody: Content { var sectionID: String }
-        try await app.asyncTest(
-            .POST, "/instructor/\(publicID)/section",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                req.headers.add(name: "x-csrf-token", value: token)
-                req.headers.contentType = .json
-                try req.content.encode(MoveBody(sectionID: sectionID.uuidString))
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            struct MoveBody: Content { var sectionID: String }
+            try await app.asyncTest(
+                .POST, "/instructor/\(publicID)/section",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    req.headers.add(name: "x-csrf-token", value: token)
+                    req.headers.contentType = .json
+                    try req.content.encode(MoveBody(sectionID: sectionID.uuidString))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let updated = try await APIAssignment.find(assignment.id, on: app.db)
-        #expect(updated?.sectionID == sectionID)
+            let updated = try await APIAssignment.find(assignment.id, on: app.db)
+            #expect(updated?.sectionID == sectionID)
+
+        }
     }
 
     @Test func moveToSection_emptyIDClearsSection() async throws {
-        let course = try await makeCourse(code: "SECT_MOVE2")
-        let courseID = try course.requireID()
-        let section = try await makeSection(name: "ASection", order: 1, courseID: courseID)
-        let sectionID = try section.requireID()
-        let assignment = try await makeAssignment(
-            setupID: "move_setup2",
-            title: "Moveable2", courseID: courseID)
-        assignment.sectionID = sectionID
-        try await assignment.save(on: app.db)
-        let publicID = assignment.publicID
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_MOVE2")
+            let courseID = try course.requireID()
+            let section = try await makeSection(name: "ASection", order: 1, courseID: courseID)
+            let sectionID = try section.requireID()
+            let assignment = try await makeAssignment(
+                setupID: "move_setup2",
+                title: "Moveable2", courseID: courseID)
+            assignment.sectionID = sectionID
+            try await assignment.save(on: app.db)
+            let publicID = assignment.publicID
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_mv2", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_mv2", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        struct MoveBody: Content { var sectionID: String }
-        try await app.asyncTest(
-            .POST, "/instructor/\(publicID)/section",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                req.headers.add(name: "x-csrf-token", value: token)
-                req.headers.contentType = .json
-                try req.content.encode(MoveBody(sectionID: ""))
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            struct MoveBody: Content { var sectionID: String }
+            try await app.asyncTest(
+                .POST, "/instructor/\(publicID)/section",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    req.headers.add(name: "x-csrf-token", value: token)
+                    req.headers.contentType = .json
+                    try req.content.encode(MoveBody(sectionID: ""))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let updated = try await APIAssignment.find(assignment.id, on: app.db)
-        #expect(updated?.sectionID == nil)
+            let updated = try await APIAssignment.find(assignment.id, on: app.db)
+            #expect(updated?.sectionID == nil)
+
+        }
     }
 
     @Test func moveToSection_syncsBrowserGradingMode() async throws {
-        let course = try await makeCourse(code: "SECT_MOVE3")
-        let courseID = try course.requireID()
-        let section = try await makeSection(
-            name: "BrowserSection", mode: "browser",
-            order: 1, courseID: courseID)
-        let sectionID = try section.requireID()
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "SECT_MOVE3")
+            let courseID = try course.requireID()
+            let section = try await makeSection(
+                name: "BrowserSection", mode: "browser",
+                order: 1, courseID: courseID)
+            let sectionID = try section.requireID()
 
-        // Create assignment with a manifest that has gradingMode = "worker"
-        let manifest = """
-            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null,"gradingMode":"worker"}
-            """
-        let setupID = "move_setup3"
-        let setup = APITestSetup(
-            id: setupID, manifest: manifest,
-            zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
-        try await setup.save(on: app.db)
-        let assignment = APIAssignment(
-            testSetupID: setupID, title: "GradeModeTest",
-            dueAt: nil, isOpen: true, courseID: courseID)
-        try await assignment.save(on: app.db)
-        let publicID = assignment.publicID
+            // Create assignment with a manifest that has gradingMode = "worker"
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null,"gradingMode":"worker"}
+                """
+            let setupID = "move_setup3"
+            let setup = APITestSetup(
+                id: setupID, manifest: manifest,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
+            try await setup.save(on: app.db)
+            let assignment = APIAssignment(
+                testSetupID: setupID, title: "GradeModeTest",
+                dueAt: nil, isOpen: true, courseID: courseID)
+            try await assignment.save(on: app.db)
+            let publicID = assignment.publicID
 
-        let cookie = try await loginUser(
-            username: "sect_instructor_mv3", password: "pw",
-            role: "instructor", on: app)
-        let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            let cookie = try await loginUser(
+                username: "sect_instructor_mv3", password: "pw",
+                role: "instructor", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
-        struct MoveBody: Content { var sectionID: String }
-        try await app.asyncTest(
-            .POST, "/instructor/\(publicID)/section",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: newCookie)
-                req.headers.add(name: "x-csrf-token", value: token)
-                req.headers.contentType = .json
-                try req.content.encode(MoveBody(sectionID: sectionID.uuidString))
-            },
-            afterResponse: { res in
-                #expect(res.status == .ok)
-            })
+            struct MoveBody: Content { var sectionID: String }
+            try await app.asyncTest(
+                .POST, "/instructor/\(publicID)/section",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    req.headers.add(name: "x-csrf-token", value: token)
+                    req.headers.contentType = .json
+                    try req.content.encode(MoveBody(sectionID: sectionID.uuidString))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        // The test setup manifest should now have gradingMode = "browser"
-        let updatedSetup = try await APITestSetup.find(setup.id, on: app.db)
-        let manifestData = Data((updatedSetup?.manifest ?? "").utf8)
-        let dict = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
-        #expect(dict?["gradingMode"] as? String == "browser")
+            // The test setup manifest should now have gradingMode = "browser"
+            let updatedSetup = try await APITestSetup.find(setup.id, on: app.db)
+            let manifestData = Data((updatedSetup?.manifest ?? "").utf8)
+            let dict = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+            #expect(dict?["gradingMode"] as? String == "browser")
+
+        }
     }
 }

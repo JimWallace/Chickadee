@@ -100,15 +100,6 @@ jobs:
   api-tests-postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Temporarily not gating the PR: the Swift Testing migration's
-    # @Suite(.serialized) final-class fixtures use a fire-and-forget
-    # deinit shutdown, which under postgres surfaces "too many clients"
-    # as apps overlap.  A dedicated follow-up will move every class
-    # suite to a `withApp(app) { _ in ... }` wrap per test so apps
-    # shut down deterministically before the next init.  Until then,
-    # the SQLite api-tests job + post-fix api-tests-postgres re-run
-    # remain authoritative.
-    continue-on-error: true
     container:
       image: swift:6.3-jammy
       options: --privileged
@@ -150,22 +141,13 @@ jobs:
       - name: Install system test dependencies
         run: |
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip postgresql-client && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
 
       - name: Run APITests against PostgreSQL
-        # Sequential (not --parallel) intentionally: the Swift Testing
-        # migration's @Suite(.serialized) final-class fixtures each open a
-        # Vapor app with its own Postgres connection pool, and with
-        # --parallel the transient pile-up during deinit handoff exceeds
-        # Postgres's default 100-connection cap ("too many clients").
-        # Restoring parallelism here needs either a shared NIO ELG across
-        # test apps or a CI-side max_connections bump (the docker-restart
-        # approach failed because the runner container has no docker.sock
-        # access).  Tracked as a Phase 4 cleanup item.
-        run: swift test --filter APITests
+        run: swift test --parallel --filter APITests
 
   browser-runner-tests:
     runs-on: ubuntu-latest
