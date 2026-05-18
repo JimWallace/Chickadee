@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Plug the remaining editor test gaps deferred in PR #581.**
+  Adds 9 tests to `AssignmentRoutesEditorTests`:
+    * **`GET /instructor/new/draft/solution-notebook`** (5 tests):
+      happy-path returns the notebook bytes via the fallback path,
+      404 for unknown draft, 404 for draft without a solution file,
+      404 for missing `draftID` query param, 403 for student.
+    * **`POST /instructor/:assignmentID/edit/save`** (4 tests):
+      403 for student, 404 for unknown assignment, validation-failure
+      redirect with `?error=Assignment%20name%20is%20required` on
+      empty title, validation-failure redirect with `?error=…` on
+      missing test suites.  Happy-path multipart save is already
+      exercised end-to-end by `AssignmentRoutesPublishTests`.
+
+  Includes a comment explaining the CSRF-token-ordering gotcha that
+  bit during authoring (token must be fetched before any fixture
+  creates a course-bearing setup; otherwise `GET /instructor` redirects
+  to `/enroll` for the instructor and the token extractor returns the
+  empty string).
+
+  Editor suite is now 21 tests, 0 failures.
+
 - **Extract `updateNewAssignmentDraft` request-body parsing into
   `parseNewAssignmentDraftPayload(req:)`.**  The handler's first
   ~90 lines were Multi/Single Vapor `Content` decoding + multipart
