@@ -10,17 +10,13 @@ set -euo pipefail
 # invocation on a fresh checkout downloads + caches it; subsequent runs are
 # fast.
 #
-# Note: we deliberately do NOT pass `--strict`.  The structural rules
-# (function_body_length, cyclomatic_complexity, type_body_length) have
-# meaningful warning/error thresholds in .swiftlint.yml — `warning`
-# catches "getting long, consider splitting" and `error` catches "this
-# is a real outlier."  `--strict` collapses that distinction by
-# upgrading every warning to an error, which would either force every
-# 100-line route handler to be split (noise) or push the warning
-# threshold so high the rule stops mattering.  Without `--strict`,
-# SwiftLint exits non-zero only on rules at error severity, while
-# still reporting warnings in the output for visibility.
+# Runs with `--strict`: every reported issue, warning or error, fails the
+# build.  This is the ratchet that keeps the codebase improving incrementally
+# at every change.  PR #524 left us at 0 violations, so this is enforceable
+# starting from zero.  If a structural-rule warning threshold (e.g.
+# function_body_length at 100 lines) starts causing legitimate friction,
+# raise the threshold in .swiftlint.yml rather than dropping --strict.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-exec swift package --allow-writing-to-package-directory swiftlint lint
+exec swift package --allow-writing-to-package-directory swiftlint lint --strict

@@ -38,6 +38,9 @@ jobs:
       - name: Run SwiftLint
         run: scripts/swiftlint.sh
 
+      - name: Block new XCTest imports
+        run: scripts/no-new-xctest.sh
+
   core-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
