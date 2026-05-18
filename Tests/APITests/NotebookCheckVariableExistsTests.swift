@@ -7,16 +7,16 @@
 
 import Core
 import Foundation
+import Testing
 import Vapor
-import XCTest
 
 @testable import chickadee_server
 
-final class NotebookCheckVariableExistsTests: XCTestCase {
+@Suite struct NotebookCheckVariableExistsTests {
 
     // MARK: - Renderer
 
-    func testRender_existenceOnly_emitsMissingSentinelAndNoTypeCheck() {
+    @Test func render_existenceOnly_emitsMissingSentinelAndNoTypeCheck() {
         let check = NotebookCheck(
             id: "var_df",
             kind: .variableExists,
@@ -25,36 +25,30 @@ final class NotebookCheckVariableExistsTests: XCTestCase {
         let bundle = renderNotebookCheck(check)
         let source = bundle.script.source
 
-        XCTAssertTrue(
+        #expect(
             source.contains("kind=variable_exists"),
             "header should record the kind for stale-script audits")
-        XCTAssertTrue(
+        #expect(
             source.contains("name = \"df\""),
             "variable name should be embedded as a Python string literal")
-        XCTAssertTrue(
+        #expect(
             source.contains("getattr(student_module, name, _MISSING)"),
             "must use the standard _MISSING sentinel idiom")
-        XCTAssertTrue(
+        #expect(
             source.contains("is not defined in the student notebook"),
             "missing-variable failure message should be present")
-        XCTAssertTrue(
+        #expect(
             source.contains("# (no type check; existence only)"),
             "no-type branch should include the explicit no-op comment")
-        XCTAssertFalse(
-            source.contains("isinstance"),
-            "no isinstance check should appear when expectedType is nil")
-        XCTAssertFalse(
-            source.contains("__mro__"),
-            "no MRO walk should appear when expectedType is nil")
-        XCTAssertTrue(
+        #expect(source.contains("isinstance") == false, "no isinstance check should appear when expectedType is nil")
+        #expect(source.contains("__mro__") == false, "no MRO walk should appear when expectedType is nil")
+        #expect(
             source.contains("passed("),
             "must emit a pass message on success")
-        XCTAssertEqual(
-            bundle.sidecars.count, 0,
-            "variableExists never produces sidecars")
+        #expect(bundle.sidecars.isEmpty, "variableExists never produces sidecars")
     }
 
-    func testRender_withBuiltinType_emitsIsinstanceCheck() {
+    @Test func render_withBuiltinType_emitsIsinstanceCheck() {
         let check = NotebookCheck(
             id: "var_n",
             kind: .variableExists,
@@ -63,16 +57,16 @@ final class NotebookCheckVariableExistsTests: XCTestCase {
         )
         let source = renderNotebookCheck(check).script.source
 
-        XCTAssertTrue(source.contains("expected_type_name = \"int\""))
-        XCTAssertTrue(
+        #expect(source.contains("expected_type_name = \"int\""))
+        #expect(
             source.contains("isinstance(actual, int) and not isinstance(actual, bool)"),
             "int check must exclude bool (matches PatternFamilyRenderer's returnTypeCheck)")
-        XCTAssertTrue(
+        #expect(
             source.contains("has the wrong type"),
             "type mismatch failure message should be present")
     }
 
-    func testRender_withLibraryType_walksMROByName() {
+    @Test func render_withLibraryType_walksMROByName() {
         let check = NotebookCheck(
             id: "var_df",
             kind: .variableExists,
@@ -81,13 +75,13 @@ final class NotebookCheckVariableExistsTests: XCTestCase {
         )
         let source = renderNotebookCheck(check).script.source
 
-        XCTAssertTrue(
+        #expect(
             source.contains("__mro__"),
             "library types should be matched via MRO-name walk to avoid forcing imports")
-        XCTAssertTrue(source.contains(#""DataFrame""#))
+        #expect(source.contains(#""DataFrame""#))
     }
 
-    func testRender_withUnknownType_fallsBackToMROWalk() {
+    @Test func render_withUnknownType_fallsBackToMROWalk() {
         // Validator allows any non-empty type name; the renderer's MRO
         // fallback handles unknown names (student-defined classes, new
         // library types).  This mirrors `.returnTypeCheck`'s behaviour.
@@ -99,36 +93,35 @@ final class NotebookCheckVariableExistsTests: XCTestCase {
         )
         let source = renderNotebookCheck(check).script.source
 
-        XCTAssertTrue(source.contains("__mro__"))
-        XCTAssertTrue(source.contains(#""MyCustomClass""#))
+        #expect(source.contains("__mro__"))
+        #expect(source.contains(#""MyCustomClass""#))
     }
 
-    func testFilename_usesCheckPrefix_andNoSidecars() {
+    @Test func filename_usesCheckPrefix_andNoSidecars() {
         let check = NotebookCheck(
             id: "var_df", kind: .variableExists,
             tier: .release, variable: "df"
         )
         let files = notebookCheckAllGeneratedFilenames(check)
-        XCTAssertEqual(
-            files, ["releasecheck_var_df.py"],
-            "variableExists generates a single .py with the tier-prefixed name")
+        #expect(
+            files == ["releasecheck_var_df.py"], "variableExists generates a single .py with the tier-prefixed name")
     }
 
     // MARK: - Default label
 
-    func testDefaultLabel_withoutType() {
+    @Test func defaultLabel_withoutType() {
         let check = NotebookCheck(
             id: "var_results",
             kind: .variableExists,
             variable: "results"
         )
         let source = renderNotebookCheck(check).script.source
-        XCTAssertTrue(
+        #expect(
             source.contains("# Test: `results` is defined"),
             "default label should describe pure existence")
     }
 
-    func testDefaultLabel_withType() {
+    @Test func defaultLabel_withType() {
         let check = NotebookCheck(
             id: "var_df",
             kind: .variableExists,
@@ -136,62 +129,67 @@ final class NotebookCheckVariableExistsTests: XCTestCase {
             expectedType: "DataFrame"
         )
         let source = renderNotebookCheck(check).script.source
-        XCTAssertTrue(
+        #expect(
             source.contains("# Test: `df` is defined and is a DataFrame"),
             "default label should describe existence + type")
     }
 
     // MARK: - Validator
 
-    func testValidate_passesForBareExistence() throws {
+    @Test func validate_passesForBareExistence() throws {
         let checks = [
             NotebookCheck(id: "ok", kind: .variableExists, variable: "df")
         ]
-        XCTAssertNoThrow(try validateNotebookChecks(checks))
+        try validateNotebookChecks(checks)
     }
 
-    func testValidate_passesForExistencePlusType() throws {
+    @Test func validate_passesForExistencePlusType() throws {
         let checks = [
             NotebookCheck(
                 id: "ok", kind: .variableExists,
                 variable: "df", expectedType: "DataFrame")
         ]
-        XCTAssertNoThrow(try validateNotebookChecks(checks))
+        try validateNotebookChecks(checks)
     }
 
-    func testValidate_rejectsMissingVariable() {
+    @Test func validate_rejectsMissingVariable() throws {
         let checks = [
             NotebookCheck(id: "bad", kind: .variableExists, variable: nil)
         ]
-        XCTAssertThrowsError(try validateNotebookChecks(checks)) { err in
-            XCTAssertTrue("\(err)".contains("variable name is required"))
+        let error = try #require(throws: (any Error).self) {
+            try validateNotebookChecks(checks)
         }
+        #expect("\(error)".contains("variable name is required"))
     }
 
-    func testValidate_rejectsEmptyVariable() {
+    @Test func validate_rejectsEmptyVariable() {
         let checks = [
             NotebookCheck(id: "bad", kind: .variableExists, variable: "")
         ]
-        XCTAssertThrowsError(try validateNotebookChecks(checks))
-    }
-
-    func testValidate_rejectsNonIdentifierVariable() {
-        let checks = [
-            NotebookCheck(id: "bad", kind: .variableExists, variable: "1df")
-        ]
-        XCTAssertThrowsError(try validateNotebookChecks(checks)) { err in
-            XCTAssertTrue("\(err)".contains("not a valid Python identifier"))
+        #expect(throws: (any Error).self) {
+            try validateNotebookChecks(checks)
         }
     }
 
-    func testValidate_rejectsWhitespaceOnlyExpectedType() {
+    @Test func validate_rejectsNonIdentifierVariable() throws {
+        let checks = [
+            NotebookCheck(id: "bad", kind: .variableExists, variable: "1df")
+        ]
+        let error = try #require(throws: (any Error).self) {
+            try validateNotebookChecks(checks)
+        }
+        #expect("\(error)".contains("not a valid Python identifier"))
+    }
+
+    @Test func validate_rejectsWhitespaceOnlyExpectedType() throws {
         let checks = [
             NotebookCheck(
                 id: "bad", kind: .variableExists,
                 variable: "df", expectedType: "   ")
         ]
-        XCTAssertThrowsError(try validateNotebookChecks(checks)) { err in
-            XCTAssertTrue("\(err)".contains("expectedType"))
+        let error = try #require(throws: (any Error).self) {
+            try validateNotebookChecks(checks)
         }
+        #expect("\(error)".contains("expectedType"))
     }
 }
