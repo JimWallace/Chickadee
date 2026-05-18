@@ -29,27 +29,49 @@ extension AssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Course")
         }
 
+        // Phase 1: assignments + sections in parallel.  The sections query
+        // only needs `courseID`, so it doesn't have to wait for assignments
+        // — and the page can't render without it either way.
+        //
         // Published assignments — i.e. those that have an APIAssignment row.
         // Setups without an assignment are draft/unpublished and never appear
         // in the student-facing dashboard, so they don't appear here either.
-        let assignments = try await APIAssignment.query(on: req.db)
+        async let assignmentsFuture = APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .all()
+        async let allSectionsFuture = APICourseSection.query(on: req.db)
+            .filter(\.$courseID == courseID)
+            .sort(\.$sortOrder, .ascending)
+            .all()
+        let assignments = try await assignmentsFuture
+        let allSections = try await allSectionsFuture
 
         let setupIDs = assignments.map(\.testSetupID)
-        let setupsByID = try await loadStudentCourseSetupsByID(req: req, setupIDs: setupIDs)
 
-        let submissions = try await loadStudentCourseSubmissions(
+        // Phase 2: setups + submissions + extensions + class-badges in
+        // parallel.  All four depend on the assignments / setupIDs from
+        // phase 1, but are independent of each other.  Pre-batching this
+        // way drops the page from ~7 sequential queries to two parallel
+        // groups + one dependent follow-on (preferredResults below).
+        async let setupsByIDFuture = loadStudentCourseSetupsByID(req: req, setupIDs: setupIDs)
+        async let submissionsFuture = loadStudentCourseSubmissions(
             req: req, student: student, setupIDs: setupIDs)
+        async let extensionByAssignmentIDFuture = loadStudentCourseExtensions(
+            req: req, student: student, assignments: assignments)
+        async let classBadgesBySetupIDFuture = loadStudentCourseClassBadges(
+            req: req, student: student, setupIDs: setupIDs)
+        let setupsByID = try await setupsByIDFuture
+        let submissions = try await submissionsFuture
+        let extensionByAssignmentID = try await extensionByAssignmentIDFuture
+        let classBadgesBySetupID = try await classBadgesBySetupIDFuture
+
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
+        // preferredResults must wait until submissions resolves (it needs
+        // the submission IDs), so it stays serial after phase 2.
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
         )
-        let extensionByAssignmentID = try await loadStudentCourseExtensions(
-            req: req, student: student, assignments: assignments)
-        let classBadgesBySetupID = try await loadStudentCourseClassBadges(
-            req: req, student: student, setupIDs: setupIDs)
 
         let fmt = waterlooDateTimeFormatter()
         let sortedAssignments = sortedStudentCourseAssignments(assignments, setupsByID: setupsByID)
@@ -71,11 +93,6 @@ extension AssignmentRoutes {
             )
         }
 
-        // Group by course section, just like the student dashboard.
-        let allSections = try await APICourseSection.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .sort(\.$sortOrder, .ascending)
-            .all()
         let (sectionContexts, ungroupedRows) = groupStudentCourseRowsBySection(
             rows: rows,
             assignments: assignments,
