@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Unify error rendering for bare `Abort(...)` and typed
+  `WebAssignmentError` throws.**  Both have always funneled through
+  `LeafErrorMiddleware` and rendered the same Leaf `error` template,
+  but the *user-facing message* diverged: typed errors produced
+  contextual reasons ("Assignment 'foo' not found", "You do not have
+  permission to edit assignments."), while a bare `Abort(.notFound)`
+  with no `reason:` rendered the raw HTTP reason phrase
+  ("Not Found", "Forbidden", "Bad Request") — and the Leaf template
+  threw away typed-error context on 404 by hard-coding a canned
+  message.  `LeafErrorMiddleware` now passes every `Abort` reason
+  through a new `friendlyReason(status:reason:)` helper that
+  substitutes a humane default (`We couldn't find that page.`,
+  `You don't have permission to view this page.`, etc.) only when
+  the caller did not supply a contextual reason; explicit reasons —
+  including all `WebAssignmentError` messages — are returned
+  verbatim.  The `error.leaf` template drops its 404 special-case
+  branch since the middleware now always provides a meaningful
+  message.  The JSON error envelope for `/api/*` and `/worker/*`
+  paths gains a `"status": <code>` field for symmetry with the HTML
+  page.  No source-side migration required — the 127 bare `Abort`
+  call sites scattered across the non-AssignmentRoutes surface now
+  render as friendly defaults without touching the route handlers
+  themselves.
+
 - **v0.6.0 cleanup: drop the two DEPRECATED back-compat shims.**
   CLAUDE.md flagged both for removal once their compatibility window
   closed.  (1) `NotebookFunctionScanner`: the
