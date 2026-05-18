@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Add `RunnerNetworkResilienceTests` to plug the coverage gap on the
+  worker's retry classifier + backoff helpers.**  Prior coverage was
+  indirect — `Reporter`/`JobPoller` tests drive the helpers through
+  the HTTP stack and the two-case sanity check in `WorkerTests`
+  (`testClassifyHTTPRetry*`) covered 4 of 9 status codes the classifier
+  handles.  New file adds 16 pure-function tests with no daemon spin-up
+  or wall-clock dependency:
+    * `classifyHTTPRetry` — full grid of retryable codes (408, 425,
+      429, 500, 502, 503, 504), terminal auth codes (401, 403), the
+      duplicate-worker-ID 409 terminal case, and the
+      "unknown-4xx ⇒ terminal" default.
+    * `classifyPollHTTPRetry` — pins the poll-path-specific upgrade
+      of 401/403 to retryable (so long-lived runners recover from
+      transient auth-reconfiguration windows) and confirms non-auth
+      codes fall through to the base classifier.
+    * `withRunnerRetry` — succeeds without retry on first hit, retries
+      until success, short-circuits on terminal disposition, respects
+      `maxAttempts` and rethrows, honours `policy.enabled=false`,
+      invokes `onRetry` exactly between attempts (N–1 calls for N
+      attempts) with correct stage/attempt/message.
+    * `ExponentialBackoff` — stays within the cap, never returns zero
+      (regression-pin for the early bug fixed in v0.4.22), and `reset()`
+      returns the next draw to within `2× initial`.
+
 - **Add `AssignmentRoutesEditorTests` to plug the coverage gap on
   `AssignmentRoutes+Editor.swift` (881 LOC).**  The script CRUD
   endpoints (`getScript` / `updateScript` / `createScript` /
