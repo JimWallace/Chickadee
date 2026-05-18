@@ -16,20 +16,30 @@ extension AssignmentRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
 
-        let students = try await loadGradesCSVStudents(
+        // Phase 1: students + assignments in parallel.  Both only need
+        // `activeCourseUUID`; neither depends on the other.
+        async let studentsFuture = loadGradesCSVStudents(
             req: req, activeCourseUUID: courseState.activeCourseUUID)
-        let assignments = try await loadGradesCSVAssignments(
+        async let assignmentsFuture = loadGradesCSVAssignments(
             req: req, activeCourseUUID: courseState.activeCourseUUID)
+        let students = try await studentsFuture
+        let assignments = try await assignmentsFuture
 
         let setupIDs = Set(assignments.map(\.testSetupID))
-        let setupByID = try await loadGradesCSVSetupsByID(req: req, setupIDs: setupIDs)
-        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
-
         let studentIDs = Set(students.compactMap(\.id))
-        let submissions = try await loadGradesCSVSubmissions(
+
+        // Phase 2: setups-by-id + submissions in parallel.  Both depend on
+        // phase 1 (setupIDs / studentIDs), but neither depends on the other.
+        async let setupByIDFuture = loadGradesCSVSetupsByID(req: req, setupIDs: setupIDs)
+        async let submissionsFuture = loadGradesCSVSubmissions(
             req: req, setupIDs: setupIDs, studentIDs: studentIDs)
+        let setupByID = try await setupByIDFuture
+        let submissions = try await submissionsFuture
+
+        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
         let submissionIDs = submissions.map(\.id)
 
+        // Serial follow-on: needs submission IDs from phase 2.
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissionIDs, on: req.db)
         let bestPointsByUserAndSetup = bestPointsByUserAndSetup(
