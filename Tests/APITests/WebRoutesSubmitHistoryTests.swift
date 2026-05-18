@@ -1,123 +1,135 @@
 // Tests/APITests/WebRoutesSubmitHistoryTests.swift
 //
-// Split from WebRoutesTests.swift.  See WebRoutesTestCase.swift for
-// shared helpers (auth, seeding, submitMultipartBody, submitOnceAs).
+// Split from WebRoutesTests.swift.  See WebRoutesHelpers.swift for the
+// `withWebRoutesApp` lifecycle wrapper and free-function helpers (auth,
+// seeding, submitMultipartBody, submitOnceAs).
 
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class WebRoutesSubmitHistoryTests: WebRoutesTestCase {
+@Suite struct WebRoutesSubmitHistoryTests {
 
     // MARK: - GET /testsetups/:id/submit
 
-    func testSubmitFormRendersForStudent() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enrollUser(user)
-        try await insertSetup(id: "setup_sub")
+    @Test func submitFormRendersForStudent() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sub", on: app)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/setup_sub/submit",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/setup_sub/submit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+        }
     }
 
-    func testSubmitForm404ForMissingSetup() async throws {
-        let cookie = try await loginAsStudent()
+    @Test func submitForm404ForMissingSetup() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/nonexistent/submit",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/nonexistent/submit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+        }
     }
 
-    func testSubmitPostRejectsOverdueAssignmentsAndPersistsClosure() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        try await enrollUser(user)
-        _ = try await insertSetup(id: "setup_submit_overdue")
-        let assignment = try await insertAssignment(
-            testSetupID: "setup_submit_overdue",
-            title: "Late Lab",
-            isOpen: true,
-            dueAt: Date().addingTimeInterval(-60)
-        )
+    @Test func submitPostRejectsOverdueAssignmentsAndPersistsClosure() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            _ = try await wrInsertSetup(id: "setup_submit_overdue", on: app)
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_submit_overdue",
+                title: "Late Lab",
+                isOpen: true,
+                dueAt: Date().addingTimeInterval(-60),
+                on: app
+            )
 
-        let (csrf, sessionCookie) = try await csrfFields(
-            for: "/testsetups/setup_submit_overdue/submit",
-            cookie: cookie,
-            on: app
-        )
-        let boundary = "late-submit-boundary"
+            let (csrf, sessionCookie) = try await csrfFields(
+                for: "/testsetups/setup_submit_overdue/submit",
+                cookie: cookie,
+                on: app
+            )
+            let boundary = "late-submit-boundary"
 
-        try await app.asyncTest(
-            .POST, "/testsetups/setup_submit_overdue/submit",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.contentType = HTTPMediaType(
-                    type: "multipart",
-                    subType: "form-data",
-                    parameters: ["boundary": boundary]
-                )
-                req.body = .init(buffer: submitMultipartBody(boundary: boundary, csrfToken: csrf))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
-                XCTAssertTrue(res.body.string.contains("closed"))
-            })
+            try await app.asyncTest(
+                .POST, "/testsetups/setup_submit_overdue/submit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart",
+                        subType: "form-data",
+                        parameters: ["boundary": boundary]
+                    )
+                    req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                    #expect(res.body.string.contains("closed"))
+                })
 
-        let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
-        XCTAssertNotNil(refreshedOptional)
-        let refreshed = refreshedOptional!
-        XCTAssertFalse(refreshed.isOpen)
+            let refreshed = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(!refreshed.isOpen)
+        }
     }
 
     // MARK: - GET /testsetups/:id/history
 
-    func testHistoryShowsSubmissions() async throws {
-        let cookie = try await loginAsStudent()
-        let user = try await studentUser()
-        let userID = try user.requireID()
-        try await insertSetup(id: "setup_hist")
-        try await insertAssignment(testSetupID: "setup_hist", title: "History Test", isOpen: true)
-        try await insertSubmission(id: "sub_h1", testSetupID: "setup_hist", userID: userID, attemptNumber: 1)
-        try await insertSubmission(id: "sub_h2", testSetupID: "setup_hist", userID: userID, attemptNumber: 2)
+    @Test func historyShowsSubmissions() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrInsertSetup(id: "setup_hist", on: app)
+            try await wrInsertAssignment(testSetupID: "setup_hist", title: "History Test", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_h1", testSetupID: "setup_hist", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertSubmission(
+                id: "sub_h2", testSetupID: "setup_hist", userID: userID, attemptNumber: 2, on: app)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/setup_hist/history",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let html = res.body.string
-                XCTAssertTrue(html.contains("History Test"), "Should show assignment title")
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/setup_hist/history",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("History Test"), "Should show assignment title")
+                })
+        }
     }
 
-    func testHistory404ForMissingSetup() async throws {
-        let cookie = try await loginAsStudent()
+    @Test func history404ForMissingSetup() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
 
-        try await app.asyncTest(
-            .GET, "/testsetups/nonexistent/history",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
-            })
+            try await app.asyncTest(
+                .GET, "/testsetups/nonexistent/history",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+        }
     }
 }

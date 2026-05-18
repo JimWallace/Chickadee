@@ -24,7 +24,6 @@ Tests/APITests/TestScriptTemplatesTests.swift
 Tests/APITests/WebRoutesBadgeTests.swift
 Tests/APITests/WebRoutesIndexTests.swift
 Tests/APITests/WebRoutesSubmissionPageTests.swift
-Tests/APITests/WebRoutesSubmitHistoryTests.swift
 Tests/APITests/WebRoutesTestCase.swift
 Tests/APITests/WorkerRoutesTests.swift
 Tests/APITests/ZipUploadValidationTests.swift
