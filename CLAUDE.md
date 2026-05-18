@@ -392,10 +392,60 @@ same bytes without a build-time network fetch.
   install). Run `scripts/swiftlint.sh` to check. The two tools are
   complementary: swift-format owns formatting, SwiftLint owns correctness;
   overlapping rules are disabled in `.swiftlint.yml`. CI enforces SwiftLint
-  as a step in the `format-lint` job (alongside `scripts/lint.sh`); the
-  script does not pass `--strict` so warning-severity rules still report
-  for visibility without blocking, while error-severity rules (outsized
-  functions/types, real outliers) fail the job.
+  as a step in the `format-lint` job (alongside `scripts/lint.sh`).
+  `scripts/swiftlint.sh` passes `--strict` (every reported issue, warning
+  or error, fails the build), keeping the codebase at zero violations
+  going forward. If a structural-rule warning threshold (e.g.
+  `function_body_length` at 100 lines) starts causing legitimate
+  friction, raise the threshold in `.swiftlint.yml` rather than dropping
+  `--strict`.
+
+---
+
+## Testing Conventions
+
+- **Framework: Swift Testing only for new files.** The codebase is mid-
+  migration from XCTest to Swift Testing. The remaining `XCTestCase`
+  files stay until their phase migrates them; CI rejects new
+  `import XCTest` lines via `scripts/no-new-xctest.sh`.
+- **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
+  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`, and
+  `@Test(arguments:)`. Avoid `CustomExecutionTrait`, hand-rolled trait
+  types, and anything still labelled experimental in the Swift Testing
+  source — the API is still evolving and we don't want migration churn
+  on toolchain bumps.
+- **Struct vs class suites.** Default to `@Suite struct Foo` with each
+  `@Test` building its own fixture. Use `@Suite final class Foo` only
+  when you need `init()` / `deinit` for setup/teardown of expensive
+  shared state (e.g. temp directories with explicit cleanup). See
+  `Tests/WorkerTests/DirectorySizeBytesTests.swift` for the class
+  pattern and `Tests/APITests/COEPMiddlewareTests.swift` for the struct
+  pattern.
+- **`.serialized` on DB-touching suites.** Postgres test parallelism
+  uses per-class isolated schemas (commit `b615235`); within a suite,
+  Swift Testing runs tests in parallel by default. Suites that mutate
+  shared rows or env vars must annotate `@Suite(.serialized)`. New
+  migrated suites start `.serialized` with a TODO and relax later once
+  Phase 4 finishes.
+- **Env-var isolation: `EnvTestLock`.** Tests that call
+  `setenv`/`unsetenv` must grab `EnvTestLock.shared` (see
+  `Tests/APITests/EnvTestLock.swift`). The lock prevents concurrent
+  env-mutating tests from clobbering each other under `--parallel`.
+- **Force unwraps in new tests.** Even though `Tests/.swiftlint.yml`
+  still permits `!` / `try!` / `as!` for the legacy XCTest files, new
+  Swift Testing files must use `try #require(value)` instead — it's the
+  idiomatic equivalent of `XCTUnwrap` and gives a usable failure
+  message. After Phase 4 (XCTest fully gone), the test-folder lint
+  exemption itself will be dropped.
+- **Pattern references.**
+  - Standalone struct suite:
+    [Tests/APITests/COEPMiddlewareTests.swift](Tests/APITests/COEPMiddlewareTests.swift)
+  - Class suite with `init`/`deinit`:
+    [Tests/APITests/ZipArchiverTests.swift](Tests/APITests/ZipArchiverTests.swift)
+  - Parameterized + `try #require`:
+    [Tests/APITests/MarmosetImportParserTests.swift](Tests/APITests/MarmosetImportParserTests.swift)
+  - Worker-side class suite:
+    [Tests/WorkerTests/DirectorySizeBytesTests.swift](Tests/WorkerTests/DirectorySizeBytesTests.swift)
 
 ---
 

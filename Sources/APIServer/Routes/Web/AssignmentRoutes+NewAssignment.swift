@@ -166,37 +166,6 @@ extension AssignmentRoutes {
     // MARK: - updateNewAssignmentDraft helpers
 
     fileprivate func parseNewAssignmentDraftPayload(req: Request) throws -> NewAssignmentDraftPayload {
-        struct DraftBodyMany: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var draftAction: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-        struct DraftBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var draftAction: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-
         let bodyMany = try? req.content.decode(DraftBodyMany.self)
         let bodySingle = bodyMany == nil ? (try? req.content.decode(DraftBodySingle.self)) : nil
         guard bodyMany != nil || bodySingle != nil else {
@@ -385,6 +354,38 @@ extension AssignmentRoutes {
             clearDraftFormState(req: req, draftID: validated.draftID)
         }
         return req.redirect(to: "/instructor")
+    }
+
+    fileprivate struct DraftBodyMany: Content {
+        var assignmentName: String?
+        var dueAt: String?
+        var sectionID: String?
+        var draftID: String?
+        var draftAction: String?
+        var assignmentNotebookFile: File?
+        var solutionNotebookFile: File?
+        var suiteFiles: [File]?
+        var suiteConfig: String?
+        var requiredPlatform: String?
+        var requiredArchitecture: String?
+        var requiredLanguagesCSV: String?
+        var requiredCapabilitiesCSV: String?
+    }
+
+    fileprivate struct DraftBodySingle: Content {
+        var assignmentName: String?
+        var dueAt: String?
+        var sectionID: String?
+        var draftID: String?
+        var draftAction: String?
+        var assignmentNotebookFile: File?
+        var solutionNotebookFile: File?
+        var suiteFiles: File?
+        var suiteConfig: String?
+        var requiredPlatform: String?
+        var requiredArchitecture: String?
+        var requiredLanguagesCSV: String?
+        var requiredCapabilitiesCSV: String?
     }
 
     // MARK: - saveNewAssignment helpers
