@@ -8,9 +8,6 @@ Tests/APITests/AssignmentRoutesNotebookTests.swift
 Tests/APITests/AssignmentRoutesPublishTests.swift
 Tests/APITests/AssignmentRoutesRetestTests.swift
 Tests/APITests/AssignmentRoutesTestCase.swift
-Tests/APITests/NotebookCheckVariableExistsTests.swift
-Tests/APITests/OIDCDiscoveryURLValidationTests.swift
-Tests/APITests/OIDCTests.swift
 Tests/APITests/PatternFamilyApplyTests.swift
 Tests/APITests/PatternFamilyKindsTests.swift
 Tests/APITests/PatternFamilyRendererTests.swift
