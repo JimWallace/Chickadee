@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Typed throws on `WorkerJobRoutes.buildJobPayload`.**  The
+  function only throws `WorkerJobError.internalInconsistency` (two
+  sites: missing id, malformed URL).  Signature tightens from
+  `async throws -> Job` to `async throws(WorkerJobError) -> Job`
+  so the compiler now enforces the error contract at the call
+  sites.  The single caller (`requestJob` route handler) stays
+  on plain `throws` — typed throws promotes to `Error`
+  automatically when caught by an untyped catch.
+
+  This is the first conversion of round-2 review item #1.  Two
+  other candidates (`BrowserResultRoutes.submitBrowserResult` and
+  `TestSetupRoutes.downloadSupportFile`) need `AppError` to land
+  on main first (#591) before they can be similarly tightened.
+  Sibling functions in `WorkerJobRoutes.swift` (e.g.
+  `encodeJobResponse`) throw Codable errors and are intentionally
+  left as untyped `throws`.
+
 - **Document the one `try!` in production code.**  The compile-time
   regex literal in `NotebookSubstitution.placeholderRegex`
   (`Sources/APIServer/Services/NotebookSubstitution.swift:32`)
