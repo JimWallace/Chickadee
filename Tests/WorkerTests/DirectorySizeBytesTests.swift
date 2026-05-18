@@ -1,51 +1,49 @@
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
-final class DirectorySizeBytesTests: XCTestCase {
+@Suite final class DirectorySizeBytesTests {
 
-    private var tempDir: URL!
+    let tempDir: URL
 
-    override func setUp() {
-        super.setUp()
+    init() throws {
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-directorysize-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 
-    override func tearDown() {
-        if let tempDir { try? FileManager.default.removeItem(at: tempDir) }
-        super.tearDown()
+    deinit {
+        try? FileManager.default.removeItem(at: tempDir)
     }
 
-    func test_emptyDirectoryReturnsZero() throws {
-        XCTAssertEqual(directorySizeBytes(at: tempDir), 0)
+    @Test func emptyDirectoryReturnsZero() throws {
+        #expect(directorySizeBytes(at: tempDir) == 0)
     }
 
-    func test_sumsAllRegularFiles() throws {
+    @Test func sumsAllRegularFiles() throws {
         try Data(count: 100).write(to: tempDir.appendingPathComponent("a.bin"))
         try Data(count: 250).write(to: tempDir.appendingPathComponent("b.bin"))
-        XCTAssertEqual(directorySizeBytes(at: tempDir), 350)
+        #expect(directorySizeBytes(at: tempDir) == 350)
     }
 
-    func test_recursesIntoSubdirectories() throws {
+    @Test func recursesIntoSubdirectories() throws {
         let sub = tempDir.appendingPathComponent("nested/deeper", isDirectory: true)
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
         try Data(count: 64).write(to: tempDir.appendingPathComponent("top.bin"))
         try Data(count: 128).write(to: sub.appendingPathComponent("leaf.bin"))
-        XCTAssertEqual(directorySizeBytes(at: tempDir), 192)
+        #expect(directorySizeBytes(at: tempDir) == 192)
     }
 
-    func test_skipsHiddenFiles() throws {
+    @Test func skipsHiddenFiles() throws {
         try Data(count: 50).write(to: tempDir.appendingPathComponent("visible.bin"))
         try Data(count: 200).write(to: tempDir.appendingPathComponent(".hidden"))
         // .skipsHiddenFiles option in the enumerator means we ignore dotfiles.
-        XCTAssertEqual(directorySizeBytes(at: tempDir), 50)
+        #expect(directorySizeBytes(at: tempDir) == 50)
     }
 
-    func test_returnsNilForMissingDirectory() {
+    @Test func returnsNilForMissingDirectory() {
         let nonexistent = tempDir.appendingPathComponent("does-not-exist", isDirectory: true)
-        XCTAssertNil(directorySizeBytes(at: nonexistent))
+        #expect(directorySizeBytes(at: nonexistent) == nil)
     }
 }

@@ -8,6 +8,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Migrate 5 standalone XCTest files to Swift Testing.**  First slice
+  of round-2 review item #4 (89 XCTest files total).  Picked the
+  smallest, most independent suites — no shared base class, no
+  async tearDown — to establish the conversion pattern:
+    * `Tests/APITests/COEPMiddlewareTests.swift` (3 tests)
+    * `Tests/APITests/ScanModeMiddlewareTests.swift` (3 tests)
+    * `Tests/APITests/CurrentUserContextTests.swift` (2 tests)
+    * `Tests/WorkerTests/DirectorySizeBytesTests.swift` (5 tests,
+      migrated to `@Suite final class` + `init() throws` + `deinit`
+      because the temp-dir setup/teardown needs lifecycle)
+    * `Tests/WorkerTests/WorkerRequestSignerTests.swift` (2 tests)
+
+  Pattern: `final class X: XCTestCase` → `@Suite struct X`
+  (or `@Suite final class X` when teardown is needed);
+  `func testFoo()` → `@Test func foo()`;
+  `XCTAssertEqual(a, b)` → `#expect(a == b)`;
+  `XCTAssertNil(x)` → `#expect(x == nil)`;
+  `XCTAssertNotNil(x)` → `#expect(x != nil)`.  Imports drop
+  `XCTest`, keep `XCTVapor` where Vapor test helpers are still
+  used (`Application.testable()` works inside Swift Testing
+  closures).  All 15 migrated tests pass under the new framework.
+
+  Skipped for this slice: suites that subclass shared test bases
+  (`AssignmentHelpersTestCase`, `WebRoutesTestCase`, etc.) and
+  suites with async `tearDownTestApp()` cleanup (the
+  `makeTestApp`-using files like `AuditLogReaperServiceTests`).
+  Those need a designed cleanup pattern — Swift Testing has no
+  `tearDown` and async `deinit` is unavailable for class-typed
+  suites.  Follow-up PRs can tackle them with a dedicated helper.
+
 - **Introduce general-purpose `AppError` typed error + migrate 45
   `Abort(.X, reason: "msg")` sites to it.**  PR #579 unified the
   *rendering* of bare `Abort(...)` and typed `WebAssignmentError`
