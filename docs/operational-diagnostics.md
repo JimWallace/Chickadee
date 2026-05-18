@@ -316,3 +316,33 @@ usage and descendant count, but it is not a kernel-level cgroup peak:
 
 The abstraction is intentionally generic so container-specific metrics can be
 added later without changing the stored schema.
+
+## User-row foreign-key cascade
+
+Every column that references `api_users.id` and the policy that fires when
+the user row is hard-deleted via `POST /admin/users/:userID/delete`.
+
+| Table | Column | On delete | Notes |
+|---|---|---|---|
+| `submissions` | `user_id` | SET NULL | Submission row preserved as immutable grade history; "anonymous attempt." |
+| `submissions` | `retested_by_user_id` | SET NULL | Submission row preserved; retest attribution drops. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
+| `course_enrollments` | `user_id` | CASCADE | Enrollment row goes when the user goes. |
+| `class_achievements` | `user_id` | CASCADE | Derived per-user row; goes with the user. **Enforced by `AddUserFKConstraints` on Postgres; by `AdminRoutes.deleteUser` on SQLite.** |
+| `client_diagnostics` | `user_id` | CASCADE | Browser-error breadcrumb; tied to the user. |
+| `assignment_personalization_seeds` | `user_id` | CASCADE | Per-user seed; gone with the user. |
+| `job_execution_metrics` | `user_id` | SET NULL | Metric row preserved for capacity reporting; user attribution drops. |
+| `audit_log` | `actor_user_id` | SET NULL | Audit row preserved; actor link drops. |
+| `audit_log` | `actor_username` (denormalised string, no FK) | **preserved verbatim** | Audit log is a forensic record. "Who did what" must survive even when the user row is gone — otherwise incident-response queries blank out. The denormalised column is the only attribution that remains after the FK breaks. |
+| `pre_enrollments` | `username` (string) | **N/A** | Not an FK to `api_users` — pre-enrollment rows pre-date the user row and resolve by username on first login. |
+
+### Implementation note
+
+Of the FK constraints above, two (`submissions.retested_by_user_id` and
+`class_achievements.user_id`) were created as bare UUID columns and lack
+a DB-level constraint on existing deployments. The `AddUserFKConstraints`
+migration adds them on Postgres. SQLite cannot add an FK to an existing
+column without recreating the table, so on SQLite the same semantics are
+enforced by application code in `AdminRoutes.deleteUser` — it explicitly
+clears `class_achievements` rows and nulls `retested_by_user_id`
+references before deleting the user row. Both backends end up with the
+same observable behaviour.
