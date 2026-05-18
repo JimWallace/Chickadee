@@ -300,6 +300,97 @@ final class AdminRoutesTests: XCTestCase {
             })
     }
 
+    // MARK: - POST /admin/users/:userID/delete — FK cleanup (#562)
+
+    /// Deleting a user must CASCADE-delete the `class_achievements` rows
+    /// that reference them.  The DB-level FK constraint added by
+    /// `AddUserFKConstraints` covers Postgres; the admin handler enforces
+    /// the same semantics in application code so SQLite (which can't add
+    /// FK constraints to existing columns) behaves identically.
+    func testDeleteUserCascadesClassAchievements() async throws {
+        let cookie = try await loginAsAdmin()
+        let student = try await makeUser(username: "fk_cascade_student", role: "student")
+        let studentID = try student.requireID()
+        let course = try await makeCourse(code: "FKC101", name: "FK Cascade")
+        let courseID = try course.requireID()
+        let setup = try await makeSetup(id: "fk_cascade_setup", courseID: courseID)
+        _ = setup
+        let submission = try await makeSubmission(
+            id: "fk_cascade_sub", setupID: "fk_cascade_setup", userID: studentID)
+
+        let achievement = APIClassAchievement(
+            testSetupID: "fk_cascade_setup",
+            achievementID: "speed_champion",
+            userID: studentID,
+            submissionID: try submission.requireID(),
+            metricValue: 42
+        )
+        try await achievement.save(on: app.db)
+        let preDeleteCount = try await APIClassAchievement.query(on: app.db)
+            .filter(\.$userID == studentID)
+            .count()
+        XCTAssertEqual(preDeleteCount, 1)
+
+        let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+        try await app.asyncTest(
+            .POST, "/admin/users/\(studentID.uuidString)/delete",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: boundCookie)
+                try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            }
+        )
+
+        let reloadedUser = try await APIUser.find(studentID, on: app.db)
+        XCTAssertNil(reloadedUser)
+        let postDeleteCount = try await APIClassAchievement.query(on: app.db)
+            .filter(\.$userID == studentID)
+            .count()
+        XCTAssertEqual(
+            postDeleteCount, 0,
+            "class_achievements rows referencing the deleted user must be removed")
+    }
+
+    /// Deleting an instructor who has retested submissions must NULL out
+    /// `submissions.retested_by_user_id` — the submission row stays
+    /// (immutable grade history) but the retest attribution drops.
+    func testDeleteUserNullsRetestedByReferences() async throws {
+        let cookie = try await loginAsAdmin()
+        let student = try await makeUser(username: "fk_null_student", role: "student")
+        let studentID = try student.requireID()
+        let instructor = try await makeUser(username: "fk_null_instructor", role: "instructor")
+        let instructorID = try instructor.requireID()
+        let course = try await makeCourse(code: "FKN101", name: "FK Null")
+        let courseID = try course.requireID()
+        _ = try await makeSetup(id: "fk_null_setup", courseID: courseID)
+        let submission = try await makeSubmission(
+            id: "fk_null_sub", setupID: "fk_null_setup", userID: studentID)
+        submission.retestedByUserID = instructorID
+        try await submission.save(on: app.db)
+
+        let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+        try await app.asyncTest(
+            .POST, "/admin/users/\(instructorID.uuidString)/delete",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: boundCookie)
+                try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+            }
+        )
+
+        let reloadedInstructor = try await APIUser.find(instructorID, on: app.db)
+        XCTAssertNil(reloadedInstructor)
+        let reloaded = try await APISubmission.find("fk_null_sub", on: app.db)
+        XCTAssertNotNil(reloaded, "Submission row must be preserved as immutable grade history")
+        XCTAssertNil(
+            reloaded?.retestedByUserID,
+            "retested_by_user_id must clear when the referenced user is deleted")
+    }
+
     func testAdminUserActionsRenderDeleteInUsersTableOnly() async throws {
         let cookie = try await loginAsAdmin()
         let managedUser = try await makeUser(username: "managed_for_actions", role: "student")

@@ -396,6 +396,24 @@ struct AdminRoutes: RouteCollection {
 
         let deletedUsername = user.username
         let deletedRole = user.role
+
+        // Application-layer enforcement of the FK cascade behaviour
+        // documented in docs/operational-diagnostics.md ("User-row FK
+        // cascade").  Two rows here lack a DB-level constraint on
+        // SQLite (the AddUserFKConstraints migration only adds the
+        // constraints on Postgres because SQLite can't `ALTER TABLE
+        // ADD CONSTRAINT FOREIGN KEY` post-hoc), so we enforce them
+        // explicitly here.  Same logic runs on Postgres too — it just
+        // becomes a no-op because the DB-level cascade already cleared
+        // the same rows.
+        try await APIClassAchievement.query(on: req.db)
+            .filter(\.$userID == uuid)
+            .delete()
+        try await APISubmission.query(on: req.db)
+            .filter(\.$retestedByUserID == uuid)
+            .set(\.$retestedByUserID, to: nil)
+            .update()
+
         try await APICourseEnrollment.query(on: req.db)
             .filter(\.$userID == uuid)
             .delete()
