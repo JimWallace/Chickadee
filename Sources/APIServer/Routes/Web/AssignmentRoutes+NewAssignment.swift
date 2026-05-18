@@ -102,6 +102,11 @@ extension AssignmentRoutes {
     // splitting them into per-action helpers would require passing the
     // same five locals through each helper.  Inline switch reads more
     // straightforwardly than the threaded-helper version.
+    //
+    // What IS extracted: the body-parsing boilerplate above the switch
+    // (Multi/Single Content + multipart fallback chain).  See
+    // `parseNewAssignmentDraftPayload(req:)` below.  Mirrors the
+    // `parseSaveEditedAssignmentForm` pattern further down this file.
     @Sendable
     // swiftlint:disable:next function_body_length cyclomatic_complexity
     func updateNewAssignmentDraft(req: Request) async throws -> Response {
@@ -114,117 +119,38 @@ extension AssignmentRoutes {
             throw WebAssignmentError.noActiveCourse(action: "creating an assignment")
         }
 
-        struct DraftBodyMany: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var draftAction: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-        struct DraftBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var draftAction: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-
-        let bodyMany = try? req.content.decode(DraftBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(DraftBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
-            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
-        }
-
-        let assignmentName =
-            try multipartTextField(named: ["assignmentName"], from: req)
-            ?? bodyMany?.assignmentName
-            ?? bodySingle?.assignmentName
-            ?? ""
-        let dueAt =
-            try multipartTextField(named: ["dueAt"], from: req)
-            ?? bodyMany?.dueAt
-            ?? bodySingle?.dueAt
-            ?? ""
-        let sectionIDRaw =
-            try multipartTextField(named: ["sectionID"], from: req)
-            ?? bodyMany?.sectionID
-            ?? bodySingle?.sectionID
-            ?? ""
-        let draftIDRaw =
-            try multipartTextField(named: ["draftID"], from: req)
-            ?? bodyMany?.draftID
-            ?? bodySingle?.draftID
-        let action =
-            (try multipartTextField(named: ["draftAction"], from: req)
-            ?? bodyMany?.draftAction
-            ?? bodySingle?.draftAction
-            ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
-        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
-        let suiteFiles =
-            (try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? bodyMany?.suiteFiles
-            ?? (bodySingle?.suiteFiles.map { [$0] } ?? []))
-            .filter { $0.data.readableBytes > 0 }
-        let suiteConfigRaw =
-            try multipartTextField(named: ["suiteConfig"], from: req)
-            ?? bodyMany?.suiteConfig
-            ?? bodySingle?.suiteConfig
-        let requiredPlatform =
-            try multipartTextField(named: ["requiredPlatform"], from: req)
-            ?? bodyMany?.requiredPlatform
-            ?? bodySingle?.requiredPlatform
-            ?? ""
-        let requiredArchitecture =
-            try multipartTextField(named: ["requiredArchitecture"], from: req)
-            ?? bodyMany?.requiredArchitecture
-            ?? bodySingle?.requiredArchitecture
-            ?? ""
-        let requiredLanguagesCSV =
-            try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
-            ?? bodyMany?.requiredLanguagesCSV
-            ?? bodySingle?.requiredLanguagesCSV
-            ?? ""
-        let requiredCapabilitiesCSV =
-            try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
-            ?? bodyMany?.requiredCapabilitiesCSV
-            ?? bodySingle?.requiredCapabilitiesCSV
-            ?? ""
+        let payload = try parseNewAssignmentDraftPayload(req: req)
 
         let setup = try await resolveOrCreateNewAssignmentDraft(
             req: req,
             courseID: courseID,
-            draftID: draftIDRaw,
-            sectionIDRaw: sectionIDRaw
+            draftID: payload.draftIDRaw,
+            sectionIDRaw: payload.sectionIDRaw
         )
         guard let setupID = setup.id else {
             throw WebAssignmentError.internalFailure(reason: "Draft test setup persisted without an id")
         }
 
         var formState = loadDraftFormState(req: req, draftID: setupID)
-        formState.assignmentName = assignmentName
-        formState.dueAt = dueAt
-        formState.sectionID = sectionIDRaw
-        formState.requiredPlatform = requiredPlatform
-        formState.requiredArchitecture = requiredArchitecture
-        formState.requiredLanguagesCSV = requiredLanguagesCSV
-        formState.requiredCapabilitiesCSV = requiredCapabilitiesCSV
+        formState.assignmentName = payload.assignmentName
+        formState.dueAt = payload.dueAt
+        formState.sectionID = payload.sectionIDRaw
+        formState.requiredPlatform = payload.requiredPlatform
+        formState.requiredArchitecture = payload.requiredArchitecture
+        formState.requiredLanguagesCSV = payload.requiredLanguagesCSV
+        formState.requiredCapabilitiesCSV = payload.requiredCapabilitiesCSV
+
+        // Locals the per-action branches below depend on.  Spelt out here
+        // so each case reads like a small recipe rather than chasing
+        // payload-field unpacks inline.
+        let assignmentName = payload.assignmentName
+        let dueAt = payload.dueAt
+        let sectionIDRaw = payload.sectionIDRaw
+        let action = payload.action
+        let assignmentNotebookFile = payload.assignmentNotebookFile
+        let solutionNotebookFile = payload.solutionNotebookFile
+        let suiteFiles = payload.suiteFiles
+        let suiteConfigRaw = payload.suiteConfigRaw
 
         let actionTitle = assignmentName.trimmingCharacters(in: .whitespacesAndNewlines)
         let notebookTitle = actionTitle.isEmpty ? "New Assignment" : actionTitle
@@ -475,6 +401,142 @@ extension AssignmentRoutes {
             sectionID: sectionIDRaw,
             notice: nil,
             error: nil
+        )
+    }
+
+    // MARK: - updateNewAssignmentDraft helpers
+
+    /// Parsed payload for `POST /instructor/new/draft`.  Resolves the
+    /// array-typed (`suiteFiles[]`) and single-typed (`suiteFiles`)
+    /// Vapor decode paths into one shape, and reads each text field
+    /// through `multipartTextField` first (so urlencoded-form clients
+    /// and multipart-form clients see the same final values).  Mirrors
+    /// the `SaveEditedAssignmentForm` / `parseSaveEditedAssignmentForm`
+    /// pattern used by `saveEditedAssignment` further down the file.
+    fileprivate struct NewAssignmentDraftPayload {
+        let assignmentName: String
+        let dueAt: String
+        let sectionIDRaw: String
+        let draftIDRaw: String?
+        let action: String
+        let assignmentNotebookFile: File?
+        let solutionNotebookFile: File?
+        let suiteFiles: [File]
+        let suiteConfigRaw: String?
+        let requiredPlatform: String
+        let requiredArchitecture: String
+        let requiredLanguagesCSV: String
+        let requiredCapabilitiesCSV: String
+    }
+
+    fileprivate func parseNewAssignmentDraftPayload(req: Request) throws -> NewAssignmentDraftPayload {
+        struct DraftBodyMany: Content {
+            var assignmentName: String?
+            var dueAt: String?
+            var sectionID: String?
+            var draftID: String?
+            var draftAction: String?
+            var assignmentNotebookFile: File?
+            var solutionNotebookFile: File?
+            var suiteFiles: [File]?
+            var suiteConfig: String?
+            var requiredPlatform: String?
+            var requiredArchitecture: String?
+            var requiredLanguagesCSV: String?
+            var requiredCapabilitiesCSV: String?
+        }
+        struct DraftBodySingle: Content {
+            var assignmentName: String?
+            var dueAt: String?
+            var sectionID: String?
+            var draftID: String?
+            var draftAction: String?
+            var assignmentNotebookFile: File?
+            var solutionNotebookFile: File?
+            var suiteFiles: File?
+            var suiteConfig: String?
+            var requiredPlatform: String?
+            var requiredArchitecture: String?
+            var requiredLanguagesCSV: String?
+            var requiredCapabilitiesCSV: String?
+        }
+
+        let bodyMany = try? req.content.decode(DraftBodyMany.self)
+        let bodySingle = bodyMany == nil ? (try? req.content.decode(DraftBodySingle.self)) : nil
+        guard bodyMany != nil || bodySingle != nil else {
+            throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
+        }
+
+        let assignmentName =
+            try multipartTextField(named: ["assignmentName"], from: req)
+            ?? bodyMany?.assignmentName
+            ?? bodySingle?.assignmentName
+            ?? ""
+        let dueAt =
+            try multipartTextField(named: ["dueAt"], from: req)
+            ?? bodyMany?.dueAt
+            ?? bodySingle?.dueAt
+            ?? ""
+        let sectionIDRaw =
+            try multipartTextField(named: ["sectionID"], from: req)
+            ?? bodyMany?.sectionID
+            ?? bodySingle?.sectionID
+            ?? ""
+        let draftIDRaw =
+            try multipartTextField(named: ["draftID"], from: req)
+            ?? bodyMany?.draftID
+            ?? bodySingle?.draftID
+        let action =
+            (try multipartTextField(named: ["draftAction"], from: req)
+            ?? bodyMany?.draftAction
+            ?? bodySingle?.draftAction
+            ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
+        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
+        let suiteFiles =
+            (try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
+            ?? bodyMany?.suiteFiles
+            ?? (bodySingle?.suiteFiles.map { [$0] } ?? []))
+            .filter { $0.data.readableBytes > 0 }
+        let suiteConfigRaw =
+            try multipartTextField(named: ["suiteConfig"], from: req)
+            ?? bodyMany?.suiteConfig
+            ?? bodySingle?.suiteConfig
+        let requiredPlatform =
+            try multipartTextField(named: ["requiredPlatform"], from: req)
+            ?? bodyMany?.requiredPlatform
+            ?? bodySingle?.requiredPlatform
+            ?? ""
+        let requiredArchitecture =
+            try multipartTextField(named: ["requiredArchitecture"], from: req)
+            ?? bodyMany?.requiredArchitecture
+            ?? bodySingle?.requiredArchitecture
+            ?? ""
+        let requiredLanguagesCSV =
+            try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
+            ?? bodyMany?.requiredLanguagesCSV
+            ?? bodySingle?.requiredLanguagesCSV
+            ?? ""
+        let requiredCapabilitiesCSV =
+            try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
+            ?? bodyMany?.requiredCapabilitiesCSV
+            ?? bodySingle?.requiredCapabilitiesCSV
+            ?? ""
+
+        return NewAssignmentDraftPayload(
+            assignmentName: assignmentName,
+            dueAt: dueAt,
+            sectionIDRaw: sectionIDRaw,
+            draftIDRaw: draftIDRaw,
+            action: action,
+            assignmentNotebookFile: assignmentNotebookFile,
+            solutionNotebookFile: solutionNotebookFile,
+            suiteFiles: suiteFiles,
+            suiteConfigRaw: suiteConfigRaw,
+            requiredPlatform: requiredPlatform,
+            requiredArchitecture: requiredArchitecture,
+            requiredLanguagesCSV: requiredLanguagesCSV,
+            requiredCapabilitiesCSV: requiredCapabilitiesCSV
         )
     }
 
