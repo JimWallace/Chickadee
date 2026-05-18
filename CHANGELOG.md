@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Extract `updateNewAssignmentDraft` request-body parsing into
+  `parseNewAssignmentDraftPayload(req:)`.**  The handler's first
+  ~90 lines were Multi/Single Vapor `Content` decoding + multipart
+  fallback chains for 13 fields — exactly the pattern
+  `parseSaveEditedAssignmentForm` follows further down the same
+  file.  The body parsing moves into a `fileprivate` helper and a
+  named `NewAssignmentDraftPayload` struct; the handler keeps its
+  inline `switch action` over the 9 draft verbs (per the author's
+  documented preference at lines 95-104 — the per-case branches
+  share enough state that splitting them through helpers would
+  be a regression, but the parsing is a clean cut).  Handler
+  shrinks from ~370 LOC to ~280 LOC; the payload struct is
+  testable on its own and forms the foundation for a future
+  `NewAssignmentDraftService` per-action extraction if that
+  direction is chosen.  No behaviour changes — `swift test
+  --filter AssignmentRoutesPublishTests` is unchanged
+  (18 tests, 0 failures).
+
 - **Add `RunnerNetworkResilienceTests` to plug the coverage gap on the
   worker's retry classifier + backoff helpers.**  Prior coverage was
   indirect — `Reporter`/`JobPoller` tests drive the helpers through
