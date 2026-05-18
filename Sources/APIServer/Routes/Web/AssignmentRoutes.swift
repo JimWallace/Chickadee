@@ -38,21 +38,21 @@ struct AssignmentRoutes: RouteCollection {
         // Lives outside the `/instructor` prefix so the URL carries the
         // course code; the literal `students` second segment routes ahead
         // of the vanity catch-all `/:courseCode/:assignmentSlug`.
-        routes.get(":courseCode", "students", ":username", "submissions", use: courseStudentSubmissionsPage)
+        routes.get(":courseCode", "students", ":urlToken", "submissions", use: courseStudentSubmissionsPage)
         routes.get(
-            ":courseCode", "students", ":username", "assignments", ":assignmentID", "history",
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "history",
             use: studentAssignmentHistoryPage
         )
         routes.post(
-            ":courseCode", "students", ":username", "assignments", ":assignmentID", "retest",
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "retest",
             use: retestStudentAssignment
         )
         routes.post(
-            ":courseCode", "students", ":username", "assignments", ":assignmentID", "extension",
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
             use: saveStudentAssignmentExtension
         )
         routes.post(
-            ":courseCode", "students", ":username", "assignments", ":assignmentID", "extension",
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
             "delete",
             use: deleteStudentAssignmentExtension
         )

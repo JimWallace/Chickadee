@@ -1,7 +1,7 @@
 // APIServer/Routes/Web/AssignmentRoutes+StudentCourse.swift
 //
 // Instructor-facing per-student, per-course views, scoped by the URL
-// segments `/:courseCode/students/:username/...`.
+// segments `/:courseCode/students/:urlToken/...`.
 //
 // Mirrors the student dashboard shape (one row per published assignment,
 // section grouping, latest submission + best grade + badges) and adds two
@@ -16,7 +16,7 @@ import Vapor
 
 extension AssignmentRoutes {
 
-    // MARK: - GET /:courseCode/students/:username/submissions
+    // MARK: - GET /:courseCode/students/:urlToken/submissions
 
     @Sendable
     func courseStudentSubmissionsPage(req: Request) async throws -> View {
@@ -56,7 +56,7 @@ extension AssignmentRoutes {
 
         let rowContext = StudentAssignmentRowContext(
             courseCode: course.code,
-            username: student.username,
+            urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
             student: student,
             fmt: fmt
@@ -220,7 +220,7 @@ extension AssignmentRoutes {
         return (sectionContexts, ungroupedRows)
     }
 
-    // MARK: - GET /:courseCode/students/:username/assignments/:assignmentID/history
+    // MARK: - GET /:courseCode/students/:urlToken/assignments/:assignmentID/history
 
     @Sendable
     func studentAssignmentHistoryPage(req: Request) async throws -> View {
@@ -272,13 +272,14 @@ extension AssignmentRoutes {
             )
         }
 
+        let studentToken = try student.requireURLToken()
         let backURL = StudentCoursePaths.submissions(
             courseCode: course.code,
-            username: student.username
+            urlToken: studentToken
         )
         let historyPath = StudentCoursePaths.assignmentHistory(
             courseCode: course.code,
-            username: student.username,
+            urlToken: studentToken,
             assignmentID: assignmentIDRaw
         )
 
@@ -298,7 +299,7 @@ extension AssignmentRoutes {
         )
     }
 
-    // MARK: - POST /:courseCode/students/:username/assignments/:assignmentID/retest
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/retest
 
     @Sendable
     func retestStudentAssignment(req: Request) async throws -> Response {
@@ -342,12 +343,12 @@ extension AssignmentRoutes {
         return req.redirect(
             to: StudentCoursePaths.submissions(
                 courseCode: course.code,
-                username: student.username
+                urlToken: try student.requireURLToken()
             )
         )
     }
 
-    // MARK: - POST /:courseCode/students/:username/assignments/:assignmentID/extension
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/extension
 
     @Sendable
     func saveStudentAssignmentExtension(req: Request) async throws -> Response {
@@ -420,12 +421,12 @@ extension AssignmentRoutes {
         return req.redirect(
             to: StudentCoursePaths.submissions(
                 courseCode: course.code,
-                username: student.username
+                urlToken: try student.requireURLToken()
             )
         )
     }
 
-    // MARK: - POST /:courseCode/students/:username/assignments/:assignmentID/extension/delete
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/extension/delete
 
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
@@ -465,7 +466,7 @@ extension AssignmentRoutes {
         return req.redirect(
             to: StudentCoursePaths.submissions(
                 courseCode: course.code,
-                username: student.username
+                urlToken: try student.requireURLToken()
             )
         )
     }
@@ -474,15 +475,19 @@ extension AssignmentRoutes {
 // MARK: - Private helpers
 
 extension AssignmentRoutes {
-    /// Resolves `(course, student)` from `:courseCode` + `:username`.
+    /// Resolves `(course, student)` from `:courseCode` + `:urlToken`.
     /// Throws `WebAssignmentError.notFound` if either side is missing OR if
     /// the student is not currently enrolled in the course (matches the
     /// instructor dashboard's clickability rule).  Enrollment, not role,
     /// gates this — an instructor enrolled for testing should be reachable
-    /// via the same path the dashboard exposes for them.
+    /// via the same path the dashboard exposes for them.  The url token
+    /// is opaque (8-char lowercase alphanumeric) so usernames don't leak
+    /// into request logs (#556); on miss the response body is the same
+    /// generic "student not found" page either way, so brute-force token
+    /// enumeration learns nothing.
     fileprivate func resolveCourseAndStudent(req: Request) async throws -> (APICourse, APIUser) {
         guard let courseCodeRaw = req.parameters.get("courseCode"),
-            let usernameRaw = req.parameters.get("username")
+            let urlTokenRaw = req.parameters.get("urlToken")
         else {
             throw WebAssignmentError.notFound(resource: "Course or student")
         }
@@ -497,10 +502,10 @@ extension AssignmentRoutes {
         }
         guard
             let student = try await APIUser.query(on: req.db)
-                .filter(\.$username == usernameRaw)
+                .filter(\.$urlToken == urlTokenRaw)
                 .first()
         else {
-            throw WebAssignmentError.notFound(resource: "Student '\(usernameRaw)'")
+            throw WebAssignmentError.notFound(resource: "Student")
         }
         let isEnrolled =
             try await APICourseEnrollment.query(on: req.db)
@@ -515,10 +520,12 @@ extension AssignmentRoutes {
 
     /// Bundles the per-table inputs that don't vary across rows.  Lets
     /// `buildStudentAssignmentRow` stay at 5 parameters even with 9
-    /// logical inputs.
+    /// logical inputs.  `urlToken` is the student's opaque URL token
+    /// (#556) — used to build per-student action URLs without leaking
+    /// the username into request logs.
     fileprivate struct StudentAssignmentRowContext {
         let courseCode: String
-        let username: String
+        let urlToken: String
         let preferredResultBySubmissionID: [String: APIResult]
         let student: APIUser
         let fmt: DateFormatter
@@ -532,7 +539,7 @@ extension AssignmentRoutes {
         context: StudentAssignmentRowContext
     ) -> StudentAssignmentRow {
         let courseCode = context.courseCode
-        let username = context.username
+        let urlToken = context.urlToken
         let preferredResultBySubmissionID = context.preferredResultBySubmissionID
         let student = context.student
         let fmt = context.fmt
@@ -602,22 +609,22 @@ extension AssignmentRoutes {
             extensionFormInput: formInput,
             extensionSavePath: StudentCoursePaths.extensionSave(
                 courseCode: courseCode,
-                username: username,
+                urlToken: urlToken,
                 assignmentID: assignment.publicID
             ),
             extensionDeletePath: StudentCoursePaths.extensionDelete(
                 courseCode: courseCode,
-                username: username,
+                urlToken: urlToken,
                 assignmentID: assignment.publicID
             ),
             retestPath: StudentCoursePaths.retest(
                 courseCode: courseCode,
-                username: username,
+                urlToken: urlToken,
                 assignmentID: assignment.publicID
             ),
             historyURL: StudentCoursePaths.assignmentHistory(
                 courseCode: courseCode,
-                username: username,
+                urlToken: urlToken,
                 assignmentID: assignment.publicID
             ),
             submissionCount: history.count,
