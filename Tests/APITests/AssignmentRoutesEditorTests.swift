@@ -346,4 +346,195 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 XCTAssertEqual(res.status, .notFound)
             })
     }
+
+    // MARK: - GET /instructor/new/draft/solution-notebook
+    //
+    // The draft solution endpoint reads from one of two locations: a
+    // per-user working copy under `Public/jupyterlite/files/...`, or a
+    // fallback path at `<testSetupsDirectory>/notebooks/<setupID>/solution.ipynb`.
+    // These tests exercise the fallback path because it doesn't require
+    // the JupyterLite directory layout to be present in the test fixture.
+
+    private func writeDraftSolutionNotebook(setupID: String, data: Data) throws {
+        let dir = app.testSetupsDirectory + "notebooks/\(setupID)/"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try data.write(to: URL(fileURLWithPath: dir + "solution.ipynb"))
+    }
+
+    func testDraftSolutionNotebookReturnsNotebookBytes() async throws {
+        let cookie = try await loginAsInstructor()
+        let setup = try await insertSetup(id: "ed_draft_sol1")
+        try writeDraftSolutionNotebook(
+            setupID: setup.id ?? "",
+            data: sampleNotebookData(marker: "draft-solution-marker"))
+
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/solution-notebook?draftID=\(setup.id ?? "")",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(
+                    res.headers.contentType?.description,
+                    "application/json")
+                XCTAssertTrue(
+                    res.body.string.contains("draft-solution-marker"),
+                    "Expected marker in draft solution body; got: \(res.body.string.prefix(200))")
+            })
+    }
+
+    func testDraftSolutionNotebookReturns404ForUnknownDraft() async throws {
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/solution-notebook?draftID=ZZZ_does_not_exist",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
+    }
+
+    func testDraftSolutionNotebookReturns404ForDraftWithoutSolutionFile() async throws {
+        let cookie = try await loginAsInstructor()
+        let setup = try await insertSetup(id: "ed_draft_sol2")
+        // intentionally do NOT write the solution.ipynb fallback file
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/solution-notebook?draftID=\(setup.id ?? "")",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
+    }
+
+    func testDraftSolutionNotebookReturns404ForMissingDraftIDParam() async throws {
+        let cookie = try await loginAsInstructor()
+
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/solution-notebook",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                // The handler treats absent / empty draftID as "no such draft."
+                XCTAssertEqual(res.status, .notFound)
+            })
+    }
+
+    func testDraftSolutionNotebookReturns403ForStudent() async throws {
+        let cookie = try await loginAsStudent()
+        let setup = try await insertSetup(id: "ed_draft_sol3")
+        try writeDraftSolutionNotebook(
+            setupID: setup.id ?? "", data: sampleNotebookData())
+
+        try await app.asyncTest(
+            .GET, "/instructor/new/draft/solution-notebook?draftID=\(setup.id ?? "")",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
+    }
+
+    // MARK: - POST /instructor/:assignmentID/edit/save
+    //
+    // The handler's happy path requires a multipart body with notebook
+    // uploads + a non-empty manifest + a validation pipeline, which is
+    // already exercised end-to-end by AssignmentRoutesPublishTests.
+    // These tests pin the *validation-failure* redirect branches that
+    // are not otherwise covered: empty title, invalid notebook JSON,
+    // missing test suites — plus the auth and unknown-assignment cases.
+
+    func testSaveEditedAssignmentReturns403ForStudent() async throws {
+        let cookie = try await loginAsStudent()
+        try await insertSetup(id: "ed_save1")
+        let a = try await insertAssignment(testSetupID: "ed_save1", title: "Lab Save 1")
+
+        try await app.asyncTest(
+            .POST, "/instructor/\(a.publicID)/edit/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .forbidden)
+            })
+    }
+
+    func testSaveEditedAssignmentReturns404ForUnknownAssignment() async throws {
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+        try await app.asyncTest(
+            .POST, "/instructor/zzzzzz/edit/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["_csrf": csrf, "assignmentName": "Anything", "dueAt": ""],
+                    as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .notFound)
+            })
+    }
+
+    func testSaveEditedAssignmentRedirectsWithErrorOnEmptyTitle() async throws {
+        // CSRF fetched BEFORE creating the course-bearing fixtures: once a
+        // course exists but the instructor isn't enrolled in it,
+        // `GET /instructor` redirects to `/enroll` and the token extractor
+        // returns an empty string.  Token issuance is session-scoped, not
+        // path-scoped, so the early fetch is still valid for the POST.
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await insertSetup(id: "ed_save2", notebookOnDisk: sampleNotebookData())
+        let a = try await insertAssignment(testSetupID: "ed_save2", title: "Original Title")
+
+        try await app.asyncTest(
+            .POST, "/instructor/\(a.publicID)/edit/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["_csrf": csrf, "assignmentName": "  ", "dueAt": ""],
+                    as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                let location = res.headers["Location"].first ?? ""
+                XCTAssertTrue(
+                    location.contains("error=Assignment%20name%20is%20required"),
+                    "Expected error query string in redirect; got: \(location)")
+                XCTAssertTrue(
+                    location.contains("/instructor/\(a.publicID)/edit"),
+                    "Expected redirect back to edit page; got: \(location)")
+            })
+    }
+
+    func testSaveEditedAssignmentRedirectsWithErrorOnMissingTestSuites() async throws {
+        // Manifest has empty `testSuites: []` (see `insertSetup`), so the
+        // "at least one test script" guard should fire and redirect.
+        let cookie = try await loginAsInstructor()
+        let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+        try await insertSetup(id: "ed_save3", notebookOnDisk: sampleNotebookData())
+        let a = try await insertAssignment(testSetupID: "ed_save3", title: "Lab Save 3")
+
+        try await app.asyncTest(
+            .POST, "/instructor/\(a.publicID)/edit/save",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                try req.content.encode(
+                    ["_csrf": csrf, "assignmentName": "Lab Save 3", "dueAt": ""],
+                    as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                XCTAssertEqual(res.status, .seeOther)
+                let location = res.headers["Location"].first ?? ""
+                XCTAssertTrue(
+                    location.contains("error="),
+                    "Expected error query string in redirect; got: \(location)")
+            })
+    }
 }
