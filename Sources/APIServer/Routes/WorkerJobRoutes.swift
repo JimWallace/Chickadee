@@ -149,7 +149,7 @@ struct WorkerJobRoutes: RouteCollection {
     /// submission/testsetup download URLs.
     private func buildJobPayload(
         req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
-    ) async throws -> Job {
+    ) async throws(WorkerJobError) -> Job {
         let submission = claimed.submission
         let setup = claimed.setup
         let base = resolvedWorkerBaseURL(req: req)
