@@ -49,15 +49,21 @@ import XCTVapor
 
     private func withEnvironment(
         _ values: [String: String?],
-        perform operation: () async throws -> Void
-    ) async rethrows {
-        let overrides = values.map { EnvironmentOverride(key: $0.key, value: $0.value) }
-        defer {
-            for override in overrides.reversed() {
-                override.restore()
+        perform operation: @Sendable () async throws -> Void
+    ) async throws {
+        // Cross-suite env serialization: AuthModeGatingTests, AppConfigTests,
+        // DatabaseConfigurationTests also mutate env vars.  Without this lock
+        // their setenv/unsetenv races have shown up as OIDC tests reading
+        // wrong values mid-test (#603 first run).
+        try await withAsyncEnvLock {
+            let overrides = values.map { EnvironmentOverride(key: $0.key, value: $0.value) }
+            defer {
+                for override in overrides.reversed() {
+                    override.restore()
+                }
             }
+            try await operation()
         }
-        try await operation()
     }
 
     private func makeOIDCApp(publicBaseURL: String? = nil) async throws -> Application {

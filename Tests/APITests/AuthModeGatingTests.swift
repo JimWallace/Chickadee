@@ -114,23 +114,24 @@ import XCTVapor
     }
 
     @Test func ssoMode_customCallbackRouteRegisteredFromEnv() async throws {
-        // NOTE: EnvTestLock.shared.lock() can't be taken from async context
-        // under Swift 6 strict concurrency.  The suite-level `.serialized`
-        // gates within-suite parallelism; cross-suite env races during the
-        // migration window are mitigated by the 3× repeat-run CI job.
-        // TODO(migration): replace `setenv` with direct config injection.
-        setenv("OIDC_CALLBACK", "/oidc/duo/callback/", 1)
-        defer { unsetenv("OIDC_CALLBACK") }
+        // Cross-suite env serialization via `withAsyncEnvLock` — OIDCTests
+        // also mutates OIDC_* env vars, and without serialization the two
+        // suites' setenv/unsetenv calls have raced under `swift test
+        // --parallel` (#603 first run).
+        try await withAsyncEnvLock {
+            setenv("OIDC_CALLBACK", "/oidc/duo/callback/", 1)
+            defer { unsetenv("OIDC_CALLBACK") }
 
-        try await withApp(try await makeApp(authMode: .sso)) { app in
-            try await app.asyncTest(
-                .GET, "/oidc/duo/callback",
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(
-                        res.headers.first(name: .location)?.contains("sso_not_configured") == true
-                    )
-                })
+            try await withApp(try await makeApp(authMode: .sso)) { app in
+                try await app.asyncTest(
+                    .GET, "/oidc/duo/callback",
+                    afterResponse: { res in
+                        #expect(res.status == .seeOther)
+                        #expect(
+                            res.headers.first(name: .location)?.contains("sso_not_configured") == true
+                        )
+                    })
+            }
         }
     }
 
