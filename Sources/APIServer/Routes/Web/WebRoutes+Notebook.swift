@@ -555,7 +555,7 @@ private func solutionNotebookData(
         return normalizeNotebookForJupyterLite(data)
     }
 
-    throw Abort(.notFound, reason: "No solution notebook is available for this assignment yet")
+    throw AppError.notFound(resource: "Solution notebook (not yet available for this assignment)")
 }
 
 func notebookDataForHistorySelection(
@@ -566,7 +566,7 @@ func notebookDataForHistorySelection(
     userID: UUID
 ) async throws -> Data {
     guard let submission = try await APISubmission.find(submissionID, on: req.db) else {
-        throw Abort(.notFound, reason: "Submission not found")
+        throw AppError.notFound(resource: "Submission")
     }
     guard submission.kind == APISubmission.Kind.student else {
         throw Abort(.forbidden)
@@ -575,20 +575,20 @@ func notebookDataForHistorySelection(
         throw Abort(.forbidden)
     }
     guard submission.testSetupID == setupID else {
-        throw Abort(.badRequest, reason: "Submission does not belong to this assignment")
+        throw AppError.badRequest(reason: "Submission does not belong to this assignment")
     }
 
     let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
     let nameExt = (submission.filename ?? "").lowercased()
     guard pathExt == "ipynb" || nameExt.hasSuffix(".ipynb") else {
-        throw Abort(.badRequest, reason: "Only notebook submissions can be opened in notebook view")
+        throw AppError.badRequest(reason: "Only notebook submissions can be opened in notebook view")
     }
 
     let dataURL = URL(fileURLWithPath: submission.zipPath)
     guard let data = try? Data(contentsOf: dataURL),
         (try? JSONSerialization.jsonObject(with: data)) != nil
     else {
-        throw Abort(.notFound, reason: "Notebook artifact is unavailable for this submission")
+        throw AppError.notFound(resource: "Notebook artifact for this submission")
     }
     return normalizeNotebookForJupyterLite(data)
 }

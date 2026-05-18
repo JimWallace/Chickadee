@@ -32,7 +32,7 @@ struct BrowserResultRoutes: RouteCollection {
 
         // Validate the referenced test setup exists.
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID")
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
@@ -44,11 +44,11 @@ struct BrowserResultRoutes: RouteCollection {
         let collection: TestOutcomeCollection
         do {
             guard let data = body.collection.data(using: .utf8) else {
-                throw Abort(.badRequest, reason: "collection is not valid UTF-8")
+                throw AppError.invalidParameter(name: "collection", reason: "not valid UTF-8")
             }
             collection = try decoder.decode(TestOutcomeCollection.self, from: data)
         } catch let e as DecodingError {
-            throw Abort(.unprocessableEntity, reason: "Invalid TestOutcomeCollection: \(e)")
+            throw AppError.unprocessable(reason: "Invalid TestOutcomeCollection: \(e)")
         }
 
         // Persist the notebook to disk as the submission artifact.
@@ -135,7 +135,7 @@ struct BrowserResultRoutes: RouteCollection {
         let body = try req.content.decode(RunnerSubmitBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID")
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
@@ -145,7 +145,8 @@ struct BrowserResultRoutes: RouteCollection {
         if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
             manifest.gradingMode == .browser
         {
-            throw Abort(.badRequest, reason: "Browser-graded assignments must be submitted through the browser runner.")
+            throw AppError.badRequest(
+                reason: "Browser-graded assignments must be submitted through the browser runner.")
         }
 
         let subsDir = req.application.submissionsDirectory

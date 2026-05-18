@@ -42,7 +42,7 @@ struct CourseBundleRoutes: RouteCollection {
         guard let courseIDStr = req.parameters.get("courseID"),
             let courseUUID = UUID(uuidString: courseIDStr),
             let course = try await APICourse.find(courseUUID, on: req.db)
-        else { throw Abort(.notFound, reason: "Course not found") }
+        else { throw AppError.notFound(resource: "Course") }
 
         let data = try await loadExportData(courseUUID: courseUUID, on: req.db)
         let bundleIDs = assignExportBundleIDs(data: data)
@@ -307,7 +307,7 @@ struct CourseBundleRoutes: RouteCollection {
 
     private func streamExportZip(bundleZipPath: String, bundleName: String) throws -> Response {
         guard let zipData = try? Data(contentsOf: URL(fileURLWithPath: bundleZipPath)) else {
-            throw Abort(.internalServerError, reason: "Failed to read bundle ZIP")
+            throw AppError.internalFailure(reason: "Failed to read bundle ZIP")
         }
 
         var headers = HTTPHeaders()
@@ -371,7 +371,7 @@ struct CourseBundleRoutes: RouteCollection {
         guard buffer.readableBytes > 0,
             let fileBytes = buffer.readBytes(length: buffer.readableBytes)
         else {
-            throw Abort(.badRequest, reason: "Empty bundle upload")
+            throw AppError.badRequest(reason: "Empty bundle upload")
         }
         return fileBytes
     }
@@ -390,7 +390,7 @@ struct CourseBundleRoutes: RouteCollection {
     private func parseBundleManifest(extractDir: URL) throws -> CourseBundleManifest {
         let bundleJSONPath = extractDir.appendingPathComponent("bundle.json")
         guard let manifestData = try? Data(contentsOf: bundleJSONPath) else {
-            throw Abort(.badRequest, reason: "bundle.json not found in archive")
+            throw AppError.badRequest(reason: "bundle.json not found in archive")
         }
 
         let decoder = JSONDecoder()
@@ -399,7 +399,7 @@ struct CourseBundleRoutes: RouteCollection {
         do {
             manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
         } catch {
-            throw Abort(.badRequest, reason: "Invalid bundle.json: \(error)")
+            throw AppError.invalidParameter(name: "bundle.json", reason: "\(error)")
         }
 
         guard manifest.schemaVersion == 1 else {
@@ -478,7 +478,7 @@ struct CourseBundleRoutes: RouteCollection {
                 enrollmentMode: importedMode)
             try await newCourse.save(on: db)
             guard let newCourseID = newCourse.id else {
-                throw Abort(.internalServerError, reason: "Created course missing id after save")
+                throw AppError.internalFailure(reason: "Created course missing id after save")
             }
             t.courseID = newCourseID
             t.courseCode = newCourse.code
@@ -607,7 +607,7 @@ private func importBundledUsers(
             .first()
         {
             guard let existingID = existing.id else {
-                throw Abort(.internalServerError, reason: "User '\(bundledUser.username)' missing id")
+                throw AppError.internalFailure(reason: "User '\(bundledUser.username)' missing id")
             }
             userIDMap[bundledUser.bundleID] = existingID
             tally.usersMatched += 1
@@ -623,7 +623,7 @@ private func importBundledUsers(
             )
             try await newUser.save(on: db)
             guard let newUserID = newUser.id else {
-                throw Abort(.internalServerError, reason: "Created user missing id after save")
+                throw AppError.internalFailure(reason: "Created user missing id after save")
             }
             userIDMap[bundledUser.bundleID] = newUserID
             tally.usersCreated += 1

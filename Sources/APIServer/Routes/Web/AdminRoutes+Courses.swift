@@ -188,7 +188,7 @@ extension AdminRoutes {
             let course = try await APICourse.find(courseID, on: req.db)
         else { throw Abort(.notFound) }
         guard course.isArchived else {
-            throw Abort(.badRequest, reason: "Only archived courses can be deleted.")
+            throw AppError.badRequest(reason: "Only archived courses can be deleted.")
         }
 
         let setupsDir = req.application.testSetupsDirectory
@@ -456,7 +456,7 @@ extension AdminRoutes {
             let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
-            throw Abort(.badRequest, reason: "Invalid or archived course.")
+            throw AppError.badRequest(reason: "Invalid or archived course.")
         }
 
         let form = try req.content.decode(BulkEnrollForm.self)
@@ -497,5 +497,5 @@ private func uniqueCopyCode(base: String, db: Database) async throws -> String {
             return candidate
         }
     }
-    throw Abort(.conflict, reason: "Could not generate a unique course code. Rename an existing copy first.")
+    throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

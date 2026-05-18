@@ -420,10 +420,10 @@ struct WebRoutes: RouteCollection {
         do {
             manifest = try ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         } catch {
-            throw Abort(.badRequest, reason: "Invalid manifest JSON: \(error)")
+            throw AppError.unprocessable(reason: "Invalid manifest JSON: \(error)")
         }
         guard manifest.schemaVersion == 1 else {
-            throw Abort(.badRequest, reason: "Unsupported schemaVersion; expected 1")
+            throw AppError.unprocessable(reason: "Unsupported schemaVersion; expected 1")
         }
 
         let setupsDir = req.application.testSetupsDirectory

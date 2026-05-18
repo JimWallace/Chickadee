@@ -138,7 +138,9 @@ struct AdminRoutes: RouteCollection {
 
         let body = try req.content.decode(RoleBody.self)
         guard ["student", "instructor", "admin"].contains(body.role) else {
-            throw Abort(.badRequest, reason: "Invalid role: \(body.role)")
+            throw AppError.invalidParameter(
+                name: "role",
+                reason: "must be student, instructor, or admin (got '\(body.role)')")
         }
 
         let previousRole = user.role

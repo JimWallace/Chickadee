@@ -23,7 +23,7 @@ struct SubmissionRoutes: RouteCollection {
         let body = try req.content.decode(CreateSubmissionBody.self)
 
         guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
-            throw Abort(.badRequest, reason: "Invalid testSetupID")
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
         let submissionsDir = req.application.submissionsDirectory
@@ -33,7 +33,7 @@ struct SubmissionRoutes: RouteCollection {
         guard let zipData = body.zipBase64.data(using: .utf8),
             let decoded = Data(base64Encoded: zipData)
         else {
-            throw Abort(.badRequest, reason: "zipBase64 is not valid base-64")
+            throw AppError.invalidParameter(name: "zipBase64", reason: "not valid base-64")
         }
         try decoded.write(to: URL(fileURLWithPath: zipPath))
 
@@ -72,7 +72,7 @@ struct SubmissionRoutes: RouteCollection {
         )
 
         guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
-            throw Abort(.badRequest, reason: "Invalid testSetupID")
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
         let submissionsDir = req.application.submissionsDirectory

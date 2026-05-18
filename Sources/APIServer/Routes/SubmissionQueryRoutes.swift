@@ -79,7 +79,7 @@ struct SubmissionQueryRoutes: RouteCollection {
                 .sort(\.$receivedAt, .descending)
                 .first()
         else {
-            throw Abort(.notFound, reason: "No results available yet for submission \(subID)")
+            throw AppError.notFound(resource: "Results for submission '\(subID)' (none available yet)")
         }
 
         let decoder = JSONDecoder()
@@ -88,7 +88,7 @@ struct SubmissionQueryRoutes: RouteCollection {
             let data = result.collectionJSON.data(using: .utf8),
             var collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
         else {
-            throw Abort(.internalServerError, reason: "Stored result is corrupt")
+            throw AppError.internalFailure(reason: "Stored result is corrupt")
         }
 
         // Enforce deadline-based tier visibility first, then honour any ?tiers= filter.

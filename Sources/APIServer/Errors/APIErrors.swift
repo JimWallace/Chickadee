@@ -78,6 +78,83 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
     }
 }
 
+// MARK: - General-purpose application errors
+
+/// General-purpose typed errors for route handlers outside the
+/// instructor-assignment surface that `WebAssignmentError` covers.
+/// Same shape as `WebAssignmentError` minus the two assignment-specific
+/// cases (`noActiveCourse`, `validationRequired`); use this for
+/// AuthRoutes / AdminRoutes / SubmissionRoutes / TestSetupRoutes /
+/// the remaining web + API + worker routes.
+///
+/// Adopted incrementally — sites with explicit `reason:` strings on
+/// `Abort(...)` convert one-to-one; sites that throw a bare
+/// `Abort(.X)` with no `reason:` may stay bare and rely on
+/// `LeafErrorMiddleware.friendlyReason` for the user-facing default,
+/// or convert to the typed case if they have meaningful context to
+/// add at the site.
+enum AppError: AbortError, CustomStringConvertible {
+    /// A required entity could not be found.  The `resource` label is
+    /// plain English so the rendered 404 reads naturally
+    /// (e.g. "Submission 'abc123' not found", "User account").
+    case notFound(resource: String)
+    /// Generic 400 with a verbatim user-facing reason.  Use when the
+    /// reason doesn't fit `invalidParameter`'s "Invalid X: Y" format
+    /// (e.g. "Empty bundle upload", "Only notebook submissions can be
+    /// opened in notebook view").
+    case badRequest(reason: String)
+    /// Bad request keyed by a specific parameter name.  Renders as
+    /// "Invalid <name>: <reason>".  Prefer over `badRequest` when the
+    /// failure is about a specific field.
+    case invalidParameter(name: String, reason: String)
+    /// The current user lacks the role required for this action.
+    /// `RoleMiddleware` covers most of these at the route-group level;
+    /// throw this from a handler for per-resource authorization that
+    /// the middleware can't express (e.g. "students may only view their
+    /// own submissions").
+    case forbidden(action: String)
+    /// Request is well-formed but conflicts with current server state
+    /// (e.g. duplicate username, already-imported course bundle).
+    case conflict(reason: String)
+    /// Syntactically valid but semantic content can't be processed.
+    /// Maps to HTTP 422 (Unprocessable Entity).
+    case unprocessable(reason: String)
+    /// A server-side write or external operation failed unexpectedly.
+    case internalFailure(reason: String)
+
+    var status: HTTPResponseStatus {
+        switch self {
+        case .notFound: return .notFound
+        case .badRequest, .invalidParameter: return .badRequest
+        case .forbidden: return .forbidden
+        case .conflict: return .conflict
+        case .unprocessable: return .unprocessableEntity
+        case .internalFailure: return .internalServerError
+        }
+    }
+
+    var reason: String { description }
+
+    var description: String {
+        switch self {
+        case .notFound(let resource):
+            return "\(resource) not found"
+        case .badRequest(let reason):
+            return reason
+        case .invalidParameter(let name, let reason):
+            return "Invalid \(name): \(reason)"
+        case .forbidden(let action):
+            return "You do not have permission to \(action)."
+        case .conflict(let reason):
+            return reason
+        case .unprocessable(let reason):
+            return reason
+        case .internalFailure(let reason):
+            return reason
+        }
+    }
+}
+
 // MARK: - Web instructor assignment routes
 
 /// Errors raised by the instructor-facing assignment management web routes
