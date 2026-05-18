@@ -10,20 +10,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class CourseBundleTests: XCTestCase {
+@Suite(.serialized) final class CourseBundleTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-cbtest")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-cbtest")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Auth helpers
@@ -181,7 +183,7 @@ final class CourseBundleTests: XCTestCase {
 
     // MARK: - GET /admin/courses/:courseID/export
 
-    func testExportRequiresAdmin() async throws {
+    @Test func exportRequiresAdmin() async throws {
         let cookie = try await loginAsStudent()
         let course = try await makeTestCourse(code: "EXP_AUTH")
         let id = try course.requireID().uuidString
@@ -189,20 +191,20 @@ final class CourseBundleTests: XCTestCase {
         try await app.asyncTest(
             .GET, "/admin/courses/\(id)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in XCTAssertEqual(res.status, .forbidden) }
+            afterResponse: { res in #expect(res.status == .forbidden) }
         )
     }
 
-    func testExportNotFoundForUnknownCourse() async throws {
+    @Test func exportNotFoundForUnknownCourse() async throws {
         let cookie = try await loginAsAdmin()
         try await app.asyncTest(
             .GET, "/admin/courses/\(UUID().uuidString)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in XCTAssertEqual(res.status, .notFound) }
+            afterResponse: { res in #expect(res.status == .notFound) }
         )
     }
 
-    func testExportEmptyCourseReturnsZip() async throws {
+    @Test func exportEmptyCourseReturnsZip() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeTestCourse(code: "EXP_EMPTY")
         let id = try course.requireID().uuidString
@@ -211,17 +213,17 @@ final class CourseBundleTests: XCTestCase {
             .GET, "/admin/courses/\(id)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(
+                #expect(res.status == .ok)
+                #expect(
                     res.headers.first(name: .contentType)?.contains("zip") == true,
                     "Expected application/zip, got: \(res.headers.first(name: .contentType) ?? "(none)")"
                 )
-                XCTAssertTrue(res.headers.first(name: .contentDisposition)?.contains(".zip") == true)
+                #expect(res.headers.first(name: .contentDisposition)?.contains(".zip") == true)
             }
         )
     }
 
-    func testExportManifestContainsCorrectCounts() async throws {
+    @Test func exportManifestContainsCorrectCounts() async throws {
         let cookie = try await loginAsAdmin()
         let course = try await makeTestCourse(code: "EXP_COUNTS")
         let courseID = try course.requireID()
@@ -234,7 +236,7 @@ final class CourseBundleTests: XCTestCase {
             .GET, "/admin/courses/\(courseID.uuidString)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 zipData = Data(res.body.readableBytesView)
             }
         )
@@ -257,26 +259,26 @@ final class CourseBundleTests: XCTestCase {
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
 
-        XCTAssertEqual(manifest.schemaVersion, 1)
-        XCTAssertEqual(manifest.course.code, "EXP_COUNTS")
-        XCTAssertEqual(manifest.testSetups.count, 1)
-        XCTAssertEqual(manifest.assignments.count, 1)
-        XCTAssertEqual(manifest.assignments.first?.title, "Test Lab")
-        XCTAssertEqual(manifest.submissions.count, 0)
+        #expect(manifest.schemaVersion == 1)
+        #expect(manifest.course.code == "EXP_COUNTS")
+        #expect(manifest.testSetups.count == 1)
+        #expect(manifest.assignments.count == 1)
+        #expect(manifest.assignments.first?.title == "Test Lab")
+        #expect(manifest.submissions.isEmpty)
     }
 
     // MARK: - POST /admin/courses/import — access control
 
-    func testImportRequiresAdmin() async throws {
+    @Test func importRequiresAdmin() async throws {
         let cookie = try await loginAsStudent()
         let zipData = try await makeMinimalBundleZip(courseCode: "IMP_AUTH")
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .forbidden)
+        #expect(status == .forbidden)
     }
 
     // MARK: - POST /admin/courses/import — validation errors
 
-    func testImportRejectsMissingBundleJSON() async throws {
+    @Test func importRejectsMissingBundleJSON() async throws {
         let cookie = try await loginAsAdmin()
 
         let stagingDir = FileManager.default.temporaryDirectory
@@ -289,10 +291,10 @@ final class CourseBundleTests: XCTestCase {
 
         let zipData = try await zipDir(stagingDir)
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+        #expect(status == .badRequest)
     }
 
-    func testImportRejectsInvalidBundleJSON() async throws {
+    @Test func importRejectsInvalidBundleJSON() async throws {
         let cookie = try await loginAsAdmin()
 
         let stagingDir = FileManager.default.temporaryDirectory
@@ -305,10 +307,10 @@ final class CourseBundleTests: XCTestCase {
 
         let zipData = try await zipDir(stagingDir)
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+        #expect(status == .badRequest)
     }
 
-    func testImportRejectsWrongSchemaVersion() async throws {
+    @Test func importRejectsWrongSchemaVersion() async throws {
         let cookie = try await loginAsAdmin()
 
         let badJSON = """
@@ -327,10 +329,10 @@ final class CourseBundleTests: XCTestCase {
 
         let zipData = try await zipDir(stagingDir)
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+        #expect(status == .badRequest)
     }
 
-    func testImportRejectsMissingSetupFile() async throws {
+    @Test func importRejectsMissingSetupFile() async throws {
         let cookie = try await loginAsAdmin()
 
         // Manifest references a setup zip that isn't in the archive
@@ -353,19 +355,19 @@ final class CourseBundleTests: XCTestCase {
 
         let zipData = try await zipDir(stagingDir)
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+        #expect(status == .badRequest)
     }
 
-    func testImportRejectsActiveCourseDuplicate() async throws {
+    @Test func importRejectsActiveCourseDuplicate() async throws {
         let cookie = try await loginAsAdmin()
         _ = try await makeTestCourse(code: "DUPLICATE101")  // active course
 
         let zipData = try await makeMinimalBundleZip(courseCode: "DUPLICATE101")
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .conflict)
+        #expect(status == .conflict)
     }
 
-    func testImportAllowsArchivedCourseDuplicate() async throws {
+    @Test func importAllowsArchivedCourseDuplicate() async throws {
         let cookie = try await loginAsAdmin()
         let archived = try await makeTestCourse(code: "ARCHIVED_IMP")
         archived.isArchived = true
@@ -374,21 +376,21 @@ final class CourseBundleTests: XCTestCase {
         let zipData = try await makeMinimalBundleZip(courseCode: "ARCHIVED_IMP")
         let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
         // 500 expected (Leaf not configured), but NOT a 4xx rejection
-        XCTAssertNotEqual(status, .conflict)
-        XCTAssertNotEqual(status, .forbidden)
-        XCTAssertNotEqual(status, .badRequest)
+        #expect(status != .conflict)
+        #expect(status != .forbidden)
+        #expect(status != .badRequest)
     }
 
     // MARK: - POST /admin/courses/import — DB record creation
 
-    func testImportCreatesExpectedDBRecords() async throws {
+    @Test func importCreatesExpectedDBRecords() async throws {
         let cookie = try await loginAsAdmin()
         let zipData = try await makeMinimalBundleZip(courseCode: "IMP_RECORDS")
 
         let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertNotEqual(status, .badRequest, "Import failed: \(body.prefix(200))")
-        XCTAssertNotEqual(status, .conflict)
-        XCTAssertNotEqual(status, .forbidden)
+        #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+        #expect(status != .conflict)
+        #expect(status != .forbidden)
 
         guard
             let course = try await APICourse.query(on: app.db)
@@ -400,16 +402,16 @@ final class CourseBundleTests: XCTestCase {
         let courseID = try course.requireID()
         let setups = try await APITestSetup.query(on: app.db)
             .filter(\.$courseID == courseID).all()
-        XCTAssertEqual(setups.count, 1, "Expected 1 imported test setup")
+        #expect(setups.count == 1, "Expected 1 imported test setup")
 
         let assignments = try await APIAssignment.query(on: app.db)
             .filter(\.$courseID == courseID).all()
-        XCTAssertEqual(assignments.count, 1, "Expected 1 imported assignment")
-        XCTAssertEqual(assignments.first?.title, "Lab 1")
-        XCTAssertEqual(assignments.first?.isOpen, false)  // bundle sets isOpen: false
+        #expect(assignments.count == 1, "Expected 1 imported assignment")
+        #expect(assignments.first?.title == "Lab 1")
+        #expect(assignments.first?.isOpen == false)  // bundle sets isOpen: false
     }
 
-    func testImportMatchesExistingUser() async throws {
+    @Test func importMatchesExistingUser() async throws {
         let cookie = try await loginAsAdmin()
 
         // Pre-create the user that the bundle will reference
@@ -424,31 +426,27 @@ final class CourseBundleTests: XCTestCase {
             username: "cb_existing_student"
         )
         let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertNotEqual(status, .forbidden, body)
-        XCTAssertNotEqual(status, .badRequest, body)
+        #expect(status != .forbidden, "\(body)")
+        #expect(status != .badRequest, "\(body)")
 
         // No new user should have been created
         let userCountAfter = try await APIUser.query(on: app.db).count()
-        XCTAssertEqual(
-            userCountAfter, userCountBefore,
-            "No new user should be created when username already exists")
+        #expect(userCountAfter == userCountBefore, "No new user should be created when username already exists")
 
         // The enrollment should reference the pre-existing user
         let course = try await APICourse.query(on: app.db)
             .filter(\.$code == "USERMATCH_CB").first()
-        XCTAssertNotNil(course)
+        #expect(course != nil)
         guard let courseID2 = try course?.requireID() else {
             XCTFail("Imported course USERMATCH_CB not found in DB")
             return
         }
         let enrollment = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$course.$id == courseID2).first()
-        XCTAssertEqual(
-            enrollment?.userID, existingID,
-            "Enrollment should point to the pre-existing user")
+        #expect(enrollment?.userID == existingID, "Enrollment should point to the pre-existing user")
     }
 
-    func testImportCreatesPlaceholderUser() async throws {
+    @Test func importCreatesPlaceholderUser() async throws {
         let cookie = try await loginAsAdmin()
 
         let zipData = try await makeBundleZipWithUser(
@@ -456,20 +454,18 @@ final class CourseBundleTests: XCTestCase {
             username: "cb_brand_new_user"
         )
         let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertNotEqual(status, .forbidden, body)
-        XCTAssertNotEqual(status, .badRequest, body)
+        #expect(status != .forbidden, "\(body)")
+        #expect(status != .badRequest, "\(body)")
 
         let placeholder = try await APIUser.query(on: app.db)
             .filter(\.$username == "cb_brand_new_user").first()
-        XCTAssertNotNil(placeholder, "Placeholder user should be created")
-        XCTAssertEqual(
-            placeholder?.passwordHash, "",
-            "Placeholder user should have empty passwordHash (inert account)")
+        #expect(placeholder != nil, "Placeholder user should be created")
+        #expect(placeholder?.passwordHash.isEmpty == true, "Placeholder user should have empty passwordHash (inert account)")
     }
 
     // MARK: - Round-trip: export → import
 
-    func testRoundTripExportImport() async throws {
+    @Test func roundTripExportImport() async throws {
         let cookie = try await loginAsAdmin()
 
         // Set up source course
@@ -484,11 +480,11 @@ final class CourseBundleTests: XCTestCase {
             .GET, "/admin/courses/\(courseID.uuidString)/export",
             beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 exportedZip = Data(res.body.readableBytesView)
             }
         )
-        XCTAssertFalse(exportedZip.isEmpty, "Exported ZIP should not be empty")
+        #expect(exportedZip.isEmpty == false, "Exported ZIP should not be empty")
 
         // Archive the original so the import does not hit a 409
         course.isArchived = true
@@ -496,9 +492,9 @@ final class CourseBundleTests: XCTestCase {
 
         // Import the exported ZIP
         let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
-        XCTAssertNotEqual(status, .badRequest, "Import should not fail: \(body.prefix(300))")
-        XCTAssertNotEqual(status, .conflict, body)
-        XCTAssertNotEqual(status, .forbidden, body)
+        #expect(status != .badRequest, "Import should not fail: \(body.prefix(300))")
+        #expect(status != .conflict, "\(body)")
+        #expect(status != .forbidden, "\(body)")
 
         // Verify the imported course has the same structure
         guard
@@ -513,12 +509,12 @@ final class CourseBundleTests: XCTestCase {
         let importedID = try imported.requireID()
         let importedSetups = try await APITestSetup.query(on: app.db)
             .filter(\.$courseID == importedID).all()
-        XCTAssertEqual(importedSetups.count, 1, "Round-trip: expected 1 test setup")
+        #expect(importedSetups.count == 1, "Round-trip: expected 1 test setup")
 
         let importedAssignments = try await APIAssignment.query(on: app.db)
             .filter(\.$courseID == importedID).all()
-        XCTAssertEqual(importedAssignments.count, 1, "Round-trip: expected 1 assignment")
-        XCTAssertEqual(importedAssignments.first?.title, "RT Lab")
+        #expect(importedAssignments.count == 1, "Round-trip: expected 1 assignment")
+        #expect(importedAssignments.first?.title == "RT Lab")
     }
 
     // MARK: - Bundle builder with a user (used by user-matching tests)

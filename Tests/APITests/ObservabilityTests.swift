@@ -1,25 +1,27 @@
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import Core
 @testable import chickadee_server
 
-final class ObservabilityTests: XCTestCase {
-    private var app: Application!
+@Suite(.serialized) final class ObservabilityTests {
     private let workerSecret = "observability-secret"
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-obs")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-obs")
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
-    func testQueueWaitMetricCalculationPersistsExpectedMilliseconds() async throws {
+    @Test func queueWaitMetricCalculationPersistsExpectedMilliseconds() async throws {
         let (_, submission) = try await makeSubmission(submissionID: "sub_queue_wait")
         let enqueuedAt = Date(timeIntervalSince1970: 1_000)
         let assignedAt = Date(timeIntervalSince1970: 1_003.5)
@@ -37,10 +39,10 @@ final class ObservabilityTests: XCTestCase {
         let metric = try await JobExecutionMetric.query(on: app.db)
             .filter(\.$submissionID == "sub_queue_wait")
             .first()
-        XCTAssertEqual(metric?.queueWaitMs, 3500)
+        #expect(metric?.queueWaitMs == 3500)
     }
 
-    func testExecutionDurationAndFinalStatusPersistence() async throws {
+    @Test func executionDurationAndFinalStatusPersistence() async throws {
         let (_, submission) = try await makeSubmission(submissionID: "sub_exec_metric")
         let enqueuedAt = Date(timeIntervalSince1970: 2_000)
         let assignedAt = Date(timeIntervalSince1970: 2_002)
@@ -97,16 +99,16 @@ final class ObservabilityTests: XCTestCase {
         let metric = try await JobExecutionMetric.query(on: app.db)
             .filter(\.$submissionID == "sub_exec_metric")
             .first()
-        XCTAssertEqual(metric?.executionMs, 3250)
+        #expect(metric?.executionMs == 3250)
         // totalProcessingMs is the sum of queueWaitMs (2000) and executionMs
         // (3250), not `completedAt − enqueuedAt`. Summing avoids mixing
         // server `enqueuedAt` with runner `completedAt`, which under any
         // runner clock skew would let `total < queueWait` slip through.
-        XCTAssertEqual(metric?.totalProcessingMs, 5250)
-        XCTAssertEqual(metric?.finalStatus, JobFinalStatus.error.rawValue)
+        #expect(metric?.totalProcessingMs == 5250)
+        #expect(metric?.finalStatus == JobFinalStatus.error.rawValue)
     }
 
-    func testWrappedExecutionReportPersistsStageTimingMetrics() async throws {
+    @Test func wrappedExecutionReportPersistsStageTimingMetrics() async throws {
         let (_, submission) = try await makeSubmission(submissionID: "sub_stage_metrics")
         submission.submittedAt = Date(timeIntervalSince1970: 3_000)
         submission.workerID = "runner-stage"
@@ -171,19 +173,19 @@ final class ObservabilityTests: XCTestCase {
         let metric = try await JobExecutionMetric.query(on: app.db)
             .filter(\.$submissionID == "sub_stage_metrics")
             .first()
-        XCTAssertEqual(metric?.workdirSetupMs, 10)
-        XCTAssertEqual(metric?.submissionDirSetupMs, 15)
-        XCTAssertEqual(metric?.submissionDownloadMs, 20)
-        XCTAssertEqual(metric?.testSetupAcquireMs, 25)
-        XCTAssertEqual(metric?.submissionUnpackMs, 30)
-        XCTAssertEqual(metric?.starterCleanupMs, 5)
-        XCTAssertEqual(metric?.submissionPrepareMs, 40)
-        XCTAssertEqual(metric?.makeStepMs, 50)
-        XCTAssertEqual(metric?.runtimeHelperSetupMs, 12)
-        XCTAssertEqual(metric?.testExecutionMs, 250)
+        #expect(metric?.workdirSetupMs == 10)
+        #expect(metric?.submissionDirSetupMs == 15)
+        #expect(metric?.submissionDownloadMs == 20)
+        #expect(metric?.testSetupAcquireMs == 25)
+        #expect(metric?.submissionUnpackMs == 30)
+        #expect(metric?.starterCleanupMs == 5)
+        #expect(metric?.submissionPrepareMs == 40)
+        #expect(metric?.makeStepMs == 50)
+        #expect(metric?.runtimeHelperSetupMs == 12)
+        #expect(metric?.testExecutionMs == 250)
     }
 
-    func testWorkerHeartbeatUpdatesRunnerSnapshot() async throws {
+    @Test func workerHeartbeatUpdatesRunnerSnapshot() async throws {
         let payload = WorkerActivityPayload(
             workerID: "runner-heartbeat",
             hostname: "host-a",
@@ -213,26 +215,26 @@ final class ObservabilityTests: XCTestCase {
                 req.body = body
             },
             afterResponse: { response in
-                XCTAssertEqual(response.status, .ok)
+                #expect(response.status == .ok)
             })
 
         let snapshot = try await RunnerSnapshot.query(on: app.db)
             .filter(\.$runnerID == "runner-heartbeat")
             .sort(\.$recordedAt, .descending)
             .first()
-        XCTAssertEqual(snapshot?.activeJobs, 2)
-        XCTAssertEqual(snapshot?.maxJobs, 4)
-        XCTAssertEqual(snapshot?.availableCapacity, 2)
-        XCTAssertNotNil(snapshot?.lastHeartbeatAt)
+        #expect(snapshot?.activeJobs == 2)
+        #expect(snapshot?.maxJobs == 4)
+        #expect(snapshot?.availableCapacity == 2)
+        #expect(snapshot?.lastHeartbeatAt != nil)
 
         let runnerProfile = try await RunnerProfile.query(on: app.db)
             .filter(\.$runnerID == "runner-heartbeat")
             .first()
-        XCTAssertEqual(runnerProfile?.platform, "linux")
+        #expect(runnerProfile?.platform == "linux")
     }
 
     // swiftlint:disable:next function_body_length
-    func testAdminMetricsAuthorizationAndResponseShape() async throws {
+    @Test func adminMetricsAuthorizationAndResponseShape() async throws {
         let (setup, submission) = try await makeSubmission(submissionID: "sub_metrics")
         let recentMetric = JobExecutionMetric(
             submissionID: try submission.requireID(),
@@ -299,7 +301,7 @@ final class ObservabilityTests: XCTestCase {
         try await app.asyncTest(
             .GET, "/admin/metrics",
             afterResponse: { response in
-                XCTAssertEqual(response.status, .seeOther)
+                #expect(response.status == .seeOther)
             })
 
         let cookie = try await loginUser(
@@ -315,14 +317,14 @@ final class ObservabilityTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { response in
-                XCTAssertEqual(response.status, .ok)
+                #expect(response.status == .ok)
                 let payload = try response.content.decode(InternalMetricsResponse.self)
                 XCTAssertGreaterThanOrEqual(payload.activeRunners, 1)
-                XCTAssertEqual(payload.jobsProcessed24h, 1)
-                XCTAssertNotNil(payload.queueWait.averageMs)
-                XCTAssertEqual(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count, 1)
-                XCTAssertFalse(payload.runnerLoads.isEmpty)
-                XCTAssertEqual(payload.compatibility.compatibleAssignmentAttempts, 0)
+                #expect(payload.jobsProcessed24h == 1)
+                #expect(payload.queueWait.averageMs != nil)
+                #expect(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count == 1)
+                #expect(payload.runnerLoads.isEmpty == false)
+                #expect(payload.compatibility.compatibleAssignmentAttempts == 0)
             })
 
         try await app.asyncTest(
@@ -331,19 +333,19 @@ final class ObservabilityTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { response in
-                XCTAssertEqual(response.status, .ok)
+                #expect(response.status == .ok)
                 let payload = try response.content.decode(InternalMetricsTimeSeriesResponse.self)
-                XCTAssertEqual(payload.windowHours, 24)
-                XCTAssertEqual(payload.bucketMinutes, 15)
-                XCTAssertFalse(payload.buckets.isEmpty)
-                XCTAssertTrue(payload.buckets.contains(where: { $0.completedJobs == 1 }))
-                XCTAssertTrue(
+                #expect(payload.windowHours == 24)
+                #expect(payload.bucketMinutes == 15)
+                #expect(payload.buckets.isEmpty == false)
+                #expect(payload.buckets.contains(where: { $0.completedJobs == 1 }))
+                #expect(
                     payload.buckets.contains(where: { ($0.requestCount > 0) || ($0.avgRunnerUtilizationPercent != nil) }
                     ))
             })
     }
 
-    func testQueueDepthExcludesBrowserModePendingJobs() async throws {
+    @Test func queueDepthExcludesBrowserModePendingJobs() async throws {
         // Only worker-mode submissions should contribute to the native worker queue depth.
         _ = try await makeSubmission(submissionID: "sub_worker_pending", gradingMode: "worker")
         _ = try await makeSubmission(submissionID: "sub_browser_pending", gradingMode: "browser")
@@ -361,9 +363,9 @@ final class ObservabilityTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { response in
-                XCTAssertEqual(response.status, .ok)
+                #expect(response.status == .ok)
                 let payload = try response.content.decode(InternalMetricsResponse.self)
-                XCTAssertEqual(payload.maxQueueDepth, 1)
+                #expect(payload.maxQueueDepth == 1)
             })
     }
 
@@ -375,7 +377,7 @@ final class ObservabilityTests: XCTestCase {
     /// (`completedAt − enqueuedAt`) straddled the two clocks and produced
     /// totals smaller than the queue wait. `totalProcessingMs` must now
     /// be `queueWaitMs + executionMs`, which never inverts.
-    func testTotalProcessingMsIsResilientToRunnerClockSkew() async throws {
+    @Test func totalProcessingMsIsResilientToRunnerClockSkew() async throws {
         let (_, submission) = try await makeSubmission(submissionID: "sub_clock_skew")
 
         // Server clock: submitted at T+0, assigned 210 ms later.
@@ -421,12 +423,12 @@ final class ObservabilityTests: XCTestCase {
         let metric = try await JobExecutionMetric.query(on: app.db)
             .filter(\.$submissionID == "sub_clock_skew")
             .first()
-        XCTAssertEqual(metric?.queueWaitMs, 210)
-        XCTAssertEqual(metric?.executionMs, 101)
+        #expect(metric?.queueWaitMs == 210)
+        #expect(metric?.executionMs == 101)
         // The invariant: total >= queueWait. The old formula yielded 111ms
         // (a clock-skewed completedAt − enqueuedAt), inverting against
         // the 210ms queueWait. The summed formula yields 311ms.
-        XCTAssertEqual(metric?.totalProcessingMs, 311)
+        #expect(metric?.totalProcessingMs == 311)
         if let total = metric?.totalProcessingMs, let queue = metric?.queueWaitMs {
             XCTAssertGreaterThanOrEqual(total, queue)
         } else {
@@ -435,7 +437,7 @@ final class ObservabilityTests: XCTestCase {
 
         // Same invariant on APISubmissionDiagnostics.turnaroundMs.
         let diag = try await APISubmissionDiagnostics.find("sub_clock_skew", on: app.db)
-        XCTAssertEqual(diag?.turnaroundMs, 311)
+        #expect(diag?.turnaroundMs == 311)
         if let turnaround = diag?.turnaroundMs, let queue = diag?.queueWaitMs {
             XCTAssertGreaterThanOrEqual(turnaround, queue)
         }
@@ -450,7 +452,7 @@ final class ObservabilityTests: XCTestCase {
     ///    `totalProcessingMs`, `executionMs`, stage timings, etc.) are
     ///    cleared, so an in-flight retest never renders with `Total <
     ///    Queue Wait` on the admin runner page.
-    func testRetestClearsStalePerAttemptFieldsAndRebaselinesEnqueue() async throws {
+    @Test func retestClearsStalePerAttemptFieldsAndRebaselinesEnqueue() async throws {
         let (_, submission) = try await makeSubmission(submissionID: "sub_retest")
 
         // --- Attempt 1: submit, assign, complete. ---
@@ -493,9 +495,9 @@ final class ObservabilityTests: XCTestCase {
         let postFirstRun = try await JobExecutionMetric.query(on: app.db)
             .filter(\.$submissionID == "sub_retest")
             .first()
-        XCTAssertEqual(postFirstRun?.totalProcessingMs, 9_000)  // queueWait 2_000 + execution 7_000
-        XCTAssertEqual(postFirstRun?.queueWaitMs, 2_000)  //  1_002 − 1_000
-        XCTAssertNotNil(postFirstRun?.completedAt)
+        #expect(postFirstRun?.totalProcessingMs == 9_000)  // queueWait 2_000 + execution 7_000
+        #expect(postFirstRun?.queueWaitMs == 2_000)  //  1_002 − 1_000
+        #expect(postFirstRun?.completedAt != nil)
 
         // --- Retest is triggered later, gets re-assigned. ---
         let retestedAt = Date(timeIntervalSince1970: 50_000)
@@ -513,13 +515,13 @@ final class ObservabilityTests: XCTestCase {
             .first()
         // Queue wait reflects the retest window only (4s), not 49,004s since
         // the original submission.
-        XCTAssertEqual(postRetestAssign?.queueWaitMs, 4_000)
+        #expect(postRetestAssign?.queueWaitMs == 4_000)
         // Per-attempt fields from the previous run are cleared.
-        XCTAssertNil(postRetestAssign?.completedAt)
-        XCTAssertNil(postRetestAssign?.startedAt)
-        XCTAssertNil(postRetestAssign?.executionMs)
-        XCTAssertNil(postRetestAssign?.totalProcessingMs)
-        XCTAssertNil(postRetestAssign?.finalStatus)
+        #expect(postRetestAssign?.completedAt == nil)
+        #expect(postRetestAssign?.startedAt == nil)
+        #expect(postRetestAssign?.executionMs == nil)
+        #expect(postRetestAssign?.totalProcessingMs == nil)
+        #expect(postRetestAssign?.finalStatus == nil)
         // Specifically: Total < Queue Wait is no longer possible because
         // totalProcessingMs is nil — the admin page will show "—" until
         // the retest completes.

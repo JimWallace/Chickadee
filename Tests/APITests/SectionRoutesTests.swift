@@ -10,20 +10,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class SectionRoutesTests: XCTestCase {
+@Suite(.serialized) final class SectionRoutesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-sect")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-sect")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -71,7 +73,7 @@ final class SectionRoutesTests: XCTestCase {
 
     // MARK: - POST /instructor/sections — create
 
-    func testCreateSection_instructorCanCreateSection() async throws {
+    @Test func createSection_instructorCanCreateSection() async throws {
         let course = try await makeCourse(code: "SECT_CREATE1")
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -89,19 +91,19 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let sections = try await APICourseSection.query(on: app.db)
             .filter(\.$courseID == courseID)
             .all()
-        XCTAssertEqual(sections.count, 1)
-        XCTAssertEqual(sections[0].name, "Labs")
-        XCTAssertEqual(sections[0].defaultGradingMode, "browser")
-        XCTAssertEqual(sections[0].sortOrder, 1)
+        #expect(sections.count == 1)
+        #expect(sections[0].name == "Labs")
+        #expect(sections[0].defaultGradingMode == "browser")
+        #expect(sections[0].sortOrder == 1)
     }
 
-    func testCreateSection_secondSectionGetsHigherSortOrder() async throws {
+    @Test func createSection_secondSectionGetsHigherSortOrder() async throws {
         let course = try await makeCourse(code: "SECT_CREATE2")
         let courseID = try course.requireID()
         try await makeSection(name: "Existing", order: 1, courseID: courseID)
@@ -121,17 +123,17 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let exams = try await APICourseSection.query(on: app.db)
             .filter(\.$courseID == courseID)
             .filter(\.$name == "Exams")
             .first()
-        XCTAssertEqual(exams?.sortOrder, 2)
+        #expect(exams?.sortOrder == 2)
     }
 
-    func testCreateSection_emptyNameRejected() async throws {
+    @Test func createSection_emptyNameRejected() async throws {
         try await makeCourse(code: "SECT_EMPTY")
         let cookie = try await loginUser(
             username: "sect_instructor3", password: "pw",
@@ -148,11 +150,11 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testCreateSection_invalidGradingModeRejected() async throws {
+    @Test func createSection_invalidGradingModeRejected() async throws {
         try await makeCourse(code: "SECT_BADMODE")
         let cookie = try await loginUser(
             username: "sect_instructor4", password: "pw",
@@ -169,11 +171,11 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testCreateSection_studentForbidden() async throws {
+    @Test func createSection_studentForbidden() async throws {
         try await makeCourse(code: "SECT_STUDENT1")
         let cookie = try await loginUser(
             username: "sect_student1", password: "pw",
@@ -191,13 +193,13 @@ final class SectionRoutesTests: XCTestCase {
             },
             afterResponse: { res in
                 // Redirected to login (role middleware) or 403.
-                XCTAssertTrue(res.status == .seeOther || res.status == .forbidden)
+                #expect(res.status == .seeOther || res.status == .forbidden)
             })
     }
 
     // MARK: - POST /instructor/sections/reorder
 
-    func testReorderSections_updatesOrder() async throws {
+    @Test func reorderSections_updatesOrder() async throws {
         let course = try await makeCourse(code: "SECT_REORDER1")
         let courseID = try course.requireID()
         let s1 = try await makeSection(name: "A", order: 1, courseID: courseID)
@@ -223,17 +225,17 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(ReorderBody(sectionIDs: [id3, id2, id1]))
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let updated = try await APICourseSection.query(on: app.db)
             .filter(\.$courseID == courseID)
             .sort(\.$sortOrder)
             .all()
-        XCTAssertEqual(updated.map { $0.name }, ["C", "B", "A"])
+        #expect(updated.map { $0.name } == ["C", "B", "A"])
     }
 
-    func testReorderSections_invalidUUIDRejected() async throws {
+    @Test func reorderSections_invalidUUIDRejected() async throws {
         try await makeCourse(code: "SECT_REORDER2")
         let cookie = try await loginUser(
             username: "sect_instructor_ri", password: "pw",
@@ -250,13 +252,13 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(ReorderBody(sectionIDs: ["not-a-uuid"]))
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
     // MARK: - POST /instructor/sections/:sectionID/rename
 
-    func testRenameSection_updatesNameAndMode() async throws {
+    @Test func renameSection_updatesNameAndMode() async throws {
         let course = try await makeCourse(code: "SECT_RENAME1")
         let courseID = try course.requireID()
         let section = try await makeSection(
@@ -279,15 +281,15 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourseSection.find(section.id, on: app.db)
-        XCTAssertEqual(updated?.name, "NewName")
-        XCTAssertEqual(updated?.defaultGradingMode, "browser")
+        #expect(updated?.name == "NewName")
+        #expect(updated?.defaultGradingMode == "browser")
     }
 
-    func testRenameSection_emptyNameRejected() async throws {
+    @Test func renameSection_emptyNameRejected() async throws {
         let course = try await makeCourse(code: "SECT_RENAME2")
         let courseID = try course.requireID()
         let section = try await makeSection(name: "Good", order: 1, courseID: courseID)
@@ -308,11 +310,11 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testRenameSection_notFoundForUnknownID() async throws {
+    @Test func renameSection_notFoundForUnknownID() async throws {
         try await makeCourse(code: "SECT_RENAME3")
         let cookie = try await loginUser(
             username: "sect_instructor_rnf", password: "pw",
@@ -330,13 +332,13 @@ final class SectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
     // MARK: - POST /instructor/sections/:sectionID/delete
 
-    func testDeleteSection_removesSection() async throws {
+    @Test func deleteSection_removesSection() async throws {
         let course = try await makeCourse(code: "SECT_DEL1")
         let courseID = try course.requireID()
         let section = try await makeSection(name: "ToDelete", order: 1, courseID: courseID)
@@ -354,14 +356,14 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let deleted = try await APICourseSection.find(sectionID, on: app.db)
-        XCTAssertNil(deleted)
+        #expect(deleted == nil)
     }
 
-    func testDeleteSection_assignmentsBecomesUngrouped() async throws {
+    @Test func deleteSection_assignmentsBecomesUngrouped() async throws {
         let course = try await makeCourse(code: "SECT_DEL2")
         let courseID = try course.requireID()
         let section = try await makeSection(name: "Doomed", order: 1, courseID: courseID)
@@ -386,18 +388,18 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         // The assignment should still exist but be ungrouped.
         let updated = try await APIAssignment.find(assignment.id, on: app.db)
-        XCTAssertNotNil(updated)
-        XCTAssertNil(updated?.sectionID)
+        #expect(updated != nil)
+        #expect(updated?.sectionID == nil)
     }
 
     // MARK: - POST /instructor/:assignmentID/section
 
-    func testMoveToSection_setsSection() async throws {
+    @Test func moveToSection_setsSection() async throws {
         let course = try await makeCourse(code: "SECT_MOVE1")
         let courseID = try course.requireID()
         let section = try await makeSection(name: "Target", order: 1, courseID: courseID)
@@ -422,14 +424,14 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(MoveBody(sectionID: sectionID.uuidString))
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let updated = try await APIAssignment.find(assignment.id, on: app.db)
-        XCTAssertEqual(updated?.sectionID, sectionID)
+        #expect(updated?.sectionID == sectionID)
     }
 
-    func testMoveToSection_emptyIDClearsSection() async throws {
+    @Test func moveToSection_emptyIDClearsSection() async throws {
         let course = try await makeCourse(code: "SECT_MOVE2")
         let courseID = try course.requireID()
         let section = try await makeSection(name: "ASection", order: 1, courseID: courseID)
@@ -456,14 +458,14 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(MoveBody(sectionID: ""))
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let updated = try await APIAssignment.find(assignment.id, on: app.db)
-        XCTAssertNil(updated?.sectionID)
+        #expect(updated?.sectionID == nil)
     }
 
-    func testMoveToSection_syncsBrowserGradingMode() async throws {
+    @Test func moveToSection_syncsBrowserGradingMode() async throws {
         let course = try await makeCourse(code: "SECT_MOVE3")
         let courseID = try course.requireID()
         let section = try await makeSection(
@@ -501,13 +503,13 @@ final class SectionRoutesTests: XCTestCase {
                 try req.content.encode(MoveBody(sectionID: sectionID.uuidString))
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         // The test setup manifest should now have gradingMode = "browser"
         let updatedSetup = try await APITestSetup.find(setup.id, on: app.db)
         let manifestData = Data((updatedSetup?.manifest ?? "").utf8)
         let dict = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
-        XCTAssertEqual(dict?["gradingMode"] as? String, "browser")
+        #expect(dict?["gradingMode"] as? String == "browser")
     }
 }

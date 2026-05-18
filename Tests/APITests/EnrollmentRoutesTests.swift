@@ -12,20 +12,22 @@ import Core
 import Crypto
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class EnrollmentRoutesTests: XCTestCase {
+@Suite(.serialized) final class EnrollmentRoutesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-enr")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-enr")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -44,7 +46,7 @@ final class EnrollmentRoutesTests: XCTestCase {
 
     // MARK: - GET /enroll
 
-    func testEnrollPage_showsOnlyOpenCourses() async throws {
+    @Test func enrollPage_showsOnlyOpenCourses() async throws {
         let open = try await makeCourse(code: "ENR_OPEN1", mode: .open)
         let auto = try await makeCourse(code: "ENR_AUTO1", mode: .auto)
         let closed = try await makeCourse(code: "ENR_CLOSED1", mode: .closed)
@@ -60,25 +62,25 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let html = res.body.string
-                XCTAssertTrue(html.contains(open.code), "Open course should appear")
-                XCTAssertFalse(html.contains(auto.code), "Auto course should not appear on /enroll")
-                XCTAssertFalse(html.contains(closed.code), "Closed course should not appear")
-                XCTAssertFalse(html.contains(archived.code), "Archived course should not appear")
+                #expect(html.contains(open.code), "Open course should appear")
+                #expect(html.contains(auto.code) == false, "Auto course should not appear on /enroll")
+                #expect(html.contains(closed.code) == false, "Closed course should not appear")
+                #expect(html.contains(archived.code) == false, "Archived course should not appear")
             })
     }
 
-    func testEnrollPage_unauthenticated_redirects() async throws {
+    @Test func enrollPage_unauthenticated_redirects() async throws {
         try await app.asyncTest(.GET, "/enroll") { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/login")
+            #expect(res.status == .seeOther)
+            #expect(res.headers.first(name: .location) == "/login")
         }
     }
 
     // MARK: - POST /enroll
 
-    func testSaveEnrollment_enrollsInSelectedCourses() async throws {
+    @Test func saveEnrollment_enrollsInSelectedCourses() async throws {
         let course = try await makeCourse(code: "ENR_SAVE1", mode: .open)
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -94,19 +96,19 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "courseIDs=\(courseID.uuidString)&_csrf=\(token)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/")
             })
 
         let user = try await APIUser.query(on: app.db).filter(\.$username == "enr_student2").first()
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == user!.requireID())
             .all()
-        XCTAssertEqual(enrollments.count, 1)
-        XCTAssertEqual(enrollments.first?.$course.id, courseID)
+        #expect(enrollments.count == 1)
+        #expect(enrollments.first?.$course.id == courseID)
     }
 
-    func testSaveEnrollment_noneSelected_redirectsWithError() async throws {
+    @Test func saveEnrollment_noneSelected_redirectsWithError() async throws {
         let cookie = try await loginUser(
             username: "enr_student3", password: "pw",
             role: "student", on: app)
@@ -119,15 +121,15 @@ final class EnrollmentRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
                 let loc = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(
+                #expect(
                     loc.contains("error=none_selected"),
                     "Should redirect with none_selected error, got: \(loc)")
             })
     }
 
-    func testSaveEnrollment_ignoresClosedCourse() async throws {
+    @Test func saveEnrollment_ignoresClosedCourse() async throws {
         let closed = try await makeCourse(code: "ENR_CLOSED2", mode: .closed)
         let closedID = try closed.requireID()
         let cookie = try await loginUser(
@@ -143,18 +145,18 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "courseIDs=\(closedID.uuidString)&_csrf=\(token)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
                 let loc = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(loc.contains("error=none_selected"))
+                #expect(loc.contains("error=none_selected"))
             })
 
         let user = try await APIUser.query(on: app.db).filter(\.$username == "enr_student4").first()
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == user!.requireID()).all()
-        XCTAssertTrue(enrollments.isEmpty, "Should not be enrolled in a closed course")
+        #expect(enrollments.isEmpty, "Should not be enrolled in a closed course")
     }
 
-    func testSaveEnrollment_ignoresAutoCourse() async throws {
+    @Test func saveEnrollment_ignoresAutoCourse() async throws {
         // Auto courses are not shown on /enroll and must not be self-enrollable via POST.
         let auto = try await makeCourse(code: "ENR_AUTO2", mode: .auto)
         let autoID = try auto.requireID()
@@ -174,15 +176,15 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "courseIDs=\(autoID.uuidString)&_csrf=\(token)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
                 let loc = res.headers.first(name: .location) ?? ""
-                XCTAssertTrue(
+                #expect(
                     loc.contains("error=none_selected"),
                     "Auto course should not be self-enrollable via /enroll, got: \(loc)")
             })
     }
 
-    func testSaveEnrollment_doesNotDuplicate() async throws {
+    @Test func saveEnrollment_doesNotDuplicate() async throws {
         let course = try await makeCourse(code: "ENR_DUP1", mode: .open)
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -204,12 +206,12 @@ final class EnrollmentRoutesTests: XCTestCase {
         let user = try await APIUser.query(on: app.db).filter(\.$username == "enr_student5").first()
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == user!.requireID()).all()
-        XCTAssertEqual(enrollments.count, 1, "Should not create duplicate enrollments")
+        #expect(enrollments.count == 1, "Should not create duplicate enrollments")
     }
 
     // MARK: - Auto-enrolment (resolveActiveCourse)
 
-    func testAutoEnroll_onResolveActiveCourse_enrollsInAutoCourse() async throws {
+    @Test func autoEnroll_onResolveActiveCourse_enrollsInAutoCourse() async throws {
         let auto = try await makeCourse(code: "AUT_RESOLVE1", mode: .auto)
         let autoID = try auto.requireID()
 
@@ -222,12 +224,12 @@ final class EnrollmentRoutesTests: XCTestCase {
         let enrollments = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == user!.requireID())
             .all()
-        XCTAssertEqual(enrollments.count, 1)
-        XCTAssertEqual(enrollments.first?.$course.id, autoID)
+        #expect(enrollments.count == 1)
+        #expect(enrollments.first?.$course.id == autoID)
         _ = cookie
     }
 
-    func testAutoEnroll_multipleAutoCourses_enrollsAll() async throws {
+    @Test func autoEnroll_multipleAutoCourses_enrollsAll() async throws {
         let a1 = try await makeCourse(code: "AUT_MULTI1", mode: .auto)
         let a2 = try await makeCourse(code: "AUT_MULTI2", mode: .auto)
         let id1 = try a1.requireID()
@@ -244,12 +246,12 @@ final class EnrollmentRoutesTests: XCTestCase {
             .all()
             .map { $0.$course.id }
 
-        XCTAssertTrue(enrolledIDs.contains(id1), "Should be enrolled in first auto course")
-        XCTAssertTrue(enrolledIDs.contains(id2), "Should be enrolled in second auto course")
+        #expect(enrolledIDs.contains(id1), "Should be enrolled in first auto course")
+        #expect(enrolledIDs.contains(id2), "Should be enrolled in second auto course")
         _ = cookie
     }
 
-    func testAutoEnroll_doesNotEnrollInOpenOrClosedCourses() async throws {
+    @Test func autoEnroll_doesNotEnrollInOpenOrClosedCourses() async throws {
         let open = try await makeCourse(code: "AUT_OPEN1", mode: .open)
         let closed = try await makeCourse(code: "AUT_CLOSED1", mode: .closed)
         let auto = try await makeCourse(code: "AUT_AUTO1", mode: .auto)
@@ -269,13 +271,13 @@ final class EnrollmentRoutesTests: XCTestCase {
                 .all()
                 .map { $0.$course.id })
 
-        XCTAssertTrue(enrolledIDs.contains(autoID), "Should be auto-enrolled in .auto course")
-        XCTAssertFalse(enrolledIDs.contains(openID), "Should NOT be auto-enrolled in .open course")
-        XCTAssertFalse(enrolledIDs.contains(closedID), "Should NOT be auto-enrolled in .closed course")
+        #expect(enrolledIDs.contains(autoID), "Should be auto-enrolled in .auto course")
+        #expect(enrolledIDs.contains(openID) == false, "Should NOT be auto-enrolled in .open course")
+        #expect(enrolledIDs.contains(closedID) == false, "Should NOT be auto-enrolled in .closed course")
         _ = cookie
     }
 
-    func testAutoEnroll_doesNotDuplicateExistingEnrollment() async throws {
+    @Test func autoEnroll_doesNotDuplicateExistingEnrollment() async throws {
         let auto = try await makeCourse(code: "AUT_NODUP1", mode: .auto)
         let autoID = try auto.requireID()
 
@@ -292,12 +294,12 @@ final class EnrollmentRoutesTests: XCTestCase {
             .filter(\.$userID == user!.requireID())
             .filter(\.$course.$id == autoID)
             .count()
-        XCTAssertEqual(count, 1, "Should not create duplicate enrollment on repeated login")
+        #expect(count == 1, "Should not create duplicate enrollment on repeated login")
     }
 
     // MARK: - postLoginRedirect behaviour
 
-    func testPostLoginRedirect_withClosedCourseOnly_redirectsToHome() async throws {
+    @Test func postLoginRedirect_withClosedCourseOnly_redirectsToHome() async throws {
         // Only a closed course → user can't self-enroll → redirect to / (empty state).
         try await makeCourse(code: "PLR_CLOSED1", mode: .closed)
 
@@ -315,14 +317,12 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "username=plr_closed_student&password=pw&_csrf=\(csrf)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(
-                    res.headers.first(name: .location), "/",
-                    "User with only closed course should go to /")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/", "User with only closed course should go to /")
             })
     }
 
-    func testPostLoginRedirect_withOpenCourseOnly_redirectsToEnroll() async throws {
+    @Test func postLoginRedirect_withOpenCourseOnly_redirectsToEnroll() async throws {
         // Only an open course → user has no enrollment → redirect to /enroll.
         try await makeCourse(code: "PLR_OPEN1", mode: .open)
 
@@ -340,14 +340,14 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "username=plr_open_student&password=pw&_csrf=\(csrf)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(
-                    res.headers.first(name: .location), "/enroll",
+                #expect(res.status == .seeOther)
+                #expect(
+                    res.headers.first(name: .location) == "/enroll",
                     "User with open course and no enrollments should go to /enroll")
             })
     }
 
-    func testPostLoginRedirect_withAutoCourse_enrollsAndRedirectsToHome() async throws {
+    @Test func postLoginRedirect_withAutoCourse_enrollsAndRedirectsToHome() async throws {
         // Auto course → user gets enrolled → redirect to /.
         try await makeCourse(code: "PLR_AUTO1", mode: .auto)
 
@@ -366,21 +366,19 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "username=plr_auto_student&password=pw&_csrf=\(csrf)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(
-                    res.headers.first(name: .location), "/",
-                    "Auto-enrolled user should go to /")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/", "Auto-enrolled user should go to /")
             })
 
         let count = try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == userID)
             .count()
-        XCTAssertEqual(count, 1, "User should be enrolled in the auto course after login")
+        #expect(count == 1, "User should be enrolled in the auto course after login")
     }
 
     // MARK: - POST /courses/:courseID/activate
 
-    func testActivateCourse_enrolledUser_setsSession() async throws {
+    @Test func activateCourse_enrolledUser_setsSession() async throws {
         let course = try await makeCourse(code: "ACT_COURSE1", mode: .auto)
         let courseID = try course.requireID()
         // auto mode: loginUser triggers auto-enrolment, so the student is enrolled.
@@ -396,11 +394,11 @@ final class EnrollmentRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
     }
 
-    func testActivateCourse_notEnrolled_doesNotSetSession() async throws {
+    @Test func activateCourse_notEnrolled_doesNotSetSession() async throws {
         let course = try await makeCourse(code: "ACT_COURSE2", mode: .open)
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -416,11 +414,11 @@ final class EnrollmentRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
     }
 
-    func testActivateCourse_invalidCourseID_returns400() async throws {
+    @Test func activateCourse_invalidCourseID_returns400() async throws {
         let cookie = try await loginUser(
             username: "act_student3", password: "pw",
             role: "student", on: app)
@@ -433,13 +431,13 @@ final class EnrollmentRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": token], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
     // MARK: - Admin enrollment-mode route
 
-    func testAdminSetEnrollmentMode_setsMode() async throws {
+    @Test func adminSetEnrollmentMode_setsMode() async throws {
         let course = try await makeCourse(code: "ADM_MODE1", mode: .open)
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -456,14 +454,14 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "enrollmentMode=auto&_csrf=\(token)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourse.find(courseID, on: app.db)
-        XCTAssertEqual(updated?.enrollmentMode, .auto, "Enrollment mode should be .auto after update")
+        #expect(updated?.enrollmentMode == .auto, "Enrollment mode should be .auto after update")
     }
 
-    func testAdminSetEnrollmentMode_unknownValue_defaultsToOpen() async throws {
+    @Test func adminSetEnrollmentMode_unknownValue_defaultsToOpen() async throws {
         let course = try await makeCourse(code: "ADM_MODE2", mode: .auto)
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -480,14 +478,14 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "enrollmentMode=bogus&_csrf=\(token)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourse.find(courseID, on: app.db)
-        XCTAssertEqual(updated?.enrollmentMode, .open, "Unknown value should default to .open")
+        #expect(updated?.enrollmentMode == .open, "Unknown value should default to .open")
     }
 
-    func testInstructorSetEnrollmentMode_setsMode() async throws {
+    @Test func instructorSetEnrollmentMode_setsMode() async throws {
         let course = try await makeCourse(code: "INS_MODE1", mode: .open)
         let courseID = try course.requireID()
         let cookie = try await loginUser(
@@ -503,10 +501,10 @@ final class EnrollmentRoutesTests: XCTestCase {
                 req.body = .init(string: "enrollmentMode=closed&_csrf=\(token)")
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let updated = try await APICourse.find(courseID, on: app.db)
-        XCTAssertEqual(updated?.enrollmentMode, .closed)
+        #expect(updated?.enrollmentMode == .closed)
     }
 }

@@ -12,7 +12,6 @@ import Leaf
 import LeafKit
 import SQLKit
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
