@@ -460,7 +460,10 @@ import XCTVapor
         let placeholder = try await APIUser.query(on: app.db)
             .filter(\.$username == "cb_brand_new_user").first()
         #expect(placeholder != nil, "Placeholder user should be created")
-        #expect(placeholder?.passwordHash.isEmpty == true, "Placeholder user should have empty passwordHash (inert account)")
+        #expect(
+            placeholder?.passwordHash.isEmpty == true,
+            "Placeholder user should have empty passwordHash (inert account)"
+        )
     }
 
     // MARK: - Round-trip: export → import
