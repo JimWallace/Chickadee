@@ -8,6 +8,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Extract `updateNewAssignmentDraft` per-action dispatch into a
+  new `NewAssignmentDraftService`.**  The 9 draft-action verbs
+  (create / upload / clear assignment & solution notebooks, replace
+  / clear suite files, etc.) had been an inline `switch action`
+  inside the route handler — preserved that way through the parser
+  extraction in PR #583 because the per-case branches shared five
+  locals (`setup`, `setupID`, `userID`, `courseID`, `formState`)
+  that threading through per-action free helpers would have made
+  worse, not better.
+
+  This PR moves the shared locals onto a `NewAssignmentDraftService`
+  struct in `Sources/APIServer/Services/` and turns each verb into
+  a `mutating` method on the service.  Each method reads/writes
+  `self.setup` / `self.formState` instead of a thread-through.
+  The handler shrinks from ~290 LOC to ~60 LOC: parse → resolve
+  setup → seed form state → `service.perform()` → write back →
+  redirect.  Outcome enum `NewAssignmentDraftActionOutcome`
+  (`.applied` / `.validationFailed(String)`) keeps the service
+  HTTP-agnostic — the handler builds the redirect from it.
+
+  Additional changes:
+    * `NewAssignmentDraftPayload` moved from a `fileprivate` struct
+      inside `+NewAssignment.swift` to a file-internal struct in
+      `Sources/APIServer/Routes/Web/NewAssignmentDraftPayload.swift`
+      so the service can construct one.
+    * `newAssignmentSectionGradingMode(...)` lifted from a `private`
+      method on the `AssignmentRoutes` extension to a file-scope
+      function so the service can call it.
+
+  New `NewAssignmentDraftServiceTests` adds 11 service-level unit
+  tests exercising each action in isolation (validation branches
+  for both upload variants, file-system + form-state assertions
+  for create/clear assignment notebook, no-op behaviour for
+  unknown/empty action verbs, `notebookTitle` derivation).  The 18
+  end-to-end tests in `AssignmentRoutesPublishTests` remain green
+  (behavior parity confirmed).  Service-level tests run ~5× faster
+  per case than the integration tests — adding a new action now
+  comes with a fast inner-loop test cost.
+
+  Sets the precedent for the service-layer pattern across the rest
+  of the routes layer; follow-ups can apply the same shape to
+  `saveEditedAssignment` and the helpers-as-services migration.
+
 - **Parallelise the 7 sequential DB queries on
   `courseStudentSubmissionsPage`.**  The
   `/:courseCode/students/:username/submissions` handler in
