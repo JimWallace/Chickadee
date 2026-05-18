@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Round-2 coverage for `WorkerDaemon`: job-claim concurrency +
+  terminal download failure.**  Closes the two architecture-review
+  follow-ups that PR #582 (`RunnerNetworkResilienceTests`)
+  explicitly deferred.  New cases:
+    * `testWorkerDaemonRunsJobsConcurrentlyWhenMaxConcurrentJobsAllows` —
+      feeds 5 jobs to a daemon with `maxConcurrentJobs: 5` and a
+      script runner that records peak simultaneous invocations.
+      Asserts the recording runner observed ≥ 2 concurrent calls;
+      regression-pins the `withThrowingDiscardingTaskGroup` worker-loop
+      fanout that's been silently relied on by every production
+      runner.
+    * `testWorkerDaemonReportsSyntheticFailureWhenSubmissionDownloadTerminallyFails`
+      — terminal 404 on the submission download → daemon still emits a
+      `buildStatus: .failed` report with `outcomes: []` and does NOT
+      invoke the script runner.  Complements
+      `testDownloadRetriesThroughShortServerInterruption` which
+      covers the *recoverable* download path.
+
+  Supporting fixtures: `ConcurrencyRecordingRunner` actor (peak-count
+  ScriptRunner) and `AlwaysFails404Server` (always-404 HTTP server),
+  added inline in `WorkerDaemonTests` per the existing fixture
+  convention there.  Full `WorkerDaemonTests` suite: 12 tests, 0
+  failures.
+
 - **Plug the remaining editor test gaps deferred in PR #581.**
   Adds 9 tests to `AssignmentRoutesEditorTests`:
     * **`GET /instructor/new/draft/solution-notebook`** (5 tests):

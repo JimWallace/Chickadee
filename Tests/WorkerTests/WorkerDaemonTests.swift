@@ -939,4 +939,211 @@ final class WorkerDaemonTests: XCTestCase {
             _ = await task.result
         }
     }
+
+    // MARK: - Concurrency / state-transition coverage (round 2)
+
+    /// Records the peak number of simultaneous `run(...)` invocations so a
+    /// concurrency test can prove the daemon's worker-loop fanout actually
+    /// processes jobs in parallel.  Holds each invocation open for `delay`
+    /// so the time window for overlap is reliable.
+    private actor ConcurrencyRecordingRunner: ScriptRunner {
+        private var activeCount = 0
+        private var maxObserved = 0
+        private var totalCompletions = 0
+        private let output: ScriptOutput
+        private let delay: Duration
+
+        init(output: ScriptOutput, delay: Duration) {
+            self.output = output
+            self.delay = delay
+        }
+
+        func run(
+            script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]
+        ) async -> ScriptOutput {
+            activeCount += 1
+            maxObserved = Swift.max(maxObserved, activeCount)
+            try? await Task.sleep(for: delay)
+            activeCount -= 1
+            totalCompletions += 1
+            return output
+        }
+
+        func snapshot() -> (maxConcurrent: Int, total: Int) {
+            (maxObserved, totalCompletions)
+        }
+    }
+
+    /// Always returns a 4xx terminal HTTP error for submission downloads.
+    /// Lets us exercise the "submission download terminally fails →
+    /// daemon still reports a synthetic failure and keeps polling" path
+    /// without needing a real flaky server.
+    private final class AlwaysFails404Server {
+        let process: Process
+        let port: Int
+        private let stdout: Pipe
+
+        init() throws {
+            process = Process()
+            stdout = Pipe()
+            process.standardOutput = stdout
+            process.standardError = FileHandle.nullDevice
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [
+                "python3",
+                "-c",
+                #"""
+                import http.server
+                import socketserver
+
+                class Handler(http.server.BaseHTTPRequestHandler):
+                    def do_GET(self):
+                        self.send_response(404)
+                        self.end_headers()
+                        self.wfile.write(b"not found")
+                    def log_message(self, format, *args):
+                        pass
+
+                with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+                    print(httpd.server_address[1], flush=True)
+                    httpd.serve_forever()
+                """#,
+            ]
+            try process.run()
+            let data = stdout.fileHandleForReading.availableData
+            guard
+                let line = String(data: data, encoding: .utf8)?.split(separator: "\n").first,
+                let port = Int(line)
+            else {
+                process.terminate()
+                throw XCTSkip("python3 is unavailable for always-404 server")
+            }
+            self.port = port
+        }
+
+        func stop() {
+            guard process.isRunning else { return }
+            process.terminate()
+            for _ in 0..<20 where process.isRunning {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if process.isRunning {
+                #if os(Linux)
+                _ = Glibc.kill(process.processIdentifier, SIGKILL)
+                #else
+                _ = Darwin.kill(process.processIdentifier, SIGKILL)
+                #endif
+            }
+            process.waitUntilExit()
+            stdout.fileHandleForReading.closeFile()
+        }
+    }
+
+    /// With `maxConcurrentJobs > 1`, the daemon should actually run more
+    /// than one job at a time — not serialize them through a single
+    /// worker loop.  This test feeds 5 jobs and a 100 ms per-job delay,
+    /// then asserts the recording runner observed at least 2 concurrent
+    /// invocations (more is fine; less means the worker-loop fanout
+    /// regressed).
+    func testWorkerDaemonRunsJobsConcurrentlyWhenMaxConcurrentJobsAllows() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-concurrent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-concurrent-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+
+        let server = try StaticFileServer(directory: root)
+        defer { server.stop() }
+
+        let jobs = try (0..<5).map { i in
+            try makeServedJob(root: root, serverPort: server.port, submissionID: "concurrent_\(i)")
+        }
+        let poller = MockPoller(jobs: jobs.map(Optional.some) + [nil])
+        let reporter = MockReporter()
+        let runner = ConcurrencyRecordingRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "passed", stderr: "", executionTimeMs: 1, timedOut: false),
+            delay: .milliseconds(100)
+        )
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-concurrent",
+            workerSecret: "secret",
+            maxConcurrentJobs: 5,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
+        )
+
+        let task = Task { try await daemon.run() }
+        _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 5 }
+        task.cancel()
+        try? await task.value
+
+        let (maxConcurrent, total) = await runner.snapshot()
+        XCTAssertEqual(total, 5, "all 5 jobs should have completed")
+        XCTAssertGreaterThanOrEqual(
+            maxConcurrent, 2,
+            "expected >= 2 concurrent script invocations, got \(maxConcurrent); fanout may have regressed")
+    }
+
+    /// When the submission download terminally fails (404, not a retryable
+    /// 5xx), the daemon should still finish the job with a synthetic
+    /// failure report rather than crashing or silently skipping the job,
+    /// AND continue polling for the next job.  Complements
+    /// `testDownloadRetriesThroughShortServerInterruption` which covers
+    /// the *recoverable* download failure path.
+    func testWorkerDaemonReportsSyntheticFailureWhenSubmissionDownloadTerminallyFails() async throws {
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-dl-terminal-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+        let failServer = try AlwaysFails404Server()
+        defer { failServer.stop() }
+
+        let job = Job(
+            submissionID: "sub_dl_terminal",
+            testSetupID: "setup_dl_terminal",
+            attemptNumber: 1,
+            submissionURL: URL(string: "http://127.0.0.1:\(failServer.port)/submission.zip")!,
+            testSetupURL: URL(string: "http://127.0.0.1:\(failServer.port)/testsetup.zip")!,
+            manifest: try makeManifest(),
+            submissionFilename: "submission.ipynb"
+        )
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: URL(string: "http://localhost:8080")!,
+            workerID: "worker-dl-terminal",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
+        )
+
+        let task = Task { try await daemon.run() }
+        _ = await waitUntil(timeoutSeconds: 5) { await reporter.snapshot().count == 1 }
+        task.cancel()
+        try? await task.value
+
+        let reports = await reporter.snapshot()
+        XCTAssertEqual(reports.count, 1, "should still produce a report for the failed job")
+        let report = try XCTUnwrap(reports.first)
+        XCTAssertEqual(report.submissionID, "sub_dl_terminal")
+        XCTAssertEqual(
+            report.buildStatus, .failed,
+            "terminal download failure should surface as buildStatus=.failed")
+        XCTAssertEqual(report.outcomes, [], "no outcomes when build fails")
+        let runnerInvocations = await runner.observedInvocationCount()
+        XCTAssertEqual(
+            runnerInvocations, 0,
+            "ScriptRunner should not have been invoked when the submission download failed")
+    }
 }
