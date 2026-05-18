@@ -93,22 +93,17 @@ extension AssignmentRoutes {
     }
 
     // updateNewAssignmentDraft is the dispatcher for the new-assignment
-    // form's "Save draft" partial actions — its body is one big
-    // `switch action` over ~10 distinct verbs (create / upload / clear
-    // assignment & solution notebooks, replace / clear suite files,
-    // etc.).  Each case touches file I/O, draft state, and zip
-    // rebuilding in slightly different ways; the per-case branches
-    // share enough local state (setup, formState, userID, paths) that
-    // splitting them into per-action helpers would require passing the
-    // same five locals through each helper.  Inline switch reads more
-    // straightforwardly than the threaded-helper version.
+    // form's "Save draft" partial-form actions (9 verbs: create / upload
+    // / clear assignment & solution notebooks, replace / clear suite
+    // files, etc.).  Each verb touches file I/O, draft state, and zip
+    // rebuilding in slightly different ways.
     //
-    // What IS extracted: the body-parsing boilerplate above the switch
-    // (Multi/Single Content + multipart fallback chain).  See
-    // `parseNewAssignmentDraftPayload(req:)` below.  Mirrors the
-    // `parseSaveEditedAssignmentForm` pattern further down this file.
+    // The handler stays thin: parse → resolve setup → seed form state
+    // → delegate to `NewAssignmentDraftService` → write back form
+    // state → redirect.  The per-verb logic lives on the service so
+    // each verb is independently navigable and unit-testable.  See
+    // `Sources/APIServer/Services/NewAssignmentDraftService.swift`.
     @Sendable
-    // swiftlint:disable:next function_body_length cyclomatic_complexity
     func updateNewAssignmentDraft(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
         guard let userID = user.id else {
@@ -140,294 +135,35 @@ extension AssignmentRoutes {
         formState.requiredLanguagesCSV = payload.requiredLanguagesCSV
         formState.requiredCapabilitiesCSV = payload.requiredCapabilitiesCSV
 
-        // Locals the per-action branches below depend on.  Spelt out here
-        // so each case reads like a small recipe rather than chasing
-        // payload-field unpacks inline.
-        let assignmentName = payload.assignmentName
-        let dueAt = payload.dueAt
-        let sectionIDRaw = payload.sectionIDRaw
-        let action = payload.action
-        let assignmentNotebookFile = payload.assignmentNotebookFile
-        let solutionNotebookFile = payload.solutionNotebookFile
-        let suiteFiles = payload.suiteFiles
-        let suiteConfigRaw = payload.suiteConfigRaw
+        var service = NewAssignmentDraftService(
+            req: req,
+            setup: setup,
+            setupID: setupID,
+            userID: userID,
+            courseID: courseID,
+            formState: formState,
+            payload: payload
+        )
+        let outcome = try await service.perform()
 
-        let actionTitle = assignmentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let notebookTitle = actionTitle.isEmpty ? "New Assignment" : actionTitle
+        saveDraftFormState(req: req, draftID: setupID, state: service.formState)
 
-        switch action {
-        case "create-assignment-notebook":
-            let data = defaultNotebookData(title: notebookTitle)
-            let dir = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            let path = dir + "assignment.ipynb"
-            try data.write(to: URL(fileURLWithPath: path))
-            setup.notebookPath = path
-            try await setup.save(on: req.db)
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                overwriteWith: data
-            )
-            formState.assignmentNotebookName = "assignment.ipynb"
-        case "upload-assignment-notebook":
-            guard let assignmentNotebookFile, assignmentNotebookFile.data.readableBytes > 0 else {
-                return redirectToNewAssignmentDraft(
-                    req: req,
-                    draftID: setupID,
-                    assignmentName: assignmentName,
-                    dueAt: dueAt,
-                    sectionID: sectionIDRaw,
-                    notice: nil,
-                    error: "Select an assignment notebook to upload"
-                )
-            }
-            let raw = Data(assignmentNotebookFile.data.readableBytesView)
-            guard (try? JSONSerialization.jsonObject(with: raw)) != nil else {
-                return redirectToNewAssignmentDraft(
-                    req: req,
-                    draftID: setupID,
-                    assignmentName: assignmentName,
-                    dueAt: dueAt,
-                    sectionID: sectionIDRaw,
-                    notice: nil,
-                    error: "Assignment notebook must be valid JSON (.ipynb)"
-                )
-            }
-            let normalized = normalizeNotebookForJupyterLite(raw)
-            let dir = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            let filename = notebookFilenameForStorage(
-                uploadedName: assignmentNotebookFile.filename, fallback: "assignment.ipynb")
-            let path = dir + filename
-            try normalized.write(to: URL(fileURLWithPath: path))
-            setup.notebookPath = path
-            try await setup.save(on: req.db)
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                overwriteWith: normalized
-            )
-            formState.assignmentNotebookName = filename
-        case "clear-assignment-notebook":
-            removeDraftNotebookFiles(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fileKind: .assignment,
-                persistedPath: setup.notebookPath
-            )
-            setup.notebookPath = nil
-            try await setup.save(on: req.db)
-            formState.assignmentNotebookName = nil
-        case "create-solution-notebook":
-            let data = defaultNotebookData(title: "\(notebookTitle) Solution")
-            let path = draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            _ = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            try data.write(to: URL(fileURLWithPath: path))
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: userNotebookWorkingCopyRelativePath(
-                    setupID: setupID, userID: userID, fileKind: .solution),
-                overwriteWith: data
-            )
-            formState.solutionNotebookName = "solution.ipynb"
-        case "create-solution-from-assignment":
-            // Parity PR 4 of #433.  Mirrors the assignment-scoped
-            // `createSolutionFromAssignment` (POST /:id/create-solution):
-            // copy the assignment notebook bytes into the draft solution
-            // path so the instructor can author the answer key starting
-            // from the student-facing notebook.  Falls back to a blank
-            // notebook with the title suffix " Solution" when the
-            // assignment notebook isn't readable yet — same fallback
-            // the assignment-scoped variant uses.
-            let sourceData: Data = {
-                if let path = setup.notebookPath,
-                    let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)),
-                    !bytes.isEmpty
-                {
-                    return bytes
-                }
-                return defaultNotebookData(title: "\(notebookTitle) Solution")
-            }()
-            let normalized = normalizeNotebookForJupyterLite(sourceData)
-            let path = draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            _ = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            try normalized.write(to: URL(fileURLWithPath: path))
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: userNotebookWorkingCopyRelativePath(
-                    setupID: setupID, userID: userID, fileKind: .solution),
-                overwriteWith: normalized
-            )
-            formState.solutionNotebookName = "solution.ipynb"
-        case "upload-solution-notebook":
-            guard let solutionNotebookFile, solutionNotebookFile.data.readableBytes > 0 else {
-                return redirectToNewAssignmentDraft(
-                    req: req,
-                    draftID: setupID,
-                    assignmentName: assignmentName,
-                    dueAt: dueAt,
-                    sectionID: sectionIDRaw,
-                    notice: nil,
-                    error: "Select a solution notebook to upload"
-                )
-            }
-            let raw = Data(solutionNotebookFile.data.readableBytesView)
-            guard (try? JSONSerialization.jsonObject(with: raw)) != nil else {
-                return redirectToNewAssignmentDraft(
-                    req: req,
-                    draftID: setupID,
-                    assignmentName: assignmentName,
-                    dueAt: dueAt,
-                    sectionID: sectionIDRaw,
-                    notice: nil,
-                    error: "Solution notebook must be valid JSON (.ipynb)"
-                )
-            }
-            let normalized = normalizeNotebookForJupyterLite(raw)
-            let path = draftSolutionNotebookPath(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            _ = try ensureDraftNotebookDirectory(
-                testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            try normalized.write(to: URL(fileURLWithPath: path))
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: userNotebookWorkingCopyRelativePath(
-                    setupID: setupID, userID: userID, fileKind: .solution),
-                overwriteWith: normalized
-            )
-            formState.solutionNotebookName = notebookFilenameForStorage(
-                uploadedName: solutionNotebookFile.filename, fallback: "solution.ipynb")
-
-            // v0.4.100: auto-scan the solution for `##` sections and
-            // top-level function defs, then scaffold one `publictest_
-            // exists_<fn>.py` per detected function, placed in the
-            // section whose `##` header most recently preceded it.
-            // One-shot: silently skips if the manifest already has
-            // sections / test entries.  Errors are swallowed — this is
-            // a nice-to-have that must not block the upload.
-            do {
-                let result = try await autoScaffoldFromSolutionNotebook(
-                    setup: setup,
-                    notebookData: normalized,
-                    zipPath: setup.zipPath,
-                    on: req.db
-                )
-                if result.functions > 0 {
-                    req.logger.info(
-                        "auto_scaffold sections=\(result.sections) functions=\(result.functions) setup=\(setup.id ?? "?")"
-                    )
-                }
-            } catch {
-                req.logger.warning("auto_scaffold_failed setup=\(setup.id ?? "?") error=\(error)")
-            }
-        case "clear-solution-notebook":
-            removeDraftNotebookFiles(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fileKind: .solution,
-                persistedPath: draftSolutionNotebookPath(
-                    testSetupsDirectory: req.application.testSetupsDirectory, setupID: setupID)
-            )
-            formState.solutionNotebookName = nil
-        case "replace-suite-files":
-            let setupPackage = try createRunnerSetupZip(
-                suiteFiles: suiteFiles,
-                suiteConfigJSON: suiteConfigRaw,
-                zipPath: setup.zipPath
-            )
-            let sectionGradingMode = try await newAssignmentSectionGradingMode(
-                req: req,
-                courseID: courseID,
-                sectionIDRaw: sectionIDRaw
-            )
-            let starterNotebook =
-                setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
-            setup.manifest = try makeWorkerManifestJSON(
-                testSuites: setupPackage.testSuites,
-                includeMakefile: setupPackage.hasMakefile,
-                gradingMode: sectionGradingMode,
-                starterNotebook: starterNotebook
-            )
-            try await setup.save(on: req.db)
-            extractSupportFilesToSharedDirectory(
-                zipPath: setup.zipPath,
-                setupID: setupID,
-                testSuiteScripts: Set(setupPackage.testSuites.map { $0.script }),
-                testSetupsDirectory: req.application.testSetupsDirectory
-            )
-        case "clear-suite-files":
-            let starterNotebook =
-                setup.notebookPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "assignment.ipynb"
-            _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: setup.zipPath)
-            setup.manifest = try makeWorkerManifestJSON(
-                testSuites: [],
-                includeMakefile: false,
-                gradingMode: try await newAssignmentSectionGradingMode(
-                    req: req, courseID: courseID, sectionIDRaw: sectionIDRaw),
-                starterNotebook: starterNotebook
-            )
-            try await setup.save(on: req.db)
-        default:
-            break
-        }
-
-        saveDraftFormState(req: req, draftID: setupID, state: formState)
-
+        let errorMessage: String? = {
+            if case .validationFailed(let msg) = outcome { return msg }
+            return nil
+        }()
         return redirectToNewAssignmentDraft(
             req: req,
             draftID: setupID,
-            assignmentName: assignmentName,
-            dueAt: dueAt,
-            sectionID: sectionIDRaw,
+            assignmentName: payload.assignmentName,
+            dueAt: payload.dueAt,
+            sectionID: payload.sectionIDRaw,
             notice: nil,
-            error: nil
+            error: errorMessage
         )
     }
 
     // MARK: - updateNewAssignmentDraft helpers
-
-    /// Parsed payload for `POST /instructor/new/draft`.  Resolves the
-    /// array-typed (`suiteFiles[]`) and single-typed (`suiteFiles`)
-    /// Vapor decode paths into one shape, and reads each text field
-    /// through `multipartTextField` first (so urlencoded-form clients
-    /// and multipart-form clients see the same final values).  Mirrors
-    /// the `SaveEditedAssignmentForm` / `parseSaveEditedAssignmentForm`
-    /// pattern used by `saveEditedAssignment` further down the file.
-    fileprivate struct NewAssignmentDraftPayload {
-        let assignmentName: String
-        let dueAt: String
-        let sectionIDRaw: String
-        let draftIDRaw: String?
-        let action: String
-        let assignmentNotebookFile: File?
-        let solutionNotebookFile: File?
-        let suiteFiles: [File]
-        let suiteConfigRaw: String?
-        let requiredPlatform: String
-        let requiredArchitecture: String
-        let requiredLanguagesCSV: String
-        let requiredCapabilitiesCSV: String
-    }
 
     fileprivate func parseNewAssignmentDraftPayload(req: Request) throws -> NewAssignmentDraftPayload {
         struct DraftBodyMany: Content {
@@ -955,18 +691,9 @@ extension AssignmentRoutes {
         return setup
     }
 
-    private func newAssignmentSectionGradingMode(
-        req: Request,
-        courseID: UUID,
-        sectionIDRaw: String
-    ) async throws -> String {
-        guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db),
-            let sec = try await APICourseSection.find(sid, on: req.db)
-        else {
-            return "worker"
-        }
-        return sec.defaultGradingMode
-    }
+    // newAssignmentSectionGradingMode moved to file scope (below the
+    // extension) so `NewAssignmentDraftService` can call it without
+    // needing visibility into the extension's privates.
 
     @Sendable
     func publish(req: Request) async throws -> Response {
@@ -1029,4 +756,26 @@ extension AssignmentRoutes {
         return req.redirect(to: "/instructor/\(assignment.publicID)/validate")
     }
 
+}
+
+// MARK: - File-scope helpers
+
+/// Resolves the default grading mode for the section identified by
+/// `sectionIDRaw` within `courseID`.  Falls back to `"worker"` when
+/// the section can't be resolved (e.g., the form's "Ungrouped"
+/// pseudo-section, or a missing section row).
+///
+/// File-scope so `NewAssignmentDraftService` (in `Services/`) can
+/// call it without needing to access the route extension's privates.
+func newAssignmentSectionGradingMode(
+    req: Request,
+    courseID: UUID,
+    sectionIDRaw: String
+) async throws -> String {
+    guard let sid = try await resolveSectionID(sectionIDRaw, courseID: courseID, db: req.db),
+        let sec = try await APICourseSection.find(sid, on: req.db)
+    else {
+        return "worker"
+    }
+    return sec.defaultGradingMode
 }
