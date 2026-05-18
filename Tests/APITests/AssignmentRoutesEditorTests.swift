@@ -14,21 +14,22 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AssignmentRoutesEditorTests: XCTestCase {
+@Suite(.serialized) final class AssignmentRoutesEditorTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-editor")
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-editor")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Auth helpers
@@ -77,7 +78,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
     private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { throw XCTSkip("zip/unzip not available") }
+        else { Issue.record("skipped: " + "zip/unzip not available"); return }
 
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-editor-zip-\(UUID().uuidString)")
@@ -93,7 +94,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
         proc.arguments = ["-q", "-r", zipPath, "."]
         try proc.run()
         proc.waitUntilExit()
-        XCTAssertEqual(proc.terminationStatus, 0, "zip should succeed")
+        #expect(proc.terminationStatus == 0, "zip should succeed")
     }
 
     @discardableResult
@@ -143,7 +144,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
 
     // MARK: - GET /instructor/:assignmentID/files/notebook
 
-    func testDownloadNotebookFileReturnsNotebookBytes() async throws {
+    @Test func downloadNotebookFileReturnsNotebookBytes() async throws {
         let cookie = try await loginAsInstructor()
         let nb = sampleNotebookData(marker: "starter")
         try await insertSetup(id: "ed_nb1", notebookOnDisk: nb)
@@ -155,17 +156,17 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 // notebookData(for:) normalises before returning, so we can't
                 // byte-compare — but the unique marker we put in must survive.
-                XCTAssertTrue(
+                #expect(
                     res.body.string.contains("starter"),
                     "Expected normalised notebook to contain marker; got prefix: \(res.body.string.prefix(160))")
-                XCTAssertNotNil(res.headers["Content-Disposition"].first)
+                #expect(res.headers["Content-Disposition"].first != nil)
             })
     }
 
-    func testDownloadNotebookFileReturns403ForStudent() async throws {
+    @Test func downloadNotebookFileReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "ed_nb2", notebookOnDisk: sampleNotebookData())
         let a = try await insertAssignment(testSetupID: "ed_nb2", title: "Lab 2")
@@ -176,11 +177,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
-    func testDownloadNotebookFileReturns404ForUnknownAssignment() async throws {
+    @Test func downloadNotebookFileReturns404ForUnknownAssignment() async throws {
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -189,13 +190,13 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
     // MARK: - GET /instructor/:assignmentID/files/item?name=<filename>
 
-    func testDownloadSetupItemReturnsFileContent() async throws {
+    @Test func downloadSetupItemReturnsFileContent() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(
             id: "ed_item1",
@@ -208,12 +209,12 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains("col1,col2"))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("col1,col2"))
             })
     }
 
-    func testDownloadSetupItemReturns404ForMissingFile() async throws {
+    @Test func downloadSetupItemReturns404ForMissingFile() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "ed_item2")
         let a = try await insertAssignment(testSetupID: "ed_item2", title: "Lab 4")
@@ -224,13 +225,13 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
     /// Path-traversal guard: anything that isn't a pure filename (e.g.
     /// "../etc/passwd", "subdir/x") is rejected at the handler level.
-    func testDownloadSetupItemRejectsPathTraversal() async throws {
+    @Test func downloadSetupItemRejectsPathTraversal() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "ed_item3")
         let a = try await insertAssignment(testSetupID: "ed_item3", title: "Lab 5")
@@ -241,11 +242,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testDownloadSetupItemReturns403ForStudent() async throws {
+    @Test func downloadSetupItemReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "ed_item4")
         let a = try await insertAssignment(testSetupID: "ed_item4", title: "Lab 6")
@@ -256,13 +257,13 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
     // MARK: - GET /instructor/:assignmentID/files/solution
 
-    func testDownloadSolutionFileReturnsZipEntry() async throws {
+    @Test func downloadSolutionFileReturnsZipEntry() async throws {
         let cookie = try await loginAsInstructor()
         let solution = sampleNotebookData(marker: "solution-payload")
         try await insertSetup(
@@ -276,14 +277,14 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(
+                #expect(res.status == .ok)
+                #expect(
                     res.body.string.contains("solution-payload"),
                     "Expected solution marker in response body")
             })
     }
 
-    func testDownloadSolutionFileReturns404WhenNoSolutionExists() async throws {
+    @Test func downloadSolutionFileReturns404WhenNoSolutionExists() async throws {
         let cookie = try await loginAsInstructor()
         try await insertSetup(id: "ed_sol2")  // no solution.* entry
         let a = try await insertAssignment(testSetupID: "ed_sol2", title: "Lab 8")
@@ -294,11 +295,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testDownloadSolutionFileReturns403ForStudent() async throws {
+    @Test func downloadSolutionFileReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
         try await insertSetup(
             id: "ed_sol3",
@@ -311,13 +312,13 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
     // MARK: - POST /instructor/:assignmentID/create-solution
 
-    func testCreateSolutionFromAssignmentReturns403ForStudent() async throws {
+    @Test func createSolutionFromAssignmentReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "ed_csol1", notebookOnDisk: sampleNotebookData())
         let a = try await insertAssignment(testSetupID: "ed_csol1", title: "Lab 10")
@@ -328,11 +329,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
-    func testCreateSolutionFromAssignmentReturns404ForUnknownAssignment() async throws {
+    @Test func createSolutionFromAssignmentReturns404ForUnknownAssignment() async throws {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -343,7 +344,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
@@ -361,7 +362,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
         try data.write(to: URL(fileURLWithPath: dir + "solution.ipynb"))
     }
 
-    func testDraftSolutionNotebookReturnsNotebookBytes() async throws {
+    @Test func draftSolutionNotebookReturnsNotebookBytes() async throws {
         let cookie = try await loginAsInstructor()
         let setup = try await insertSetup(id: "ed_draft_sol1")
         try writeDraftSolutionNotebook(
@@ -374,17 +375,15 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(
-                    res.headers.contentType?.description,
-                    "application/json")
-                XCTAssertTrue(
+                #expect(res.status == .ok)
+                #expect(res.headers.contentType?.description == "application/json")
+                #expect(
                     res.body.string.contains("draft-solution-marker"),
                     "Expected marker in draft solution body; got: \(res.body.string.prefix(200))")
             })
     }
 
-    func testDraftSolutionNotebookReturns404ForUnknownDraft() async throws {
+    @Test func draftSolutionNotebookReturns404ForUnknownDraft() async throws {
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -393,11 +392,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testDraftSolutionNotebookReturns404ForDraftWithoutSolutionFile() async throws {
+    @Test func draftSolutionNotebookReturns404ForDraftWithoutSolutionFile() async throws {
         let cookie = try await loginAsInstructor()
         let setup = try await insertSetup(id: "ed_draft_sol2")
         // intentionally do NOT write the solution.ipynb fallback file
@@ -407,11 +406,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testDraftSolutionNotebookReturns404ForMissingDraftIDParam() async throws {
+    @Test func draftSolutionNotebookReturns404ForMissingDraftIDParam() async throws {
         let cookie = try await loginAsInstructor()
 
         try await app.asyncTest(
@@ -421,11 +420,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
             },
             afterResponse: { res in
                 // The handler treats absent / empty draftID as "no such draft."
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testDraftSolutionNotebookReturns403ForStudent() async throws {
+    @Test func draftSolutionNotebookReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
         let setup = try await insertSetup(id: "ed_draft_sol3")
         try writeDraftSolutionNotebook(
@@ -437,7 +436,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
@@ -450,7 +449,7 @@ final class AssignmentRoutesEditorTests: XCTestCase {
     // are not otherwise covered: empty title, invalid notebook JSON,
     // missing test suites — plus the auth and unknown-assignment cases.
 
-    func testSaveEditedAssignmentReturns403ForStudent() async throws {
+    @Test func saveEditedAssignmentReturns403ForStudent() async throws {
         let cookie = try await loginAsStudent()
         try await insertSetup(id: "ed_save1")
         let a = try await insertAssignment(testSetupID: "ed_save1", title: "Lab Save 1")
@@ -461,11 +460,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
-    func testSaveEditedAssignmentReturns404ForUnknownAssignment() async throws {
+    @Test func saveEditedAssignmentReturns404ForUnknownAssignment() async throws {
         let cookie = try await loginAsInstructor()
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -478,11 +477,11 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                     as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testSaveEditedAssignmentRedirectsWithErrorOnEmptyTitle() async throws {
+    @Test func saveEditedAssignmentRedirectsWithErrorOnEmptyTitle() async throws {
         // CSRF fetched BEFORE creating the course-bearing fixtures: once a
         // course exists but the instructor isn't enrolled in it,
         // `GET /instructor` redirects to `/enroll` and the token extractor
@@ -502,18 +501,18 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                     as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
                 let location = res.headers["Location"].first ?? ""
-                XCTAssertTrue(
+                #expect(
                     location.contains("error=Assignment%20name%20is%20required"),
                     "Expected error query string in redirect; got: \(location)")
-                XCTAssertTrue(
+                #expect(
                     location.contains("/instructor/\(a.publicID)/edit"),
                     "Expected redirect back to edit page; got: \(location)")
             })
     }
 
-    func testSaveEditedAssignmentRedirectsWithErrorOnMissingTestSuites() async throws {
+    @Test func saveEditedAssignmentRedirectsWithErrorOnMissingTestSuites() async throws {
         // Manifest has empty `testSuites: []` (see `insertSetup`), so the
         // "at least one test script" guard should fire and redirect.
         let cookie = try await loginAsInstructor()
@@ -530,9 +529,9 @@ final class AssignmentRoutesEditorTests: XCTestCase {
                     as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
                 let location = res.headers["Location"].first ?? ""
-                XCTAssertTrue(
+                #expect(
                     location.contains("error="),
                     "Expected error query string in redirect; got: \(location)")
             })

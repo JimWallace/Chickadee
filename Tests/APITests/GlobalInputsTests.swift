@@ -11,71 +11,65 @@
 
 import Core
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_server
 
-final class GlobalInputsTests: XCTestCase {
+@Suite struct GlobalInputsTests {
 
     // MARK: - TestScriptVariablePrepender
 
-    func testPrepender_emit_emptyListYieldsEmptyString() {
-        XCTAssertEqual(TestScriptVariablePrepender.emit([]), "")
+    @Test func prepender_emit_emptyListYieldsEmptyString() {
+        #expect(TestScriptVariablePrepender.emit([]).isEmpty)
     }
 
-    func testPrepender_emit_singleVariable() {
+    @Test func prepender_emit_singleVariable() {
         let vars = [FamilyVariable(name: "x", value: .int(12))]
-        XCTAssertEqual(TestScriptVariablePrepender.emit(vars), "x = 12")
+        #expect(TestScriptVariablePrepender.emit(vars) == "x = 12")
     }
 
-    func testPrepender_emit_multipleVariablesInOrder() {
+    @Test func prepender_emit_multipleVariablesInOrder() {
         let vars = [
             FamilyVariable(name: "x", value: .int(1)),
             FamilyVariable(name: "y", value: .string("hi")),
         ]
-        XCTAssertEqual(
-            TestScriptVariablePrepender.emit(vars),
-            "x = 1\ny = \"hi\""
-        )
+        #expect(TestScriptVariablePrepender.emit(vars) == "x = 1\ny = \"hi\"")
     }
 
-    func testPrepender_emitBlock_emptyYieldsEmpty() {
-        XCTAssertEqual(TestScriptVariablePrepender.emitBlock([]), "")
+    @Test func prepender_emitBlock_emptyYieldsEmpty() {
+        #expect(TestScriptVariablePrepender.emitBlock([]).isEmpty)
     }
 
-    func testPrepender_emitBlock_addsTrailingBlankLine() {
+    @Test func prepender_emitBlock_addsTrailingBlankLine() {
         let vars = [FamilyVariable(name: "x", value: .int(1))]
-        XCTAssertEqual(TestScriptVariablePrepender.emitBlock(vars), "x = 1\n\n")
+        #expect(TestScriptVariablePrepender.emitBlock(vars) == "x = 1\n\n")
     }
 
-    func testPrepender_prependToRawScript_emptyVariablesReturnsBodyUnchanged() {
+    @Test func prepender_prependToRawScript_emptyVariablesReturnsBodyUnchanged() {
         let body = "import os\nprint('hi')\n"
-        XCTAssertEqual(
-            TestScriptVariablePrepender.prependToRawScript(body, variables: []),
-            body
-        )
+        #expect(TestScriptVariablePrepender.prependToRawScript(body, variables: []) == body)
     }
 
-    func testPrepender_prependToRawScript_addsBannerAndDecls() {
+    @Test func prepender_prependToRawScript_addsBannerAndDecls() {
         let body = "import os\nprint('hi')\n"
         let result = TestScriptVariablePrepender.prependToRawScript(
             body,
             variables: [FamilyVariable(name: "x", value: .int(7))]
         )
-        XCTAssertTrue(result.contains(TestScriptVariablePrepender.rawScriptBannerComment))
-        XCTAssertTrue(result.contains("x = 7"))
-        XCTAssertTrue(result.contains("import os"))
+        #expect(result.contains(TestScriptVariablePrepender.rawScriptBannerComment))
+        #expect(result.contains("x = 7"))
+        #expect(result.contains("import os"))
         // Banner appears before the original body.
         if let bannerRange = result.range(of: TestScriptVariablePrepender.rawScriptBannerComment),
             let importRange = result.range(of: "import os")
         {
-            XCTAssertLessThan(bannerRange.upperBound, importRange.lowerBound)
+            #expect(bannerRange.upperBound < importRange.lowerBound)
         } else {
-            XCTFail("Banner or import line not found")
+            Issue.record("Banner or import line not found")
         }
     }
 
-    func testPrepender_prependToRawScript_preservesShebang() {
+    @Test func prepender_prependToRawScript_preservesShebang() {
         let body = "#!/usr/bin/env python3\nimport os\n"
         let result = TestScriptVariablePrepender.prependToRawScript(
             body,
@@ -83,11 +77,11 @@ final class GlobalInputsTests: XCTestCase {
         )
         // Shebang must stay on line 1.
         let firstLine = result.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
-        XCTAssertEqual(firstLine, "#!/usr/bin/env python3")
-        XCTAssertTrue(result.contains("x = 1"))
+        #expect(firstLine == "#!/usr/bin/env python3")
+        #expect(result.contains("x = 1"))
     }
 
-    func testPrepender_idempotentReSave() {
+    @Test func prepender_idempotentReSave() {
         // Save once with x=1, then re-save with x=2.  Result should have
         // exactly one block carrying the new value.
         let body = "import os\nprint('hi')\n"
@@ -100,16 +94,16 @@ final class GlobalInputsTests: XCTestCase {
             variables: [FamilyVariable(name: "x", value: .int(2))]
         )
         // Old value gone, new value present, banner appears once.
-        XCTAssertFalse(secondPass.contains("x = 1"))
-        XCTAssertTrue(secondPass.contains("x = 2"))
+        #expect(secondPass.contains("x = 1") == false)
+        #expect(secondPass.contains("x = 2"))
         let bannerOccurrences =
             secondPass.components(
                 separatedBy: TestScriptVariablePrepender.rawScriptBannerComment
             ).count - 1
-        XCTAssertEqual(bannerOccurrences, 1, "banner should appear exactly once after re-prepending")
+        #expect(bannerOccurrences == 1, "banner should appear exactly once after re-prepending")
     }
 
-    func testPrepender_emptyVariablesStripsExistingBlock() {
+    @Test func prepender_emptyVariablesStripsExistingBlock() {
         let body = "import os\nprint('hi')\n"
         let prepended = TestScriptVariablePrepender.prependToRawScript(
             body,
@@ -120,12 +114,12 @@ final class GlobalInputsTests: XCTestCase {
             prepended,
             variables: []
         )
-        XCTAssertFalse(stripped.contains(TestScriptVariablePrepender.rawScriptBannerComment))
-        XCTAssertFalse(stripped.contains("x = 1"))
-        XCTAssertTrue(stripped.contains("import os"))
+        #expect(stripped.contains(TestScriptVariablePrepender.rawScriptBannerComment) == false)
+        #expect(stripped.contains("x = 1") == false)
+        #expect(stripped.contains("import os"))
     }
 
-    func testPrepender_applyForRawScript_skipsNonPython() {
+    @Test func prepender_applyForRawScript_skipsNonPython() {
         let manifest = TestProperties(globalVariables: [
             FamilyVariable(name: "x", value: .int(1))
         ])
@@ -135,10 +129,10 @@ final class GlobalInputsTests: XCTestCase {
             content: body,
             manifest: manifest
         )
-        XCTAssertEqual(result, body)
+        #expect(result == body)
     }
 
-    func testPrepender_applyForRawScript_combinesGlobalAndSection() {
+    @Test func prepender_applyForRawScript_combinesGlobalAndSection() {
         let section = TestSuiteSection(
             id: "sec1", name: "Q1",
             variables: [FamilyVariable(name: "s", value: .int(99))]
@@ -154,13 +148,13 @@ final class GlobalInputsTests: XCTestCase {
             content: "print('hi')",
             manifest: manifest
         )
-        XCTAssertTrue(result.contains("g = 7"))
-        XCTAssertTrue(result.contains("s = 99"))
+        #expect(result.contains("g = 7"))
+        #expect(result.contains("s = 99"))
         // Global appears before section (broader scope first).
         if let g = result.range(of: "g = 7"),
             let s = result.range(of: "s = 99")
         {
-            XCTAssertLessThan(g.lowerBound, s.lowerBound)
+            #expect(g.lowerBound < s.lowerBound)
         }
     }
 
@@ -185,7 +179,7 @@ final class GlobalInputsTests: XCTestCase {
         return try! JSONSerialization.data(withJSONObject: nb)
     }
 
-    func testSubstitution_replacesPlaceholderInCodeCell() throws {
+    @Test func substitution_replacesPlaceholderInCodeCell() throws {
         // Instructor writes `ciphertext = {{ciphertext}}` (no quotes
         // around the marker — the substituted value IS a Python literal,
         // i.e. `repr("Khoor")` = `'"Khoor"'`).  Mirrors the design doc's
@@ -201,13 +195,13 @@ final class GlobalInputsTests: XCTestCase {
             let cells = nb["cells"] as? [[String: Any]],
             let source = cells.first?["source"] as? String
         else {
-            XCTFail("Unexpected notebook shape")
+            Issue.record("Unexpected notebook shape")
             return
         }
-        XCTAssertEqual(source, "ciphertext = \"Khoor\"")
+        #expect(source == "ciphertext = \"Khoor\"")
     }
 
-    func testSubstitution_tagsRewrittenCellWithFencedMetadata() throws {
+    @Test func substitution_tagsRewrittenCellWithFencedMetadata() throws {
         let data = minimalNotebook(cellSources: ["x = \"{{name}}\""])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
@@ -218,33 +212,29 @@ final class GlobalInputsTests: XCTestCase {
             let cells = nb["cells"] as? [[String: Any]],
             let metadata = cells.first?["metadata"] as? [String: Any]
         else {
-            XCTFail("Unexpected notebook shape")
+            Issue.record("Unexpected notebook shape")
             return
         }
-        XCTAssertEqual(
-            metadata[NotebookSubstitution.fencedCellMetadataKey] as? String,
-            "name"
-        )
+        #expect(metadata[NotebookSubstitution.fencedCellMetadataKey] as? String == "name")
     }
 
-    func testSubstitution_strictThrowsOnUnknown() {
+    @Test func substitution_strictThrowsOnUnknown() {
         let data = minimalNotebook(cellSources: ["x = \"{{nope}}\""])
-        XCTAssertThrowsError(
+        #expect {
             try NotebookSubstitution.apply(
                 notebookData: data,
                 substitutions: [:],
                 strict: true
             )
-        ) { error in
+        } throws: { error in
             if case NotebookSubstitutionError.unknownPlaceholder(let name) = error {
-                XCTAssertEqual(name, "nope")
-            } else {
-                XCTFail("Expected unknownPlaceholder, got \(error)")
+                return name == "nope"
             }
+            return false
         }
     }
 
-    func testSubstitution_nonStrictLeavesUnknownAlone() throws {
+    @Test func substitution_nonStrictLeavesUnknownAlone() throws {
         let data = minimalNotebook(cellSources: ["x = \"{{nope}}\""])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
@@ -255,13 +245,13 @@ final class GlobalInputsTests: XCTestCase {
             let cells = nb["cells"] as? [[String: Any]],
             let source = cells.first?["source"] as? String
         else {
-            XCTFail("Unexpected notebook shape")
+            Issue.record("Unexpected notebook shape")
             return
         }
-        XCTAssertEqual(source, "x = \"{{nope}}\"")
+        #expect(source == "x = \"{{nope}}\"")
     }
 
-    func testSubstitution_skipsMarkdownCells() throws {
+    @Test func substitution_skipsMarkdownCells() throws {
         // Build a notebook with a markdown cell containing {{name}}.
         let nb: [String: Any] = [
             "cells": [
@@ -285,21 +275,21 @@ final class GlobalInputsTests: XCTestCase {
             let cells = nb2["cells"] as? [[String: Any]],
             let source = cells.first?["source"] as? String
         else {
-            XCTFail("Unexpected notebook shape")
+            Issue.record("Unexpected notebook shape")
             return
         }
-        XCTAssertEqual(source, "Welcome {{name}}")
+        #expect(source == "Welcome {{name}}")
     }
 
-    func testSubstitution_placeholderNamesReturnsSortedDedupedNames() {
+    @Test func substitution_placeholderNamesReturnsSortedDedupedNames() {
         let data = minimalNotebook(cellSources: [
             "a = \"{{name}}\"",
             "b = {{shift}} + {{name}}",
         ])
-        XCTAssertEqual(NotebookSubstitution.placeholderNames(in: data), ["name", "shift"])
+        #expect(NotebookSubstitution.placeholderNames(in: data) == ["name", "shift"])
     }
 
-    func testSubstitution_multiplePlaceholdersInOneCell() throws {
+    @Test func substitution_multiplePlaceholdersInOneCell() throws {
         let data = minimalNotebook(cellSources: ["pair = ({{a}}, {{b}})"])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
@@ -310,13 +300,13 @@ final class GlobalInputsTests: XCTestCase {
             let cells = nb["cells"] as? [[String: Any]],
             let source = cells.first?["source"] as? String
         else {
-            XCTFail("Unexpected notebook shape")
+            Issue.record("Unexpected notebook shape")
             return
         }
-        XCTAssertEqual(source, "pair = (1, 2)")
+        #expect(source == "pair = (1, 2)")
     }
 
-    func testSubstitution_arrayShapeSourcePreserved() throws {
+    @Test func substitution_arrayShapeSourcePreserved() throws {
         // nbformat's source-as-array shape: ["line1\n", "line2"].
         let nb: [String: Any] = [
             "cells": [
@@ -340,16 +330,16 @@ final class GlobalInputsTests: XCTestCase {
             let cells = nb2["cells"] as? [[String: Any]],
             let source = cells.first?["source"] as? [String]
         else {
-            XCTFail("Expected array source shape preserved")
+            Issue.record("Expected array source shape preserved")
             return
         }
         // Source should still be an array, with substitution applied.
-        XCTAssertTrue(source.joined().contains("Alice"))
+        #expect(source.joined().contains("Alice"))
     }
 
     // MARK: - TestProperties.globalVariables round-trip
 
-    func testTestProperties_globalVariablesRoundTrip() throws {
+    @Test func testProperties_globalVariablesRoundTrip() throws {
         let props = TestProperties(
             globalVariables: [
                 FamilyVariable(name: "quotes", value: .array([.string("hi"), .string("hi")])),
@@ -358,25 +348,25 @@ final class GlobalInputsTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(props)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: data)
-        XCTAssertEqual(decoded.globalVariables.count, 2)
-        XCTAssertEqual(decoded.globalVariables[0].name, "quotes")
-        XCTAssertEqual(decoded.globalVariables[1].name, "n")
+        #expect(decoded.globalVariables.count == 2)
+        #expect(decoded.globalVariables[0].name == "quotes")
+        #expect(decoded.globalVariables[1].name == "n")
     }
 
-    func testTestProperties_missingGlobalVariablesDecodesAsEmpty() throws {
+    @Test func testProperties_missingGlobalVariablesDecodesAsEmpty() throws {
         let json = #"""
             {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}
             """#.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(TestProperties.self, from: json)
-        XCTAssertEqual(decoded.globalVariables.count, 0)
+        #expect(decoded.globalVariables.isEmpty)
     }
 
-    func testTestProperties_runnerSanitizedPreservesGlobalVariables() {
+    @Test func testProperties_runnerSanitizedPreservesGlobalVariables() {
         let props = TestProperties(
             globalVariables: [FamilyVariable(name: "x", value: .int(1))]
         )
         let sanitized = props.runnerSanitized()
-        XCTAssertEqual(sanitized.globalVariables.count, 1)
-        XCTAssertEqual(sanitized.globalVariables[0].name, "x")
+        #expect(sanitized.globalVariables.count == 1)
+        #expect(sanitized.globalVariables[0].name == "x")
     }
 }

@@ -1,33 +1,35 @@
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import Core
 @testable import chickadee_server
 
-final class RunnerCompatibilityTests: XCTestCase {
-    private var app: Application!
+@Suite(.serialized) final class RunnerCompatibilityTests {
     private let workerSecret = "compatibility-secret"
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-rct")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-rct")
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
-    func testVersionComparatorSupportsMinimumAndExactMatches() {
+    @Test func versionComparatorSupportsMinimumAndExactMatches() {
         let comparator = VersionComparator()
-        XCTAssertEqual(comparator.compare("3.11", "3.10"), .orderedDescending)
-        XCTAssertEqual(comparator.compare("3.9", "3.10"), .orderedAscending)
-        XCTAssertEqual(comparator.compare("6.0", "6.0"), .orderedSame)
-        XCTAssertEqual(comparator.compare("6.0", "6.1"), .orderedAscending)
+        #expect(comparator.compare("3.11", "3.10") == .orderedDescending)
+        #expect(comparator.compare("3.9", "3.10") == .orderedAscending)
+        #expect(comparator.compare("6.0", "6.0") == .orderedSame)
+        #expect(comparator.compare("6.0", "6.1") == .orderedAscending)
     }
 
-    func testCapabilityAndLanguageMatchingReportsDetailedFailures() {
+    @Test func capabilityAndLanguageMatchingReportsDetailedFailures() {
         let matcher = CompatibilityMatcher()
         let runner = RunnerCapabilityProfile(
             platform: "linux",
@@ -53,14 +55,14 @@ final class RunnerCompatibilityTests: XCTestCase {
         )
 
         let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
-        XCTAssertFalse(result.isCompatible)
-        XCTAssertTrue(result.reasons.contains("python version 3.9 < required 3.10"))
-        XCTAssertTrue(result.reasons.contains("swift version 6.0 != required 6.1"))
-        XCTAssertTrue(result.reasons.contains("missing language r"))
-        XCTAssertTrue(result.reasons.contains("missing capability pandas"))
+        #expect(result.isCompatible == false)
+        #expect(result.reasons.contains("python version 3.9 < required 3.10"))
+        #expect(result.reasons.contains("swift version 6.0 != required 6.1"))
+        #expect(result.reasons.contains("missing language r"))
+        #expect(result.reasons.contains("missing capability pandas"))
     }
 
-    func testPlatformAndArchitectureMatchingPassesWhenExactMatchExists() {
+    @Test func platformAndArchitectureMatchingPassesWhenExactMatchExists() {
         let matcher = CompatibilityMatcher()
         let runner = RunnerCapabilityProfile(
             platform: "linux",
@@ -76,11 +78,11 @@ final class RunnerCompatibilityTests: XCTestCase {
         )
 
         let result = matcher.evaluate(runnerProfile: runner, requirements: requirements)
-        XCTAssertTrue(result.isCompatible)
-        XCTAssertTrue(result.reasons.isEmpty)
+        #expect(result.isCompatible)
+        #expect(result.reasons.isEmpty)
     }
 
-    func testRunnerProfileInsertedAndUpdatedOnHeartbeat() async throws {
+    @Test func runnerProfileInsertedAndUpdatedOnHeartbeat() async throws {
         let initial = WorkerActivityPayload(
             workerID: "runner-profile",
             hostname: "runner-profile.local",
@@ -99,8 +101,8 @@ final class RunnerCompatibilityTests: XCTestCase {
         let inserted = try await RunnerProfile.query(on: app.db)
             .filter(\.$runnerID == "runner-profile")
             .first()
-        XCTAssertEqual(inserted?.platform, "linux")
-        XCTAssertEqual(inserted?.capabilityProfile.capabilities.map(\.name), ["numpy"])
+        #expect(inserted?.platform == "linux")
+        #expect(inserted?.capabilityProfile.capabilities.map(\.name) == ["numpy"])
 
         let updatedPayload = WorkerActivityPayload(
             workerID: "runner-profile",
@@ -120,13 +122,13 @@ final class RunnerCompatibilityTests: XCTestCase {
         let profiles = try await RunnerProfile.query(on: app.db)
             .filter(\.$runnerID == "runner-profile")
             .all()
-        XCTAssertEqual(profiles.count, 1)
-        XCTAssertEqual(profiles.first?.capabilityProfile.languageVersions.first?.version, "3.12.0")
-        XCTAssertEqual(profiles.first?.capabilityProfile.capabilities.map(\.name), ["numpy", "pandas"])
-        XCTAssertEqual(profiles.first?.isActive, true)
+        #expect(profiles.count == 1)
+        #expect(profiles.first?.capabilityProfile.languageVersions.first?.version == "3.12.0")
+        #expect(profiles.first?.capabilityProfile.capabilities.map(\.name) == ["numpy", "pandas"])
+        #expect(profiles.first?.isActive == true)
     }
 
-    func testAssignmentWithNoRequirementsRemainsAssignableWithoutProfile() async throws {
+    @Test func assignmentWithNoRequirementsRemainsAssignableWithoutProfile() async throws {
         let setup = try await makeSetup(id: "compat_setup_open")
         let assignment = try await makeAssignment(setupID: setup.requireID(), title: "No Requirements")
         _ = assignment
@@ -136,11 +138,11 @@ final class RunnerCompatibilityTests: XCTestCase {
             workerID: "runner-no-profile",
             profile: nil
         )
-        XCTAssertEqual(response.status, .ok)
-        XCTAssertEqual(try response.content.decode(Job.self).submissionID, submission.id)
+        #expect(response.status == .ok)
+        #expect(try response.content.decode(Job.self).submissionID == submission.id)
     }
 
-    func testAssignmentWithRequirementsBlockedOnIncompatibleRunner() async throws {
+    @Test func assignmentWithRequirementsBlockedOnIncompatibleRunner() async throws {
         let setup = try await makeSetup(id: "compat_setup_blocked")
         let assignment = try await makeAssignment(setupID: setup.requireID(), title: "Python Assignment")
         try await addRequirement(
@@ -163,13 +165,13 @@ final class RunnerCompatibilityTests: XCTestCase {
                 capabilities: []
             )
         )
-        XCTAssertEqual(response.status, .noContent)
+        #expect(response.status == .noContent)
 
         let reloaded = try await APISubmission.find(try submission.requireID(), on: app.db)
-        XCTAssertEqual(reloaded?.status, "pending")
+        #expect(reloaded?.status == "pending")
     }
 
-    func testCompatibleRunnerReceivesJobAfterIncompatibleRunnerSkipsIt() async throws {
+    @Test func compatibleRunnerReceivesJobAfterIncompatibleRunnerSkipsIt() async throws {
         let setup = try await makeSetup(id: "compat_setup_claim")
         let assignment = try await makeAssignment(setupID: setup.requireID(), title: "Needs Pandas")
         try await addRequirement(
@@ -192,7 +194,7 @@ final class RunnerCompatibilityTests: XCTestCase {
                 capabilities: [RunnerCapability(name: "pandas")]
             )
         )
-        XCTAssertEqual(firstResponse.status, .noContent)
+        #expect(firstResponse.status == .noContent)
 
         let secondResponse = try await requestJob(
             workerID: "runner-compatible",
@@ -203,8 +205,10 @@ final class RunnerCompatibilityTests: XCTestCase {
                 capabilities: [RunnerCapability(name: "pandas")]
             )
         )
-        XCTAssertEqual(secondResponse.status, .ok)
-        XCTAssertEqual(try secondResponse.content.decode(Job.self).submissionID, try submission.requireID())
+        #expect(secondResponse.status == .ok)
+        let secondSubmissionID = try secondResponse.content.decode(Job.self).submissionID
+        let expectedID = try submission.requireID()
+        #expect(secondSubmissionID == expectedID)
     }
 
     private func requestJob(
@@ -244,7 +248,7 @@ final class RunnerCompatibilityTests: XCTestCase {
                 req.body = body
             },
             afterResponse: { response in
-                XCTAssertEqual(response.status, .ok)
+                #expect(response.status == .ok)
             })
     }
 

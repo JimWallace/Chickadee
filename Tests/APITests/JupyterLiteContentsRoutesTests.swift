@@ -1,12 +1,12 @@
 import Fluent
 import Foundation
+import Testing
 import Vapor
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class JupyterLiteContentsRoutesTests: XCTestCase {
+@Suite(.serialized) final class JupyterLiteContentsRoutesTests {
     private struct InjectAuthMiddleware: AsyncMiddleware {
         let user: APIUser
 
@@ -16,13 +16,14 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
         }
     }
 
-    private var app: Application!
     private var tmpRoot: String!
     private var publicDir: String!
     private var instructorUser: APIUser!
 
-    override func setUp() async throws {
-        app = try await Application.make(.testing)
+    let app: Application
+
+    init() async throws {
+        self.app = try await Application.make(.testing)
 
         tmpRoot =
             FileManager.default.temporaryDirectory
@@ -46,12 +47,12 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
         try app.register(collection: JupyterLiteContentsRoutes())
     }
 
-    override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpRoot)
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
-    func testAllJSONListsNotebook() async throws {
+    @Test func allJSONListsNotebook() async throws {
         let notebookName = "setup_test-assignment.ipynb"
         let notebookData = """
             {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}
@@ -61,16 +62,16 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
         try await app.asyncTest(
             .GET, "/jupyterlite/lab/api/contents/all.json",
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let bodyData = Data(res.body.string.utf8)
-                let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-                XCTAssertEqual(object["type"] as? String, "directory")
-                let content = try XCTUnwrap(object["content"] as? [[String: Any]])
-                XCTAssertTrue(content.contains { ($0["name"] as? String) == notebookName })
+                let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                #expect(object["type"] as? String == "directory")
+                let content = try #require(object["content"] as? [[String: Any]])
+                #expect(content.contains { ($0["name"] as? String) == notebookName })
             })
     }
 
-    func testNotebookMetadataAndContent() async throws {
+    @Test func notebookMetadataAndContent() async throws {
         let notebookName = "setup_test-assignment.ipynb"
         let notebookJSON = """
             {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["hello"]}]}
@@ -82,24 +83,24 @@ final class JupyterLiteContentsRoutesTests: XCTestCase {
         try await app.asyncTest(
             .GET, "/jupyterlite/lab/api/contents/\(notebookName)",
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let bodyData = Data(res.body.string.utf8)
-                let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-                XCTAssertEqual(object["type"] as? String, "notebook")
-                XCTAssertEqual(object["format"] as? String, "json")
-                XCTAssertTrue(object["content"] is NSNull)
+                let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                #expect(object["type"] as? String == "notebook")
+                #expect(object["format"] as? String == "json")
+                #expect(object["content"] is NSNull)
             })
 
         try await app.asyncTest(
             .GET, "/jupyterlite/lab/api/contents/\(notebookName)?content=1",
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let bodyData = Data(res.body.string.utf8)
-                let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
-                XCTAssertEqual(object["type"] as? String, "notebook")
-                let content = try XCTUnwrap(object["content"] as? [String: Any])
-                let cells = try XCTUnwrap(content["cells"] as? [[String: Any]])
-                XCTAssertEqual(cells.count, 1)
+                let object = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                #expect(object["type"] as? String == "notebook")
+                let content = try #require(object["content"] as? [String: Any])
+                let cells = try #require(content["cells"] as? [[String: Any]])
+                #expect(cells.count == 1)
             })
     }
 }

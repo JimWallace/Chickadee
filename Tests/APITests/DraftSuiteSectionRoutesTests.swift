@@ -15,20 +15,22 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class DraftSuiteSectionRoutesTests: XCTestCase {
+@Suite(.serialized) final class DraftSuiteSectionRoutesTests {
 
-    private var app: Application!
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-dssrt")
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-dssrt")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Fixture
@@ -77,13 +79,13 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
             let data = setup.manifest.data(using: .utf8),
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { throw XCTSkip("manifest load failed") }
+        else { throw IssueRecorded("manifest load failed") }
         return dict
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections (create)
 
-    func testCreateDraftSuiteSection_appendsToManifestAndRedirects() async throws {
+    @Test func createDraftSuiteSection_appendsToManifestAndRedirects() async throws {
         let draftID = try await makeDraft()
         let cookie = try await loginUser(username: "dssrt_inst1", password: "pw", role: "instructor", on: app)
         // CSRF token cooks against any GET — the create page itself works fine here.
@@ -99,18 +101,18 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
-                XCTAssertEqual(res.headers.first(name: .location), "/instructor/new?draftID=\(draftID)")
+                #expect(res.status == .seeOther)
+                #expect(res.headers.first(name: .location) == "/instructor/new?draftID=\(draftID)")
             })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
-        XCTAssertEqual(sections.count, 1)
-        XCTAssertEqual(sections[0]["name"] as? String, "Question 1")
-        XCTAssertNotNil(sections[0]["id"] as? String)
+        #expect(sections.count == 1)
+        #expect(sections[0]["name"] as? String == "Question 1")
+        #expect(sections[0]["id"] is String)
     }
 
-    func testCreateDraftSuiteSection_rejectsEmptyName() async throws {
+    @Test func createDraftSuiteSection_rejectsEmptyName() async throws {
         let draftID = try await makeDraft()
         let cookie = try await loginUser(username: "dssrt_inst2", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -125,11 +127,11 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testCreateDraftSuiteSection_missingDraftIDReturns400() async throws {
+    @Test func createDraftSuiteSection_missingDraftIDReturns400() async throws {
         _ = try await makeDraft()
         let cookie = try await loginUser(username: "dssrt_inst3", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -144,13 +146,13 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/:sid/rename
 
-    func testRenameDraftSuiteSection_updatesNameInManifest() async throws {
+    @Test func renameDraftSuiteSection_updatesNameInManifest() async throws {
         let sid = UUID().uuidString
         let draftID = try await makeDraft(seedSections: [(sid, "Original")])
         let cookie = try await loginUser(username: "dssrt_inst4", password: "pw", role: "instructor", on: app)
@@ -166,17 +168,17 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
-        XCTAssertEqual(sections.count, 1)
-        XCTAssertEqual(sections[0]["id"] as? String, sid, "Section id must survive a rename")
-        XCTAssertEqual(sections[0]["name"] as? String, "Renamed")
+        #expect(sections.count == 1)
+        #expect(sections[0]["id"] as? String == sid, "Section id must survive a rename")
+        #expect(sections[0]["name"] as? String == "Renamed")
     }
 
-    func testRenameDraftSuiteSection_unknownIDReturns404() async throws {
+    @Test func renameDraftSuiteSection_unknownIDReturns404() async throws {
         let draftID = try await makeDraft(seedSections: [(UUID().uuidString, "Existing")])
         let cookie = try await loginUser(username: "dssrt_inst5", password: "pw", role: "instructor", on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -191,13 +193,13 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/:sid/delete
 
-    func testDeleteDraftSuiteSection_removesSectionAndClearsOrphanEntrySectionIDs() async throws {
+    @Test func deleteDraftSuiteSection_removesSectionAndClearsOrphanEntrySectionIDs() async throws {
         let sidA = UUID().uuidString
         let sidB = UUID().uuidString
         let draftID = try await makeDraft(
@@ -218,25 +220,25 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
-        XCTAssertEqual(sections.count, 1, "Section A should be gone; B survives")
-        XCTAssertEqual(sections[0]["id"] as? String, sidB)
+        #expect(sections.count == 1, "Section A should be gone; B survives")
+        #expect(sections[0]["id"] as? String == sidB)
 
         let entries = dict["testSuites"] as? [[String: Any]] ?? []
-        XCTAssertEqual(entries.count, 3, "Entries themselves are preserved — only the orphan sectionID is cleared")
+        #expect(entries.count == 3, "Entries themselves are preserved — only the orphan sectionID is cleared")
         let bySection = Dictionary(grouping: entries) { ($0["script"] as? String) ?? "" }
-        XCTAssertNil(bySection["publictest_a.py"]?.first?["sectionID"], "Orphan sectionID must be cleared")
-        XCTAssertEqual(bySection["publictest_b.py"]?.first?["sectionID"] as? String, sidB, "Other section untouched")
-        XCTAssertNil(bySection["publictest_c.py"]?.first?["sectionID"], "Orphan sectionID must be cleared")
+        #expect(bySection["publictest_a.py"]?.first?["sectionID"] == nil, "Orphan sectionID must be cleared")
+        #expect(bySection["publictest_b.py"]?.first?["sectionID"] as? String == sidB, "Other section untouched")
+        #expect(bySection["publictest_c.py"]?.first?["sectionID"] == nil, "Orphan sectionID must be cleared")
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/:sid/variables
 
-    func testUpdateDraftSuiteSectionVariables_persistsAndValidates() async throws {
+    @Test func updateDraftSuiteSectionVariables_persistsAndValidates() async throws {
         let sid = UUID().uuidString
         let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
         let cookie = try await loginUser(username: "dssrt_inst7", password: "pw", role: "instructor", on: app)
@@ -260,15 +262,15 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 try req.content.encode(validBody, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
             })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
-        XCTAssertEqual(sections.count, 1)
+        #expect(sections.count == 1)
         let vars = sections[0]["variables"] as? [[String: Any]]
-        XCTAssertEqual(vars?.count, 2)
-        XCTAssertEqual(vars?.first?["name"] as? String, "vals")
+        #expect(vars?.count == 2)
+        #expect(vars?.first?["name"] as? String == "vals")
 
         // Reject duplicate names.
         let dupeBody = VariablesBody(variables: [
@@ -283,7 +285,7 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 try req.content.encode(dupeBody, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .unprocessableEntity)
+                #expect(res.status == .unprocessableEntity)
             })
 
         // Reject non-identifier names.
@@ -298,13 +300,13 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 try req.content.encode(badIdentBody, as: .json)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .unprocessableEntity)
+                #expect(res.status == .unprocessableEntity)
             })
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/reorder
 
-    func testReorderDraftSuiteSections_updatesOrder() async throws {
+    @Test func reorderDraftSuiteSections_updatesOrder() async throws {
         let sidA = UUID().uuidString
         let sidB = UUID().uuidString
         let sidC = UUID().uuidString
@@ -325,15 +327,15 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let dict = try await loadManifestDict(setupID: draftID)
         let sections = dict["sections"] as? [[String: Any]] ?? []
-        XCTAssertEqual(sections.map { $0["id"] as? String }, [sidC, sidA, sidB])
+        #expect(sections.map { $0["id"] as? String } == [sidC, sidA, sidB])
     }
 
-    func testReorderDraftSuiteSections_rejectsMismatchedIDSet() async throws {
+    @Test func reorderDraftSuiteSections_rejectsMismatchedIDSet() async throws {
         let sidA = UUID().uuidString
         let sidB = UUID().uuidString
         let draftID = try await makeDraft(seedSections: [(sidA, "A"), (sidB, "B")])
@@ -351,7 +353,7 @@ final class DraftSuiteSectionRoutesTests: XCTestCase {
                 )
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 }

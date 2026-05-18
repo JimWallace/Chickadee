@@ -468,3 +468,12 @@ func loginUser(
         })
     return authCookie
 }
+
+/// Wraps a runtime skip-or-fail condition as a throwable error.  Use
+/// from sync/async helpers where the test cannot proceed; the test
+/// will surface the message and fail.
+struct IssueRecorded: Error, CustomStringConvertible {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var description: String { message }
+}

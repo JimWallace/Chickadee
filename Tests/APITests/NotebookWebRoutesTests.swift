@@ -1,20 +1,21 @@
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class NotebookWebRoutesTests: XCTestCase {
+@Suite(.serialized) final class NotebookWebRoutesTests {
 
-    private var app: Application!
     private var tmpRoot: String!
     private var tmpDir: String!
     private var publicDir: String!
     private var repoRoot: String!
 
-    override func setUp() async throws {
-        app = try await Application.make(.testing)
+    let app: Application
+
+    init() async throws {
+        self.app = try await Application.make(.testing)
 
         repoRoot = FileManager.default.currentDirectoryPath
         tmpRoot =
@@ -36,6 +37,7 @@ final class NotebookWebRoutesTests: XCTestCase {
         for dir in dirs {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
+
         app.resultsDirectory = dirs[0]
         app.testSetupsDirectory = dirs[1]
         app.submissionsDirectory = dirs[2]
@@ -49,9 +51,9 @@ final class NotebookWebRoutesTests: XCTestCase {
         try routes(app)
     }
 
-    override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpRoot)
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     private func loginAsStudent(username: String) async throws -> String {
@@ -71,7 +73,7 @@ final class NotebookWebRoutesTests: XCTestCase {
         let user = try await APIUser.query(on: app.db)
             .filter(\.$username == "notebook_student")
             .first()
-        return try XCTUnwrap(user)
+        return try #require(user)
     }
 
     private func makeCourse() async throws -> APICourse {
@@ -174,7 +176,7 @@ final class NotebookWebRoutesTests: XCTestCase {
 
     private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
-            throw XCTSkip("env not available")
+            throw IssueRecorded("env not available")
         }
 
         let entriesCode = entries.map { entry in
@@ -194,11 +196,11 @@ final class NotebookWebRoutesTests: XCTestCase {
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            throw XCTSkip("python3 not available or failed to create zip")
+            throw IssueRecorded("python3 not available or failed to create zip")
         }
     }
 
-    func testNotebookPageSeedsWorkingCopyAndRendersEditorFrame() async throws {
+    @Test func notebookPageSeedsWorkingCopyAndRendersEditorFrame() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         try await enroll(user)
@@ -214,12 +216,12 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let html = res.body.string
-                XCTAssertTrue(html.contains("data-setup-id=\"\(setupID)\""))
-                XCTAssertTrue(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
-                XCTAssertTrue(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
-                XCTAssertTrue(html.contains("&amp;path=users/"))
+                #expect(html.contains("data-setup-id=\"\(setupID)\""))
+                #expect(html.contains("data-notebook-url=\"/testsetups/\(setupID)/notebook/source\""))
+                #expect(html.contains("/jupyterlite/notebooks/index.html?workspace=\(setupID)-"))
+                #expect(html.contains("&amp;path=users/"))
                 // v0.4.153 cache-bust: the iframe is stamped with the
                 // working-copy mtime so notebook.js can force-reseed when the
                 // server overwrites the file (instructor "Reset" action).
@@ -239,11 +241,11 @@ final class NotebookWebRoutesTests: XCTestCase {
             contentsOfFile: workingCopyPath(setupID: setupID, userID: try user.requireID()),
             encoding: .utf8
         )
-        XCTAssertTrue(workingCopy.contains("Notebook seed"))
-        XCTAssertTrue(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
+        #expect(workingCopy.contains("Notebook seed"))
+        #expect(workingCopy.contains("\"display_name\":\"Python (Pyodide)\""))
     }
 
-    func testNotebookPageOpenAssignmentRendersSubmitAndEditableIframe() async throws {
+    @Test func notebookPageOpenAssignmentRendersSubmitAndEditableIframe() async throws {
         // Open assignment: data-read-only="false", Submit button rendered,
         // no "closed" notice.
         let cookie = try await loginAsStudent()
@@ -260,21 +262,21 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let html = res.body.string
-                XCTAssertTrue(
+                #expect(
                     html.contains(#"data-read-only="false""#),
                     "Open assignment iframe must carry data-read-only=\"false\"")
-                XCTAssertTrue(
+                #expect(
                     html.contains(#"id="nb-submit""#),
                     "Open assignment must render the Submit button")
-                XCTAssertFalse(
-                    html.contains("This assignment is closed"),
+                #expect(
+                    html.contains("This assignment is closed") == false,
                     "Open assignment must not render the closed-view notice")
             })
     }
 
-    func testNotebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
+    @Test func notebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
         // Closed assignment (deadline past, no override): the iframe must
         // carry data-read-only="true", the Submit button must disappear,
         // and the closed-view notice must appear.  This is the core
@@ -298,21 +300,20 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let html = res.body.string
-                XCTAssertTrue(
+                #expect(
                     html.contains(#"data-read-only="true""#),
                     "Closed assignment iframe must carry data-read-only=\"true\"")
-                XCTAssertFalse(
-                    html.contains(#"id="nb-submit""#),
-                    "Closed assignment must NOT render the Submit button")
-                XCTAssertTrue(
+                #expect(
+                    html.contains(#"id="nb-submit""#) == false, "Closed assignment must NOT render the Submit button")
+                #expect(
                     html.contains("This assignment is closed"),
                     "Closed assignment must render the view-only notice")
             })
     }
 
-    func testNotebookSourceReturnsExistingWorkingCopy() async throws {
+    @Test func notebookSourceReturnsExistingWorkingCopy() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         try await enroll(user)
@@ -335,14 +336,14 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.headers.contentType?.description, "application/json; charset=utf-8")
-                XCTAssertTrue(res.body.string.contains("Saved working copy"))
-                XCTAssertFalse(res.body.string.contains("Original notebook"))
+                #expect(res.status == .ok)
+                #expect(res.headers.contentType?.description == "application/json; charset=utf-8")
+                #expect(res.body.string.contains("Saved working copy"))
+                #expect(res.body.string.contains("Original notebook") == false)
             })
     }
 
-    func testNotebookPageSubmissionIDRestoresSelectedSubmission() async throws {
+    @Test func notebookPageSubmissionIDRestoresSelectedSubmission() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         let userID = try user.requireID()
@@ -377,21 +378,21 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         // The submission-specific view file should contain the student's content.
         let userSlug = userID.uuidString.lowercased()
         let viewPath = publicDir + "jupyterlite/files/users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
         let viewContent = try String(contentsOfFile: viewPath, encoding: .utf8)
-        XCTAssertTrue(viewContent.contains("History selection"), "view file should contain submission content")
+        #expect(viewContent.contains("History selection"), "view file should contain submission content")
 
         // The regular working copy must be left untouched.
         let staleCopyAfter = try String(contentsOfFile: staleCopyPath, encoding: .utf8)
-        XCTAssertTrue(staleCopyAfter.contains("Stale working copy"), "regular working copy must not be overwritten")
+        #expect(staleCopyAfter.contains("Stale working copy"), "regular working copy must not be overwritten")
     }
 
-    func testNotebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
+    @Test func notebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         let userID = try user.requireID()
@@ -437,27 +438,25 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
             })
 
         let studentDir = (workingCopyPath(setupID: setupID, userID: userID) as NSString).deletingLastPathComponent
         let supportPath = studentDir + "/bmi.py"
-        XCTAssertTrue(FileManager.default.fileExists(atPath: supportPath))
-        XCTAssertEqual(
-            try FileManager.default.destinationOfSymbolicLink(atPath: supportPath),
-            sharedDir + "bmi.py"
-        )
-        XCTAssertFalse(FileManager.default.fileExists(atPath: studentDir + "/test.sh"))
+        #expect(FileManager.default.fileExists(atPath: supportPath))
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
+        #expect(FileManager.default.fileExists(atPath: studentDir + "/test.sh") == false)
 
         for root in legacyRoots {
             let userDir = root + "users/\(userID.uuidString.lowercased())/"
             let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
-            XCTAssertFalse(
-                contents.contains { $0.hasSuffix(".ipynb") }, "Legacy notebooks should be removed from \(userDir)")
+            #expect(
+                contents.contains { $0.hasSuffix(".ipynb") } == false,
+                "Legacy notebooks should be removed from \(userDir)")
         }
     }
 
-    func testNotebookSourceReplacesCorruptWorkingCopyWithLatestNotebookSubmission() async throws {
+    @Test func notebookSourceReplacesCorruptWorkingCopyWithLatestNotebookSubmission() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         let userID = try user.requireID()
@@ -486,17 +485,17 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains("Recovered notebook"))
-                XCTAssertFalse(res.body.string.contains("Instructor baseline"))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("Recovered notebook"))
+                #expect(res.body.string.contains("Instructor baseline") == false)
             })
 
         let replaced = try String(contentsOfFile: workingCopy, encoding: .utf8)
-        XCTAssertTrue(replaced.contains("Recovered notebook"))
-        XCTAssertFalse(replaced.contains("not json"))
+        #expect(replaced.contains("Recovered notebook"))
+        #expect(replaced.contains("not json") == false)
     }
 
-    func testNotebookPageRejectsHistorySelectionFromDifferentAssignment() async throws {
+    @Test func notebookPageRejectsHistorySelectionFromDifferentAssignment() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         let userID = try user.requireID()
@@ -520,11 +519,11 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testNotebookPageRejectsNonNotebookHistorySelection() async throws {
+    @Test func notebookPageRejectsNonNotebookHistorySelection() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         let userID = try user.requireID()
@@ -553,21 +552,21 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
+                #expect(res.status == .badRequest)
             })
     }
 
-    func testNotebookPageRejectsHistorySelectionOwnedByAnotherStudent() async throws {
+    @Test func notebookPageRejectsHistorySelectionOwnedByAnotherStudent() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         try await enroll(user)
 
         let otherCookie = try await loginAsStudent(username: "notebook_student_other")
-        XCTAssertFalse(otherCookie.isEmpty)
+        #expect(otherCookie.isEmpty == false)
         let fetchedOtherUser = try await APIUser.query(on: app.db)
             .filter(\.$username == "notebook_student_other")
             .first()
-        let otherUser = try XCTUnwrap(fetchedOtherUser)
+        let otherUser = try #require(fetchedOtherUser)
         try await enroll(otherUser)
 
         let setupID = "setup_nb_other_user"
@@ -586,11 +585,11 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
+                #expect(res.status == .forbidden)
             })
     }
 
-    func testNotebookPageReturns404WhenSetupHasNoStarterNotebook() async throws {
+    @Test func notebookPageReturns404WhenSetupHasNoStarterNotebook() async throws {
         // A setup with no .ipynb file (no notebookPath, zip contains only non-notebook
         // files) should return 404 rather than silently serving an empty notebook.
         // This prevents students from opening a blank notebook when the instructor
@@ -619,11 +618,11 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
-    func testNotebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
+    @Test func notebookSourceFallsBackToNestedManifestStarterNotebookWhenZipOnlySetupHasNoFlatNotebook() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         try await enroll(user)
@@ -655,13 +654,13 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains("Nested manifest starter"))
-                XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("Nested manifest starter"))
+                #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
             })
     }
 
-    func testNotebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
+    @Test func notebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
         let cookie = try await loginAsStudent()
         let user = try await studentUser()
         try await enroll(user)
@@ -693,9 +692,9 @@ final class NotebookWebRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(res.body.string.contains("First nested notebook"))
-                XCTAssertTrue(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("First nested notebook"))
+                #expect(res.body.string.contains("\"display_name\":\"Python (Pyodide)\""))
             })
     }
 }

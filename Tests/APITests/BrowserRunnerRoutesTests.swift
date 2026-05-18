@@ -13,21 +13,22 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class BrowserRunnerRoutesTests: XCTestCase {
+@Suite(.serialized) final class BrowserRunnerRoutesTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-br")
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-br")
     }
 
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    deinit {
+        let appLocal = app
+        Task { try? await appLocal.asyncShutdown() }
     }
 
     // MARK: - Helpers
@@ -65,7 +66,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
         deadlineOverrideActive: Bool = false
     ) async throws -> APIAssignment {
         let setupOptional = try await APITestSetup.find(testSetupID, on: app.db)
-        XCTAssertNotNil(setupOptional)
+        #expect(setupOptional != nil)
         let setup = setupOptional!
         let assignment = APIAssignment(
             testSetupID: testSetupID,
@@ -81,19 +82,19 @@ final class BrowserRunnerRoutesTests: XCTestCase {
 
     // MARK: - Manifest endpoint
 
-    func testManifestRequiresAuthentication() async throws {
+    @Test func manifestRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
         try await app.asyncTest(
             .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
             afterResponse: { res in
-                XCTAssertTrue(
+                #expect(
                     res.status == .unauthorized || res.status == .seeOther,
                     "unauthenticated manifest request should be rejected, got \(res.status)")
             })
     }
 
-    func testManifestReturnsJSON() async throws {
+    @Test func manifestReturnsJSON() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie = try await loginAsStudent()
 
@@ -103,15 +104,15 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let ct = res.headers.first(name: .contentType) ?? ""
-                XCTAssertTrue(
+                #expect(
                     ct.contains("application/json"),
                     "manifest endpoint must return application/json, got: \(ct)")
             })
     }
 
-    func testManifestBodyIsParseable() async throws {
+    @Test func manifestBodyIsParseable() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie = try await loginAsStudent()
 
@@ -121,12 +122,12 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let data = Data(res.body.readableBytesView)
                 let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                XCTAssertNotNil(json, "manifest body must be valid JSON object")
-                XCTAssertNotNil(json?["testSuites"], "manifest must contain 'testSuites' key")
-                XCTAssertNotNil(json?["gradingMode"], "manifest must contain 'gradingMode' key")
+                #expect(json != nil, "manifest body must be valid JSON object")
+                #expect(json?["testSuites"] != nil, "manifest must contain 'testSuites' key")
+                #expect(json?["gradingMode"] != nil, "manifest must contain 'gradingMode' key")
             })
     }
 
@@ -134,7 +135,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     /// that the browser runner reads before executing each test script.
     /// A missing or malformed `dependsOn` field caused JS errors in older
     /// versions of browser-runner.js.
-    func testManifestIncludesDependsOnArrays() async throws {
+    @Test func manifestIncludesDependsOnArrays() async throws {
         let manifest = """
             {
               "schemaVersion": 1,
@@ -158,34 +159,32 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
+                #expect(res.status == .ok)
                 let data = Data(res.body.readableBytesView)
-                let json = try XCTUnwrap(
+                let json = try #require(
                     JSONSerialization.jsonObject(with: data) as? [String: Any])
-                let suites = try XCTUnwrap(json["testSuites"] as? [[String: Any]])
-                XCTAssertEqual(suites.count, 3)
+                let suites = try #require(json["testSuites"] as? [[String: Any]])
+                #expect(suites.count == 3)
 
                 // First entry has no dependsOn — either absent or empty array is fine.
                 let first = suites[0]
                 if let deps = first["dependsOn"] {
-                    let arr = try XCTUnwrap(deps as? [Any])
-                    XCTAssertTrue(arr.isEmpty, "first entry should have empty dependsOn")
+                    let arr = try #require(deps as? [Any])
+                    #expect(arr.isEmpty, "first entry should have empty dependsOn")
                 }
 
                 // Second and third entries must have dependsOn = ["test_build.py"]
                 for idx in [1, 2] {
                     let entry = suites[idx]
-                    let deps = try XCTUnwrap(
+                    let deps = try #require(
                         entry["dependsOn"] as? [String],
                         "suites[\(idx)] must have a dependsOn string array")
-                    XCTAssertEqual(
-                        deps, ["test_build.py"],
-                        "suites[\(idx)] dependsOn should be [\"test_build.py\"]")
+                    #expect(deps == ["test_build.py"], "suites[\(idx)] dependsOn should be [\"test_build.py\"]")
                 }
             })
     }
 
-    func testManifestReturns404ForUnknownSetup() async throws {
+    @Test func manifestReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
         try await app.asyncTest(
@@ -194,25 +193,25 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
     // MARK: - Download endpoint
 
-    func testDownloadRequiresAuthentication() async throws {
+    @Test func downloadRequiresAuthentication() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
 
         try await app.asyncTest(
             .GET, "/api/v1/browser-runner/testsetups/\(setupID)/download",
             afterResponse: { res in
-                XCTAssertTrue(
+                #expect(
                     res.status == .unauthorized || res.status == .seeOther,
                     "unauthenticated download should be rejected, got \(res.status)")
             })
     }
 
-    func testDownloadSucceedsForAuthenticatedStudent() async throws {
+    @Test func downloadSucceedsForAuthenticatedStudent() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let cookie = try await loginAsStudent()
 
@@ -222,13 +221,11 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(
-                    res.status, .ok,
-                    "authenticated student must be able to download test setup zip")
+                #expect(res.status == .ok, "authenticated student must be able to download test setup zip")
             })
     }
 
-    func testDownloadReturns404ForUnknownSetup() async throws {
+    @Test func downloadReturns404ForUnknownSetup() async throws {
         let cookie = try await loginAsStudent()
 
         try await app.asyncTest(
@@ -237,7 +234,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 req.headers.add(name: .cookie, value: cookie)
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
+                #expect(res.status == .notFound)
             })
     }
 
@@ -247,7 +244,7 @@ final class BrowserRunnerRoutesTests: XCTestCase {
     /// prerequisite failed, the resulting TestOutcomeCollection (with the
     /// skipped outcome recorded as `fail`) must be accepted and stored by the
     /// server without error.
-    func testBrowserResultAcceptsDependencySkippedOutcomes() async throws {
+    @Test func browserResultAcceptsDependencySkippedOutcomes() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
         let cookie = try await loginAsStudent()
@@ -316,8 +313,8 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                     parameters: ["boundary": "dep-test-boundary"])
             },
             afterResponse: { res in
-                XCTAssertEqual(
-                    res.status, .ok,
+                #expect(
+                    res.status == .ok,
                     "server must accept collection with dependency-skipped outcomes, body: \(res.body.string)")
                 if let json = try? JSONSerialization.jsonObject(
                     with: Data(res.body.readableBytesView)) as? [String: String]
@@ -326,19 +323,19 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                 }
             })
 
-        XCTAssertFalse(submissionID.isEmpty, "should have received a submissionID")
+        #expect(submissionID.isEmpty == false, "should have received a submissionID")
 
         // Verify the result was stored with both outcomes.
         let result = try await APIResult.query(on: app.db)
             .filter(\.$submissionID == submissionID)
             .first()
-        XCTAssertNotNil(result, "a result record should be stored for the submission")
-        XCTAssertTrue(
+        #expect(result != nil, "a result record should be stored for the submission")
+        #expect(
             result?.collectionJSON.contains("prerequisite") == true,
             "stored result JSON should contain the dependency-skip message")
     }
 
-    func testRunnerSubmitRejectsBrowserGradedAssignments() async throws {
+    @Test func runnerSubmitRejectsBrowserGradedAssignments() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
         let cookie = try await loginAsStudent()
@@ -360,8 +357,8 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                     parameters: ["boundary": "runner-submit-browser-boundary"])
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
-                XCTAssertTrue(
+                #expect(res.status == .badRequest)
+                #expect(
                     res.body.string.contains(
                         "Browser-graded assignments must be submitted through the browser runner."),
                     "expected browser-mode runner-submit requests to be rejected with a clear error"
@@ -369,10 +366,10 @@ final class BrowserRunnerRoutesTests: XCTestCase {
             })
 
         let allSubs = try await APISubmission.query(on: app.db).all()
-        XCTAssertTrue(allSubs.isEmpty, "runner-submit should not create queued submissions for browser-mode setups")
+        #expect(allSubs.isEmpty, "runner-submit should not create queued submissions for browser-mode setups")
     }
 
-    func testBrowserResultRejectsOverdueAssignmentsAndClosesThem() async throws {
+    @Test func browserResultRejectsOverdueAssignmentsAndClosesThem() async throws {
         let setupID = try await insertSetup(manifest: simpleManifest())
         let assignment = try await insertAssignment(
             testSetupID: setupID,
@@ -401,17 +398,17 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                     parameters: ["boundary": "browser-result-overdue-boundary"])
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
-                XCTAssertTrue(res.body.string.contains("closed"))
+                #expect(res.status == .forbidden)
+                #expect(res.body.string.contains("closed"))
             })
 
         let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
-        XCTAssertNotNil(refreshedOptional)
+        #expect(refreshedOptional != nil)
         let refreshed = refreshedOptional!
-        XCTAssertFalse(refreshed.isOpen)
+        #expect(refreshed.isOpen == false)
     }
 
-    func testRunnerSubmitRejectsOverdueAssignmentsAndClosesThem() async throws {
+    @Test func runnerSubmitRejectsOverdueAssignmentsAndClosesThem() async throws {
         let manifest = """
             {
               "schemaVersion": 1,
@@ -449,14 +446,14 @@ final class BrowserRunnerRoutesTests: XCTestCase {
                     parameters: ["boundary": "runner-submit-overdue-boundary"])
             },
             afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
-                XCTAssertTrue(res.body.string.contains("closed"))
+                #expect(res.status == .forbidden)
+                #expect(res.body.string.contains("closed"))
             })
 
         let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
-        XCTAssertNotNil(refreshedOptional)
+        #expect(refreshedOptional != nil)
         let refreshed = refreshedOptional!
-        XCTAssertFalse(refreshed.isOpen)
+        #expect(refreshed.isOpen == false)
     }
 
     // MARK: - Private fixtures
