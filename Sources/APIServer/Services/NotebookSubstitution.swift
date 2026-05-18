@@ -30,6 +30,11 @@ enum NotebookSubstitution {
     /// characters between the braces, no spaces.  Mirrors the validator
     /// used by the editor so the on-disk shape matches what the user typed.
     private static let placeholderRegex: NSRegularExpression = {
+        // The pattern is a compile-time string literal that we know parses
+        // successfully — there is no runtime input that could change it.
+        // A `try!` here is safe; the alternative is propagating `throws`
+        // through every call site of `apply(...)`, which would give
+        // callers a failure case that can never actually fire.
         // swiftlint:disable:next force_try
         try! NSRegularExpression(pattern: #"\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}"#)
     }()

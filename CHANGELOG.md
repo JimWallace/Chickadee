@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Internal
 
+- **Document the one `try!` in production code.**  The compile-time
+  regex literal in `NotebookSubstitution.placeholderRegex`
+  (`Sources/APIServer/Services/NotebookSubstitution.swift:32`)
+  unwraps `NSRegularExpression(pattern:)` with `try!` — the
+  alternative is propagating `throws` through every call site of
+  `apply(...)` for a failure case that cannot actually fire (the
+  pattern is a string literal, not runtime input).  Comment now
+  explains the safety reasoning so the next person reading it
+  doesn't have to re-derive it.
+
+
 - **Extract `updateNewAssignmentDraft` per-action dispatch into a
   new `NewAssignmentDraftService`.**  The 9 draft-action verbs
   (create / upload / clear assignment & solution notebooks, replace
