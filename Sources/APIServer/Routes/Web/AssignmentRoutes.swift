@@ -184,12 +184,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
 
-        let suiteCount: Int = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-            else { return 0 }
-            return props.testSuites.count
-        }()
+        let suiteCount = setup.decodedManifest()?.testSuites.count ?? 0
 
         let fmt = waterlooDateTimeFormatter()
 
@@ -431,19 +426,16 @@ struct InstructorDashboardRoutes: RouteCollection {
             solutionFilename: existingSolutionName ?? fallbackSolutionFilename
         )
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
+        let manifest = setup.decodedManifest()
         let patternFamiliesJSON: String = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-            else { return "[]" }
+            guard let props = manifest else { return "[]" }
             let enc = JSONEncoder()
             enc.outputFormatting = [.sortedKeys]
             let familyData = (try? enc.encode(props.patternFamilies)) ?? Data("[]".utf8)
             return String(data: familyData, encoding: .utf8) ?? "[]"
         }()
         let notebookChecksJSON: String = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
-            else { return "[]" }
+            guard let props = manifest else { return "[]" }
             let enc = JSONEncoder()
             enc.outputFormatting = [.sortedKeys]
             let checkData = (try? enc.encode(props.notebookChecks)) ?? Data("[]".utf8)

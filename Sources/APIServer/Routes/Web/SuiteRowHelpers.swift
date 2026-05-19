@@ -117,8 +117,8 @@ func currentSetupFiles(
     }
 
     let manifestSuites: [ManifestSuiteRow] = {
-        guard let data = setup.manifest.data(using: .utf8),
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        guard let props = setup.decodedManifest()
+
         else {
             return []
         }
@@ -222,8 +222,8 @@ private struct EditSuiteManifestTestEntry {
 }
 
 private func manifestTestEntryMap(_ setupManifestJSON: String) -> [String: EditSuiteManifestTestEntry] {
-    guard let data = setupManifestJSON.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: setupManifestJSON)
+
     else {
         return [:]
     }
@@ -395,8 +395,8 @@ func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {
         let isGenerated: Bool
     }
     let manifestTests: [String: ManifestRow] = {
-        guard let data = setup.manifest.data(using: .utf8),
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        guard let props = setup.decodedManifest()
+
         else {
             return [:]
         }
@@ -526,8 +526,8 @@ func authoredSuiteItemsFromDraftManifest(
 /// Returns one `FamilySuiteRow` per pattern family declared on this setup.
 /// Used to populate the family rows in the assignment editor's suite table.
 func familySuiteRowsForSetup(_ setup: APITestSetup) -> [FamilySuiteRow] {
-    guard let data = setup.manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = setup.decodedManifest()
+
     else { return [] }
     return props.patternFamilies.map { family in
         let totalPoints = family.cases

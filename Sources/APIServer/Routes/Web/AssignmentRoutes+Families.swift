@@ -24,8 +24,8 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetup(req)
 
         let families: [PatternFamily] = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let props = setup.decodedManifest()
+
             else { return [] }
             return props.patternFamilies
         }()

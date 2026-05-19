@@ -159,7 +159,7 @@ extension DraftAssignmentRoutes {
     ) -> String {
         guard let setup,
             let manifestData = setup.manifest.data(using: .utf8),
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+            let props = decodeManifest(from: manifestData)
         else { return "[]" }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

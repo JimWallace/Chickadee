@@ -270,7 +270,9 @@ func convertToChickadeeManifest(project: MarmosetProject) throws -> String {
 // MARK: - Zip helpers (private)
 
 /// Extracts a single named file from a zip archive using `unzip -p`.
-/// Returns `nil` if the file is not found.
+/// Returns `nil` if the file is not found.  Runs under the shared zip
+/// process lock (see `ZipProcessSerialization.swift`) so it can't race
+/// the other zip helpers in the codebase.
 private func extractFileFromZip(zipPath: String, filename: String) throws -> Data? {
     guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
         throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
@@ -279,18 +281,21 @@ private func extractFileFromZip(zipPath: String, filename: String) throws -> Dat
         try listZipContents(zipPath: zipPath).first(where: { entry in
             entry == filename || (entry as NSString).lastPathComponent == filename
         }) ?? filename
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-p", zipPath, entryName]
-    let outPipe = Pipe()
-    let errPipe = Pipe()
-    proc.standardOutput = outPipe
-    proc.standardError = errPipe
-    try proc.run()
-    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
+    let (status, data): (Int32, Data) = try withZipProcessLock {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments = ["-p", zipPath, entryName]
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        try runProcessWithEFAULTRetry(proc)
+        let captured = outPipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        return (proc.terminationStatus, captured)
+    }
     // Exit 11 = file not found in archive; treat as nil.
-    guard proc.terminationStatus == 0 else { return nil }
+    guard status == 0 else { return nil }
     return data.isEmpty ? nil : data
 }
 

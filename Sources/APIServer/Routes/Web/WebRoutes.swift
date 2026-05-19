@@ -267,7 +267,7 @@ struct WebRoutes: RouteCollection {
         let rows = sortedSetups.map { setup -> TestSetupRow in
             let setupID = setup.id ?? ""
             let data = Data(setup.manifest.utf8)
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            let props = decodeManifest(from: data)
             let assignment = assignmentBySetup[setupID]
             let latestSubmission = latestSubmissionBySetupID[setupID]
             let submissionCount = submissionCountBySetupID[setupID] ?? 0

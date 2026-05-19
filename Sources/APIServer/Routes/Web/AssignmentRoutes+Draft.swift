@@ -135,8 +135,8 @@ extension DraftAssignmentRoutes {
         // applied on the next suite-edit save once the new entry's
         // sectionID is known).
         let inlinedContent: String = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let manifest = setup.decodedManifest()
+
             else { return body.content }
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: cleaned,

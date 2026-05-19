@@ -261,8 +261,8 @@ extension PublishedAssignmentRoutes {
     // MARK: - helpers
 
     private func decodeManifest(setup: APITestSetup) throws -> TestProperties {
-        guard let data = setup.manifest.data(using: .utf8),
-            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        guard let manifest = setup.decodedManifest()
+
         else {
             throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
         }

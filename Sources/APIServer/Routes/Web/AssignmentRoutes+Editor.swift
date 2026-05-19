@@ -361,8 +361,8 @@ extension PublishedAssignmentRoutes {
         assignmentTestSetupID: String
     ) {
         let activeTestSuiteScripts: Set<String> = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let props = setup.decodedManifest()
+
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
@@ -475,8 +475,8 @@ extension PublishedAssignmentRoutes {
         // back to raw content for non-.py files or when manifest decode
         // fails (degrades to pre-Slice-1 behaviour).
         let inlinedContent: String = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let manifest = setup.decodedManifest()
+
             else { return body.content }
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: filename,
@@ -533,8 +533,8 @@ extension PublishedAssignmentRoutes {
         // is created below); the next applyPatternFamilies / suite-edit
         // save will re-prepend with the correct section scope.
         let createInlined: String = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let manifest = setup.decodedManifest()
+
             else { return body.content }
             return TestScriptVariablePrepender.applyForRawScript(
                 filename: cleaned,
@@ -568,8 +568,8 @@ extension PublishedAssignmentRoutes {
             // shared dir in sync after every POST /scripts upload, not just
             // the bigger /edit/save flow.
             let activeTestSuiteScripts: Set<String> = {
-                guard let data = setup.manifest.data(using: .utf8),
-                    let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                guard let props = setup.decodedManifest()
+
                 else { return [] }
                 return Set(props.testSuites.map(\.script))
             }()
@@ -648,8 +648,8 @@ extension PublishedAssignmentRoutes {
         // is just a flat extraction of every non-test, non-notebook
         // entry in the zip, so a deleted file vanishes from there too.
         let activeTestSuiteScripts: Set<String> = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let props = setup.decodedManifest()
+
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()
