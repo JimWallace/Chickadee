@@ -9,16 +9,16 @@ import Core
 import Crypto
 import Fluent
 import Foundation
+import Testing
 import Vapor
-import XCTest
 
 @testable import chickadee_server
 
-final class PatternFamilyRendererTests: PatternFamilyTestCase {
+@Suite struct PatternFamilyRendererTests {
 
     // MARK: - JSONValue
 
-    func testJSONValueRoundTripForEachVariant() throws {
+    @Test func jSONValueRoundTripForEachVariant() throws {
         let samples: [JSONValue] = [
             .null,
             .bool(true), .bool(false),
@@ -34,44 +34,39 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
         for sample in samples {
             let data = try encoder.encode(sample)
             let back = try decoder.decode(JSONValue.self, from: data)
-            XCTAssertEqual(sample, back, "round-trip mismatch for \(sample)")
+            #expect(sample == back, "round-trip mismatch for \(sample)")
         }
     }
 
-    func testJSONValuePythonLiteralForScalars() {
-        XCTAssertEqual(JSONValue.null.pythonLiteral, "None")
-        XCTAssertEqual(JSONValue.bool(true).pythonLiteral, "True")
-        XCTAssertEqual(JSONValue.bool(false).pythonLiteral, "False")
-        XCTAssertEqual(JSONValue.int(42).pythonLiteral, "42")
-        XCTAssertEqual(JSONValue.double(18.49).pythonLiteral, "18.49")
-        XCTAssertEqual(JSONValue.string("hi").pythonLiteral, "\"hi\"")
-        XCTAssertEqual(JSONValue.string("a\"b").pythonLiteral, "\"a\\\"b\"")
-        XCTAssertEqual(JSONValue.string("line\nbreak").pythonLiteral, "\"line\\nbreak\"")
+    @Test func jSONValuePythonLiteralForScalars() throws {
+        #expect(JSONValue.null.pythonLiteral == "None")
+        #expect(JSONValue.bool(true).pythonLiteral == "True")
+        #expect(JSONValue.bool(false).pythonLiteral == "False")
+        #expect(JSONValue.int(42).pythonLiteral == "42")
+        #expect(JSONValue.double(18.49).pythonLiteral == "18.49")
+        #expect(JSONValue.string("hi").pythonLiteral == "\"hi\"")
+        #expect(JSONValue.string("a\"b").pythonLiteral == "\"a\\\"b\"")
+        #expect(JSONValue.string("line\nbreak").pythonLiteral == "\"line\\nbreak\"")
     }
 
-    func testJSONValuePythonLiteralForArraysAndObjects() {
-        XCTAssertEqual(
-            JSONValue.array([.int(1), .int(2), .int(3)]).pythonLiteral,
-            "[1, 2, 3]"
-        )
-        XCTAssertEqual(
-            JSONValue.object(["b": .int(2), "a": .int(1)]).pythonLiteral,
-            #"{"a": 1, "b": 2}"#,
-            "Object keys must be emitted in sorted order for determinism"
-        )
+    @Test func jSONValuePythonLiteralForArraysAndObjects() throws {
+        #expect(JSONValue.array([.int(1), .int(2), .int(3)]).pythonLiteral == "[1, 2, 3]")
+        #expect(
+            JSONValue.object(["b": .int(2), "a": .int(1)]).pythonLiteral == #"{"a": 1, "b": 2}"#,
+            "Object keys must be emitted in sorted order for determinism")
     }
 
     // MARK: - Renderer
 
-    func testRendererIsDeterministic() {
-        let family = bmiFamily()
+    @Test func rendererIsDeterministic() throws {
+        let family = pfBMIFamily()
         let first = renderPatternFamily(family)
         let second = renderPatternFamily(family)
-        XCTAssertEqual(first, second, "Same input must produce byte-identical output")
+        #expect(first == second, "Same input must produce byte-identical output")
     }
 
-    func testRendererSkipsDisabledCases() {
-        var cases = bmiFamily().cases
+    @Test func rendererSkipsDisabledCases() throws {
+        var cases = pfBMIFamily().cases
         cases[1] = PatternCase(
             key: cases[1].key, label: cases[1].label,
             args: cases[1].args, expected: cases[1].expected,
@@ -83,18 +78,18 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             cases: cases
         )
         let rendered = renderPatternFamily(family)
-        XCTAssertEqual(rendered.count, 2)
-        XCTAssertFalse(rendered.map(\.caseKey).contains(cases[1].key))
+        #expect(rendered.count == 2)
+        #expect(rendered.map(\.caseKey).contains(cases[1].key) == false)
     }
 
-    func testRendererFilenameFormat() {
-        let rendered = renderPatternFamily(bmiFamily())
-        XCTAssertEqual(rendered[0].filename, "publictest_bmi_category_01.py")
-        XCTAssertEqual(rendered[1].filename, "publictest_bmi_category_02.py")
-        XCTAssertEqual(rendered[2].filename, "publictest_bmi_category_03.py")
+    @Test func rendererFilenameFormat() throws {
+        let rendered = renderPatternFamily(pfBMIFamily())
+        #expect(rendered[0].filename == "publictest_bmi_category_01.py")
+        #expect(rendered[1].filename == "publictest_bmi_category_02.py")
+        #expect(rendered[2].filename == "publictest_bmi_category_03.py")
     }
 
-    func testRendererPerCaseTierOverrideDrivesFilenamePrefix() {
+    @Test func rendererPerCaseTierOverrideDrivesFilenamePrefix() throws {
         let family = PatternFamily(
             id: "mix", name: "Mixed tiers", kind: .boundaryEquality,
             functionName: "f", paramNames: ["x"],
@@ -105,30 +100,30 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             ]
         )
         let rendered = renderPatternFamily(family)
-        XCTAssertEqual(rendered[0].filename, "publictest_mix_a.py")
-        XCTAssertEqual(rendered[1].filename, "secrettest_mix_b.py")
+        #expect(rendered[0].filename == "publictest_mix_a.py")
+        #expect(rendered[1].filename == "secrettest_mix_b.py")
     }
 
-    func testRendererSourceContainsRichFeedbackElements() {
-        let rendered = renderPatternFamily(bmiFamily())
+    @Test func rendererSourceContainsRichFeedbackElements() throws {
+        let rendered = renderPatternFamily(pfBMIFamily())
         let src = rendered[0].source
         // Test: label first so test_runtime's label picker finds it.
-        XCTAssertTrue(src.hasPrefix("# Test: BMI < 18.5 is underweight\n"))
+        #expect(src.hasPrefix("# Test: BMI < 18.5 is underweight\n"))
         // Provenance comment on second line.
-        XCTAssertTrue(src.contains("Generated from pattern family"))
-        XCTAssertTrue(src.contains("[bmi_category]"))
-        XCTAssertTrue(src.contains("spec_hash="))
+        #expect(src.contains("Generated from pattern family"))
+        #expect(src.contains("[bmi_category]"))
+        #expect(src.contains("spec_hash="))
         // Rich feedback shape mirrors Phase 1 templates.
-        XCTAssertTrue(src.contains("bmi = 18.49"))
-        XCTAssertTrue(src.contains("expected = \"underweight\""))
-        XCTAssertTrue(src.contains("student_module.bmi_category(bmi)"))
-        XCTAssertTrue(src.contains("input:    bmi={bmi!r}"))
-        XCTAssertTrue(src.contains("Hint: values below 18.5"))
-        XCTAssertTrue(src.contains("unexpected exception"))
-        XCTAssertTrue(src.contains("wrong value"))
+        #expect(src.contains("bmi = 18.49"))
+        #expect(src.contains("expected = \"underweight\""))
+        #expect(src.contains("student_module.bmi_category(bmi)"))
+        #expect(src.contains("input:    bmi={bmi!r}"))
+        #expect(src.contains("Hint: values below 18.5"))
+        #expect(src.contains("unexpected exception"))
+        #expect(src.contains("wrong value"))
     }
 
-    func testRendererUsesDefaultHintWhenCaseHintIsMissing() {
+    @Test func rendererUsesDefaultHintWhenCaseHintIsMissing() throws {
         let family = PatternFamily(
             id: "h", name: "h", kind: .boundaryEquality,
             functionName: "f", paramNames: ["x"],
@@ -141,31 +136,31 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             ]
         )
         let rendered = renderPatternFamily(family)
-        XCTAssertTrue(rendered[0].source.contains("Hint: default hint"))
-        XCTAssertTrue(rendered[1].source.contains("Hint: override hint"))
+        #expect(rendered[0].source.contains("Hint: default hint"))
+        #expect(rendered[1].source.contains("Hint: override hint"))
     }
 
-    func testRendererDisplayNameMatchesCaseLabel() {
-        let rendered = renderPatternFamily(bmiFamily())
-        XCTAssertEqual(rendered[0].displayName, "BMI < 18.5 is underweight")
+    @Test func rendererDisplayNameMatchesCaseLabel() throws {
+        let rendered = renderPatternFamily(pfBMIFamily())
+        #expect(rendered[0].displayName == "BMI < 18.5 is underweight")
     }
 
-    func testSpecHashChangesWithSpecAndIsStableOtherwise() {
-        let a = bmiFamily()
+    @Test func specHashChangesWithSpecAndIsStableOtherwise() throws {
+        let a = pfBMIFamily()
         let aHash = patternFamilySpecHash(a)
-        XCTAssertEqual(aHash, patternFamilySpecHash(bmiFamily()), "Hash must be stable")
-        let b = bmiFamily(id: "bmi_category_v2")
-        XCTAssertNotEqual(aHash, patternFamilySpecHash(b))
-        let c = bmiFamily(hint: "different hint")
-        XCTAssertNotEqual(aHash, patternFamilySpecHash(c))
+        #expect(aHash == patternFamilySpecHash(pfBMIFamily()), "Hash must be stable")
+        let b = pfBMIFamily(id: "bmi_category_v2")
+        #expect(aHash != patternFamilySpecHash(b))
+        let c = pfBMIFamily(hint: "different hint")
+        #expect(aHash != patternFamilySpecHash(c))
     }
 
-    func testRenderedSourceIsValidPythonSyntax() throws {
+    @Test func renderedSourceIsValidPythonSyntax() throws {
         // ast.parse rejects syntactically invalid Python, catches
         // quote-escape mishaps in the renderer.
-        let rendered = renderPatternFamily(bmiFamily())
+        let rendered = renderPatternFamily(pfBMIFamily())
         for generated in rendered {
-            try assertValidPythonSyntax(generated.source, label: generated.filename)
+            try pfAssertValidPythonSyntax(generated.source, label: generated.filename)
         }
     }
 
@@ -178,7 +173,7 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
     ///      switch to kwargs the moment an arg is omitted.
     /// Regression guard for the "every arg required" pre-v0.4.94 behaviour
     /// and the user-reported `def f(dob: str, currentDate: str = "...")` case.
-    func testRenderer_defaultedTrailingArgOmitted_positionalCall() throws {
+    @Test func renderer_defaultedTrailingArgOmitted_positionalCall() throws {
         let family = PatternFamily(
             id: "dobcheck", name: "DOB Check", kind: .boundaryEquality,
             functionName: "check_dob", paramNames: ["dob", "currentDate"],
@@ -193,27 +188,24 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             ]
         )
         let rendered = renderPatternFamily(family)
-        XCTAssertEqual(rendered.count, 1)
+        #expect(rendered.count == 1)
         let src = rendered[0].source
 
-        XCTAssertTrue(
+        #expect(
             src.contains("dob = \"20260422\""),
             "Provided arg must be declared: \(src)")
-        XCTAssertFalse(
-            src.contains("currentDate ="),
-            "Omitted defaulted arg must NOT be declared: \(src)")
-        XCTAssertTrue(
+        #expect(src.contains("currentDate =") == false, "Omitted defaulted arg must NOT be declared: \(src)")
+        #expect(
             src.contains("check_dob(dob)"),
             "Call should be positional over the leading run: \(src)")
-        XCTAssertFalse(
-            src.contains("check_dob(dob, currentDate)"),
-            "Call must not reference an undeclared local: \(src)")
-        try assertValidPythonSyntax(src, label: rendered[0].filename)
+        #expect(
+            src.contains("check_dob(dob, currentDate)") == false, "Call must not reference an undeclared local: \(src)")
+        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     /// Middle-arg omission must switch subsequent provided args to kwargs,
     /// otherwise Python rejects the call as "positional after keyword".
-    func testRenderer_defaultedMiddleArgOmitted_usesKwargs() throws {
+    @Test func renderer_defaultedMiddleArgOmitted_usesKwargs() throws {
         let family = PatternFamily(
             id: "middlemissing", name: "Middle missing", kind: .boundaryEquality,
             functionName: "three_args", paramNames: ["a", "b", "c"],
@@ -229,24 +221,22 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
         )
         let rendered = renderPatternFamily(family)
         let src = rendered[0].source
-        XCTAssertTrue(
+        #expect(
             src.contains("three_args(a, c=c)"),
             "Expected kwarg form after middle gap: \(src)")
-        XCTAssertFalse(
-            src.contains("b ="),
-            "Omitted middle arg must not be declared: \(src)")
-        try assertValidPythonSyntax(src, label: rendered[0].filename)
+        #expect(src.contains("b =") == false, "Omitted middle arg must not be declared: \(src)")
+        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     /// Pre-v0.4.94 families have no `argsProvided` array in their spec.
     /// The decoder lands them with an empty `argsProvided`, and the
     /// renderer must treat that as "all args provided" — same output as
     /// before.  No behaviour change for existing families.
-    func testRenderer_emptyArgsProvided_behavesAsAllProvided() throws {
-        let rendered = renderPatternFamily(bmiFamily())
+    @Test func renderer_emptyArgsProvided_behavesAsAllProvided() throws {
+        let rendered = renderPatternFamily(pfBMIFamily())
         let src = rendered[0].source
-        XCTAssertTrue(src.contains("bmi = 18.49"))
-        XCTAssertTrue(src.contains("bmi_category(bmi)"))
+        #expect(src.contains("bmi = 18.49"))
+        #expect(src.contains("bmi_category(bmi)"))
     }
 
     // MARK: - v0.4.94 — family variables
@@ -254,7 +244,7 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
     /// A family with one dict variable: the rendered test prepends the
     /// assignment, and a case referencing the variable via argVarRefs
     /// emits the bare identifier (no literal) in the param declaration.
-    func testRenderer_familyVariable_prependedAndReferencedInCase() throws {
+    @Test func renderer_familyVariable_prependedAndReferencedInCase() throws {
         let patients: JSONValue = .object([
             "p01": .object(["dob": .string("20000101"), "exempt": .bool(false)]),
             "p02": .object(["dob": .string("19950515"), "exempt": .bool(true)]),
@@ -275,28 +265,28 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             variables: [FamilyVariable(name: "patients", value: patients)]
         )
         let rendered = renderPatternFamily(family)
-        XCTAssertEqual(rendered.count, 1)
+        #expect(rendered.count == 1)
         let src = rendered[0].source
 
-        XCTAssertTrue(
+        #expect(
             src.contains("patients = {"),
             "Family variable must be declared at module scope: \(src)")
-        XCTAssertTrue(
+        #expect(
             src.contains("db = patients"),
             "Arg cell $ref must emit a bare identifier assignment: \(src)")
-        XCTAssertTrue(
+        #expect(
             src.contains("pid = \"p01\""),
             "Literal arg must still render as a literal: \(src)")
-        XCTAssertTrue(
+        #expect(
             src.contains("lookup(db, pid)"),
             "Call site must use the declared param names: \(src)")
-        try assertValidPythonSyntax(src, label: rendered[0].filename)
+        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
     /// The validator rejects a case arg that references a variable name
     /// the family doesn't declare.  Prevents dangling `$foo` refs from
     /// sneaking into generated Python as a NameError.
-    func testValidation_rejectsUnknownVariableReference() {
+    @Test func validation_rejectsUnknownVariableReference() throws {
         let family = PatternFamily(
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "f", paramNames: ["x"],
@@ -310,18 +300,20 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             ],
             variables: []
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
-            let msg = "\(err)"
-            XCTAssertTrue(
+        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+            let msg = "\(error)"
+            #expect(
                 msg.contains("does_not_exist") && msg.contains("unknown"),
-                "Expected unknown-var error, got: \(msg)")
+                "Expected unknown-var erroror, got: \(msg)")
+
+            return true
         }
     }
 
     /// Variable names must be valid Python identifiers + not collide with
     /// any param name (otherwise the generated test would shadow the
     /// variable when it assigns the per-case arg).
-    func testValidation_rejectsVariableCollidingWithParamName() {
+    @Test func validation_rejectsVariableCollidingWithParamName() throws {
         let family = PatternFamily(
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "f", paramNames: ["x"],
@@ -330,17 +322,19 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             ],
             variables: [FamilyVariable(name: "x", value: .int(99))]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
-            XCTAssertTrue(
-                "\(err)".contains("collides with a parameter name"),
-                "Expected collision error, got: \(err)")
+        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+            #expect(
+                "\(error)".contains("collides with a parameter name"),
+                "Expected collision erroror, got: \(error)")
+
+            return true
         }
     }
 
     /// Spec-hash must change when the family's variables change so the
     /// regeneration diff flips every generated file — ensuring the
     /// auto-retest loop picks up variable edits.
-    func testVariables_affectSpecHash() {
+    @Test func variables_affectSpecHash() throws {
         let base = PatternFamily(
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "f", paramNames: ["x"],
@@ -352,23 +346,25 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))],
             variables: [FamilyVariable(name: "lookup", value: .object(["k": .int(1)]))]
         )
-        XCTAssertNotEqual(
-            patternFamilySpecHash(base), patternFamilySpecHash(withVar),
+        #expect(
+            patternFamilySpecHash(base) != patternFamilySpecHash(withVar),
             "Adding a family variable must bust the spec hash")
     }
 
     // MARK: - Validation
 
-    func testValidation_rejectsDuplicateFamilyID() {
-        let f1 = bmiFamily(id: "x")
-        let f2 = bmiFamily(id: "x")
-        XCTAssertThrowsError(try validatePatternFamilies([f1, f2], testSuites: [])) { err in
-            XCTAssertTrue("\(err)".contains("Duplicate pattern family id"))
+    @Test func validation_rejectsDuplicateFamilyID() throws {
+        let f1 = pfBMIFamily(id: "x")
+        let f2 = pfBMIFamily(id: "x")
+        #expect { try validatePatternFamilies([f1, f2], testSuites: []) } throws: { error in
+            #expect("\(error)".contains("Duplicate pattern family id"))
+
+            return true
         }
     }
 
-    func testValidation_rejectsDuplicateCaseKey() {
-        var cases = bmiFamily().cases
+    @Test func validation_rejectsDuplicateCaseKey() throws {
+        var cases = pfBMIFamily().cases
         cases[1] = PatternCase(
             key: cases[0].key, label: cases[1].label,
             args: cases[1].args, expected: cases[1].expected
@@ -377,54 +373,60 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "foo", paramNames: ["x"], cases: cases
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
-            XCTAssertTrue("\(err)".contains("duplicate case key"))
+        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+            #expect("\(error)".contains("duplicate case key"))
+
+            return true
         }
     }
 
-    func testValidation_rejectsInvalidPythonIdentifierForFunction() {
+    @Test func validation_rejectsInvalidPythonIdentifierForFunction() throws {
         let family = PatternFamily(
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "2bad", paramNames: ["x"],
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: []) }
     }
 
-    func testValidation_rejectsPythonKeywordAsParameterName() {
+    @Test func validation_rejectsPythonKeywordAsParameterName() throws {
         let family = PatternFamily(
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "foo", paramNames: ["class"],
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: []) }
     }
 
-    func testValidation_rejectsArgCountMismatch() {
+    @Test func validation_rejectsArgCountMismatch() throws {
         let family = PatternFamily(
             id: "f", name: "f", kind: .boundaryEquality,
             functionName: "foo", paramNames: ["x", "y"],
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
-            XCTAssertTrue("\(err)".contains("arg(s) but family declares"))
+        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+            #expect("\(error)".contains("arg(s) but family declares"))
+
+            return true
         }
     }
 
-    func testValidation_rejectsGeneratedFilenameCollisionWithRawScript() {
-        let family = bmiFamily()
+    @Test func validation_rejectsGeneratedFilenameCollisionWithRawScript() throws {
+        let family = pfBMIFamily()
         let rawClash = TestSuiteEntry(
             tier: .pub,
             script: "publictest_bmi_category_01.py",
             generatedBy: nil
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [rawClash])) { err in
-            XCTAssertTrue("\(err)".contains("hand-written script with that name already exists"))
+        #expect { try validatePatternFamilies([family], testSuites: [rawClash]) } throws: { error in
+            #expect("\(error)".contains("hand-written script with that name already exists"))
+
+            return true
         }
     }
 
-    func testValidation_emptySpecIsValid() {
-        XCTAssertNoThrow(try validatePatternFamilies([], testSuites: []))
+    @Test func validation_emptySpecIsValid() throws {
+        try validatePatternFamilies([], testSuites: [])
     }
 
 }

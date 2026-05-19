@@ -9,116 +9,118 @@ import Core
 import Crypto
 import Fluent
 import Foundation
+import Testing
 import Vapor
-import XCTest
 
 @testable import chickadee_server
 
-final class PatternFamilyKindsTests: PatternFamilyTestCase {
+@Suite struct PatternFamilyKindsTests {
 
     // MARK: - approximateEquality kind
 
-    func testRenderer_approxEquality_emitsToleranceComparison() {
-        let rendered = renderPatternFamily(approxFamily(tolerance: 0.05))
-        XCTAssertEqual(rendered.count, 2)
+    @Test func renderer_approxEquality_emitsToleranceComparison() throws {
+        let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.05))
+        #expect(rendered.count == 2)
         let src = rendered[0].source
-        XCTAssertTrue(
+        #expect(
             src.contains("tolerance = 0.05"),
             "Expected Python literal for tolerance; got: \(src)")
-        XCTAssertTrue(src.contains("delta = abs(result - expected)"))
-        XCTAssertTrue(src.contains("if delta > tolerance:"))
-        XCTAssertTrue(
+        #expect(src.contains("delta = abs(result - expected)"))
+        #expect(src.contains("if delta > tolerance:"))
+        #expect(
             src.contains("wrong return type"),
             "Approx kind must also guard against non-numeric return types")
-        XCTAssertTrue(src.contains("value outside tolerance"))
+        #expect(src.contains("value outside tolerance"))
     }
 
-    func testRenderer_approxEquality_defaultToleranceAppliedWhenNil() {
-        let rendered = renderPatternFamily(approxFamily(tolerance: nil))
+    @Test func renderer_approxEquality_defaultToleranceAppliedWhenNil() throws {
+        let rendered = renderPatternFamily(pfApproxFamily(tolerance: nil))
         let src = rendered[0].source
         // 1e-6 renders as Swift's "1e-06" via String(Double) — either form
         // is acceptable as a Python float literal.
-        XCTAssertTrue(
+        #expect(
             src.contains("tolerance = 1e-06") || src.contains("tolerance = 0.000001"),
             "Default tolerance (1e-6) missing from: \(src)")
     }
 
-    func testRenderer_approxEquality_isValidPython() throws {
-        let rendered = renderPatternFamily(approxFamily(tolerance: 0.01))
+    @Test func renderer_approxEquality_isValidPython() throws {
+        let rendered = renderPatternFamily(pfApproxFamily(tolerance: 0.01))
         for g in rendered {
-            try assertValidPythonSyntax(g.source, label: g.filename)
+            try pfAssertValidPythonSyntax(g.source, label: g.filename)
         }
     }
 
-    func testValidation_approxEquality_rejectsNegativeTolerance() {
+    @Test func validation_approxEquality_rejectsNegativeTolerance() throws {
         let family = PatternFamily(
             id: "bad", name: "bad", kind: .approximateEquality,
             functionName: "f", paramNames: ["x"],
             defaults: PatternDefaults(tolerance: -0.1),
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: [])) { err in
-            XCTAssertTrue("\(err)".contains("tolerance"))
+        #expect { try validatePatternFamilies([family], testSuites: []) } throws: { error in
+            #expect("\(error)".contains("tolerance"))
+
+            return true
         }
     }
 
-    func testValidation_approxEquality_acceptsZeroTolerance() {
+    @Test func validation_approxEquality_acceptsZeroTolerance() throws {
         let family = PatternFamily(
             id: "strict", name: "strict", kind: .approximateEquality,
             functionName: "f", paramNames: ["x"],
             defaults: PatternDefaults(tolerance: 0),
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        XCTAssertNoThrow(try validatePatternFamilies([family], testSuites: []))
+        try validatePatternFamilies([family], testSuites: [])
     }
 
-    func testValidation_approxEquality_rejectsNonFiniteTolerance() {
+    @Test func validation_approxEquality_rejectsNonFiniteTolerance() throws {
         let family = PatternFamily(
             id: "nan", name: "nan", kind: .approximateEquality,
             functionName: "f", paramNames: ["x"],
             defaults: PatternDefaults(tolerance: .nan),
             cases: [PatternCase(key: "01", label: "a", args: [.int(1)], expected: .int(1))]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([family], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([family], testSuites: []) }
     }
 
     // MARK: - variableEquality
 
     /// Fixture: a 2-case variable-equality family.  `functionName` is
     /// irrelevant (validation skips it) — we use a placeholder.
-    func testVariableEqualityRendererChecksModuleAttr() {
-        let rendered = renderPatternFamily(notebookVariablesFamily())
-        XCTAssertEqual(rendered.count, 2)
+    @Test func variableEqualityRendererChecksModuleAttr() throws {
+        let rendered = renderPatternFamily(pfNotebookVariablesFamily())
+        #expect(rendered.count == 2)
         let src = rendered[0].source
-        XCTAssertTrue(src.hasPrefix("# Test: beats equals 5\n"))
-        XCTAssertTrue(src.contains("variable_name = \"beats\""))
-        XCTAssertTrue(src.contains("expected      = 5"))
-        XCTAssertTrue(src.contains("getattr(student_module, variable_name, _MISSING)"))
-        XCTAssertTrue(src.contains("is not defined"))
-        XCTAssertTrue(src.contains("has the wrong value"))
+        #expect(src.hasPrefix("# Test: beats equals 5\n"))
+        #expect(src.contains("variable_name = \"beats\""))
+        #expect(src.contains("expected      = 5"))
+        #expect(src.contains("getattr(student_module, variable_name, _MISSING)"))
+        #expect(src.contains("is not defined"))
+        #expect(src.contains("has the wrong value"))
         // Must NOT call any student function.
-        XCTAssertFalse(src.contains("student_module._"))
-        XCTAssertFalse(src.contains("(beats)"))
+        #expect(src.contains("student_module._") == false)
+        #expect(src.contains("(beats)") == false)
     }
 
-    func testVariableEqualityRendererFilenameFormat() {
-        let rendered = renderPatternFamily(notebookVariablesFamily())
-        XCTAssertEqual(rendered[0].filename, "publictest_notebook_variables_01.py")
-        XCTAssertEqual(rendered[1].filename, "publictest_notebook_variables_02.py")
+    @Test func variableEqualityRendererFilenameFormat() throws {
+        let rendered = renderPatternFamily(pfNotebookVariablesFamily())
+        #expect(rendered[0].filename == "publictest_notebook_variables_01.py")
+        #expect(rendered[1].filename == "publictest_notebook_variables_02.py")
     }
 
-    func testVariableEqualityRenderedSourceIsValidPython() throws {
-        let rendered = renderPatternFamily(notebookVariablesFamily())
+    @Test func variableEqualityRenderedSourceIsValidPython() throws {
+        let rendered = renderPatternFamily(pfNotebookVariablesFamily())
         for script in rendered {
-            try assertValidPythonSyntax(script.source, label: script.filename)
+            try pfAssertValidPythonSyntax(script.source, label: script.filename)
         }
     }
 
-    func testVariableEqualityValidation_acceptsGoodFamily() throws {
-        try validatePatternFamilies([notebookVariablesFamily()], testSuites: [])
+    @Test func variableEqualityValidation_acceptsGoodFamily() throws {
+        try validatePatternFamilies([pfNotebookVariablesFamily()], testSuites: [])
     }
 
-    func testVariableEqualityValidation_rejectsCaseWithMultipleArgs() {
+    @Test func variableEqualityValidation_rejectsCaseWithMultipleArgs() throws {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
@@ -129,10 +131,10 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
                     expected: .int(1))
             ]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
     }
 
-    func testVariableEqualityValidation_rejectsNonStringArg() {
+    @Test func variableEqualityValidation_rejectsNonStringArg() throws {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
@@ -142,10 +144,10 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
                     args: [.int(42)], expected: .int(1))
             ]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
     }
 
-    func testVariableEqualityValidation_rejectsEmptyVariableName() {
+    @Test func variableEqualityValidation_rejectsEmptyVariableName() throws {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
@@ -155,10 +157,10 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
                     args: [.string("")], expected: .int(1))
             ]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
     }
 
-    func testVariableEqualityValidation_rejectsNonIdentifierVariableName() {
+    @Test func variableEqualityValidation_rejectsNonIdentifierVariableName() throws {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .variableEquality,
             functionName: "_", paramNames: ["variable"],
@@ -168,10 +170,10 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
                     args: [.string("not a valid name")], expected: .int(1))
             ]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
     }
 
-    func testVariableEqualityValidation_allowsPlaceholderFunctionName() throws {
+    @Test func variableEqualityValidation_allowsPlaceholderFunctionName() throws {
         // `.variableEquality` families don't call a function, so functionName
         // doesn't have to be a valid Python identifier.  Accept "_" or even
         // empty — the renderer and runtime both ignore it.
@@ -190,40 +192,40 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
 
     // MARK: - stdoutEquality
 
-    func testStdoutEqualityRendererBasicShape() throws {
-        let rendered = renderPatternFamily(helloPrintsFamily())
-        XCTAssertEqual(rendered.count, 1)
+    @Test func stdoutEqualityRendererBasicShape() throws {
+        let rendered = renderPatternFamily(pfHelloPrintsFamily())
+        #expect(rendered.count == 1)
         let src = rendered[0].source
-        XCTAssertTrue(src.hasPrefix("# Test: prints greeting\n"))
-        XCTAssertTrue(src.contains("import contextlib as _contextlib"))
-        XCTAssertTrue(src.contains("with _contextlib.redirect_stdout(_buf):"))
-        XCTAssertTrue(src.contains("student_module.say_hi(name)"))
-        XCTAssertTrue(src.contains("expected = \"hi world\""))
-        XCTAssertTrue(src.contains("wrong stdout"))
-        XCTAssertTrue(src.contains("Printed"))
-        try assertValidPythonSyntax(src, label: rendered[0].filename)
+        #expect(src.hasPrefix("# Test: prints greeting\n"))
+        #expect(src.contains("import contextlib as _contextlib"))
+        #expect(src.contains("with _contextlib.redirect_stdout(_buf):"))
+        #expect(src.contains("student_module.say_hi(name)"))
+        #expect(src.contains("expected = \"hi world\""))
+        #expect(src.contains("wrong stdout"))
+        #expect(src.contains("Printed"))
+        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
-    func testStdoutEqualityRendererFilenameFormat() {
-        let rendered = renderPatternFamily(helloPrintsFamily())
-        XCTAssertEqual(rendered[0].filename, "publictest_hello_prints_01.py")
+    @Test func stdoutEqualityRendererFilenameFormat() throws {
+        let rendered = renderPatternFamily(pfHelloPrintsFamily())
+        #expect(rendered[0].filename == "publictest_hello_prints_01.py")
     }
 
-    func testStdoutEqualityRendererPreservesMultilineExpected() throws {
+    @Test func stdoutEqualityRendererPreservesMultilineExpected() throws {
         // A multi-line Expected (the natural shape for two `print()`
         // calls) must round-trip through the Python literal without
         // breaking the source.  The single-trailing-newline trim is
         // applied at runtime, not at rendering — the literal in the
         // source still carries the trailing \n that the instructor
         // typed.
-        let fam = helloPrintsFamily(expected: "a\nb\n")
+        let fam = pfHelloPrintsFamily(expected: "a\nb\n")
         let rendered = renderPatternFamily(fam)
         let src = rendered[0].source
-        XCTAssertTrue(src.contains(#"expected = "a\nb\n""#))
-        try assertValidPythonSyntax(src, label: rendered[0].filename)
+        #expect(src.contains(#"expected = "a\nb\n""#))
+        try pfAssertValidPythonSyntax(src, label: rendered[0].filename)
     }
 
-    func testStdoutEqualityValidationAllowsEmptyExpected() throws {
+    @Test func stdoutEqualityValidationAllowsEmptyExpected() throws {
         // "this function should print nothing" is a legitimate case.
         let fam = PatternFamily(
             id: "silent", name: "Silent", kind: .stdoutEquality,
@@ -237,7 +239,7 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
         try validatePatternFamilies([fam], testSuites: [])
     }
 
-    func testStdoutEqualityValidationRejectsNonStringExpected() {
+    @Test func stdoutEqualityValidationRejectsNonStringExpected() throws {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .stdoutEquality,
             functionName: "say", paramNames: ["x"],
@@ -247,10 +249,10 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
                     args: [.int(1)], expected: .int(42))
             ]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
     }
 
-    func testStdoutEqualityValidationRejectsArgArityMismatch() {
+    @Test func stdoutEqualityValidationRejectsArgArityMismatch() throws {
         let bad = PatternFamily(
             id: "bad", name: "Bad", kind: .stdoutEquality,
             functionName: "say", paramNames: ["x", "y"],
@@ -260,12 +262,12 @@ final class PatternFamilyKindsTests: PatternFamilyTestCase {
                     args: [.int(1)], expected: .string("hi"))
             ]
         )
-        XCTAssertThrowsError(try validatePatternFamilies([bad], testSuites: []))
+        #expect(throws: (any Error).self) { try validatePatternFamilies([bad], testSuites: []) }
     }
 
-    func testStdoutEqualitySpecHashChangesWithExpected() {
-        let a = patternFamilySpecHash(helloPrintsFamily(expected: "hi"))
-        let b = patternFamilySpecHash(helloPrintsFamily(expected: "bye"))
-        XCTAssertNotEqual(a, b)
+    @Test func stdoutEqualitySpecHashChangesWithExpected() throws {
+        let a = patternFamilySpecHash(pfHelloPrintsFamily(expected: "hi"))
+        let b = patternFamilySpecHash(pfHelloPrintsFamily(expected: "bye"))
+        #expect(a != b)
     }
 }
