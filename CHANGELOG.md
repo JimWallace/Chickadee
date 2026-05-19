@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.175] - 2026-05-19
+
+### Internal
+
+- **Test code passes the same SwiftLint vocabulary as production**
+  (`Tests/.swiftlint.yml` now only carves out `type_body_length`).
+  Three back-to-back PRs cleared the per-rule exemptions that
+  predated the Swift Testing migration:
+
+  - **`non_optional_string_data_conversion`** enabled (#612, 27
+    sites).  `<string>.data(using: .utf8)!` → `Data(<string>.utf8)`
+    everywhere — faster (no encoding-failure branch) and removes
+    a force-unwrap of a value that can never actually be nil for
+    `String`.
+
+  - **`force_unwrapping`** enabled (#613, 172 sites).  Conversion
+    patterns:
+    * `URL(string: "…")!` → `testURL("…")` via new free helpers
+      in `Tests/CoreTests/CoreTestHelpers.swift` and
+      `Tests/WorkerTests/Support/WorkerTestSkip.swift` that
+      centralize the unavoidable unwrap of literal fixture URLs.
+    * `model.id!` → `try model.requireID()` (Fluent's typed-throw
+      equivalent).
+    * `try await Y.first()!` (and `.find(…)!`) →
+      `try #require(try await Y.first())`.
+    * `let X = xOptional!` long-form XCTUnwrap → one-line
+      `let X = try #require(xOptional)`.
+    * `String(data: X, encoding: .utf8)!` →
+      `try #require(String(data: X, encoding: .utf8))` (failable
+      init preserved so the lint rule
+      `optional_data_string_conversion` is satisfied too).
+    * One non-throwing `URLProtocol.startLoading()` site uses
+      `guard let response = HTTPURLResponse(…) else { return }`.
+
+  - **`force_try` and `force_cast`** enabled (#614, 9 sites).
+    `try!` → `try` with `throws` added to the surrounding
+    `@Test func`; `as!` → `try #require(value as? T)`.
+
+  After this release the only Tests/-side lint override is
+  `type_body_length`, deliberately relaxed for the large
+  grouped-suite pattern (WorkerDaemonTests at 800 lines, etc.).
+
 ## [0.4.174] - 2026-05-19
 
 ### Internal
