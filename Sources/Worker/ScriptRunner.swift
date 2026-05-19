@@ -4,6 +4,7 @@
 // test script subprocess. Phase 4 will add SandboxedScriptRunner conforming
 // to the same protocol without changing any callers.
 
+import Core
 import Foundation
 import Synchronization
 

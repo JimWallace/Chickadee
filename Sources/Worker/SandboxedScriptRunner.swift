@@ -13,6 +13,7 @@
 // Callers interact through the ScriptRunner protocol; no change is needed at
 // call sites compared to UnsandboxedScriptRunner.
 
+import Core
 import Foundation
 
 struct SandboxedScriptRunner: ScriptRunner {
