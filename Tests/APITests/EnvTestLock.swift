@@ -8,14 +8,31 @@
 //
 // `withAsyncEnvLock { ... }` is the single serialization primitive —
 // every test that mutates env vars and every helper that reads them
-// during async setup must go through it.
+// during async setup must go through it.  The lock is reentrant on the
+// same task (tracked via a TaskLocal) so wrapping `configureTestDatabase`
+// in the lock doesn't deadlock callers that are already inside a
+// `withTestEnvironment` block.
 
 import Foundation
 
+/// Set inside the locked region so nested calls on the same task can
+/// reenter without parking.
+enum AsyncEnvLockHolding {
+    @TaskLocal static var isHeld: Bool = false
+}
+
 /// Serializes async env-mutating test bodies across suites.
 /// Only one `withAsyncEnvLock` closure can be running at a time process-wide.
-func withAsyncEnvLock<R: Sendable>(_ body: @Sendable () async throws -> R) async rethrows -> R {
-    try await AsyncEnvLock.shared.run(body)
+/// Reentrant within the same task: nested calls run the body inline.
+func withAsyncEnvLock<R: Sendable>(_ body: @Sendable () async throws -> R) async throws -> R {
+    if AsyncEnvLockHolding.isHeld {
+        return try await body()
+    }
+    return try await AsyncEnvLock.shared.run {
+        try await AsyncEnvLockHolding.$isHeld.withValue(true) {
+            try await body()
+        }
+    }
 }
 
 /// Async helper to mutate process env vars for the duration of a test body
