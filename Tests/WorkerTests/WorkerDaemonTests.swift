@@ -1,6 +1,6 @@
 import Core
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
@@ -8,7 +8,7 @@ import XCTest
 import Glibc
 #endif
 
-final class WorkerDaemonTests: XCTestCase {
+@Suite struct WorkerDaemonTests {
     private let fastRetryPolicy = RunnerRetryPolicy(
         enabled: true,
         maxAttempts: 2,
@@ -68,7 +68,7 @@ final class WorkerDaemonTests: XCTestCase {
                 let port = Int(line)
             else {
                 process.terminate()
-                throw XCTSkip("python3 is unavailable for local static file serving")
+                throw IssueRecorded("python3 is unavailable for local static file serving")
             }
 
             self.port = port
@@ -279,7 +279,7 @@ final class WorkerDaemonTests: XCTestCase {
                 let port = Int(line)
             else {
                 process.terminate()
-                throw XCTSkip("python3 is unavailable for local flaky HTTP serving")
+                throw IssueRecorded("python3 is unavailable for local flaky HTTP serving")
             }
 
             self.port = port
@@ -403,7 +403,7 @@ final class WorkerDaemonTests: XCTestCase {
         ]
         try process.run()
         process.waitUntilExit()
-        XCTAssertEqual(process.terminationStatus, 0)
+        #expect(process.terminationStatus == 0)
     }
 
     private func makeServedJob(
@@ -476,7 +476,7 @@ final class WorkerDaemonTests: XCTestCase {
         }
     }
 
-    func testWorkerDaemonCanBeCancelledWhilePollingForNoWork() async throws {
+    @Test func workerDaemonCanBeCancelledWhilePollingForNoWork() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = MockReporter()
         let runner = MockRunner(
@@ -499,7 +499,7 @@ final class WorkerDaemonTests: XCTestCase {
         let didPoll = await waitUntil {
             await poller.observedRequestCount() > 0
         }
-        XCTAssertTrue(didPoll, "Daemon should poll for work before cancellation")
+        #expect(didPoll, "Daemon should poll for work before cancellation")
 
         task.cancel()
         do {
@@ -509,10 +509,10 @@ final class WorkerDaemonTests: XCTestCase {
         }
 
         let requestCount = await poller.observedRequestCount()
-        XCTAssertGreaterThan(requestCount, 0)
+        #expect(requestCount > 0)
     }
 
-    func testWorkerDaemonReportsSyntheticFailureWhenProcessingThrows() async throws {
+    @Test func workerDaemonReportsSyntheticFailureWhenProcessingThrows() async throws {
         let poller = MockPoller(jobs: [try makeJob(), nil, nil])
         let reporter = MockReporter()
         let runner = MockRunner(
@@ -536,7 +536,7 @@ final class WorkerDaemonTests: XCTestCase {
         let didReport = await waitUntil(timeoutSeconds: 5) {
             await !reporter.snapshot().isEmpty
         }
-        XCTAssertTrue(didReport, "Expected fallback failure report after processing error")
+        #expect(didReport, "Expected fallback failure report after processing error")
 
         task.cancel()
         do {
@@ -546,26 +546,26 @@ final class WorkerDaemonTests: XCTestCase {
         }
 
         let reports = await reporter.snapshot()
-        XCTAssertEqual(reports.count, 1)
-        let report = try XCTUnwrap(reports.first)
-        XCTAssertEqual(report.submissionID, "sub_worker_fail")
-        XCTAssertEqual(report.testSetupID, "setup_worker_fail")
-        XCTAssertEqual(report.attemptNumber, 2)
-        XCTAssertEqual(report.buildStatus, .failed)
-        XCTAssertEqual(report.totalTests, 0)
-        XCTAssertEqual(report.errorCount, 1)
+        #expect(reports.count == 1)
+        let report = try #require(reports.first)
+        #expect(report.submissionID == "sub_worker_fail")
+        #expect(report.testSetupID == "setup_worker_fail")
+        #expect(report.attemptNumber == 2)
+        #expect(report.buildStatus == .failed)
+        #expect(report.totalTests == 0)
+        #expect(report.errorCount == 1)
         let compilerOutput = report.compilerOutput ?? ""
-        XCTAssertTrue(
+        #expect(
             compilerOutput.contains("Could not connect to the server")
                 || compilerOutput.contains("NSURLErrorDomain"),
             "Expected propagated download failure details, got: \(compilerOutput)"
         )
 
         let runnerInvocations = await runner.observedInvocationCount()
-        XCTAssertEqual(runnerInvocations, 0, "Runner should not execute when downloads fail first")
+        #expect(runnerInvocations == 0, "Runner should not execute when downloads fail first")
     }
 
-    func testWorkerDaemonReportsFallbackFailureWhenFinalReportFails() async throws {
+    @Test func workerDaemonReportsFallbackFailureWhenFinalReportFails() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-report-failure-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -607,7 +607,7 @@ final class WorkerDaemonTests: XCTestCase {
         let didReport = await waitUntil(timeoutSeconds: 5) {
             await !reporter.snapshot().isEmpty
         }
-        XCTAssertTrue(didReport, "Expected fallback report after reporter failure")
+        #expect(didReport, "Expected fallback report after reporter failure")
 
         task.cancel()
         do {
@@ -619,19 +619,19 @@ final class WorkerDaemonTests: XCTestCase {
         let attemptCount = await reporter.observedAttempts()
         let runnerInvocations = await runner.observedInvocationCount()
         let pollCount = await poller.observedRequestCount()
-        XCTAssertEqual(reports.count, 1)
-        XCTAssertEqual(attemptCount, 2)
-        let report = try XCTUnwrap(reports.first)
-        XCTAssertEqual(report.submissionID, "sub_report_fail")
-        XCTAssertEqual(report.buildStatus, .failed)
-        XCTAssertEqual(report.totalTests, 0)
-        XCTAssertEqual(report.errorCount, 1)
-        XCTAssertTrue(report.compilerOutput?.contains("temporary failure") == true)
-        XCTAssertEqual(runnerInvocations, 1)
-        XCTAssertGreaterThan(pollCount, 1)
+        #expect(reports.count == 1)
+        #expect(attemptCount == 2)
+        let report = try #require(reports.first)
+        #expect(report.submissionID == "sub_report_fail")
+        #expect(report.buildStatus == .failed)
+        #expect(report.totalTests == 0)
+        #expect(report.errorCount == 1)
+        #expect(report.compilerOutput?.contains("temporary failure") == true)
+        #expect(runnerInvocations == 1)
+        #expect(pollCount > 1)
     }
 
-    func testWorkerDaemonContinuesToNextJobAfterProcessingFailure() async throws {
+    @Test func workerDaemonContinuesToNextJobAfterProcessingFailure() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-next-job-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -674,7 +674,7 @@ final class WorkerDaemonTests: XCTestCase {
         let didProcessBoth = await waitUntil(timeoutSeconds: 5) {
             await reporter.snapshot().count == 2
         }
-        XCTAssertTrue(didProcessBoth, "Expected daemon to report both failed and successful jobs")
+        #expect(didProcessBoth, "Expected daemon to report both failed and successful jobs")
 
         task.cancel()
         do {
@@ -684,19 +684,19 @@ final class WorkerDaemonTests: XCTestCase {
 
         let reports = await reporter.snapshot()
         let runnerInvocations = await runner.observedInvocationCount()
-        XCTAssertEqual(reports.count, 2)
-        XCTAssertEqual(reports[0].submissionID, "sub_bad_job")
-        XCTAssertEqual(reports[0].buildStatus, .failed)
-        XCTAssertEqual(reports[0].errorCount, 1)
+        #expect(reports.count == 2)
+        #expect(reports[0].submissionID == "sub_bad_job")
+        #expect(reports[0].buildStatus == .failed)
+        #expect(reports[0].errorCount == 1)
 
-        XCTAssertEqual(reports[1].submissionID, "sub_good_job")
-        XCTAssertEqual(reports[1].buildStatus, .passed)
-        XCTAssertEqual(reports[1].totalTests, 1)
-        XCTAssertEqual(reports[1].passCount, 1)
-        XCTAssertEqual(runnerInvocations, 1)
+        #expect(reports[1].submissionID == "sub_good_job")
+        #expect(reports[1].buildStatus == .passed)
+        #expect(reports[1].totalTests == 1)
+        #expect(reports[1].passCount == 1)
+        #expect(runnerInvocations == 1)
     }
 
-    func testJSONFooterStrippedFromLongResult() async throws {
+    @Test func jSONFooterStrippedFromLongResult() async throws {
         // When a test script emits human-readable output followed by a JSON footer line,
         // the JSON footer must NOT appear in longResult shown to students.
         // Only the human-readable lines should be visible.
@@ -747,32 +747,33 @@ final class WorkerDaemonTests: XCTestCase {
         try? await task.value
 
         let reports = await reporter.snapshot()
-        let report = try XCTUnwrap(reports.first)
-        XCTAssertEqual(report.outcomes.count, 1)
+        let report = try #require(reports.first)
+        #expect(report.outcomes.count == 1)
 
-        let outcome = try XCTUnwrap(report.outcomes.first)
+        let outcome = try #require(report.outcomes.first)
         // shortResult must be extracted from the JSON footer
-        XCTAssertEqual(outcome.shortResult, "3/4 cases passed")
+        #expect(outcome.shortResult == "3/4 cases passed")
 
         // longResult must contain the human-readable lines…
-        let longResult = try XCTUnwrap(outcome.longResult)
-        XCTAssertTrue(
+        let longResult = try #require(outcome.longResult)
+        #expect(
             longResult.contains("Hello, World!"),
             "Human-readable stdout must appear in longResult")
-        XCTAssertTrue(
+        #expect(
             longResult.contains("Some diagnostic output here."),
             "All human-readable lines must appear in longResult")
 
         // …but must NOT contain the raw JSON footer
-        XCTAssertFalse(
-            longResult.contains("shortResult"),
+        #expect(
+            longResult.contains("shortResult") == false,
             "JSON footer must be stripped from longResult shown to students")
-        XCTAssertFalse(
-            longResult.contains("{"),
-            "No JSON braces should appear in longResult")
+        #expect(
+            longResult.contains("{") == false,
+            "No JSON braces should appear in longResult"
+        )
     }
 
-    func testWorkerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
+    @Test func workerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = FlakyReporter(failuresRemaining: 0, heartbeatFailuresRemaining: 2)
         let runner = MockRunner(
@@ -799,14 +800,14 @@ final class WorkerDaemonTests: XCTestCase {
         let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
             await poller.observedRequestCount() > 1
         }
-        XCTAssertTrue(didKeepPolling, "Runner should continue polling while heartbeat retries fail")
+        #expect(didKeepPolling, "Runner should continue polling while heartbeat retries fail")
 
         _ = await heartbeatTask.result
         runTask.cancel()
         _ = await runTask.result
     }
 
-    func testDownloadRetriesThroughShortServerInterruption() async throws {
+    @Test func downloadRetriesThroughShortServerInterruption() async throws {
         let flakyServer = try FlakyHTTPServer(failuresBeforeSuccess: 2, responseBody: "PK\0\0")
         defer { flakyServer.stop() }
 
@@ -835,10 +836,10 @@ final class WorkerDaemonTests: XCTestCase {
             to: destination
         )
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+        #expect(FileManager.default.fileExists(atPath: destination.path))
     }
 
-    func testWorkerDaemonRetriesPollingAfterTransientHTTP500() async throws {
+    @Test func workerDaemonRetriesPollingAfterTransientHTTP500() async throws {
         try await withEnvironment([
             "RUNNER_RETRY_BASE_DELAY_MS": "10",
             "RUNNER_RETRY_MAX_DELAY_MS": "20",
@@ -865,14 +866,14 @@ final class WorkerDaemonTests: XCTestCase {
             let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
                 await poller.observedRequestCount() >= 3
             }
-            XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
+            #expect(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
 
             task.cancel()
             _ = await task.result
         }
     }
 
-    func testWorkerDaemonRetriesPollingAfterTransientHTTP401() async throws {
+    @Test func workerDaemonRetriesPollingAfterTransientHTTP401() async throws {
         try await withEnvironment([
             "RUNNER_RETRY_BASE_DELAY_MS": "10",
             "RUNNER_RETRY_MAX_DELAY_MS": "20",
@@ -899,14 +900,14 @@ final class WorkerDaemonTests: XCTestCase {
             let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
                 await poller.observedRequestCount() >= 3
             }
-            XCTAssertTrue(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
+            #expect(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
 
             task.cancel()
             _ = await task.result
         }
     }
 
-    func testWorkerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
+    @Test func workerDaemonRetriesPollingAfterDuplicateWorkerIDConflict() async throws {
         try await withEnvironment([
             "RUNNER_RETRY_BASE_DELAY_MS": "10",
             "RUNNER_RETRY_MAX_DELAY_MS": "20",
@@ -933,7 +934,7 @@ final class WorkerDaemonTests: XCTestCase {
             let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
                 await poller.observedRequestCount() >= 3
             }
-            XCTAssertTrue(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
+            #expect(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
 
             task.cancel()
             _ = await task.result
@@ -1016,7 +1017,7 @@ final class WorkerDaemonTests: XCTestCase {
                 let port = Int(line)
             else {
                 process.terminate()
-                throw XCTSkip("python3 is unavailable for always-404 server")
+                throw IssueRecorded("python3 is unavailable for always-404 server")
             }
             self.port = port
         }
@@ -1045,7 +1046,7 @@ final class WorkerDaemonTests: XCTestCase {
     /// then asserts the recording runner observed at least 2 concurrent
     /// invocations (more is fine; less means the worker-loop fanout
     /// regressed).
-    func testWorkerDaemonRunsJobsConcurrentlyWhenMaxConcurrentJobsAllows() async throws {
+    @Test func workerDaemonRunsJobsConcurrentlyWhenMaxConcurrentJobsAllows() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-concurrent-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -1084,10 +1085,11 @@ final class WorkerDaemonTests: XCTestCase {
         try? await task.value
 
         let (maxConcurrent, total) = await runner.snapshot()
-        XCTAssertEqual(total, 5, "all 5 jobs should have completed")
-        XCTAssertGreaterThanOrEqual(
-            maxConcurrent, 2,
-            "expected >= 2 concurrent script invocations, got \(maxConcurrent); fanout may have regressed")
+        #expect(total == 5, "all 5 jobs should have completed")
+        #expect(
+            maxConcurrent >= 2,
+            "expected >= 2 concurrent script invocations, got \(maxConcurrent); fanout may have regressed"
+        )
     }
 
     /// When the submission download terminally fails (404, not a retryable
@@ -1096,7 +1098,7 @@ final class WorkerDaemonTests: XCTestCase {
     /// AND continue polling for the next job.  Complements
     /// `testDownloadRetriesThroughShortServerInterruption` which covers
     /// the *recoverable* download failure path.
-    func testWorkerDaemonReportsSyntheticFailureWhenSubmissionDownloadTerminallyFails() async throws {
+    @Test func workerDaemonReportsSyntheticFailureWhenSubmissionDownloadTerminallyFails() async throws {
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-dl-terminal-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
         let failServer = try AlwaysFails404Server()
@@ -1134,16 +1136,12 @@ final class WorkerDaemonTests: XCTestCase {
         try? await task.value
 
         let reports = await reporter.snapshot()
-        XCTAssertEqual(reports.count, 1, "should still produce a report for the failed job")
-        let report = try XCTUnwrap(reports.first)
-        XCTAssertEqual(report.submissionID, "sub_dl_terminal")
-        XCTAssertEqual(
-            report.buildStatus, .failed,
-            "terminal download failure should surface as buildStatus=.failed")
-        XCTAssertEqual(report.outcomes, [], "no outcomes when build fails")
+        #expect(reports.count == 1, "should still produce a report for the failed job")
+        let report = try #require(reports.first)
+        #expect(report.submissionID == "sub_dl_terminal")
+        #expect(report.buildStatus == .failed, "terminal download failure should surface as buildStatus=.failed")
+        #expect(report.outcomes.isEmpty, "no outcomes when build fails")
         let runnerInvocations = await runner.observedInvocationCount()
-        XCTAssertEqual(
-            runnerInvocations, 0,
-            "ScriptRunner should not have been invoked when the submission download failed")
+        #expect(runnerInvocations == 0, "ScriptRunner should not have been invoked when the submission download failed")
     }
 }

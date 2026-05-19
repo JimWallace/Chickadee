@@ -5,22 +5,18 @@
 
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import Core
 @testable import chickadee_server
 
-final class SubmissionRoutesTests: XCTestCase {
+@Suite(.serialized) final class SubmissionRoutesTests {
 
-    private var app: Application!
+    let app: Application
 
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-subr")
-    }
-
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-subr")
     }
 
     // MARK: - Auth helpers
@@ -61,324 +57,369 @@ final class SubmissionRoutesTests: XCTestCase {
 
     private func userID(for username: String) async throws -> UUID {
         let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
-        return try XCTUnwrap(user).id!
+        return try #require(user).id!
     }
 
     // MARK: - POST /api/v1/submissions
 
-    func testCreateSubmissionWithValidBase64() async throws {
-        let auth = try await loginAsInstructor()
-        try await ensureSetup(id: "setup_001")
+    @Test func createSubmissionWithValidBase64() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
+            try await ensureSetup(id: "setup_001")
 
-        let zipData = Data("PK\u{03}\u{04}fake-zip-content".utf8)
-        let base64 = zipData.base64EncodedString()
+            let zipData = Data("PK\u{03}\u{04}fake-zip-content".utf8)
+            let base64 = zipData.base64EncodedString()
 
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "setup_001", zipBase64: base64))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let body = try res.content.decode(SubmissionCreatedResponse.self)
-                XCTAssertTrue(body.submissionID.hasPrefix("sub_"))
-            })
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(CreateSubmissionBody(testSetupID: "setup_001", zipBase64: base64))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionCreatedResponse.self)
+                    #expect(body.submissionID.hasPrefix("sub_"))
+                })
+
+        }
     }
 
-    func testCreateSubmissionWritesFileToDisk() async throws {
-        let auth = try await loginAsInstructor()
-        try await ensureSetup(id: "setup_disk")
+    @Test func createSubmissionWritesFileToDisk() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
+            try await ensureSetup(id: "setup_disk")
 
-        let zipData = Data("PK\u{03}\u{04}test-content-12345".utf8)
-        let base64 = zipData.base64EncodedString()
+            let zipData = Data("PK\u{03}\u{04}test-content-12345".utf8)
+            let base64 = zipData.base64EncodedString()
 
-        var submissionID = ""
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "setup_disk", zipBase64: base64))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                submissionID = try res.content.decode(SubmissionCreatedResponse.self).submissionID
-            })
+            var submissionID = ""
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(CreateSubmissionBody(testSetupID: "setup_disk", zipBase64: base64))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    submissionID = try res.content.decode(SubmissionCreatedResponse.self).submissionID
+                })
 
-        let sub = try await APISubmission.find(submissionID, on: app.db)
-        let subUnwrapped = try XCTUnwrap(sub)
-        let fileData = try Data(contentsOf: URL(fileURLWithPath: subUnwrapped.zipPath))
-        XCTAssertEqual(fileData, zipData)
+            let sub = try await APISubmission.find(submissionID, on: app.db)
+            let subUnwrapped = try #require(sub)
+            let fileData = try Data(contentsOf: URL(fileURLWithPath: subUnwrapped.zipPath))
+            #expect(fileData == zipData)
+
+        }
     }
 
-    func testCreateSubmissionIncrementsAttemptNumber() async throws {
-        let auth = try await loginAsInstructor()
-        try await ensureSetup(id: "setup_inc")
+    @Test func createSubmissionIncrementsAttemptNumber() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
+            try await ensureSetup(id: "setup_inc")
 
-        let base64 = Data("PK".utf8).base64EncodedString()
+            let base64 = Data("PK".utf8).base64EncodedString()
 
-        // First submission
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "setup_inc", zipBase64: base64))
-            }, afterResponse: { _ in })
+            // First submission
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(CreateSubmissionBody(testSetupID: "setup_inc", zipBase64: base64))
+                }, afterResponse: { _ in })
 
-        // Second submission
-        var secondID = ""
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "setup_inc", zipBase64: base64))
-            },
-            afterResponse: { res in
-                secondID = try res.content.decode(SubmissionCreatedResponse.self).submissionID
-            })
+            // Second submission
+            var secondID = ""
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(CreateSubmissionBody(testSetupID: "setup_inc", zipBase64: base64))
+                },
+                afterResponse: { res in
+                    secondID = try res.content.decode(SubmissionCreatedResponse.self).submissionID
+                })
 
-        let sub = try await APISubmission.find(secondID, on: app.db)
-        XCTAssertEqual(try XCTUnwrap(sub).attemptNumber, 2)
+            let sub = try await APISubmission.find(secondID, on: app.db)
+            #expect(try #require(sub).attemptNumber == 2)
+
+        }
     }
 
-    func testCreateSubmissionRejectsBadSetupID() async throws {
-        let auth = try await loginAsInstructor()
+    @Test func createSubmissionRejectsBadSetupID() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
 
-        let base64 = Data("PK".utf8).base64EncodedString()
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "nonexistent", zipBase64: base64))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
-            })
+            let base64 = Data("PK".utf8).base64EncodedString()
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(CreateSubmissionBody(testSetupID: "nonexistent", zipBase64: base64))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
-    func testCreateSubmissionRejectsInvalidBase64() async throws {
-        let auth = try await loginAsInstructor()
-        try await ensureSetup(id: "setup_b64")
+    @Test func createSubmissionRejectsInvalidBase64() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
+            try await ensureSetup(id: "setup_b64")
 
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "setup_b64", zipBase64: "!!!not-base64!!!"))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
-            })
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(
+                        CreateSubmissionBody(testSetupID: "setup_b64", zipBase64: "!!!not-base64!!!"))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
-    func testCreateSubmissionRequiresInstructorRole() async throws {
-        let auth = try await loginAsStudent()
-        try await ensureSetup(id: "setup_role")
+    @Test func createSubmissionRequiresInstructorRole() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsStudent()
+            try await ensureSetup(id: "setup_role")
 
-        let base64 = Data("PK".utf8).base64EncodedString()
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(CreateSubmissionBody(testSetupID: "setup_role", zipBase64: base64))
-            },
-            afterResponse: { res in
-                XCTAssertTrue(
-                    [.forbidden, .unauthorized].contains(res.status),
-                    "Expected 401 or 403, got \(res.status)")
-            })
+            let base64 = Data("PK".utf8).base64EncodedString()
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(CreateSubmissionBody(testSetupID: "setup_role", zipBase64: base64))
+                },
+                afterResponse: { res in
+                    #expect(
+                        [.forbidden, .unauthorized].contains(res.status),
+                        "Expected 401 or 403, got \(res.status)")
+                })
+
+        }
     }
 
     // MARK: - POST /api/v1/submissions/file
 
-    func testCreateSubmissionFileWithPython() async throws {
-        let auth = try await loginAsInstructor()
-        try await ensureSetup(id: "setup_py")
+    @Test func createSubmissionFileWithPython() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
+            try await ensureSetup(id: "setup_py")
 
-        let pyContent = Data("print('hello')".utf8)
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions/file",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(
-                    SubmitFileBody(testSetupID: "setup_py", filename: "solution.py", file: pyContent))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let body = try res.content.decode(SubmissionCreatedResponse.self)
-                XCTAssertTrue(body.submissionID.hasPrefix("sub_"))
-            })
+            let pyContent = Data("print('hello')".utf8)
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/file",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(
+                        SubmitFileBody(testSetupID: "setup_py", filename: "solution.py", file: pyContent))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionCreatedResponse.self)
+                    #expect(body.submissionID.hasPrefix("sub_"))
+                })
+
+        }
     }
 
-    func testCreateSubmissionFileSavesWithCorrectExtension() async throws {
-        let auth = try await loginAsInstructor()
-        try await ensureSetup(id: "setup_ext")
+    @Test func createSubmissionFileSavesWithCorrectExtension() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
+            try await ensureSetup(id: "setup_ext")
 
-        let content = Data("x = 1".utf8)
-        var subID = ""
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions/file",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(SubmitFileBody(testSetupID: "setup_ext", filename: "homework.py", file: content))
-            },
-            afterResponse: { res in
-                subID = try res.content.decode(SubmissionCreatedResponse.self).submissionID
-            })
+            let content = Data("x = 1".utf8)
+            var subID = ""
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/file",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(
+                        SubmitFileBody(testSetupID: "setup_ext", filename: "homework.py", file: content))
+                },
+                afterResponse: { res in
+                    subID = try res.content.decode(SubmissionCreatedResponse.self).submissionID
+                })
 
-        let sub = try await APISubmission.find(subID, on: app.db)
-        let path = try XCTUnwrap(sub).zipPath
-        XCTAssertTrue(path.hasSuffix(".py"), "Expected .py extension, got \(path)")
-        XCTAssertEqual(try XCTUnwrap(sub).filename, "homework.py")
+            let sub = try await APISubmission.find(subID, on: app.db)
+            let path = try #require(sub).zipPath
+            #expect(path.hasSuffix(".py"), "Expected .py extension, got \(path)")
+            #expect(try #require(sub).filename == "homework.py")
+
+        }
     }
 
-    func testCreateSubmissionFileRejectsBadSetupID() async throws {
-        let auth = try await loginAsInstructor()
+    @Test func createSubmissionFileRejectsBadSetupID() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
 
-        try await app.asyncTest(
-            .POST, "/api/v1/submissions/file",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-                req.headers.add(name: "x-csrf-token", value: auth.csrf)
-                try req.content.encode(SubmitFileBody(testSetupID: "bogus", filename: "test.py", file: Data("x".utf8)))
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .badRequest)
-            })
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/file",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                    req.headers.add(name: "x-csrf-token", value: auth.csrf)
+                    try req.content.encode(
+                        SubmitFileBody(testSetupID: "bogus", filename: "test.py", file: Data("x".utf8)))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+
+        }
     }
 
     // MARK: - GET /api/v1/submissions/:id/download
 
-    func testDownloadAsOwner() async throws {
-        let auth = try await loginAsStudent(username: "dl_owner")
-        let ownerID = try await userID(for: "dl_owner")
-        try await ensureSetup(id: "setup_dl")
+    @Test func downloadAsOwner() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsStudent(username: "dl_owner")
+            let ownerID = try await userID(for: "dl_owner")
+            try await ensureSetup(id: "setup_dl")
 
-        let sub = APISubmission(
-            id: "sub_dl_own",
-            testSetupID: "setup_dl",
-            zipPath: app.submissionsDirectory + "sub_dl_own.zip",
-            attemptNumber: 1,
-            userID: ownerID
-        )
-        try await sub.save(on: app.db)
+            let sub = APISubmission(
+                id: "sub_dl_own",
+                testSetupID: "setup_dl",
+                zipPath: app.submissionsDirectory + "sub_dl_own.zip",
+                attemptNumber: 1,
+                userID: ownerID
+            )
+            try await sub.save(on: app.db)
 
-        let fileContent = Data("fake-zip-bytes".utf8)
-        try fileContent.write(to: URL(fileURLWithPath: sub.zipPath))
+            let fileContent = Data("fake-zip-bytes".utf8)
+            try fileContent.write(to: URL(fileURLWithPath: sub.zipPath))
 
-        try await app.asyncTest(
-            .GET, "/api/v1/submissions/sub_dl_own/download",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(Data(res.body.readableBytesView), fileContent)
-            })
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_dl_own/download",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(Data(res.body.readableBytesView) == fileContent)
+                })
+
+        }
     }
 
-    func testDownloadAsInstructorForAnySubmission() async throws {
-        let studentAuth = try await loginAsStudent(username: "dl_student2")
-        let studentID = try await userID(for: "dl_student2")
-        let instrAuth = try await loginAsInstructor(username: "dl_instructor")
-        _ = studentAuth
+    @Test func downloadAsInstructorForAnySubmission() async throws {
+        try await withApp(app) { _ in
+            let studentAuth = try await loginAsStudent(username: "dl_student2")
+            let studentID = try await userID(for: "dl_student2")
+            let instrAuth = try await loginAsInstructor(username: "dl_instructor")
+            _ = studentAuth
 
-        try await ensureSetup(id: "setup_dl2")
-        let sub = APISubmission(
-            id: "sub_dl_instr",
-            testSetupID: "setup_dl2",
-            zipPath: app.submissionsDirectory + "sub_dl_instr.zip",
-            attemptNumber: 1,
-            userID: studentID
-        )
-        try await sub.save(on: app.db)
-        try Data("instructor-download".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
+            try await ensureSetup(id: "setup_dl2")
+            let sub = APISubmission(
+                id: "sub_dl_instr",
+                testSetupID: "setup_dl2",
+                zipPath: app.submissionsDirectory + "sub_dl_instr.zip",
+                attemptNumber: 1,
+                userID: studentID
+            )
+            try await sub.save(on: app.db)
+            try Data("instructor-download".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
 
-        try await app.asyncTest(
-            .GET, "/api/v1/submissions/sub_dl_instr/download",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: instrAuth.cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(Data(res.body.readableBytesView), Data("instructor-download".utf8))
-            })
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_dl_instr/download",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: instrAuth.cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(Data(res.body.readableBytesView) == Data("instructor-download".utf8))
+                })
+
+        }
     }
 
-    func testDownloadForbiddenForNonOwnerStudent() async throws {
-        let authA = try await loginAsStudent(username: "dl_studentA")
-        let idA = try await userID(for: "dl_studentA")
-        _ = authA
+    @Test func downloadForbiddenForNonOwnerStudent() async throws {
+        try await withApp(app) { _ in
+            let authA = try await loginAsStudent(username: "dl_studentA")
+            let idA = try await userID(for: "dl_studentA")
+            _ = authA
 
-        try await ensureSetup(id: "setup_dl3")
-        let sub = APISubmission(
-            id: "sub_dl_forbid",
-            testSetupID: "setup_dl3",
-            zipPath: app.submissionsDirectory + "sub_dl_forbid.zip",
-            attemptNumber: 1,
-            userID: idA
-        )
-        try await sub.save(on: app.db)
-        try Data("private".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
+            try await ensureSetup(id: "setup_dl3")
+            let sub = APISubmission(
+                id: "sub_dl_forbid",
+                testSetupID: "setup_dl3",
+                zipPath: app.submissionsDirectory + "sub_dl_forbid.zip",
+                attemptNumber: 1,
+                userID: idA
+            )
+            try await sub.save(on: app.db)
+            try Data("private".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
 
-        let authB = try await loginAsStudent(username: "dl_studentB")
-        try await app.asyncTest(
-            .GET, "/api/v1/submissions/sub_dl_forbid/download",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: authB.cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .forbidden)
-            })
+            let authB = try await loginAsStudent(username: "dl_studentB")
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_dl_forbid/download",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: authB.cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+        }
     }
 
-    func testDownloadNotFoundForMissingSubmission() async throws {
-        let auth = try await loginAsInstructor()
+    @Test func downloadNotFoundForMissingSubmission() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor()
 
-        try await app.asyncTest(
-            .GET, "/api/v1/submissions/nonexistent/download",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
-            })
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/nonexistent/download",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
     }
 
-    func testDownloadUsesCustomFilename() async throws {
-        let auth = try await loginAsInstructor(username: "dl_fname_instr")
-        try await ensureSetup(id: "setup_fname")
+    @Test func downloadUsesCustomFilename() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsInstructor(username: "dl_fname_instr")
+            try await ensureSetup(id: "setup_fname")
 
-        let sub = APISubmission(
-            id: "sub_dl_fname",
-            testSetupID: "setup_fname",
-            zipPath: app.submissionsDirectory + "sub_dl_fname.ipynb",
-            attemptNumber: 1,
-            filename: "my_notebook.ipynb"
-        )
-        try await sub.save(on: app.db)
-        try Data("{}".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
+            let sub = APISubmission(
+                id: "sub_dl_fname",
+                testSetupID: "setup_fname",
+                zipPath: app.submissionsDirectory + "sub_dl_fname.ipynb",
+                attemptNumber: 1,
+                filename: "my_notebook.ipynb"
+            )
+            try await sub.save(on: app.db)
+            try Data("{}".utf8).write(to: URL(fileURLWithPath: sub.zipPath))
 
-        try await app.asyncTest(
-            .GET, "/api/v1/submissions/sub_dl_fname/download",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: auth.cookie)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let disposition = res.headers.first(name: .contentDisposition) ?? ""
-                XCTAssertTrue(
-                    disposition.contains("my_notebook.ipynb"),
-                    "Expected filename in Content-Disposition, got: \(disposition)")
-            })
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_dl_fname/download",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: auth.cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let disposition = res.headers.first(name: .contentDisposition) ?? ""
+                    #expect(
+                        disposition.contains("my_notebook.ipynb"),
+                        "Expected filename in Content-Disposition, got: \(disposition)")
+                })
+
+        }
     }
 }

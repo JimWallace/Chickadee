@@ -1,112 +1,126 @@
+import Fluent
 // Tests/CoreTests/TestScriptTemplatesTests.swift
+import Foundation
+import Testing
+
+@testable import chickadee_server
+
 //
 // Unit tests for TestScriptTemplates.
 // These tests import the server module because templates live in APIServer, not Core.
 
-import Fluent
-import XCTest
-
-@testable import chickadee_server
-
-final class TestScriptTemplatesTests: XCTestCase {
+@Suite struct TestScriptTemplatesTests {
 
     // MARK: - Python templates
 
-    func testExistsTemplate_containsFunctionName() {
+    @Test func existsTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .exists, functionName: "myFunc", paramNames: ["x", "y"])
-        XCTAssertTrue(s.contains("myFunc"))
-        XCTAssertTrue(s.contains("require_function"))
-        XCTAssertTrue(s.contains("passed"))
+        #expect(s.contains("myFunc"))
+        #expect(s.contains("require_function"))
+        #expect(s.contains("passed"))
+
     }
 
-    func testExistsTemplate_numArgsIncluded_whenParamsPresent() {
+    @Test func existsTemplate_numArgsIncluded_whenParamsPresent() {
         let s = pythonTestScript(type: .exists, functionName: "f", paramNames: ["a", "b"])
-        XCTAssertTrue(s.contains("num_args=2"))
+        #expect(s.contains("num_args=2"))
+
     }
 
-    func testExistsTemplate_noNumArgs_whenNoParams() {
+    @Test func existsTemplate_noNumArgs_whenNoParams() {
         let s = pythonTestScript(type: .exists, functionName: "f", paramNames: [])
-        XCTAssertFalse(s.contains("num_args"))
+        #expect(s.contains("num_args") == false)
+
     }
 
-    func testCorrectnessTemplate_containsFunctionName() {
+    @Test func correctnessTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .correctness, functionName: "add", paramNames: ["a", "b"])
-        XCTAssertTrue(s.contains("add"))
-        XCTAssertTrue(s.contains("passed"))
-        XCTAssertTrue(s.contains("failed"))
+        #expect(s.contains("add"))
+        #expect(s.contains("passed"))
+        #expect(s.contains("failed"))
+
     }
 
-    func testCorrectnessTemplate_nonEmpty() {
+    @Test func correctnessTemplate_nonEmpty() {
         let s = pythonTestScript(type: .correctness, functionName: "f")
-        XCTAssertFalse(s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        #expect(s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+
     }
 
-    func testCorrectnessTemplate_richFeedback_withParams() {
+    @Test func correctnessTemplate_richFeedback_withParams() {
         let s = pythonTestScript(type: .correctness, functionName: "bmi_category", paramNames: ["bmi"])
         // Single-case rich-feedback shape: an input variable declaration, an
         // `expected` placeholder, a try/except + value-comparison, each failed()
         // call with labeled input/expected/got lines and a Hint line.
-        XCTAssertTrue(s.contains("bmi = None"), "Should declare the input variable")
-        XCTAssertTrue(s.contains("expected = None"))
-        XCTAssertTrue(s.contains("student_module.bmi_category(bmi)"))
-        XCTAssertTrue(s.contains("raised an unexpected exception"))
-        XCTAssertTrue(s.contains("returned the wrong value"))
-        XCTAssertTrue(s.contains("input:    bmi={bmi!r}"))
-        XCTAssertTrue(s.contains("Hint:"))
+        #expect(s.contains("bmi = None"), "Should declare the input variable")
+        #expect(s.contains("expected = None"))
+        #expect(s.contains("student_module.bmi_category(bmi)"))
+        #expect(s.contains("raised an unexpected exception"))
+        #expect(s.contains("returned the wrong value"))
+        #expect(s.contains("input:    bmi={bmi!r}"))
+        #expect(s.contains("Hint:"))
+
     }
 
-    func testCorrectnessTemplate_richFeedback_noParams() {
+    @Test func correctnessTemplate_richFeedback_noParams() {
         let s = pythonTestScript(type: .correctness, functionName: "get_answer", paramNames: [])
-        XCTAssertTrue(s.contains("student_module.get_answer()"))
-        XCTAssertTrue(s.contains("(no input)"))
-        XCTAssertFalse(
-            s.contains("= None   # TODO: replace with input value"),
+        #expect(s.contains("student_module.get_answer()"))
+        #expect(s.contains("(no input)"))
+        #expect(
+            s.contains("= None   # TODO: replace with input value") == false,
             "No input declarations when there are no params")
+
     }
 
-    func testCornerCasesTemplate_containsFunctionName() {
+    @Test func cornerCasesTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .cornerCases, functionName: "check", paramNames: ["n"])
-        XCTAssertTrue(s.contains("check"))
-        XCTAssertTrue(s.contains("corner_cases"))
+        #expect(s.contains("check"))
+        #expect(s.contains("corner_cases"))
+
     }
 
-    func testCornerCasesTemplate_richPerCaseMessages() {
+    @Test func cornerCasesTemplate_richPerCaseMessages() {
         let s = pythonTestScript(type: .cornerCases, functionName: "check", paramNames: ["n"])
-        XCTAssertTrue(s.contains("args_preview"))
-        XCTAssertTrue(s.contains("expected:"))
-        XCTAssertTrue(s.contains("got:"))
-        XCTAssertTrue(s.contains("raised:"))
+        #expect(s.contains("args_preview"))
+        #expect(s.contains("expected:"))
+        #expect(s.contains("got:"))
+        #expect(s.contains("raised:"))
+
     }
 
-    func testExceptionTemplate_containsFunctionName() {
+    @Test func exceptionTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .exception, functionName: "divide", paramNames: ["a", "b"])
-        XCTAssertTrue(s.contains("divide"))
-        XCTAssertTrue(s.contains("ValueError"))
+        #expect(s.contains("divide"))
+        #expect(s.contains("ValueError"))
+
     }
 
-    func testExceptionTemplate_richFeedback() {
+    @Test func exceptionTemplate_richFeedback() {
         let s = pythonTestScript(type: .exception, functionName: "divide", paramNames: ["a", "b"])
-        XCTAssertTrue(s.contains("a = None"))
-        XCTAssertTrue(s.contains("b = None"))
-        XCTAssertTrue(s.contains("expected_exc = ValueError"))
-        XCTAssertTrue(s.contains("raised the wrong exception"))
-        XCTAssertTrue(s.contains("did not raise"))
-        XCTAssertTrue(s.contains("input:    a={a!r}, b={b!r}"))
+        #expect(s.contains("a = None"))
+        #expect(s.contains("b = None"))
+        #expect(s.contains("expected_exc = ValueError"))
+        #expect(s.contains("raised the wrong exception"))
+        #expect(s.contains("did not raise"))
+        #expect(s.contains("input:    a={a!r}, b={b!r}"))
+
     }
 
-    func testTypeCheckTemplate_containsFunctionName() {
+    @Test func typeCheckTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .typeCheck, functionName: "items", paramNames: [])
-        XCTAssertTrue(s.contains("items"))
-        XCTAssertTrue(s.contains("isinstance"))
+        #expect(s.contains("items"))
+        #expect(s.contains("isinstance"))
+
     }
 
-    func testTypeCheckTemplate_richFeedback() {
+    @Test func typeCheckTemplate_richFeedback() {
         let s = pythonTestScript(type: .typeCheck, functionName: "get_name", paramNames: ["user_id"])
-        XCTAssertTrue(s.contains("user_id = None"))
-        XCTAssertTrue(s.contains("expected_type = list"))
-        XCTAssertTrue(s.contains("Return type error"))
-        XCTAssertTrue(s.contains("raised an unexpected exception"))
-        XCTAssertTrue(s.contains("input:    user_id={user_id!r}"))
+        #expect(s.contains("user_id = None"))
+        #expect(s.contains("expected_type = list"))
+        #expect(s.contains("Return type error"))
+        #expect(s.contains("raised an unexpected exception"))
+        #expect(s.contains("input:    user_id={user_id!r}"))
+
     }
 
     // MARK: - Drift guards
@@ -115,7 +129,7 @@ final class TestScriptTemplatesTests: XCTestCase {
     /// Python test_runtime helpers do not accept.  Prevents the 0.4.x-era bug
     /// where `num_args` was emitted by templates but the runtime's signature
     /// was `require_function(name)` only.
-    func testTemplates_useOnlyKnownRequireFunctionKwargs() {
+    @Test func templates_useOnlyKnownRequireFunctionKwargs() {
         let knownKwargs: Set<String> = ["num_args"]
         // One call with "real" params, one with none, to exercise both arms of
         // each template branch.
@@ -128,16 +142,17 @@ final class TestScriptTemplatesTests: XCTestCase {
             for params in [["a", "b"], [] as [String]] {
                 let s = pythonTestScript(type: type, functionName: "f", paramNames: params)
                 for kwarg in kwargsInRequireFunctionCalls(source: s) {
-                    XCTAssertTrue(
-                        knownKwargs.contains(kwarg),
-                        "Template \(type.rawValue) (params=\(params)) passes unknown kwarg "
-                            + "'\(kwarg)' to require_function(). Add it to the runtime helpers "
-                            + "in TestRuntimeSources.swift + Tools/runner-support/test_runtime.py + "
-                            + "Public/browser-runner.js, or drop it from the template."
-                    )
+                    let msg: Comment = """
+                        Template \(type.rawValue) (params=\(params)) passes unknown kwarg \
+                        '\(kwarg)' to require_function(). Add it to the runtime helpers \
+                        in TestRuntimeSources.swift + Tools/runner-support/test_runtime.py + \
+                        Public/browser-runner.js, or drop it from the template.
+                        """
+                    #expect(knownKwargs.contains(kwarg), msg)
                 }
             }
         }
+
     }
 
     /// Extract kwarg names used in any `require_function(...)` call in the
@@ -167,77 +182,80 @@ final class TestScriptTemplatesTests: XCTestCase {
         return kwargs
     }
 
-    func testPerformanceTemplate_containsFunctionName() {
+    @Test func performanceTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .performance, functionName: "sort_it", paramNames: ["lst"])
-        XCTAssertTrue(s.contains("sort_it"))
-        XCTAssertTrue(s.contains("time_limit_ms"))
+        #expect(s.contains("sort_it"))
+        #expect(s.contains("time_limit_ms"))
+
     }
 
-    func testDifferentialTemplate_containsFunctionName() {
+    @Test func differentialTemplate_containsFunctionName() {
         let s = pythonTestScript(type: .differential, functionName: "square", paramNames: ["n"])
-        XCTAssertTrue(s.contains("square"))
-        XCTAssertTrue(s.contains("_reference_square"))
+        #expect(s.contains("square"))
+        #expect(s.contains("_reference_square"))
+
     }
 
-    func testVariableEqualityTemplate_hasExpectedShape() {
+    @Test func variableEqualityTemplate_hasExpectedShape() {
         let s = pythonTestScript(type: .variableEquality)
         // Bare builtins from the injected test runtime — NOT imported from a
         // `chickadee` module (which doesn't exist on the Python path).
-        XCTAssertFalse(
-            s.contains("from chickadee"),
+        #expect(
+            s.contains("from chickadee") == false,
             "Template must not import from a `chickadee` module — passed()/failed() are injected as builtins.")
-        XCTAssertFalse(
-            s.contains("import chickadee"),
-            "Template must not import `chickadee` — builtins only.")
-        XCTAssertTrue(s.contains("passed"))
-        XCTAssertTrue(s.contains("failed"))
+        #expect(s.contains("import chickadee") == false, "Template must not import `chickadee` — builtins only.")
+        #expect(s.contains("passed"))
+        #expect(s.contains("failed"))
         // Reads a module-level attribute off `student_module` with a
         // sentinel default so "not defined" is distinguishable from
         // "defined as None".
-        XCTAssertTrue(s.contains("getattr(student_module, variable_name"))
-        XCTAssertTrue(s.contains("_MISSING"))
+        #expect(s.contains("getattr(student_module, variable_name"))
+        #expect(s.contains("_MISSING"))
         // Placeholder variable name + expected value the instructor edits.
-        XCTAssertTrue(s.contains("variable_name = \"target_variable\""))
-        XCTAssertTrue(s.contains("expected"))
+        #expect(s.contains("variable_name = \"target_variable\""))
+        #expect(s.contains("expected"))
         // Rich-feedback shape matches the other single-case templates.
-        XCTAssertTrue(s.contains("is not defined"))
-        XCTAssertTrue(s.contains("wrong value"))
-        XCTAssertTrue(s.contains("Hint:"))
+        #expect(s.contains("is not defined"))
+        #expect(s.contains("wrong value"))
+        #expect(s.contains("Hint:"))
+
     }
 
-    func testStructuralCheckTemplate_hasExpectedShape() {
+    @Test func structuralCheckTemplate_hasExpectedShape() {
         let s = pythonTestScript(
             type: .structuralCheck, functionName: "compute_bmi", paramNames: ["weight_kg", "height_m"])
         // AST-based template — no function call.
-        XCTAssertTrue(s.contains("import ast"))
-        XCTAssertTrue(s.contains("inspect.getsource(student_module)"))
-        XCTAssertTrue(s.contains("ast.parse(source)"))
+        #expect(s.contains("import ast"))
+        #expect(s.contains("inspect.getsource(student_module)"))
+        #expect(s.contains("ast.parse(source)"))
         // All the knobs are present as TODO-friendly placeholders.
-        XCTAssertTrue(s.contains("parameter_count"))
-        XCTAssertTrue(s.contains("typed_parameters"))
-        XCTAssertTrue(s.contains("return_type_hint"))
-        XCTAssertTrue(s.contains("has_docstring"))
-        XCTAssertTrue(s.contains("min_asserts_in_body"))
-        XCTAssertTrue(s.contains("min_module_asserts"))
+        #expect(s.contains("parameter_count"))
+        #expect(s.contains("typed_parameters"))
+        #expect(s.contains("return_type_hint"))
+        #expect(s.contains("has_docstring"))
+        #expect(s.contains("min_asserts_in_body"))
+        #expect(s.contains("min_module_asserts"))
         // Per-function check uses the provided functionName.
-        XCTAssertTrue(s.contains("target_function     = \"compute_bmi\""))
+        #expect(s.contains("target_function     = \"compute_bmi\""))
         // Rich-feedback shape.
-        XCTAssertTrue(s.contains("Structural check(s) failed"))
-        XCTAssertTrue(s.contains("passed"))
+        #expect(s.contains("Structural check(s) failed"))
+        #expect(s.contains("passed"))
         // Counts module-level asserts even when quarantined.
-        XCTAssertTrue(s.contains("ast.iter_child_nodes"))
+        #expect(s.contains("ast.iter_child_nodes"))
+
     }
 
-    func testAllPythonTemplateTypes_nonEmpty() {
+    @Test func allPythonTemplateTypes_nonEmpty() {
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
-            XCTAssertFalse(
-                s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            #expect(
+                s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                 "Template \(type.rawValue) should not be empty")
         }
+
     }
 
-    func testAllPythonTemplateTypes_startWithPythonShebang() {
+    @Test func allPythonTemplateTypes_startWithPythonShebang() {
         // Instructors sometimes name test scripts without a `.py` extension
         // (e.g. "beats").  Without a shebang the runner falls through to
         // `/bin/sh` and the Python body blows up as shell.  Per v0.4.73 a
@@ -245,51 +263,52 @@ final class TestScriptTemplatesTests: XCTestCase {
         // Python runtime regardless of filename.
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
-            XCTAssertTrue(
+            #expect(
                 s.hasPrefix("#!/usr/bin/env python3"),
                 "Template \(type.rawValue) must begin with a `#!/usr/bin/env python3` shebang")
         }
+
     }
 
-    func testAllPythonTemplateTypes_doNotImportChickadee() {
+    @Test func allPythonTemplateTypes_doNotImportChickadee() {
         // passed(), failed(), errored(), require_function() are injected as
         // builtins by the test runtime — they are NOT importable from a
         // `chickadee` module (which doesn't exist on sys.path).  Guard
         // against a future template regressing to `from chickadee import …`.
         for type in PythonTestTemplateType.allCases {
             let s = pythonTestScript(type: type, functionName: "f", paramNames: ["x"])
-            XCTAssertFalse(
-                s.contains("from chickadee"),
+            #expect(
+                s.contains("from chickadee") == false,
                 "Template \(type.rawValue) must not import from a `chickadee` module")
-            XCTAssertFalse(
-                s.contains("import chickadee"),
-                "Template \(type.rawValue) must not import `chickadee`")
+            #expect(s.contains("import chickadee") == false, "Template \(type.rawValue) must not import `chickadee`")
         }
+
     }
 
-    func testAllPythonTemplateTypes_containFunctionName() {
+    @Test func allPythonTemplateTypes_containFunctionName() {
         // `.variableEquality` is the one template that isn't function-scoped —
         // it tests a module-level variable by name, so `functionName` is not
         // relevant.  Every other template should echo the function name.
         for type in PythonTestTemplateType.allCases where type != .variableEquality {
             let s = pythonTestScript(type: type, functionName: "mySpecialFunc", paramNames: ["a"])
-            XCTAssertTrue(
+            #expect(
                 s.contains("mySpecialFunc"),
                 "Template \(type.rawValue) should contain the function name")
         }
+
     }
 
     /// Parses every Python template through python3's `ast.parse` to catch
     /// any indentation / syntax regression in the generated source.  Skipped
     /// on machines where `python3` isn't on PATH (rare in CI but possible
     /// locally — the test reports a clear skip message rather than failing).
-    func testAllPythonTemplateTypes_parseAsValidPython() throws {
+    @Test func allPythonTemplateTypes_parseAsValidPython() throws {
         guard
             FileManager.default.fileExists(atPath: "/usr/bin/python3")
                 || FileManager.default.fileExists(atPath: "/opt/homebrew/bin/python3")
                 || FileManager.default.fileExists(atPath: "/usr/local/bin/python3")
         else {
-            throw XCTSkip("python3 not available on PATH — skipping syntax check.")
+            throw IssueRecorded("python3 not available on PATH — skipping syntax check.")
         }
         for type in PythonTestTemplateType.allCases {
             let source = pythonTestScript(type: type, functionName: "sample_fn", paramNames: ["x", "y"])
@@ -307,68 +326,76 @@ final class TestScriptTemplatesTests: XCTestCase {
             p.waitUntilExit()
             if p.terminationStatus != 0 {
                 let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                XCTFail("Template \(type.rawValue) generated invalid Python:\n\(err)\n--- source ---\n\(source)")
+                Issue.record("Template \(type.rawValue) generated invalid Python:\n\(err)\n--- source ---\n\(source)")
             }
         }
+
     }
 
-    func testDefaultFunctionName_usedWhenNotSpecified() {
+    @Test func defaultFunctionName_usedWhenNotSpecified() {
         let s = pythonTestScript(type: .exists)
-        XCTAssertTrue(s.contains("my_function"))
+        #expect(s.contains("my_function"))
+
     }
 
     // MARK: - Shell templates
 
-    func testShellAlwaysPass() {
+    @Test func shellAlwaysPass() {
         let s = shellTestScript(type: .alwaysPass)
-        XCTAssertTrue(s.contains("exit 0"))
-        XCTAssertTrue(s.contains("#!/bin/sh"))
+        #expect(s.contains("exit 0"))
+        #expect(s.contains("#!/bin/sh"))
+
     }
 
-    func testShellFileExists() {
+    @Test func shellFileExists() {
         let s = shellTestScript(type: .fileExists)
-        XCTAssertTrue(s.contains("#!/bin/sh"))
-        XCTAssertTrue(s.contains("exit 0"))
-        XCTAssertTrue(s.contains("exit 1"))
-        XCTAssertTrue(s.contains("-f"))
+        #expect(s.contains("#!/bin/sh"))
+        #expect(s.contains("exit 0"))
+        #expect(s.contains("exit 1"))
+        #expect(s.contains("-f"))
+
     }
 
-    func testShellCommandOutput() {
+    @Test func shellCommandOutput() {
         let s = shellTestScript(type: .commandOutput)
-        XCTAssertTrue(s.contains("#!/bin/sh"))
-        XCTAssertTrue(s.contains("exit 0"))
-        XCTAssertTrue(s.contains("exit 1"))
-        XCTAssertTrue(s.contains("EXPECTED"))
-        XCTAssertTrue(s.contains("ACTUAL"))
+        #expect(s.contains("#!/bin/sh"))
+        #expect(s.contains("exit 0"))
+        #expect(s.contains("exit 1"))
+        #expect(s.contains("EXPECTED"))
+        #expect(s.contains("ACTUAL"))
+
     }
 
-    func testAllShellTemplateTypes_nonEmpty() {
+    @Test func allShellTemplateTypes_nonEmpty() {
         for type in ShellTestTemplateType.allCases {
             let s = shellTestScript(type: type)
-            XCTAssertFalse(
-                s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            #expect(
+                s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                 "Shell template \(type.rawValue) should not be empty")
         }
+
     }
 
     // MARK: - allTemplateInfos
 
-    func testAllTemplateInfos_countMatchesTypes() {
+    @Test func allTemplateInfos_countMatchesTypes() {
         let infos = allTemplateInfos(functionName: "foo", paramNames: ["x"])
         let expectedCount = PythonTestTemplateType.allCases.count + ShellTestTemplateType.allCases.count
-        XCTAssertEqual(infos.count, expectedCount)
+        #expect(infos.count == expectedCount)
+
     }
 
-    func testAllTemplateInfos_eachHasContent() {
+    @Test func allTemplateInfos_eachHasContent() {
         let infos = allTemplateInfos(functionName: "bar", paramNames: [])
         for info in infos {
-            XCTAssertFalse(
-                info.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            #expect(
+                info.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                 "Template \(info.id) content should not be empty")
         }
+
     }
 
-    func testAllTemplateInfos_pythonContainFunctionName() {
+    @Test func allTemplateInfos_pythonContainFunctionName() {
         let infos = allTemplateInfos(functionName: "special_fn", paramNames: ["x"])
         // `variable_equality` is the one template that isn't function-scoped —
         // it checks a module-level variable by name, so the function name is
@@ -378,9 +405,10 @@ final class TestScriptTemplatesTests: XCTestCase {
             $0.language == "python" && $0.id != PythonTestTemplateType.variableEquality.rawValue
         }
         for info in pythonInfos {
-            XCTAssertTrue(
+            #expect(
                 info.content.contains("special_fn"),
                 "Python template \(info.id) should contain function name")
         }
+
     }
 }

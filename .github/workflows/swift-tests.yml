@@ -195,6 +195,11 @@ jobs:
   worker-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Sequential to avoid MockURLProtocol global-state races between
+    # ReporterTests + JobPollerTests (both use the same process-wide
+    # mock URLProtocol).  Restore --parallel in the final cleanup pass
+    # once the mock is refactored to be per-suite-instance.
+    # (See test-isolation.yml / api-tests for the same pattern.)
     container:
       image: swift:6.3-jammy
       options: --privileged
@@ -217,4 +222,4 @@ jobs:
         run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run WorkerTests
-        run: swift test --parallel --filter WorkerTests
+        run: swift test --filter WorkerTests

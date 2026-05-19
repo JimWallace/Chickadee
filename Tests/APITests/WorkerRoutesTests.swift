@@ -8,14 +8,24 @@
 import Core
 import Fluent
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class WorkerRoutesTests: XCTestCase {
+@Suite(.serialized) final class WorkerRoutesTests {
 
-    private var app: Application!
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-worker")
+
+        // Initialize the claim queue before requests start (mirrors configure() eager-init pattern).
+        app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
+        // Set the shared secret so WorkerHMACAuthMiddleware validates signed requests
+        await app.workerSecretStore.setRuntimeOverride(workerSecret)
+    }
+
     private let workerSecret = "test-worker-secret-abc123"
 
     // Minimal worker-mode manifest JSON (gradingMode defaults to .worker)
@@ -27,19 +37,6 @@ final class WorkerRoutesTests: XCTestCase {
     private let browserManifestJSON = """
         {"schemaVersion":1,"gradingMode":"browser","testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
         """
-
-    override func setUp() async throws {
-        app = try await makeTestApp(prefix: "chickadee-worker")
-
-        // Initialize the claim queue before requests start (mirrors configure() eager-init pattern).
-        app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
-        // Set the shared secret so WorkerHMACAuthMiddleware validates signed requests
-        await app.workerSecretStore.setRuntimeOverride(workerSecret)
-    }
-
-    override func tearDown() async throws {
-        try await app.tearDownTestApp()
-    }
 
     // MARK: - Helpers
 
@@ -121,486 +118,538 @@ final class WorkerRoutesTests: XCTestCase {
 
     // MARK: - Auth tests
 
-    func testRequestJob_missingSecret_returns401() async throws {
-        try await app.asyncTest(
-            .POST, "/api/v1/worker/request",
-            beforeRequest: { req in
-                req.headers.contentType = .json
-                req.body = try self.workerRequestBody(workerID: "w1")
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .unauthorized)
-            })
-    }
+    @Test func requestJob_missingSecret_returns401() async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(
+                .POST, "/api/v1/worker/request",
+                beforeRequest: { req in
+                    req.headers.contentType = .json
+                    req.body = try self.workerRequestBody(workerID: "w1")
+                },
+                afterResponse: { res in
+                    #expect(res.status == .unauthorized)
+                })
 
-    func testRequestJob_wrongSecret_returns401() async throws {
-        // Sending a bad/absent signature should still yield 401
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w1")
-        var badHeaders = workerHMACHeaders(
-            method: .POST, path: path, body: body,
-            workerSecret: "wrong-secret")
-        badHeaders.contentType = .json
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = badHeaders
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .unauthorized)
-            })
-    }
-
-    func testDownloadSubmission_missingSecret_returns401() async throws {
-        try await app.asyncTest(.GET, "/api/v1/worker/submissions/sub1/download") { res in
-            XCTAssertEqual(res.status, .unauthorized)
         }
     }
 
-    func testDownloadTestSetup_missingSecret_returns401() async throws {
-        try await app.asyncTest(.GET, "/api/v1/worker/testsetups/setup1/download") { res in
-            XCTAssertEqual(res.status, .unauthorized)
+    @Test func requestJob_wrongSecret_returns401() async throws {
+        try await withApp(app) { _ in
+            // Sending a bad/absent signature should still yield 401
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w1")
+            var badHeaders = workerHMACHeaders(
+                method: .POST, path: path, body: body,
+                workerSecret: "wrong-secret")
+            badHeaders.contentType = .json
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = badHeaders
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .unauthorized)
+                })
+
+        }
+    }
+
+    @Test func downloadSubmission_missingSecret_returns401() async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(.GET, "/api/v1/worker/submissions/sub1/download") { res in
+                #expect(res.status == .unauthorized)
+            }
+
+        }
+    }
+
+    @Test func downloadTestSetup_missingSecret_returns401() async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(.GET, "/api/v1/worker/testsetups/setup1/download") { res in
+                #expect(res.status == .unauthorized)
+            }
+
         }
     }
 
     // MARK: - POST /api/v1/worker/request
 
-    func testRequestJob_noPendingJobs_returns204() async throws {
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w1")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .noContent)
-            })
+    @Test func requestJob_noPendingJobs_returns204() async throws {
+        try await withApp(app) { _ in
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w1")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .noContent)
+                })
+
+        }
     }
 
-    func testRequestJob_pendingWorkerModeStudent_returnsJob() async throws {
-        let setup = try await makeTestSetup(id: "wsetup_01", manifest: workerManifestJSON)
-        let sub = try await makeSubmission(id: "wsub_01", setupID: setup.id!)
+    @Test func requestJob_pendingWorkerModeStudent_returnsJob() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_01", manifest: workerManifestJSON)
+            let sub = try await makeSubmission(id: "wsub_01", setupID: setup.id!)
 
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w1")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(job.submissionID, sub.id)
-                XCTAssertEqual(job.testSetupID, setup.id)
-                XCTAssertEqual(job.attemptNumber, 1)
-                XCTAssertEqual(job.testSetupURL.path, "/api/v1/worker/testsetups/\(setup.id!)/download")
-                XCTAssertNotNil(
-                    URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w1")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == sub.id)
+                    #expect(job.testSetupID == setup.id)
+                    #expect(job.attemptNumber == 1)
+                    #expect(job.testSetupURL.path == "/api/v1/worker/testsetups/\(setup.id!)/download")
+                    #expect(
+                        URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
+                            .queryItems?
+                            .first(where: { $0.name == "v" })?
+                            .value != nil)
+                })
+
+            // Submission should now be "assigned"
+            let updated = try await APISubmission.find(sub.id, on: app.db)
+            #expect(updated?.status == "assigned")
+            #expect(updated?.workerID == "w1")
+
+        }
+    }
+
+    @Test func requestJobTestSetupVersionChangesWhenZipContentsChangeWithoutSizeChanging() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "wsetup_version", manifest: workerManifestJSON)
+            try Data("print('A')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
+            let firstSub = try await makeSubmission(id: "wsub_version_1", setupID: setup.id!)
+
+            let path = "/api/v1/worker/request"
+            let firstBody = try workerRequestBody(workerID: "w-version-1")
+            var firstVersion: String?
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: firstBody)
+                    req.body = firstBody
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == firstSub.id)
+                    firstVersion =
+                        URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
                         .queryItems?
                         .first(where: { $0.name == "v" })?
-                        .value)
-            })
+                        .value
+                })
 
-        // Submission should now be "assigned"
-        let updated = try await APISubmission.find(sub.id, on: app.db)
-        XCTAssertEqual(updated?.status, "assigned")
-        XCTAssertEqual(updated?.workerID, "w1")
+            try Data("print('B')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
+            let secondSub = try await makeSubmission(id: "wsub_version_2", setupID: setup.id!)
+
+            let secondBody = try workerRequestBody(workerID: "w-version-2")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: secondBody)
+                    req.body = secondBody
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == secondSub.id)
+                    let secondVersion = URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
+                        .queryItems?
+                        .first(where: { $0.name == "v" })?
+                        .value
+                    #expect(firstVersion != nil)
+                    #expect(secondVersion != nil)
+                    #expect(firstVersion != secondVersion)
+                })
+
+        }
     }
 
-    func testRequestJobTestSetupVersionChangesWhenZipContentsChangeWithoutSizeChanging() async throws {
-        let setup = try await makeTestSetup(id: "wsetup_version", manifest: workerManifestJSON)
-        try Data("print('A')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
-        let firstSub = try await makeSubmission(id: "wsub_version_1", setupID: setup.id!)
+    @Test func requestJob_browserModePendingStudent_claimedAsBackstop() async throws {
+        try await withApp(app) { _ in
+            // Browser-mode pending submissions ARE claimed by the worker as a backstop
+            // (e.g., browser runner failed, timed out, or these are pre-fix stuck submissions).
+            let setup = try await makeTestSetup(id: "bsetup_01", manifest: browserManifestJSON)
+            let sub = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
 
-        let path = "/api/v1/worker/request"
-        let firstBody = try workerRequestBody(workerID: "w-version-1")
-        var firstVersion: String?
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: firstBody)
-                req.body = firstBody
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(job.submissionID, firstSub.id)
-                firstVersion =
-                    URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
-                    .queryItems?
-                    .first(where: { $0.name == "v" })?
-                    .value
-            })
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w1")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "Worker must claim browser-mode pending submissions as backstop")
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == sub.id)
+                })
 
-        try Data("print('B')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
-        let secondSub = try await makeSubmission(id: "wsub_version_2", setupID: setup.id!)
+            // Submission should now be "assigned" to the worker
+            let updated = try await APISubmission.find(sub.id, on: app.db)
+            #expect(updated?.status == "assigned")
+            #expect(updated?.workerID == "w1")
 
-        let secondBody = try workerRequestBody(workerID: "w-version-2")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: secondBody)
-                req.body = secondBody
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(job.submissionID, secondSub.id)
-                let secondVersion = URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
-                    .queryItems?
-                    .first(where: { $0.name == "v" })?
-                    .value
-                XCTAssertNotNil(firstVersion)
-                XCTAssertNotNil(secondVersion)
-                XCTAssertNotEqual(firstVersion, secondVersion)
-            })
+        }
     }
 
-    func testRequestJob_browserModePendingStudent_claimedAsBackstop() async throws {
-        // Browser-mode pending submissions ARE claimed by the worker as a backstop
-        // (e.g., browser runner failed, timed out, or these are pre-fix stuck submissions).
-        let setup = try await makeTestSetup(id: "bsetup_01", manifest: browserManifestJSON)
-        let sub = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
+    @Test func requestJob_browserModeAlreadyComplete_notReclaimed() async throws {
+        try await withApp(app) { _ in
+            // A submission already completed by the browser runner must never be reclaimed.
+            // The worker should only see "pending" submissions; "complete" ones are invisible.
+            let setup = try await makeTestSetup(id: "bsetup_02", manifest: browserManifestJSON)
+            _ = try await makeSubmission(
+                id: "bsub_complete", setupID: setup.id!,
+                status: "complete", kind: APISubmission.Kind.student)
 
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w1")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok, "Worker must claim browser-mode pending submissions as backstop")
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(job.submissionID, sub.id)
-            })
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w1")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .noContent, "Already-complete browser submission must not be reclaimed by worker")
+                })
 
-        // Submission should now be "assigned" to the worker
-        let updated = try await APISubmission.find(sub.id, on: app.db)
-        XCTAssertEqual(updated?.status, "assigned")
-        XCTAssertEqual(updated?.workerID, "w1")
+        }
     }
 
-    func testRequestJob_browserModeAlreadyComplete_notReclaimed() async throws {
-        // A submission already completed by the browser runner must never be reclaimed.
-        // The worker should only see "pending" submissions; "complete" ones are invisible.
-        let setup = try await makeTestSetup(id: "bsetup_02", manifest: browserManifestJSON)
-        _ = try await makeSubmission(
-            id: "bsub_complete", setupID: setup.id!,
-            status: "complete", kind: APISubmission.Kind.student)
+    @Test func requestJob_browserAndWorkerMixed_bothClaimable_noContention() async throws {
+        try await withApp(app) { _ in
+            // Both browser-mode and worker-mode pending submissions are claimable.
+            // Two sequential worker polls should each claim one; no double-claiming.
+            let workerSetup = try await makeTestSetup(id: "mixed_wsetup", manifest: workerManifestJSON)
+            let browserSetup = try await makeTestSetup(id: "mixed_bsetup", manifest: browserManifestJSON)
+            let workerSub = try await makeSubmission(id: "mixed_wsub", setupID: workerSetup.id!)
+            let browserSub = try await makeSubmission(id: "mixed_bsub", setupID: browserSetup.id!)
 
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w1")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(
-                    res.status, .noContent,
-                    "Already-complete browser submission must not be reclaimed by worker")
-            })
+            let path = "/api/v1/worker/request"
+
+            // First poll — claims the student submission (submitted first by sort order).
+            let body1 = try workerRequestBody(workerID: "w1")
+            var firstJobID: String?
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body1)
+                    req.body = body1
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    firstJobID = try res.content.decode(Job.self).submissionID
+                })
+
+            // Second poll — claims the remaining submission.
+            let body2 = try workerRequestBody(workerID: "w2")
+            var secondJobID: String?
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body2)
+                    req.body = body2
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    secondJobID = try res.content.decode(Job.self).submissionID
+                })
+
+            // Both submissions should be claimed, each by a different worker.
+            let allIDs = Set([firstJobID, secondJobID].compactMap { $0 })
+            #expect(allIDs.count == 2, "Both submissions must be claimed exactly once")
+            #expect(allIDs.contains(workerSub.id!))
+            #expect(allIDs.contains(browserSub.id!))
+
+            // Third poll — nothing left.
+            let body3 = try workerRequestBody(workerID: "w3")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body3)
+                    req.body = body3
+                },
+                afterResponse: { res in
+                    #expect(res.status == .noContent, "Queue must be empty after both submissions are claimed")
+                })
+
+        }
     }
 
-    func testRequestJob_browserAndWorkerMixed_bothClaimable_noContention() async throws {
-        // Both browser-mode and worker-mode pending submissions are claimable.
-        // Two sequential worker polls should each claim one; no double-claiming.
-        let workerSetup = try await makeTestSetup(id: "mixed_wsetup", manifest: workerManifestJSON)
-        let browserSetup = try await makeTestSetup(id: "mixed_bsetup", manifest: browserManifestJSON)
-        let workerSub = try await makeSubmission(id: "mixed_wsub", setupID: workerSetup.id!)
-        let browserSub = try await makeSubmission(id: "mixed_bsub", setupID: browserSetup.id!)
+    @Test func requestJob_pendingValidation_returnsJob() async throws {
+        try await withApp(app) { _ in
+            // Validation submissions are always worker-mode regardless of manifest gradingMode
+            let setup = try await makeTestSetup(id: "vsetup_01", manifest: workerManifestJSON)
+            let sub = try await makeSubmission(
+                id: "vsub_01", setupID: setup.id!,
+                kind: APISubmission.Kind.validation)
 
-        let path = "/api/v1/worker/request"
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w2")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == sub.id)
+                })
 
-        // First poll — claims the student submission (submitted first by sort order).
-        let body1 = try workerRequestBody(workerID: "w1")
-        var firstJobID: String?
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body1)
-                req.body = body1
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                firstJobID = try res.content.decode(Job.self).submissionID
-            })
-
-        // Second poll — claims the remaining submission.
-        let body2 = try workerRequestBody(workerID: "w2")
-        var secondJobID: String?
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body2)
-                req.body = body2
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                secondJobID = try res.content.decode(Job.self).submissionID
-            })
-
-        // Both submissions should be claimed, each by a different worker.
-        let allIDs = Set([firstJobID, secondJobID].compactMap { $0 })
-        XCTAssertEqual(allIDs.count, 2, "Both submissions must be claimed exactly once")
-        XCTAssertTrue(allIDs.contains(workerSub.id!))
-        XCTAssertTrue(allIDs.contains(browserSub.id!))
-
-        // Third poll — nothing left.
-        let body3 = try workerRequestBody(workerID: "w3")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body3)
-                req.body = body3
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .noContent, "Queue must be empty after both submissions are claimed")
-            })
+        }
     }
 
-    func testRequestJob_pendingValidation_returnsJob() async throws {
-        // Validation submissions are always worker-mode regardless of manifest gradingMode
-        let setup = try await makeTestSetup(id: "vsetup_01", manifest: workerManifestJSON)
-        let sub = try await makeSubmission(
-            id: "vsub_01", setupID: setup.id!,
-            kind: APISubmission.Kind.validation)
+    @Test func requestJob_studentPreferredOverValidation() async throws {
+        try await withApp(app) { _ in
+            // Worker-mode student submission should be returned before a validation submission
+            let setup = try await makeTestSetup(id: "psetup_01", manifest: workerManifestJSON)
+            let student = try await makeSubmission(
+                id: "psub_student", setupID: setup.id!,
+                kind: APISubmission.Kind.student)
+            _ = try await makeSubmission(
+                id: "psub_val", setupID: setup.id!,
+                kind: APISubmission.Kind.validation)
 
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w2")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(job.submissionID, sub.id)
-            })
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w3")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == student.id, "Student submission should be preferred over validation")
+                })
+
+        }
     }
 
-    func testRequestJob_studentPreferredOverValidation() async throws {
-        // Worker-mode student submission should be returned before a validation submission
-        let setup = try await makeTestSetup(id: "psetup_01", manifest: workerManifestJSON)
-        let student = try await makeSubmission(
-            id: "psub_student", setupID: setup.id!,
-            kind: APISubmission.Kind.student)
-        _ = try await makeSubmission(
-            id: "psub_val", setupID: setup.id!,
-            kind: APISubmission.Kind.validation)
+    @Test func requestJob_concurrentClaims_onlyOneSucceeds() async throws {
+        try await withApp(app) { _ in
+            // One pending submission; two workers race to claim it.
+            // The transaction in requestJob must ensure only one succeeds.
+            let setup = try await makeTestSetup(id: "cc_setup", manifest: workerManifestJSON)
+            _ = try await makeSubmission(id: "cc_sub", setupID: setup.id!)
 
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w3")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(
-                    job.submissionID, student.id,
-                    "Student submission should be preferred over validation")
-            })
-    }
+            let path = "/api/v1/worker/request"
+            let secret = workerSecret  // String — Sendable
+            let testApp = app  // Application — @unchecked Sendable
 
-    func testRequestJob_concurrentClaims_onlyOneSucceeds() async throws {
-        // One pending submission; two workers race to claim it.
-        // The transaction in requestJob must ensure only one succeeds.
-        let setup = try await makeTestSetup(id: "cc_setup", manifest: workerManifestJSON)
-        _ = try await makeSubmission(id: "cc_sub", setupID: setup.id!)
-
-        let path = "/api/v1/worker/request"
-        let secret = workerSecret  // String — Sendable
-        let testApp = app!  // Application — @unchecked Sendable
-
-        var responses: [XCTHTTPResponse] = []
-        try await withThrowingTaskGroup(of: XCTHTTPResponse.self) { group in
-            for workerID in ["w1", "w2"] {
-                // Compute per-worker values outside the task so the closure
-                // captures only Sendable types and avoids capturing `self`.
-                let body = try self.workerRequestBody(workerID: workerID)
-                let headers = workerHMACHeaders(
-                    method: .POST, path: path,
-                    body: body, workerSecret: secret)
-                group.addTask {
-                    return try await testApp.asyncSendRequest(.POST, path) { req in
-                        req.headers = headers
-                        req.body = body
+            var responses: [XCTHTTPResponse] = []
+            try await withThrowingTaskGroup(of: XCTHTTPResponse.self) { group in
+                for workerID in ["w1", "w2"] {
+                    // Compute per-worker values outside the task so the closure
+                    // captures only Sendable types and avoids capturing `self`.
+                    let body = try self.workerRequestBody(workerID: workerID)
+                    let headers = workerHMACHeaders(
+                        method: .POST, path: path,
+                        body: body, workerSecret: secret)
+                    group.addTask {
+                        return try await testApp.asyncSendRequest(.POST, path) { req in
+                            req.headers = headers
+                            req.body = body
+                        }
                     }
                 }
+                for try await response in group {
+                    responses.append(response)
+                }
             }
-            for try await response in group {
-                responses.append(response)
-            }
+
+            #expect(responses.count == 2)
+            let statuses = responses.map(\.status)
+            #expect(statuses.contains(.ok), "One worker must claim the job")
+            #expect(statuses.contains(.noContent), "The other worker must find nothing")
+
+            // The submission must be owned by exactly one worker.
+            let updated = try await APISubmission.find("cc_sub", on: app.db)
+            #expect(updated?.status == "assigned")
+            #expect(updated?.workerID != nil)
+
         }
-
-        XCTAssertEqual(responses.count, 2)
-        let statuses = responses.map(\.status)
-        XCTAssertTrue(statuses.contains(.ok), "One worker must claim the job")
-        XCTAssertTrue(statuses.contains(.noContent), "The other worker must find nothing")
-
-        // The submission must be owned by exactly one worker.
-        let updated = try await APISubmission.find("cc_sub", on: app.db)
-        XCTAssertEqual(updated?.status, "assigned")
-        XCTAssertNotNil(updated?.workerID)
     }
 
-    func testRequestJob_freshSubmissionClaimedAheadOfOlderRetest() async throws {
-        // Even when a retest has an older submittedAt, a fresh student
-        // submission must be claimed first so manifest-revision sweeps
-        // can't starve active students (#427).
-        let setup = try await makeTestSetup(id: "prio_setup", manifest: workerManifestJSON)
+    @Test func requestJob_freshSubmissionClaimedAheadOfOlderRetest() async throws {
+        try await withApp(app) { _ in
+            // Even when a retest has an older submittedAt, a fresh student
+            // submission must be claimed first so manifest-revision sweeps
+            // can't starve active students (#427).
+            let setup = try await makeTestSetup(id: "prio_setup", manifest: workerManifestJSON)
 
-        let now = Date()
-        let earlier = now.addingTimeInterval(-3600)
-        let later = now.addingTimeInterval(-60)
+            let now = Date()
+            let earlier = now.addingTimeInterval(-3600)
+            let later = now.addingTimeInterval(-60)
 
-        // Retest with the OLDER submittedAt (would win under pure FIFO).
-        let retest = try await makeSubmission(id: "prio_retest", setupID: setup.id!)
-        retest.submittedAt = earlier
-        retest.retestedAt = now
-        try await retest.save(on: app.db)
+            // Retest with the OLDER submittedAt (would win under pure FIFO).
+            let retest = try await makeSubmission(id: "prio_retest", setupID: setup.id!)
+            retest.submittedAt = earlier
+            retest.retestedAt = now
+            try await retest.save(on: app.db)
 
-        // Fresh submission with a NEWER submittedAt — should still be claimed first.
-        let fresh = try await makeSubmission(id: "prio_fresh", setupID: setup.id!)
-        fresh.submittedAt = later
-        try await fresh.save(on: app.db)
+            // Fresh submission with a NEWER submittedAt — should still be claimed first.
+            let fresh = try await makeSubmission(id: "prio_fresh", setupID: setup.id!)
+            fresh.submittedAt = later
+            try await fresh.save(on: app.db)
 
-        let path = "/api/v1/worker/request"
-        let body1 = try workerRequestBody(workerID: "w1")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body1)
-                req.body = body1
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(
-                    job.submissionID, fresh.id,
-                    "Fresh submission must be claimed before retest, regardless of submittedAt order")
-            })
+            let path = "/api/v1/worker/request"
+            let body1 = try workerRequestBody(workerID: "w1")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body1)
+                    req.body = body1
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(
+                        job.submissionID == fresh.id,
+                        "Fresh submission must be claimed before retest, regardless of submittedAt order")
+                })
 
-        // Second poll should now drain the retest.
-        let body2 = try workerRequestBody(workerID: "w2")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body2)
-                req.body = body2
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(
-                    job.submissionID, retest.id,
-                    "Retest must be claimed once fresh work has drained")
-            })
+            // Second poll should now drain the retest.
+            let body2 = try workerRequestBody(workerID: "w2")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body2)
+                    req.body = body2
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(job.submissionID == retest.id, "Retest must be claimed once fresh work has drained")
+                })
+
+        }
     }
 
-    func testRequestJob_amongRetests_oldestSubmittedAtFirst() async throws {
-        // With no fresh work, retests drain in submittedAt order (oldest first).
-        let setup = try await makeTestSetup(id: "rprio_setup", manifest: workerManifestJSON)
+    @Test func requestJob_amongRetests_oldestSubmittedAtFirst() async throws {
+        try await withApp(app) { _ in
+            // With no fresh work, retests drain in submittedAt order (oldest first).
+            let setup = try await makeTestSetup(id: "rprio_setup", manifest: workerManifestJSON)
 
-        let now = Date()
-        let earlier = now.addingTimeInterval(-3600)
-        let later = now.addingTimeInterval(-60)
+            let now = Date()
+            let earlier = now.addingTimeInterval(-3600)
+            let later = now.addingTimeInterval(-60)
 
-        let olderRetest = try await makeSubmission(id: "rprio_r1", setupID: setup.id!)
-        olderRetest.submittedAt = earlier
-        olderRetest.retestedAt = now
-        try await olderRetest.save(on: app.db)
+            let olderRetest = try await makeSubmission(id: "rprio_r1", setupID: setup.id!)
+            olderRetest.submittedAt = earlier
+            olderRetest.retestedAt = now
+            try await olderRetest.save(on: app.db)
 
-        let newerRetest = try await makeSubmission(id: "rprio_r2", setupID: setup.id!)
-        newerRetest.submittedAt = later
-        newerRetest.retestedAt = now
-        try await newerRetest.save(on: app.db)
+            let newerRetest = try await makeSubmission(id: "rprio_r2", setupID: setup.id!)
+            newerRetest.submittedAt = later
+            newerRetest.retestedAt = now
+            try await newerRetest.save(on: app.db)
 
-        let path = "/api/v1/worker/request"
-        let body = try workerRequestBody(workerID: "w1")
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .POST, path: path, body: body)
-                req.body = body
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                let job = try res.content.decode(Job.self)
-                XCTAssertEqual(
-                    job.submissionID, olderRetest.id,
-                    "Among retests with no fresh work, oldest submittedAt is claimed first")
-            })
+            let path = "/api/v1/worker/request"
+            let body = try workerRequestBody(workerID: "w1")
+            try await app.asyncTest(
+                .POST, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .POST, path: path, body: body)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let job = try res.content.decode(Job.self)
+                    #expect(
+                        job.submissionID == olderRetest.id,
+                        "Among retests with no fresh work, oldest submittedAt is claimed first")
+                })
+
+        }
     }
 
     // MARK: - GET /api/v1/worker/submissions/:id/download
 
-    func testDownloadSubmission_existingFile_returns200() async throws {
-        let setup = try await makeTestSetup(id: "dlsetup_01", manifest: workerManifestJSON)
-        let sub = try await makeSubmission(id: "dlsub_01", setupID: setup.id!)
+    @Test func downloadSubmission_existingFile_returns200() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "dlsetup_01", manifest: workerManifestJSON)
+            let sub = try await makeSubmission(id: "dlsub_01", setupID: setup.id!)
 
-        let path = "/api/v1/worker/submissions/\(sub.id!)/download"
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .GET, path: path)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-            })
+            let path = "/api/v1/worker/submissions/\(sub.id!)/download"
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .GET, path: path)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+        }
     }
 
-    func testDownloadSubmission_notFound_returns404() async throws {
-        let path = "/api/v1/worker/submissions/nonexistent/download"
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .GET, path: path)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
-            })
+    @Test func downloadSubmission_notFound_returns404() async throws {
+        try await withApp(app) { _ in
+            let path = "/api/v1/worker/submissions/nonexistent/download"
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .GET, path: path)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
     }
 
     // MARK: - GET /api/v1/worker/testsetups/:id/download
 
-    func testDownloadTestSetup_existingFile_returns200() async throws {
-        let setup = try await makeTestSetup(id: "dlts_01", manifest: workerManifestJSON)
+    @Test func downloadTestSetup_existingFile_returns200() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "dlts_01", manifest: workerManifestJSON)
 
-        let path = "/api/v1/worker/testsetups/\(setup.id!)/download"
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .GET, path: path)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-            })
+            let path = "/api/v1/worker/testsetups/\(setup.id!)/download"
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .GET, path: path)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+        }
     }
 
-    func testDownloadTestSetup_notFound_returns404() async throws {
-        let path = "/api/v1/worker/testsetups/nonexistent/download"
-        try await app.asyncTest(
-            .GET, path,
-            beforeRequest: { req in
-                req.headers = workerHeaders(method: .GET, path: path)
-            },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .notFound)
-            })
+    @Test func downloadTestSetup_notFound_returns404() async throws {
+        try await withApp(app) { _ in
+            let path = "/api/v1/worker/testsetups/nonexistent/download"
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in
+                    req.headers = workerHeaders(method: .GET, path: path)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
     }
 }
