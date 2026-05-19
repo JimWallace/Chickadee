@@ -5,86 +5,67 @@
 
 import Core
 import Fluent
+import Testing
 import Vapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
+final class AssignmentHelpersManifestTests {
 
-    func testSanitizedAssignmentReturnPathAcceptsOnlyInstructorScopedPaths() {
-        XCTAssertEqual(
+    @Test func sanitizedAssignmentReturnPathAcceptsOnlyInstructorScopedPaths() {
+        #expect(
             sanitizedAssignmentReturnPath(
                 "/instructor/asg123",
                 assignmentIDRaw: "asg123",
                 fallbackPath: "/instructor/asg123/edit"
-            ),
-            "/instructor/asg123"
-        )
+            ) == "/instructor/asg123")
 
-        XCTAssertEqual(
+        #expect(
             sanitizedAssignmentReturnPath(
                 "/instructor/asg123/submissions",
                 assignmentIDRaw: "asg123",
                 fallbackPath: "/instructor/asg123/edit"
-            ),
-            "/instructor/asg123/submissions"
-        )
+            ) == "/instructor/asg123/submissions")
 
-        XCTAssertEqual(
+        #expect(
             sanitizedAssignmentReturnPath(
                 "/instructor/other/submissions",
                 assignmentIDRaw: "asg123",
                 fallbackPath: "/instructor/asg123/edit"
-            ),
-            "/instructor/asg123/edit"
-        )
+            ) == "/instructor/asg123/edit")
 
-        XCTAssertEqual(
+        #expect(
             sanitizedAssignmentReturnPath(
                 "https://example.com/escape",
                 assignmentIDRaw: "asg123",
                 fallbackPath: "/instructor/asg123/edit"
-            ),
-            "/instructor/asg123/edit"
-        )
+            ) == "/instructor/asg123/edit")
     }
 
-    func testNotebookFilenameForStorageSanitizesAndNormalizesExtension() {
-        XCTAssertEqual(
-            notebookFilenameForStorage(uploadedName: "../Unit 1: Intro", fallback: "assignment.ipynb"),
-            "Unit 1  Intro.ipynb"
-        )
+    @Test func notebookFilenameForStorageSanitizesAndNormalizesExtension() {
+        #expect(
+            notebookFilenameForStorage(uploadedName: "../Unit 1: Intro", fallback: "assignment.ipynb")
+                == "Unit 1  Intro.ipynb")
 
-        XCTAssertEqual(
-            notebookFilenameForStorage(uploadedName: "lesson.ipynb", fallback: "assignment.ipynb"),
-            "lesson.ipynb"
-        )
+        #expect(
+            notebookFilenameForStorage(uploadedName: "lesson.ipynb", fallback: "assignment.ipynb") == "lesson.ipynb")
 
-        XCTAssertEqual(
-            notebookFilenameForStorage(uploadedName: "   ", fallback: "starter.ipynb"),
-            "starter.ipynb"
-        )
+        #expect(notebookFilenameForStorage(uploadedName: "   ", fallback: "starter.ipynb") == "starter.ipynb")
     }
 
-    func testSubmissionFilenameForStorageSanitizesAndPreservesExtension() {
-        XCTAssertEqual(
-            submissionFilenameForStorage(uploadedName: "../Assignment 0 Solution.ipynb", fallback: "solution.ipynb"),
-            "Assignment 0 Solution.ipynb"
-        )
+    @Test func submissionFilenameForStorageSanitizesAndPreservesExtension() {
+        #expect(
+            submissionFilenameForStorage(uploadedName: "../Assignment 0 Solution.ipynb", fallback: "solution.ipynb")
+                == "Assignment 0 Solution.ipynb")
 
-        XCTAssertEqual(
-            submissionFilenameForStorage(uploadedName: "C:\\\\fakepath\\\\dna.py", fallback: "solution.ipynb"),
-            "C   fakepath  dna.py"
-        )
+        #expect(
+            submissionFilenameForStorage(uploadedName: "C:\\\\fakepath\\\\dna.py", fallback: "solution.ipynb")
+                == "C   fakepath  dna.py")
 
-        XCTAssertEqual(
-            submissionFilenameForStorage(uploadedName: "   ", fallback: "solution.ipynb"),
-            "solution.ipynb"
-        )
+        #expect(submissionFilenameForStorage(uploadedName: "   ", fallback: "solution.ipynb") == "solution.ipynb")
     }
 
-    func testManifestDependentsReturnsScriptsThatReferenceDependency() {
+    @Test func manifestDependentsReturnsScriptsThatReferenceDependency() {
         let manifest = try! makeWorkerManifestJSON(
             testSuites: [
                 ConfiguredSuiteEntry(
@@ -115,14 +96,12 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             includeMakefile: false
         )
 
-        XCTAssertEqual(
-            manifestDependents(manifestJSON: manifest, filename: "01_public.py"),
-            ["02_release.py", "03_secret.py"]
-        )
-        XCTAssertEqual(manifestDependents(manifestJSON: manifest, filename: "missing.py"), [])
+        #expect(
+            manifestDependents(manifestJSON: manifest, filename: "01_public.py") == ["02_release.py", "03_secret.py"])
+        #expect(manifestDependents(manifestJSON: manifest, filename: "missing.py").isEmpty)
     }
 
-    func testUpdateManifestAddingScriptPreservesMetadataAndAppendsEntry() throws {
+    @Test func updateManifestAddingScriptPreservesMetadataAndAppendsEntry() throws {
         let original = """
             {
               "schemaVersion": 1,
@@ -137,7 +116,7 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             }
             """
 
-        let updated = try XCTUnwrap(
+        let updated = try #require(
             updateManifestAddingScript(
                 manifestJSON: original,
                 entry: ConfiguredSuiteEntry(
@@ -152,16 +131,16 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
         )
 
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
-        XCTAssertEqual(props.gradingMode, .browser)
-        XCTAssertEqual(props.starterNotebook, "starter.ipynb")
-        XCTAssertNotNil(props.makefile)
-        XCTAssertEqual(props.testSuites.map(\.script), ["01_public.py", "02_release.py"])
-        XCTAssertEqual(props.testSuites.last?.dependsOn, ["01_public.py"])
-        XCTAssertEqual(props.testSuites.last?.points, 2)
-        XCTAssertEqual(props.testSuites.last?.name, "Release tests")
+        #expect(props.gradingMode == .browser)
+        #expect(props.starterNotebook == "starter.ipynb")
+        #expect(props.makefile != nil)
+        #expect(props.testSuites.map(\.script) == ["01_public.py", "02_release.py"])
+        #expect(props.testSuites.last?.dependsOn == ["01_public.py"])
+        #expect(props.testSuites.last?.points == 2)
+        #expect(props.testSuites.last?.name == "Release tests")
     }
 
-    func testUpdateManifestRemovingScriptClearsDependencyReferences() throws {
+    @Test func updateManifestRemovingScriptClearsDependencyReferences() throws {
         let original = try makeWorkerManifestJSON(
             testSuites: [
                 ConfiguredSuiteEntry(
@@ -184,20 +163,20 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             includeMakefile: false
         )
 
-        let updated = try XCTUnwrap(
+        let updated = try #require(
             updateManifestRemovingScript(manifestJSON: original, filename: "01_public.py")
         )
 
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
-        XCTAssertEqual(props.testSuites.map(\.script), ["02_release.py"])
-        XCTAssertEqual(props.testSuites.first?.dependsOn, [])
+        #expect(props.testSuites.map(\.script) == ["02_release.py"])
+        #expect(props.testSuites.first?.dependsOn.isEmpty ?? true)
     }
 
-    func testDetectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
+    @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
             .path
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 (name: "tests/run.sh", content: "#!/bin/bash\necho ok\n")
@@ -212,16 +191,16 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
         )
 
         let suggestions = detectRequirementSuggestions(
-            assignmentNotebookData: notebookData(source: "import pandas\n"),
-            solutionNotebookData: notebookData(source: "import scipy\nimport matplotlib\n"),
+            assignmentNotebookData: try ahNotebookData(source: "import pandas\n"),
+            solutionNotebookData: try ahNotebookData(source: "import scipy\nimport matplotlib\n"),
             setup: setup
         )
 
-        XCTAssertEqual(suggestions.languages, ["python"])
-        XCTAssertEqual(suggestions.capabilities, ["pandas", "shell-bash"])
+        #expect(suggestions.languages == ["python"])
+        #expect(suggestions.capabilities == ["pandas", "shell-bash"])
     }
 
-    func testMakeWorkerManifestJSONTopologicallySortsSuitesAndOmitsDefaults() throws {
+    @Test func makeWorkerManifestJSONTopologicallySortsSuitesAndOmitsDefaults() throws {
         let manifest = try makeWorkerManifestJSON(
             testSuites: [
                 ConfiguredSuiteEntry(
@@ -254,25 +233,25 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             starterNotebook: nil
         )
 
-        let object = try XCTUnwrap(
+        let object = try #require(
             JSONSerialization.jsonObject(with: Data(manifest.utf8)) as? [String: Any]
         )
-        let suites = try XCTUnwrap(object["testSuites"] as? [[String: Any]])
+        let suites = try #require(object["testSuites"] as? [[String: Any]])
 
-        XCTAssertEqual(suites.map { $0["script"] as? String }, ["01_public.py", "02_release.py", "03_secret.py"])
-        XCTAssertNil(object["starterNotebook"])
-        XCTAssertNotNil(object["makefile"])
-        XCTAssertNil(suites[0]["points"], "Default weight should be omitted")
-        XCTAssertNil(suites[0]["dependsOn"], "Empty dependencies should be omitted")
-        XCTAssertEqual(suites[1]["points"] as? Int, 4)
-        XCTAssertEqual(suites[1]["name"] as? String, "Release tests")
+        #expect(suites.map { $0["script"] as? String } == ["01_public.py", "02_release.py", "03_secret.py"])
+        #expect(object["starterNotebook"] == nil)
+        #expect(object["makefile"] != nil)
+        #expect(suites[0]["points"] == nil, "Default weight should be omitted")
+        #expect(suites[0]["dependsOn"] == nil, "Empty dependencies should be omitted")
+        #expect(suites[1]["points"] as? Int == 4)
+        #expect(suites[1]["name"] as? String == "Release tests")
     }
 
-    func testBuildSuiteEntriesUsesExplicitSuiteConfigOrderingAndMetadata() throws {
+    @Test func buildSuiteEntriesUsesExplicitSuiteConfigOrderingAndMetadata() throws {
         let suiteFiles = [
-            makeFile(named: "01_public.py", contents: "print('public')"),
-            makeFile(named: "notes.txt", contents: "support"),
-            makeFile(named: "02_secret.py", contents: "print('secret')"),
+            ahMakeFile(named: "01_public.py", contents: "print('public')"),
+            ahMakeFile(named: "notes.txt", contents: "support"),
+            ahMakeFile(named: "02_secret.py", contents: "print('secret')"),
         ]
 
         let configJSON = """
@@ -293,18 +272,18 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             suiteConfigJSON: configJSON
         )
 
-        XCTAssertEqual(entries.map(\.script), ["01_public.py", "02_secret.py"])
-        XCTAssertEqual(entries[1].tier, "secret")
-        XCTAssertEqual(entries[1].dependsOn, ["01_public.py"])
-        XCTAssertEqual(entries[1].points, 3)
-        XCTAssertEqual(entries[1].displayName, "Secret")
+        #expect(entries.map(\.script) == ["01_public.py", "02_secret.py"])
+        #expect(entries[1].tier == "secret")
+        #expect(entries[1].dependsOn == ["01_public.py"])
+        #expect(entries[1].points == 3)
+        #expect(entries[1].displayName == "Secret")
     }
 
-    func testBuildSuiteEntriesFallsBackToLikelyTestFilesAndInferredOrder() throws {
+    @Test func buildSuiteEntriesFallsBackToLikelyTestFilesAndInferredOrder() throws {
         let suiteFiles = [
-            makeFile(named: "20_hidden.py", contents: "print('b')"),
-            makeFile(named: "readme.txt", contents: "ignore"),
-            makeFile(named: "01_public.sh", contents: "echo test"),
+            ahMakeFile(named: "20_hidden.py", contents: "print('b')"),
+            ahMakeFile(named: "readme.txt", contents: "ignore"),
+            ahMakeFile(named: "01_public.sh", contents: "echo test"),
         ]
 
         let entries = try buildSuiteEntries(
@@ -317,17 +296,17 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             suiteConfigJSON: nil
         )
 
-        XCTAssertEqual(entries.map(\.script), ["01_public.sh", "20_hidden.py"])
-        XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
+        #expect(entries.map(\.script) == ["01_public.sh", "20_hidden.py"])
+        #expect(entries.allSatisfy { $0.tier == "public" })
     }
 
-    func testBuildSuiteEntriesFallsBackToExtensionlessShebangScripts() throws {
+    @Test func buildSuiteEntriesFallsBackToExtensionlessShebangScripts() throws {
         let suiteFiles = [
-            makeFile(named: "01_shell", contents: "#!/bin/sh\necho ok\n"),
-            makeFile(named: "02_bash", contents: "#!/usr/bin/env bash\necho ok\n"),
-            makeFile(named: "03_notes", contents: "echo support but no shebang\n"),
-            makeFile(named: "04_python.py", contents: "print('ok')\n"),
-            makeFile(named: "BMI Boundary Cases", contents: "#!/usr/bin/env python3\nprint('ok')\n"),
+            ahMakeFile(named: "01_shell", contents: "#!/bin/sh\necho ok\n"),
+            ahMakeFile(named: "02_bash", contents: "#!/usr/bin/env bash\necho ok\n"),
+            ahMakeFile(named: "03_notes", contents: "echo support but no shebang\n"),
+            ahMakeFile(named: "04_python.py", contents: "print('ok')\n"),
+            ahMakeFile(named: "BMI Boundary Cases", contents: "#!/usr/bin/env python3\nprint('ok')\n"),
         ]
 
         let entries = try buildSuiteEntries(
@@ -342,15 +321,15 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             suiteConfigJSON: nil
         )
 
-        XCTAssertEqual(entries.map(\.script), ["01_shell", "02_bash", "04_python.py", "BMI Boundary Cases"])
-        XCTAssertTrue(entries.allSatisfy { $0.tier == "public" })
+        #expect(entries.map(\.script) == ["01_shell", "02_bash", "04_python.py", "BMI Boundary Cases"])
+        #expect(entries.allSatisfy { $0.tier == "public" })
     }
 
-    func testBuildSuiteEntriesTreatsAnyNonSupportTierAsATestWhenIsTestIsMissing() throws {
+    @Test func buildSuiteEntriesTreatsAnyNonSupportTierAsATestWhenIsTestIsMissing() throws {
         let suiteFiles = [
-            makeFile(named: "assignment.ipynb", contents: "{}"),
-            makeFile(named: "test_q1.py", contents: "print('q1')"),
-            makeFile(named: "notes.txt", contents: "support"),
+            ahMakeFile(named: "assignment.ipynb", contents: "{}"),
+            ahMakeFile(named: "test_q1.py", contents: "print('q1')"),
+            ahMakeFile(named: "notes.txt", contents: "support"),
         ]
 
         let configJSON = """
@@ -371,12 +350,12 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             suiteConfigJSON: configJSON
         )
 
-        XCTAssertEqual(entries.map(\.script), ["test_q1.py"])
-        XCTAssertEqual(entries.first?.tier, "release")
-        XCTAssertEqual(entries.first?.points, 2)
+        #expect(entries.map(\.script) == ["test_q1.py"])
+        #expect(entries.first?.tier == "release")
+        #expect(entries.first?.points == 2)
     }
 
-    func testCreateRunnerSetupZipDeduplicatesStoredNamesAndDetectsMakefile() throws {
+    @Test func createRunnerSetupZipDeduplicatesStoredNamesAndDetectsMakefile() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -384,9 +363,9 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
         let suiteFiles = [
-            makeFile(named: "tests.py", contents: "print('one')"),
-            makeFile(named: "nested/tests.py", contents: "print('two')"),
-            makeFile(named: "Makefile", contents: "all:\n\t@echo hi\n"),
+            ahMakeFile(named: "tests.py", contents: "print('one')"),
+            ahMakeFile(named: "nested/tests.py", contents: "print('two')"),
+            ahMakeFile(named: "Makefile", contents: "all:\n\t@echo hi\n"),
         ]
         let configJSON = """
             [
@@ -402,24 +381,24 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             zipPath: zipPath
         )
 
-        XCTAssertTrue(package.hasMakefile)
-        XCTAssertEqual(package.testSuites.map(\.script), ["tests.py", "tests-2.py"])
-        XCTAssertEqual(package.testSuites.map(\.tier), ["public", "secret"])
+        #expect(package.hasMakefile)
+        #expect(package.testSuites.map(\.script) == ["tests.py", "tests-2.py"])
+        #expect(package.testSuites.map(\.tier) == ["public", "secret"])
 
         let zipEntries = Set(listZipEntries(zipPath: zipPath))
-        XCTAssertTrue(zipEntries.contains("tests.py"))
-        XCTAssertTrue(zipEntries.contains("tests-2.py"))
-        XCTAssertTrue(zipEntries.contains("Makefile"))
+        #expect(zipEntries.contains("tests.py"))
+        #expect(zipEntries.contains("tests-2.py"))
+        #expect(zipEntries.contains("Makefile"))
     }
 
-    func testExtractSupportFilesToSharedDirectoryRefreshesAndFiltersReservedEntries() throws {
+    @Test func extractSupportFilesToSharedDirectoryRefreshesAndFiltersReservedEntries() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("support-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),
@@ -442,15 +421,15 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
         )
 
         let extracted = Set(try FileManager.default.subpathsOfDirectory(atPath: sharedDir))
-        XCTAssertTrue(extracted.contains("data/sample.csv"))
-        XCTAssertTrue(extracted.contains("notes.txt"))
-        XCTAssertFalse(extracted.contains("tests.py"))
-        XCTAssertFalse(extracted.contains("assignment.ipynb"))
-        XCTAssertFalse(extracted.contains("solution.ipynb"))
-        XCTAssertFalse(extracted.contains("stale.txt"))
+        #expect(extracted.contains("data/sample.csv"))
+        #expect(extracted.contains("notes.txt"))
+        #expect(extracted.contains("tests.py") == false)
+        #expect(extracted.contains("assignment.ipynb") == false)
+        #expect(extracted.contains("solution.ipynb") == false)
+        #expect(extracted.contains("stale.txt") == false)
     }
 
-    func testRemoveMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {
+    @Test func removeMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("materialized-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -492,13 +471,12 @@ final class AssignmentHelpersManifestTests: AssignmentHelpersTestCase {
             removeMaterializedNotebookFiles(req: req, setupID: "setup_123")
 
             for root in roots {
-                XCTAssertFalse(
-                    FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123-work.ipynb")
-                )
-                XCTAssertTrue(
+                #expect(
+                    FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123-work.ipynb") == false)
+                #expect(
                     FileManager.default.fileExists(atPath: publicDirectory + root + "other-work.ipynb")
                 )
-                XCTAssertTrue(
+                #expect(
                     FileManager.default.fileExists(atPath: publicDirectory + root + "setup_123.txt")
                 )
             }

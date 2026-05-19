@@ -1,13 +1,3 @@
-Tests/APITests/AssignmentExtensionsTests.swift
-Tests/APITests/AssignmentHelpersManifestTests.swift
-Tests/APITests/AssignmentHelpersTestCase.swift
-Tests/APITests/AssignmentHelpersUtilityTests.swift
-Tests/APITests/AssignmentRoutesDashboardTests.swift
-Tests/APITests/AssignmentRoutesLifecycleTests.swift
-Tests/APITests/AssignmentRoutesNotebookTests.swift
-Tests/APITests/AssignmentRoutesPublishTests.swift
-Tests/APITests/AssignmentRoutesRetestTests.swift
-Tests/APITests/AssignmentRoutesTestCase.swift
 Tests/APITests/PatternFamilyApplyTests.swift
 Tests/APITests/PatternFamilyKindsTests.swift
 Tests/APITests/PatternFamilyRendererTests.swift

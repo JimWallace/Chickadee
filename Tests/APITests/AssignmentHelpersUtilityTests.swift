@@ -5,90 +5,86 @@
 
 import Core
 import Fluent
+import Testing
 import Vapor
-import XCTest
 
 @testable import chickadee_server
 
-final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
+final class AssignmentHelpersUtilityTests {
 
-    func testGradePercentFromCollectionJSONPrefersWeightedPointsAndFallsBackToCounts() {
-        XCTAssertEqual(
+    @Test func gradePercentFromCollectionJSONPrefersWeightedPointsAndFallsBackToCounts() {
+        #expect(
             gradePercentFromCollectionJSON(
                 #"{"earnedPoints":7,"totalPoints":8,"passCount":1,"totalTests":4}"#
-            ),
-            88
-        )
+            ) == 88)
 
-        XCTAssertEqual(
+        #expect(
             gradePercentFromCollectionJSON(
                 #"{"passCount":3,"totalTests":4}"#
-            ),
-            75
-        )
+            ) == 75)
 
-        XCTAssertNil(gradePercentFromCollectionJSON(#"{"passCount":0,"totalTests":0}"#))
-        XCTAssertNil(gradePercentFromCollectionJSON("not-json"))
+        #expect(gradePercentFromCollectionJSON(#"{"passCount":0,"totalTests":0}"#) == nil)
+        #expect(gradePercentFromCollectionJSON("not-json") == nil)
     }
 
-    func testCsvEscapedQuotesOnlyWhenNeeded() {
-        XCTAssertEqual(csvEscaped("plain"), "plain")
-        XCTAssertEqual(csvEscaped("last, first"), "\"last, first\"")
-        XCTAssertEqual(csvEscaped("say \"hi\""), "\"say \"\"hi\"\"\"")
+    @Test func csvEscapedQuotesOnlyWhenNeeded() {
+        #expect(csvEscaped("plain") == "plain")
+        #expect(csvEscaped("last, first") == "\"last, first\"")
+        #expect(csvEscaped("say \"hi\"") == "\"say \"\"hi\"\"\"")
     }
 
-    func testInferNameFromStudentIDParsesCommaSeparatedNames() {
-        XCTAssertEqual(inferNameFromStudentID("Doe, Jane").surname, "Doe")
-        XCTAssertEqual(inferNameFromStudentID("Doe, Jane").givenNames, "Jane")
-        XCTAssertEqual(inferNameFromStudentID("  ").surname, "—")
-        XCTAssertEqual(inferNameFromStudentID("jdoe123").givenNames, "—")
+    @Test func inferNameFromStudentIDParsesCommaSeparatedNames() {
+        #expect(inferNameFromStudentID("Doe, Jane").surname == "Doe")
+        #expect(inferNameFromStudentID("Doe, Jane").givenNames == "Jane")
+        #expect(inferNameFromStudentID("  ").surname == "—")
+        #expect(inferNameFromStudentID("jdoe123").givenNames == "—")
     }
 
-    func testDefaultNotebookDataEmbedsAssignmentTitle() throws {
+    @Test func defaultNotebookDataEmbedsAssignmentTitle() throws {
         let data = defaultNotebookData(title: "Lab \"1\"")
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
-        XCTAssertTrue(json.contains(#"# Lab \"1\""#))
-        XCTAssertTrue(json.contains(#""nbformat": 4"#))
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.contains(#"# Lab \"1\""#))
+        #expect(json.contains(#""nbformat": 4"#))
     }
 
-    func testContentTypeMapsKnownTextAndNotebookTypes() {
-        XCTAssertEqual(contentType(for: "assignment.ipynb"), .json)
-        XCTAssertEqual(contentType(for: "notes.md"), .plainText)
-        XCTAssertEqual(contentType(for: "archive.bin").serialize(), "application/octet-stream")
+    @Test func contentTypeMapsKnownTextAndNotebookTypes() {
+        #expect(contentType(for: "assignment.ipynb") == .json)
+        #expect(contentType(for: "notes.md") == .plainText)
+        #expect(contentType(for: "archive.bin").serialize() == "application/octet-stream")
     }
 
-    func testUrlEncodeEscapesSpacesAndReservedCharacters() {
-        XCTAssertEqual(urlEncode("hello world.py"), "hello%20world.py")
-        XCTAssertEqual(urlEncode("data/results?.csv"), "data%2Fresults%3F.csv")
+    @Test func urlEncodeEscapesSpacesAndReservedCharacters() {
+        #expect(urlEncode("hello world.py") == "hello%20world.py")
+        #expect(urlEncode("data/results?.csv") == "data%2Fresults%3F.csv")
     }
 
-    func testParseDueDateAndLocalInputStringHandleSupportedFormats() {
+    @Test func parseDueDateAndLocalInputStringHandleSupportedFormats() {
         let isoDate = parseDueDate("2026-03-26T14:30:00Z")
-        XCTAssertNotNil(isoDate)
+        #expect(isoDate != nil)
 
         let localDate = parseDueDate("2026-03-26T14:30")
-        XCTAssertEqual(dueAtLocalInputString(localDate), "2026-03-26T14:30")
+        #expect(dueAtLocalInputString(localDate) == "2026-03-26T14:30")
 
-        XCTAssertNil(parseDueDate(""))
-        XCTAssertNil(parseDueDate("not-a-date"))
-        XCTAssertEqual(dueAtLocalInputString(nil), "")
+        #expect(parseDueDate("") == nil)
+        #expect(parseDueDate("not-a-date") == nil)
+        #expect(dueAtLocalInputString(nil).isEmpty)
     }
 
-    func testDeadlineOverrideHelpersRespectPastAndFutureDueDates() {
+    @Test func deadlineOverrideHelpersRespectPastAndFutureDueDates() {
         let past = Date().addingTimeInterval(-60)
         let future = Date().addingTimeInterval(60)
 
-        XCTAssertTrue(deadlineOverrideValueForInstructorOpen(dueAt: past))
-        XCTAssertFalse(deadlineOverrideValueForInstructorOpen(dueAt: future))
-        XCTAssertFalse(deadlineOverrideValueForInstructorOpen(dueAt: nil))
+        #expect(deadlineOverrideValueForInstructorOpen(dueAt: past))
+        #expect(deadlineOverrideValueForInstructorOpen(dueAt: future) == false)
+        #expect(deadlineOverrideValueForInstructorOpen(dueAt: nil) == false)
 
-        XCTAssertFalse(normalizedDeadlineOverrideAfterDueDateChange(dueAt: future, existingOverride: true))
-        XCTAssertFalse(normalizedDeadlineOverrideAfterDueDateChange(dueAt: nil, existingOverride: true))
-        XCTAssertTrue(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: true))
-        XCTAssertFalse(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: false))
+        #expect(normalizedDeadlineOverrideAfterDueDateChange(dueAt: future, existingOverride: true) == false)
+        #expect(normalizedDeadlineOverrideAfterDueDateChange(dueAt: nil, existingOverride: true) == false)
+        #expect(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: true))
+        #expect(normalizedDeadlineOverrideAfterDueDateChange(dueAt: past, existingOverride: false) == false)
     }
 
-    func testCurrentSetupFilesUsesManifestOrderingAndSolutionFallbacks() throws {
+    @Test func currentSetupFilesUsesManifestOrderingAndSolutionFallbacks() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("current-setup-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -97,7 +93,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
         let notebookPath = tempRoot.appendingPathComponent("starter.ipynb").path
         try Data("{}".utf8).write(to: URL(fileURLWithPath: notebookPath))
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),
@@ -132,25 +128,25 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             solutionFilename: "BMI Boundary Cases.ipynb"
         )
 
-        XCTAssertEqual(result.assignmentFile.name, "starter.ipynb")
-        XCTAssertEqual(result.assignmentFile.url, "/instructor/asg123/files/notebook")
-        XCTAssertEqual(result.solutionFile?.name, "BMI Boundary Cases.ipynb")
-        XCTAssertEqual(result.solutionFile?.url, "/instructor/asg123/files/solution")
-        XCTAssertEqual(result.existingSuiteRows.map(\.name), ["01_public.py", "02_release.py", "notes.txt"])
-        XCTAssertEqual(result.existingSuiteRows[0].displayName, "Public test")
-        XCTAssertEqual(result.existingSuiteRows[1].dependsOn, ["01_public.py"])
-        XCTAssertEqual(result.existingSuiteRows[1].points, 3)
-        XCTAssertEqual(result.existingSuiteRows[2].tier, "support")
+        #expect(result.assignmentFile.name == "starter.ipynb")
+        #expect(result.assignmentFile.url == "/instructor/asg123/files/notebook")
+        #expect(result.solutionFile?.name == "BMI Boundary Cases.ipynb")
+        #expect(result.solutionFile?.url == "/instructor/asg123/files/solution")
+        #expect(result.existingSuiteRows.map(\.name) == ["01_public.py", "02_release.py", "notes.txt"])
+        #expect(result.existingSuiteRows[0].displayName == "Public test")
+        #expect(result.existingSuiteRows[1].dependsOn == ["01_public.py"])
+        #expect(result.existingSuiteRows[1].points == 3)
+        #expect(result.existingSuiteRows[2].tier == "support")
     }
 
-    func testResolveEditSuiteFilesFallbackPreservesExistingAndAppendsUploads() throws {
+    @Test func resolveEditSuiteFilesFallbackPreservesExistingAndAppendsUploads() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("resolve-edit-fallback-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),
@@ -160,8 +156,8 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             ])
 
         let uploads = [
-            makeFile(named: "10_new.py", contents: "print('new')"),
-            makeFile(named: "extra.txt", contents: "extra"),
+            ahMakeFile(named: "10_new.py", contents: "print('new')"),
+            ahMakeFile(named: "extra.txt", contents: "extra"),
         ]
 
         let resolved = try resolveEditSuiteFiles(
@@ -182,22 +178,22 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             suiteConfigJSON: nil
         )
 
-        XCTAssertEqual(resolved.files.map(\.filename), ["02_release.py", "readme.txt", "10_new.py", "extra.txt"])
-        let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
-        let rows = try JSONDecoder().decode([DecodedReindexedSuiteConfigRow].self, from: configData)
-        XCTAssertEqual(rows.map(\.tier), ["release", "support", "public", "support"])
-        XCTAssertEqual(rows.map(\.isTest), [true, false, true, false])
-        XCTAssertEqual(rows[0].points, 2)
+        #expect(resolved.files.map(\.filename) == ["02_release.py", "readme.txt", "10_new.py", "extra.txt"])
+        let configData = try #require(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
+        let rows = try JSONDecoder().decode([AHDecodedReindexedSuiteConfigRow].self, from: configData)
+        #expect(rows.map(\.tier) == ["release", "support", "public", "support"])
+        #expect(rows.map(\.isTest) == [true, false, true, false])
+        #expect(rows[0].points == 2)
     }
 
-    func testResolveEditSuiteFilesExplicitConfigFiltersAndSanitizesSources() throws {
+    @Test func resolveEditSuiteFilesExplicitConfigFiltersAndSanitizesSources() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("resolve-edit-explicit-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 ("existing.py", "print('existing')"),
@@ -205,8 +201,8 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             ])
 
         let uploads = [
-            makeFile(named: "nested/new.py", contents: "print('upload')"),
-            makeFile(named: "", contents: "fallback name"),
+            ahMakeFile(named: "nested/new.py", contents: "print('upload')"),
+            ahMakeFile(named: "", contents: "fallback name"),
         ]
 
         let resolved = try resolveEditSuiteFiles(
@@ -224,26 +220,26 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
                 """
         )
 
-        XCTAssertEqual(resolved.files.map(\.filename), ["existing.py", "new.py"])
-        let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
-        let rows = try JSONDecoder().decode([DecodedReindexedSuiteConfigRow].self, from: configData)
-        XCTAssertEqual(rows.count, 2)
-        XCTAssertEqual(rows[0].tier, "secret")
-        XCTAssertEqual(rows[0].dependsOn, ["dep.py"])
-        XCTAssertEqual(rows[0].points, 4)
-        XCTAssertEqual(rows[0].displayName, "Existing")
-        XCTAssertEqual(rows[1].tier, "release")
-        XCTAssertEqual(rows[1].isTest, true)
+        #expect(resolved.files.map(\.filename) == ["existing.py", "new.py"])
+        let configData = try #require(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
+        let rows = try JSONDecoder().decode([AHDecodedReindexedSuiteConfigRow].self, from: configData)
+        #expect(rows.count == 2)
+        #expect(rows[0].tier == "secret")
+        #expect(rows[0].dependsOn == ["dep.py"])
+        #expect(rows[0].points == 4)
+        #expect(rows[0].displayName == "Existing")
+        #expect(rows[1].tier == "release")
+        #expect(rows[1].isTest == true)
     }
 
-    func testResolveEditSuiteFilesTreatsLegacyUncheckedRowsAsSupport() throws {
+    @Test func resolveEditSuiteFilesTreatsLegacyUncheckedRowsAsSupport() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("resolve-edit-legacy-support-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 ("test_q1.py", "print('q1')"),
@@ -262,28 +258,28 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
                 """
         )
 
-        let configData = try XCTUnwrap(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
-        let rows = try JSONDecoder().decode([DecodedReindexedSuiteConfigRow].self, from: configData)
-        XCTAssertEqual(rows.map(\.tier), ["support", "support"])
-        XCTAssertEqual(rows.map(\.isTest), [false, false])
+        let configData = try #require(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
+        let rows = try JSONDecoder().decode([AHDecodedReindexedSuiteConfigRow].self, from: configData)
+        #expect(rows.map(\.tier) == ["support", "support"])
+        #expect(rows.map(\.isTest) == [false, false])
     }
 
-    func testNormalizeTierAndInferredOrderHandleFallbackCases() {
-        XCTAssertEqual(normalizeTier(nil), "public")
-        XCTAssertEqual(normalizeTier("VISIBLE"), "public")
-        XCTAssertEqual(normalizeTier("support"), "support")
-        XCTAssertEqual(normalizeTier("secret"), "secret")
-        XCTAssertEqual(normalizeTier("release"), "release")
-        XCTAssertEqual(normalizeTier("mystery"), "public")
-        XCTAssertEqual(normalizeTier("public", isTest: false), "support")
-        XCTAssertEqual(normalizeTier(nil, isTest: false), "support")
+    @Test func normalizeTierAndInferredOrderHandleFallbackCases() {
+        #expect(normalizeTier(nil) == "public")
+        #expect(normalizeTier("VISIBLE") == "public")
+        #expect(normalizeTier("support") == "support")
+        #expect(normalizeTier("secret") == "secret")
+        #expect(normalizeTier("release") == "release")
+        #expect(normalizeTier("mystery") == "public")
+        #expect(normalizeTier("public", isTest: false) == "support")
+        #expect(normalizeTier(nil, isTest: false) == "support")
 
-        XCTAssertEqual(inferredOrder(from: "12_release.py"), 12)
-        XCTAssertEqual(inferredOrder(from: "007_secret.py"), 7)
-        XCTAssertNil(inferredOrder(from: "notes.txt"))
+        #expect(inferredOrder(from: "12_release.py") == 12)
+        #expect(inferredOrder(from: "007_secret.py") == 7)
+        #expect(inferredOrder(from: "notes.txt") == nil)
     }
 
-    func testCreateRunnerSetupZipAllowsConfigsWithoutSelectedTests() throws {
+    @Test func createRunnerSetupZipAllowsConfigsWithoutSelectedTests() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-empty-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -291,7 +287,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
 
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
         let suiteFiles = [
-            makeFile(named: "10_hidden.py", contents: "print('hidden')")
+            ahMakeFile(named: "10_hidden.py", contents: "print('hidden')")
         ]
         let configJSON = """
             [
@@ -310,11 +306,11 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             zipPath: zipPath
         )
 
-        XCTAssertEqual(setupZip.testSuites.count, 0)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: zipPath))
+        #expect(setupZip.testSuites.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: zipPath))
     }
 
-    func testCreateRunnerSetupZipReplacesExistingArchiveInsteadOfMergingRemovedFiles() throws {
+    @Test func createRunnerSetupZipReplacesExistingArchiveInsteadOfMergingRemovedFiles() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("runner-setup-replace-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
@@ -324,8 +320,8 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
 
         _ = try createRunnerSetupZip(
             suiteFiles: [
-                makeFile(named: "keep.py", contents: "print('keep')"),
-                makeFile(named: "remove.py", contents: "print('remove')"),
+                ahMakeFile(named: "keep.py", contents: "print('keep')"),
+                ahMakeFile(named: "remove.py", contents: "print('remove')"),
             ],
             suiteConfigJSON: """
                 [
@@ -338,7 +334,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
 
         _ = try createRunnerSetupZip(
             suiteFiles: [
-                makeFile(named: "keep.py", contents: "print('keep-updated')")
+                ahMakeFile(named: "keep.py", contents: "print('keep-updated')")
             ],
             suiteConfigJSON: """
                 [
@@ -349,22 +345,22 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
         )
 
         let entries = Set(listZipEntries(zipPath: zipPath))
-        XCTAssertEqual(entries, ["keep.py"])
-        XCTAssertNil(extractZipEntry(zipPath: zipPath, entryName: "remove.py"))
-        let keepData = try XCTUnwrap(extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
-        XCTAssertEqual(String(data: keepData, encoding: .utf8), "print('keep-updated')")
+        #expect(entries == ["keep.py"])
+        #expect(extractZipEntry(zipPath: zipPath, entryName: "remove.py") == nil)
+        let keepData = try #require(extractZipEntry(zipPath: zipPath, entryName: "keep.py"))
+        #expect(String(data: keepData, encoding: .utf8) == "print('keep-updated')")
     }
 
     // MARK: - mergeExistingFilesIntoSuiteFiles
 
-    func testMergeExistingFilesAddsNamedDraftFilesAndRewritesRowsWithIndices() throws {
+    @Test func mergeExistingFilesAddsNamedDraftFilesAndRewritesRowsWithIndices() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("merge-existing-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("draft.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: zipPath,
             entries: [
                 ("test_existing.py", "print('existing')"),
@@ -380,7 +376,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
               {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
             ]
             """
-        let uploadedFile = makeFile(named: "test_generated.py", contents: "print('generated')")
+        let uploadedFile = ahMakeFile(named: "test_generated.py", contents: "print('generated')")
 
         let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
             suiteFiles: [uploadedFile],
@@ -389,26 +385,26 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
         )
 
         // Both files should now be in the merged list.
-        XCTAssertEqual(merged.count, 2)
-        XCTAssertTrue(merged.contains(where: { $0.filename == "test_generated.py" }))
-        XCTAssertTrue(merged.contains(where: { $0.filename == "test_existing.py" }))
+        #expect(merged.count == 2)
+        #expect(merged.contains(where: { $0.filename == "test_generated.py" }))
+        #expect(merged.contains(where: { $0.filename == "test_existing.py" }))
 
         // Updated JSON must use numeric 'index' for all rows so SuiteConfigRow decodes cleanly.
-        let updatedData = try XCTUnwrap(updatedJSON?.data(using: .utf8))
-        let rows = try XCTUnwrap(JSONSerialization.jsonObject(with: updatedData) as? [[String: Any]])
-        XCTAssertEqual(rows.count, 2)
+        let updatedData = try #require(updatedJSON?.data(using: .utf8))
+        let rows = try #require(JSONSerialization.jsonObject(with: updatedData) as? [[String: Any]])
+        #expect(rows.count == 2)
         for row in rows {
-            XCTAssertNotNil(row["index"], "Every row must have a numeric index after merging")
-            XCTAssertNil(row["name"], "'name' key should be removed after converting to index-based row")
+            #expect(row["index"] != nil, "Every row must have a numeric index after merging")
+            #expect(row["name"] == nil, "'name' key should be removed after converting to index-based row")
         }
     }
 
-    func testMergeExistingFilesPassesThroughPureUploadConfig() throws {
+    @Test func mergeExistingFilesPassesThroughPureUploadConfig() throws {
         // When no 'existing' rows are present the file list and row count should be unchanged.
         let configJSON = """
             [{"source":"upload","index":0,"isTest":true,"tier":"public","order":1,"dependsOn":[],"points":1}]
             """
-        let file = makeFile(named: "test.py", contents: "pass")
+        let file = ahMakeFile(named: "test.py", contents: "pass")
 
         let (merged, updatedJSON) = mergeExistingFilesIntoSuiteFiles(
             suiteFiles: [file],
@@ -416,16 +412,16 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             draftZipPath: nil
         )
 
-        XCTAssertEqual(merged.count, 1)
+        #expect(merged.count == 1)
         // Verify the row is unchanged: still one index-based row with the correct fields.
-        let data = try XCTUnwrap(updatedJSON?.data(using: .utf8))
-        let rows = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0]["index"] as? Int, 0)
-        XCTAssertNil(rows[0]["name"])
+        let data = try #require(updatedJSON?.data(using: .utf8))
+        let rows = try #require(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        #expect(rows.count == 1)
+        #expect(rows[0]["index"] as? Int == 0)
+        #expect(rows[0]["name"] == nil)
     }
 
-    func testDetectFunctionsRoundTripIncludesBothExistingAndGeneratedTests() throws {
+    @Test func detectFunctionsRoundTripIncludesBothExistingAndGeneratedTests() throws {
         // Full integration of the detect-functions save path: an assignment draft has an existing
         // test file; the instructor generates an additional test via "Detect Functions"; on save the
         // manifest must include BOTH the existing test and the newly generated one.
@@ -435,7 +431,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let draftZipPath = tempRoot.appendingPathComponent("draft.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: draftZipPath,
             entries: [
                 ("test_existing.py", "print('existing test')")
@@ -450,7 +446,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
               {"source":"upload","index":0,"isTest":true,"tier":"public","order":2,"dependsOn":[],"points":1,"displayName":null}
             ]
             """
-        let generatedFile = makeFile(named: "test_generated.py", contents: "print('generated test')")
+        let generatedFile = ahMakeFile(named: "test_generated.py", contents: "print('generated test')")
 
         let (mergedFiles, mergedConfig) = mergeExistingFilesIntoSuiteFiles(
             suiteFiles: [generatedFile],
@@ -464,19 +460,19 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
         )
 
         let testScripts = Set(package.testSuites.map(\.script))
-        XCTAssertTrue(testScripts.contains("test_existing.py"), "Existing draft test must survive the save")
-        XCTAssertTrue(testScripts.contains("test_generated.py"), "Generated test must be included in manifest")
-        XCTAssertEqual(package.testSuites.count, 2)
+        #expect(testScripts.contains("test_existing.py"), "Existing draft test must survive the save")
+        #expect(testScripts.contains("test_generated.py"), "Generated test must be included in manifest")
+        #expect(package.testSuites.count == 2)
     }
 
-    func testPracticeLabBrowserSetupRoundTripPreservesAllSuiteFiles() throws {
+    @Test func practiceLabBrowserSetupRoundTripPreservesAllSuiteFiles() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("practice-lab-roundtrip-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let originalZipPath = tempRoot.appendingPathComponent("practice.zip").path
-        try makeZip(
+        try ahMakeZip(
             at: originalZipPath,
             entries: [
                 ("assignment.ipynb", "{}"),
@@ -515,9 +511,8 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
             suiteConfigJSON: nil
         )
 
-        XCTAssertEqual(
-            resolved.files.map(\.filename),
-            [
+        #expect(
+            resolved.files.map(\.filename) == [
                 "test.properties.json",
                 "test_q1_bmi.py",
                 "test_q2_bp.py",
@@ -525,8 +520,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
                 "test_q4_patients.py",
                 "test_q5_dose.py",
                 "test_q6_risk.py",
-            ]
-        )
+            ])
 
         let rebuiltZipPath = tempRoot.appendingPathComponent("rebuilt.zip").path
         _ = try createRunnerSetupZip(
@@ -546,9 +540,8 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
 
         let result = currentSetupFiles(for: setup, assignmentID: "asg_practice", solutionFilename: nil)
 
-        XCTAssertEqual(
-            result.existingSuiteRows.map(\.name),
-            [
+        #expect(
+            result.existingSuiteRows.map(\.name) == [
                 "test_q1_bmi.py",
                 "test_q2_bp.py",
                 "test_q3_hr_zone.py",
@@ -556,8 +549,7 @@ final class AssignmentHelpersUtilityTests: AssignmentHelpersTestCase {
                 "test_q5_dose.py",
                 "test_q6_risk.py",
                 "test.properties.json",
-            ]
-        )
-        XCTAssertEqual(result.existingSuiteRows.last?.tier, "support")
+            ])
+        #expect(result.existingSuiteRows.last?.tier == "support")
     }
 }
