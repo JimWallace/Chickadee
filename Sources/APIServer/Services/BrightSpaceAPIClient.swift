@@ -77,9 +77,27 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
     }
 }
 
+// MARK: - Grading seam
+
+/// The network-touching BrightSpace operations the grade-sync sweep depends on.
+///
+/// `BrightSpaceAPIClient` is the production conformer. Tests substitute an
+/// in-memory fake so the sweep's grade-selection, debounce, and user-ID
+/// caching logic can be exercised without a live D2L endpoint.
+protocol BrightSpaceGrading: Sendable {
+    func lookupUserID(orgDefinedId: String, on application: Application) async throws -> String?
+    func pushGrade(
+        orgUnitID: String,
+        gradeObjectID: String,
+        bsUserID: String,
+        earnedPoints: Double,
+        on application: Application
+    ) async throws
+}
+
 // MARK: - Client
 
-actor BrightSpaceAPIClient {
+actor BrightSpaceAPIClient: BrightSpaceGrading {
     private let config: BrightSpaceSyncConfig
 
     init(config: BrightSpaceSyncConfig) {

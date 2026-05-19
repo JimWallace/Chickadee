@@ -21,7 +21,7 @@ import Vapor
 @discardableResult
 func sweepBrightSpaceGradeSync(
     on db: Database,
-    client: BrightSpaceAPIClient,
+    client: any BrightSpaceGrading,
     config: BrightSpaceSyncConfig,
     logger: Logger,
     application: Application,
@@ -57,7 +57,7 @@ func sweepBrightSpaceGradeSync(
 private func pushGradeForResult(
     _ result: APIResult,
     db: Database,
-    client: BrightSpaceAPIClient,
+    client: any BrightSpaceGrading,
     logger: Logger,
     application: Application
 ) async throws {
@@ -172,7 +172,7 @@ private func pushGradeForResult(
 private func resolvedBrightSpaceUserID(
     for userID: UUID,
     db: Database,
-    client: BrightSpaceAPIClient,
+    client: any BrightSpaceGrading,
     application: Application
 ) async throws -> String? {
     guard let user = try await APIUser.find(userID, on: db) else { return nil }
