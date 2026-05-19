@@ -106,19 +106,7 @@ jobs:
 
   api-tests-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Non-blocking while we work through the Swift Testing parallelism
-    # plumbing.  Even `swift test --filter APITests` (no --parallel) runs
-    # multiple class-suite instances concurrently — Swift Testing has its
-    # own scheduler with parallel-by-default that the `--parallel` CLI
-    # flag does NOT control; only `.serialized` traits do, and those only
-    # apply within a suite (not across).  Each test's FluentKit migration
-    # step opens many Postgres connections briefly; with several suites
-    # in-flight the default 100-connection cap is exceeded.
-    # Tracked as a follow-up: either configure a global serialized trait
-    # for the test binary, or land a shared NIO ELG across test apps.
-    # The SQLite api-tests job remains the authoritative APITests gate.
-    continue-on-error: true
+    timeout-minutes: 25
     container:
       image: swift:6.3-jammy
       options: --privileged
@@ -197,9 +185,9 @@ jobs:
     timeout-minutes: 20
     # Sequential to avoid MockURLProtocol global-state races between
     # ReporterTests + JobPollerTests (both use the same process-wide
-    # mock URLProtocol).  Restore --parallel in the final cleanup pass
-    # once the mock is refactored to be per-suite-instance.
-    # (See test-isolation.yml / api-tests for the same pattern.)
+    # mock URLProtocol).  withMockURLProtocolLock serializes within
+    # the test process; --parallel would just have the runner schedule
+    # them across multiple xctest binaries that don't share the lock.
     container:
       image: swift:6.3-jammy
       options: --privileged
