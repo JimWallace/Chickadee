@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.188] - 2026-05-19
+
+### Internal
+
+- **Renamed `AssignmentRoutes+*.swift` files to match their new
+  parent collections.**  Phase 2 split `AssignmentRoutes` into 5
+  `RouteCollection`s but kept the existing `AssignmentRoutes+*.swift`
+  filenames for `git blame` continuity.  Sixteen files since extended
+  a different collection from what their name suggested; this PR
+  closes the deferred file-rename item by aligning the names.
+
+  Renames (all via `git mv`, blame preserved):
+
+    - `AssignmentRoutes.swift` →
+      `InstructorDashboardRoutes.swift`
+    - `AssignmentRoutes+List.swift` →
+      `InstructorDashboardRoutes+List.swift`
+    - `AssignmentRoutes+Submissions.swift` →
+      `InstructorDashboardRoutes+Submissions.swift`
+    - `AssignmentRoutes+NewAssignment.swift` →
+      `DraftAssignmentRoutes+NewAssignment.swift`
+    - `AssignmentRoutes+NewPage.swift` →
+      `DraftAssignmentRoutes+NewPage.swift`
+    - `AssignmentRoutes+SaveValidation.swift` →
+      `DraftAssignmentRoutes+SaveValidation.swift`
+    - `AssignmentRoutes+Draft.swift` →
+      `DraftAssignmentRoutes+SuiteEditing.swift`
+    - `AssignmentRoutes+DraftSections.swift` →
+      `DraftAssignmentRoutes+Sections.swift`
+    - `AssignmentRoutes+Suite.swift` →
+      `PublishedAssignmentRoutes+Suite.swift`
+    - `AssignmentRoutes+SuiteSections.swift` →
+      `PublishedAssignmentRoutes+SuiteSections.swift`
+    - `AssignmentRoutes+Checks.swift` →
+      `PublishedAssignmentRoutes+Checks.swift`
+    - `AssignmentRoutes+Families.swift` →
+      `PublishedAssignmentRoutes+Families.swift`
+    - `AssignmentRoutes+GlobalVariables.swift` →
+      `PublishedAssignmentRoutes+GlobalVariables.swift`
+    - `AssignmentRoutes+Sections.swift` →
+      `CourseAdminRoutes+Sections.swift`
+    - `AssignmentRoutes+Enrollment.swift` →
+      `CourseAdminRoutes+Enrollment.swift`
+    - `AssignmentRoutes+StudentCourse.swift` →
+      `StudentCourseRoutes+History.swift`
+
+  Each file's leading `// APIServer/Routes/Web/<filename>` header
+  comment was updated to match.  The in-scope file list in
+  `WebAssignmentErrorTests.noRawAbortInInstructorAssignmentRoutes`
+  was updated accordingly.
+
+  No source-code edits beyond the path comments — just renames.
+
 ## [0.4.187] - 2026-05-19
 
 ### Internal

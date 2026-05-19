@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+NewPage.swift
+// APIServer/Routes/Web/DraftAssignmentRoutes+NewPage.swift
 //
 // Context-building helpers for `GET /instructor/new`
 // (`AssignmentRoutes.newAssignmentPage`).  Split out per #443: the original

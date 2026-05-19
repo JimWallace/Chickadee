@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Draft.swift
+// APIServer/Routes/Web/DraftAssignmentRoutes+SuiteEditing.swift
 //
 // Draft-scoped siblings of the pattern-family / suite / script endpoints.
 // The Create Assignment page (`/instructor/new`) operates on an

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Checks.swift
+// APIServer/Routes/Web/PublishedAssignmentRoutes+Checks.swift
 //
 // Notebook check editor endpoints.  Sibling to AssignmentRoutes+Families.swift
 // for the parallel concept introduced in the data-science autograding

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Submissions.swift
+// APIServer/Routes/Web/InstructorDashboardRoutes+Submissions.swift
 //
 // Submission-related handlers for AssignmentRoutes.
 // Extracted from AssignmentRoutes.swift — no behaviour changes.
