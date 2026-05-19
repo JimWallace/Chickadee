@@ -160,7 +160,7 @@ import Testing
 
     // MARK: - NotebookSubstitution
 
-    private func minimalNotebook(cellSources: [String]) -> Data {
+    private func minimalNotebook(cellSources: [String]) throws -> Data {
         let cells: [[String: Any]] = cellSources.map { src in
             [
                 "cell_type": "code",
@@ -176,7 +176,7 @@ import Testing
             "nbformat": 4,
             "nbformat_minor": 5,
         ]
-        return try! JSONSerialization.data(withJSONObject: nb)
+        return try JSONSerialization.data(withJSONObject: nb)
     }
 
     @Test func substitution_replacesPlaceholderInCodeCell() throws {
@@ -185,7 +185,7 @@ import Testing
         // i.e. `repr("Khoor")` = `'"Khoor"'`).  Mirrors the design doc's
         // contract: substitution drops a `repr()` directly into Python
         // source.
-        let data = minimalNotebook(cellSources: ["ciphertext = {{ciphertext}}"])
+        let data = try minimalNotebook(cellSources: ["ciphertext = {{ciphertext}}"])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
             substitutions: ["ciphertext": "\"Khoor\""],
@@ -202,7 +202,7 @@ import Testing
     }
 
     @Test func substitution_tagsRewrittenCellWithFencedMetadata() throws {
-        let data = minimalNotebook(cellSources: ["x = \"{{name}}\""])
+        let data = try minimalNotebook(cellSources: ["x = \"{{name}}\""])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
             substitutions: ["name": "\"Alice\""],
@@ -218,8 +218,8 @@ import Testing
         #expect(metadata[NotebookSubstitution.fencedCellMetadataKey] as? String == "name")
     }
 
-    @Test func substitution_strictThrowsOnUnknown() {
-        let data = minimalNotebook(cellSources: ["x = \"{{nope}}\""])
+    @Test func substitution_strictThrowsOnUnknown() throws {
+        let data = try minimalNotebook(cellSources: ["x = \"{{nope}}\""])
         #expect {
             try NotebookSubstitution.apply(
                 notebookData: data,
@@ -235,7 +235,7 @@ import Testing
     }
 
     @Test func substitution_nonStrictLeavesUnknownAlone() throws {
-        let data = minimalNotebook(cellSources: ["x = \"{{nope}}\""])
+        let data = try minimalNotebook(cellSources: ["x = \"{{nope}}\""])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
             substitutions: [:],
@@ -281,8 +281,8 @@ import Testing
         #expect(source == "Welcome {{name}}")
     }
 
-    @Test func substitution_placeholderNamesReturnsSortedDedupedNames() {
-        let data = minimalNotebook(cellSources: [
+    @Test func substitution_placeholderNamesReturnsSortedDedupedNames() throws {
+        let data = try minimalNotebook(cellSources: [
             "a = \"{{name}}\"",
             "b = {{shift}} + {{name}}",
         ])
@@ -290,7 +290,7 @@ import Testing
     }
 
     @Test func substitution_multiplePlaceholdersInOneCell() throws {
-        let data = minimalNotebook(cellSources: ["pair = ({{a}}, {{b}})"])
+        let data = try minimalNotebook(cellSources: ["pair = ({{a}}, {{b}})"])
         let result = try NotebookSubstitution.apply(
             notebookData: data,
             substitutions: ["a": "1", "b": "2"],

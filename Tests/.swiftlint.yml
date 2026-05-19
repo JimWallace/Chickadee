@@ -4,15 +4,6 @@
 parent_config: ../.swiftlint.yml
 
 disabled_rules:
-  # force_try and force_cast remain disabled while their per-site
-  # cleanup follow-ups are staged.  Tests operate on controlled inputs
-  # (literal JSON, known-shape fixture data, etc.) where `try!` and
-  # `as!` are the idiomatic shorthand for "this cannot fail given the
-  # setup; if it does, the test failure is the right signal."
-  # TODO: convert remaining sites to `try` (+ `throws` on the test
-  # signature) and `try #require(x as? T)`, then drop these too.
-  - force_try
-  - force_cast
   # `type_body_length` is disabled for tests: large suites
   # (WorkerDaemonTests at 800 lines, AssignmentRoutesPublishTests at
   # 700+, etc.) group dozens of related tests by area.  Splitting them

@@ -203,14 +203,14 @@ import Testing
             suggestedTitle: nil
         )
         let json = try convertToChickadeeManifest(project: project)
-        let decoded = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+        let decoded = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
 
         #expect(decoded["schemaVersion"] as? Int == 1)
         #expect(decoded["gradingMode"] as? String == "worker")
         #expect(decoded["timeLimitSeconds"] as? Int == 10)
         #expect(decoded["starterNotebook"] as? String == "assignment.ipynb")
 
-        let suites = decoded["testSuites"] as! [[String: String]]
+        let suites = try #require(decoded["testSuites"] as? [[String: String]])
         #expect(suites.count == 2)
         #expect(suites.contains { $0["tier"] == "public" && $0["script"] == "test_public.sh" })
         #expect(suites.contains { $0["tier"] == "release" && $0["script"] == "test_release.sh" })
@@ -226,8 +226,8 @@ import Testing
             suggestedTitle: "Project 2"
         )
         let json = try convertToChickadeeManifest(project: project)
-        let decoded = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
-        let suites = decoded["testSuites"] as! [[String: String]]
+        let decoded = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let suites = try #require(decoded["testSuites"] as? [[String: String]])
 
         #expect(suites.count == 5)
         #expect(suites.filter { $0["tier"] == "public" }.count == 2)
@@ -241,8 +241,8 @@ import Testing
             hasMakefile: false, suggestedTitle: nil
         )
         let json = try convertToChickadeeManifest(project: project)
-        let decoded = try JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
-        let suites = decoded["testSuites"] as! [[String: String]]
+        let decoded = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let suites = try #require(decoded["testSuites"] as? [[String: String]])
         #expect(suites.isEmpty)
     }
 
