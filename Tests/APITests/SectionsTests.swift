@@ -105,7 +105,7 @@ import Testing
                 TestSuiteSection(id: "s2", name: "Two"),
             ]
         )
-        let manifest = String(data: try encoder.encode(props), encoding: .utf8)!
+        let manifest = try #require(String(data: try encoder.encode(props), encoding: .utf8))
 
         let payload = buildSuitePayload(fromManifest: manifest)
         #expect(payload.sections.map(\.id) == ["s1", "s2"])
@@ -146,7 +146,7 @@ import Testing
             notebookChecks: [check],
             sections: [TestSuiteSection(id: "s1", name: "One")]
         )
-        let manifest = String(data: try encoder.encode(props), encoding: .utf8)!
+        let manifest = try #require(String(data: try encoder.encode(props), encoding: .utf8))
 
         let payload = buildSuitePayload(fromManifest: manifest)
         #expect(payload.items.count == 2)

@@ -57,7 +57,7 @@ import XCTVapor
 
     private func userID(for username: String) async throws -> UUID {
         let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
-        return try #require(user).id!
+        return try (#require(user)).requireID()
     }
 
     // MARK: - POST /api/v1/submissions

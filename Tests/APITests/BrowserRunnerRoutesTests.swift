@@ -60,9 +60,7 @@ import XCTVapor
         dueAt: Date? = nil,
         deadlineOverrideActive: Bool = false
     ) async throws -> APIAssignment {
-        let setupOptional = try await APITestSetup.find(testSetupID, on: app.db)
-        #expect(setupOptional != nil)
-        let setup = setupOptional!
+        let setup = try #require(try await APITestSetup.find(testSetupID, on: app.db))
         let assignment = APIAssignment(
             testSetupID: testSetupID,
             title: "Browser Assignment",
@@ -428,9 +426,8 @@ import XCTVapor
                     #expect(res.body.string.contains("closed"))
                 })
 
-            let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
-            #expect(refreshedOptional != nil)
-            let refreshed = refreshedOptional!
+            let refreshed = try #require(
+                try await APIAssignment.find(assignment.id, on: app.db))
             #expect(refreshed.isOpen == false)
 
         }
@@ -479,9 +476,8 @@ import XCTVapor
                     #expect(res.body.string.contains("closed"))
                 })
 
-            let refreshedOptional = try await APIAssignment.find(assignment.id, on: app.db)
-            #expect(refreshedOptional != nil)
-            let refreshed = refreshedOptional!
+            let refreshed = try #require(
+                try await APIAssignment.find(assignment.id, on: app.db))
             #expect(refreshed.isOpen == false)
 
         }

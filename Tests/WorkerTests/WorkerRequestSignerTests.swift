@@ -12,7 +12,7 @@ import FoundationNetworking
 
     @Test func signerProducesExpectedHeadersAndSignature() {
         let signer = WorkerRequestSigner(sharedSecret: "secret-123", workerID: "worker-1")
-        let url = URL(string: "http://localhost:8080/internal/worker/ping")!
+        let url = testURL("http://localhost:8080/internal/worker/ping")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = Data(#"{"submission":"sub_1"}"#.utf8)
@@ -38,7 +38,7 @@ import FoundationNetworking
 
     @Test func signerOmitsWorkerIDWhenNil() {
         let signer = WorkerRequestSigner(sharedSecret: "secret-123", workerID: nil)
-        let url = URL(string: "http://localhost:8080/internal/worker/ping")!
+        let url = testURL("http://localhost:8080/internal/worker/ping")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
 

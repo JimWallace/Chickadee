@@ -225,7 +225,7 @@ import XCTVapor
             try editedJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
 
             // Update DB record to point at the flat file.
-            let setup = try await APITestSetup.find("setup_flat", on: app.db)!
+            let setup = try #require(try await APITestSetup.find("setup_flat", on: app.db))
             setup.notebookPath = flatPath
             try await setup.save(on: app.db)
 
@@ -255,7 +255,7 @@ import XCTVapor
             let flatPath = app.testSetupsDirectory + "setup_flat_kernel.ipynb"
             try python3NotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
 
-            let setup = try await APITestSetup.find("setup_flat_kernel", on: app.db)!
+            let setup = try #require(try await APITestSetup.find("setup_flat_kernel", on: app.db))
             setup.notebookPath = flatPath
             try await setup.save(on: app.db)
 
@@ -447,7 +447,7 @@ import XCTVapor
             let flatPath = app.testSetupsDirectory + "setup_flat_ir.ipynb"
             try irNotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
 
-            let setup = try await APITestSetup.find("setup_flat_ir", on: app.db)!
+            let setup = try #require(try await APITestSetup.find("setup_flat_ir", on: app.db))
             setup.notebookPath = flatPath
             try await setup.save(on: app.db)
 

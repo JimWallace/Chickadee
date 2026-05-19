@@ -45,17 +45,17 @@ import XCTVapor
 
             let overdueReloadedOptional = try await APIAssignment.find(overdue.id, on: app.db)
             #expect(overdueReloadedOptional != nil)
-            let overdueReloaded = overdueReloadedOptional!
+            let overdueReloaded = try #require(overdueReloadedOptional)
             #expect(overdueReloaded.isOpen == false)
 
             let noDeadlineReloadedOptional = try await APIAssignment.find(noDeadline.id, on: app.db)
             #expect(noDeadlineReloadedOptional != nil)
-            let noDeadlineReloaded = noDeadlineReloadedOptional!
+            let noDeadlineReloaded = try #require(noDeadlineReloadedOptional)
             #expect(noDeadlineReloaded.isOpen)
 
             let overriddenReloadedOptional = try await APIAssignment.find(overridden.id, on: app.db)
             #expect(overriddenReloadedOptional != nil)
-            let overriddenReloaded = overriddenReloadedOptional!
+            let overriddenReloaded = try #require(overriddenReloadedOptional)
             #expect(overriddenReloaded.isOpen)
 
         }
@@ -85,14 +85,14 @@ import XCTVapor
 
             let reopenedOptional = try await APIAssignment.find(assignment.id, on: app.db)
             #expect(reopenedOptional != nil)
-            let reopened = reopenedOptional!
+            let reopened = try #require(reopenedOptional)
             #expect(reopened.isOpen)
             #expect(reopened.deadlineOverrideActive == true)
 
             _ = try await closeExpiredAssignments(on: app.db, logger: app.logger)
             let stillOpenOptional = try await APIAssignment.find(assignment.id, on: app.db)
             #expect(stillOpenOptional != nil)
-            let stillOpen = stillOpenOptional!
+            let stillOpen = try #require(stillOpenOptional)
             #expect(stillOpen.isOpen)
 
         }

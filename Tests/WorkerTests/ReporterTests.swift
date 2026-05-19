@@ -17,7 +17,7 @@ import FoundationNetworking
 /// HTTP-only URLProtocol pipeline doesn't produce.
 @Suite(.serialized) struct ReporterTests {
 
-    private let apiBaseURL = URL(string: "https://server.test")!
+    private let apiBaseURL = testURL("https://server.test")
 
     // MARK: report() — happy path
 

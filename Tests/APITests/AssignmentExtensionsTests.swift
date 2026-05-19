@@ -166,9 +166,9 @@ import XCTVapor
                 userID: try student.requireID(),
                 extendedDueAt: future
             ).save(on: app.db)
-            let withExt = try await effectiveDueAt(for: assignment, user: student, on: app.db)
-            #expect(withExt != nil)
-            #expect(abs(withExt!.timeIntervalSinceReferenceDate - future.timeIntervalSinceReferenceDate) < 1)
+            let withExt = try #require(
+                try await effectiveDueAt(for: assignment, user: student, on: app.db))
+            #expect(abs(withExt.timeIntervalSinceReferenceDate - future.timeIntervalSinceReferenceDate) < 1)
 
             // Sanity: the per-user gate now reports open.
             let openForExtended = try await isAssignmentEffectivelyOpen(

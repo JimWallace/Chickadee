@@ -142,9 +142,10 @@ import XCTVapor
                 })
 
             // The zip now contains the generated .py files.
-            let assignment = try await APIAssignment.query(on: app.db)
-                .filter(\.$publicID == id).first()!
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db)
+                    .filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let entries = Set(listZipEntries(zipPath: setup.zipPath))
             #expect(entries.contains("publictest_bmi_category_01.py"))
             #expect(entries.contains("publictest_bmi_category_02.py"))

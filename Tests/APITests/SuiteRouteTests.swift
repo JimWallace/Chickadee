@@ -116,11 +116,9 @@ import XCTVapor
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let s = res.body.string
-                    let firstIdx = s.range(of: "publictest_first.py")?.lowerBound
-                    let secondIdx = s.range(of: "publictest_second.py")?.lowerBound
-                    #expect(firstIdx != nil)
-                    #expect(secondIdx != nil)
-                    #expect(firstIdx! < secondIdx!, "first should precede second in the payload")
+                    let firstIdx = try #require(s.range(of: "publictest_first.py")?.lowerBound)
+                    let secondIdx = try #require(s.range(of: "publictest_second.py")?.lowerBound)
+                    #expect(firstIdx < secondIdx, "first should precede second in the payload")
                 })
 
         }
@@ -163,8 +161,8 @@ import XCTVapor
                 },
                 afterResponse: { res in
                     let s = res.body.string
-                    let aIdx = s.range(of: "publictest_a.py")!.lowerBound
-                    let bIdx = s.range(of: "publictest_b.py")!.lowerBound
+                    let aIdx = try #require(s.range(of: "publictest_a.py")?.lowerBound)
+                    let bIdx = try #require(s.range(of: "publictest_b.py")?.lowerBound)
                     #expect(bIdx < aIdx, "b should now precede a")
                 })
 
@@ -209,8 +207,8 @@ import XCTVapor
                 })
 
             // Persisted manifest must have expanded filenames, not family:bmi.
-            let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let assignment = try #require(try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
             let followup = try #require(props.testSuites.first { $0.script == "publictest_followup.py" })
             #expect(
@@ -274,8 +272,8 @@ import XCTVapor
                     })
             }
 
-            let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let assignment = try #require(try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let entries = Set(listZipEntries(zipPath: setup.zipPath))
             #expect(
                 entries.contains("publictest_bmi_01.py") == false,
@@ -321,8 +319,8 @@ import XCTVapor
                     #expect(res.status == .ok, "\(res.body.string)")
                 })
 
-            let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let assignment = try #require(try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
             let generated = props.testSuites.filter { $0.generatedBy != nil }
             #expect(generated.count == 2)
@@ -364,8 +362,8 @@ import XCTVapor
                     #expect(res.status == .ok, "\(res.body.string)")
                 })
 
-            let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let assignment = try #require(try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             // The generated .py must contain the approx-kind comparison.
             let source = try #require(
                 readScriptFromZip(
@@ -483,8 +481,8 @@ import XCTVapor
             // Step 4: the manifest still has exactly one notebook check
             // entry pointing at the same id; no spurious hand-written script
             // got created for the generated filename.
-            let assignment = try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first()!
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: app.db)!
+            let assignment = try #require(try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
             #expect(props.notebookChecks.map(\.id) == ["var_exists_x"])
             let checkEntries = props.testSuites.filter { $0.generatedByCheck == "var_exists_x" }

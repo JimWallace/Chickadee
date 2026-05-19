@@ -195,7 +195,7 @@ import XCTVapor
     @Test func requestJob_pendingWorkerModeStudent_returnsJob() async throws {
         try await withApp(app) { _ in
             let setup = try await makeTestSetup(id: "wsetup_01", manifest: workerManifestJSON)
-            let sub = try await makeSubmission(id: "wsub_01", setupID: setup.id!)
+            let sub = try await makeSubmission(id: "wsub_01", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
             let body = try workerRequestBody(workerID: "w1")
@@ -211,7 +211,7 @@ import XCTVapor
                     #expect(job.submissionID == sub.id)
                     #expect(job.testSetupID == setup.id)
                     #expect(job.attemptNumber == 1)
-                    #expect(job.testSetupURL.path == "/api/v1/worker/testsetups/\(setup.id!)/download")
+                    #expect(job.testSetupURL.path == "/api/v1/worker/testsetups/\((try setup.requireID()))/download")
                     #expect(
                         URLComponents(url: job.testSetupURL, resolvingAgainstBaseURL: false)?
                             .queryItems?
@@ -231,7 +231,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let setup = try await makeTestSetup(id: "wsetup_version", manifest: workerManifestJSON)
             try Data("print('A')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
-            let firstSub = try await makeSubmission(id: "wsub_version_1", setupID: setup.id!)
+            let firstSub = try await makeSubmission(id: "wsub_version_1", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
             let firstBody = try workerRequestBody(workerID: "w-version-1")
@@ -254,7 +254,7 @@ import XCTVapor
                 })
 
             try Data("print('B')\n".utf8).write(to: URL(fileURLWithPath: setup.zipPath))
-            let secondSub = try await makeSubmission(id: "wsub_version_2", setupID: setup.id!)
+            let secondSub = try await makeSubmission(id: "wsub_version_2", setupID: (try setup.requireID()))
 
             let secondBody = try workerRequestBody(workerID: "w-version-2")
             try await app.asyncTest(
@@ -284,7 +284,8 @@ import XCTVapor
             // Browser-mode pending submissions ARE claimed by the worker as a backstop
             // (e.g., browser runner failed, timed out, or these are pre-fix stuck submissions).
             let setup = try await makeTestSetup(id: "bsetup_01", manifest: browserManifestJSON)
-            let sub = try await makeSubmission(id: "bsub_01", setupID: setup.id!, kind: APISubmission.Kind.student)
+            let sub = try await makeSubmission(
+                id: "bsub_01", setupID: (try setup.requireID()), kind: APISubmission.Kind.student)
 
             let path = "/api/v1/worker/request"
             let body = try workerRequestBody(workerID: "w1")
@@ -314,7 +315,7 @@ import XCTVapor
             // The worker should only see "pending" submissions; "complete" ones are invisible.
             let setup = try await makeTestSetup(id: "bsetup_02", manifest: browserManifestJSON)
             _ = try await makeSubmission(
-                id: "bsub_complete", setupID: setup.id!,
+                id: "bsub_complete", setupID: (try setup.requireID()),
                 status: "complete", kind: APISubmission.Kind.student)
 
             let path = "/api/v1/worker/request"
@@ -339,8 +340,8 @@ import XCTVapor
             // Two sequential worker polls should each claim one; no double-claiming.
             let workerSetup = try await makeTestSetup(id: "mixed_wsetup", manifest: workerManifestJSON)
             let browserSetup = try await makeTestSetup(id: "mixed_bsetup", manifest: browserManifestJSON)
-            let workerSub = try await makeSubmission(id: "mixed_wsub", setupID: workerSetup.id!)
-            let browserSub = try await makeSubmission(id: "mixed_bsub", setupID: browserSetup.id!)
+            let workerSub = try await makeSubmission(id: "mixed_wsub", setupID: (try workerSetup.requireID()))
+            let browserSub = try await makeSubmission(id: "mixed_bsub", setupID: (try browserSetup.requireID()))
 
             let path = "/api/v1/worker/request"
 
@@ -375,8 +376,8 @@ import XCTVapor
             // Both submissions should be claimed, each by a different worker.
             let allIDs = Set([firstJobID, secondJobID].compactMap { $0 })
             #expect(allIDs.count == 2, "Both submissions must be claimed exactly once")
-            #expect(allIDs.contains(workerSub.id!))
-            #expect(allIDs.contains(browserSub.id!))
+            #expect(allIDs.contains((try workerSub.requireID())))
+            #expect(allIDs.contains((try browserSub.requireID())))
 
             // Third poll — nothing left.
             let body3 = try workerRequestBody(workerID: "w3")
@@ -398,7 +399,7 @@ import XCTVapor
             // Validation submissions are always worker-mode regardless of manifest gradingMode
             let setup = try await makeTestSetup(id: "vsetup_01", manifest: workerManifestJSON)
             let sub = try await makeSubmission(
-                id: "vsub_01", setupID: setup.id!,
+                id: "vsub_01", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.validation)
 
             let path = "/api/v1/worker/request"
@@ -423,10 +424,10 @@ import XCTVapor
             // Worker-mode student submission should be returned before a validation submission
             let setup = try await makeTestSetup(id: "psetup_01", manifest: workerManifestJSON)
             let student = try await makeSubmission(
-                id: "psub_student", setupID: setup.id!,
+                id: "psub_student", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.student)
             _ = try await makeSubmission(
-                id: "psub_val", setupID: setup.id!,
+                id: "psub_val", setupID: (try setup.requireID()),
                 kind: APISubmission.Kind.validation)
 
             let path = "/api/v1/worker/request"
@@ -451,7 +452,7 @@ import XCTVapor
             // One pending submission; two workers race to claim it.
             // The transaction in requestJob must ensure only one succeeds.
             let setup = try await makeTestSetup(id: "cc_setup", manifest: workerManifestJSON)
-            _ = try await makeSubmission(id: "cc_sub", setupID: setup.id!)
+            _ = try await makeSubmission(id: "cc_sub", setupID: (try setup.requireID()))
 
             let path = "/api/v1/worker/request"
             let secret = workerSecret  // String — Sendable
@@ -503,13 +504,13 @@ import XCTVapor
             let later = now.addingTimeInterval(-60)
 
             // Retest with the OLDER submittedAt (would win under pure FIFO).
-            let retest = try await makeSubmission(id: "prio_retest", setupID: setup.id!)
+            let retest = try await makeSubmission(id: "prio_retest", setupID: (try setup.requireID()))
             retest.submittedAt = earlier
             retest.retestedAt = now
             try await retest.save(on: app.db)
 
             // Fresh submission with a NEWER submittedAt — should still be claimed first.
-            let fresh = try await makeSubmission(id: "prio_fresh", setupID: setup.id!)
+            let fresh = try await makeSubmission(id: "prio_fresh", setupID: (try setup.requireID()))
             fresh.submittedAt = later
             try await fresh.save(on: app.db)
 
@@ -555,12 +556,12 @@ import XCTVapor
             let earlier = now.addingTimeInterval(-3600)
             let later = now.addingTimeInterval(-60)
 
-            let olderRetest = try await makeSubmission(id: "rprio_r1", setupID: setup.id!)
+            let olderRetest = try await makeSubmission(id: "rprio_r1", setupID: (try setup.requireID()))
             olderRetest.submittedAt = earlier
             olderRetest.retestedAt = now
             try await olderRetest.save(on: app.db)
 
-            let newerRetest = try await makeSubmission(id: "rprio_r2", setupID: setup.id!)
+            let newerRetest = try await makeSubmission(id: "rprio_r2", setupID: (try setup.requireID()))
             newerRetest.submittedAt = later
             newerRetest.retestedAt = now
             try await newerRetest.save(on: app.db)
@@ -589,9 +590,9 @@ import XCTVapor
     @Test func downloadSubmission_existingFile_returns200() async throws {
         try await withApp(app) { _ in
             let setup = try await makeTestSetup(id: "dlsetup_01", manifest: workerManifestJSON)
-            let sub = try await makeSubmission(id: "dlsub_01", setupID: setup.id!)
+            let sub = try await makeSubmission(id: "dlsub_01", setupID: (try setup.requireID()))
 
-            let path = "/api/v1/worker/submissions/\(sub.id!)/download"
+            let path = "/api/v1/worker/submissions/\((try sub.requireID()))/download"
             try await app.asyncTest(
                 .GET, path,
                 beforeRequest: { req in
@@ -625,7 +626,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let setup = try await makeTestSetup(id: "dlts_01", manifest: workerManifestJSON)
 
-            let path = "/api/v1/worker/testsetups/\(setup.id!)/download"
+            let path = "/api/v1/worker/testsetups/\((try setup.requireID()))/download"
             try await app.asyncTest(
                 .GET, path,
                 beforeRequest: { req in

@@ -112,12 +112,14 @@ final class MockURLProtocol: URLProtocol {
             return
         }
 
-        let response = HTTPURLResponse(
-            url: request.url ?? URL(string: "https://example.invalid")!,
-            statusCode: stub.status,
-            httpVersion: "HTTP/1.1",
-            headerFields: stub.headers
-        )!
+        guard
+            let response = HTTPURLResponse(
+                url: request.url ?? testURL("https://example.invalid"),
+                statusCode: stub.status,
+                httpVersion: "HTTP/1.1",
+                headerFields: stub.headers
+            )
+        else { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: stub.body)
         client?.urlProtocolDidFinishLoading(self)
