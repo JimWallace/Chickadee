@@ -164,7 +164,7 @@ import XCTVapor
             runnerProfile.capabilitiesJSON = "[]"
             runnerProfile.profileHash = nil
             runnerProfile.lastRegisteredAt = now
-            runnerProfile.lastSeenAt = now
+            runnerProfile.lastSeenAt = Date().addingTimeInterval(3600)
             runnerProfile.isActive = true
             try await runnerProfile.save(on: app.db)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -532,7 +532,7 @@ import XCTVapor
             runnerProfile.capabilitiesJSON = "[]"
             runnerProfile.profileHash = nil
             runnerProfile.lastRegisteredAt = now
-            runnerProfile.lastSeenAt = now
+            runnerProfile.lastSeenAt = Date().addingTimeInterval(3600)
             runnerProfile.isActive = true
             try await runnerProfile.save(on: app.db)
 
@@ -742,7 +742,7 @@ import XCTVapor
             runnerProfile.capabilitiesJSON = "[]"
             runnerProfile.profileHash = nil
             runnerProfile.lastRegisteredAt = now
-            runnerProfile.lastSeenAt = now
+            runnerProfile.lastSeenAt = Date().addingTimeInterval(3600)
             runnerProfile.isActive = true
             try await runnerProfile.save(on: app.db)
 
@@ -844,7 +844,7 @@ import XCTVapor
             runnerProfile.capabilitiesJSON = "[]"
             runnerProfile.profileHash = nil
             runnerProfile.lastRegisteredAt = now
-            runnerProfile.lastSeenAt = now
+            runnerProfile.lastSeenAt = Date().addingTimeInterval(3600)
             runnerProfile.isActive = true
             try await runnerProfile.save(on: app.db)
             let cookie = try await arLoginAsInstructor(on: app)
