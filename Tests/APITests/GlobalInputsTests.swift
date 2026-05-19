@@ -13,7 +13,7 @@ import Core
 import Foundation
 import Testing
 
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite struct GlobalInputsTests {
 

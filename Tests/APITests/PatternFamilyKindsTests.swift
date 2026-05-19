@@ -12,7 +12,7 @@ import Foundation
 import Testing
 import Vapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite struct PatternFamilyKindsTests {
 

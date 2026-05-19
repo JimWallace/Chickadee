@@ -4,7 +4,7 @@ import Testing
 import Vapor
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite(.serialized) final class JupyterLiteContentsRoutesTests {
     private struct InjectAuthMiddleware: AsyncMiddleware {

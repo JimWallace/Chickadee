@@ -11,7 +11,7 @@ import Foundation
 import Testing
 import Vapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 // MARK: - Family fixtures
 

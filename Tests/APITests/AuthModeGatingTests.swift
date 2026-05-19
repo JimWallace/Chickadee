@@ -10,7 +10,7 @@ import Foundation
 import Testing
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 // `.serialized` until the migration is complete (Phase 4) and we audit which
 // suites need it — one test mutates `OIDC_CALLBACK` and each test brings up a

@@ -2,7 +2,7 @@ import Fluent
 import Testing
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite struct ScanModeMiddlewareTests {
 

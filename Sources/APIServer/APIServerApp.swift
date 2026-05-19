@@ -7,35 +7,35 @@ import Foundation
 import Leaf
 import Vapor
 
-@main
-struct APIServerApp {
-    static func main() async throws {
-        var env = try Environment.detect()
-        let cliWorkerSecret = extractWorkerSecretArgument(from: &env)
-        try LoggingSystem.bootstrap(from: &env)
+/// Library entry point invoked by the `chickadee-server` executable target.
+/// Lives in `APIServer` (a library) so test targets can compile against the
+/// same module without pulling in `@main` semantics.
+public func runAPIServer() async throws {
+    var env = try Environment.detect()
+    let cliWorkerSecret = extractWorkerSecretArgument(from: &env)
+    try LoggingSystem.bootstrap(from: &env)
 
-        let app = try await Application.make(env)
-        app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
+    let app = try await Application.make(env)
+    app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
 
-        do {
-            try configure(app, cliWorkerSecret: cliWorkerSecret)
+    do {
+        try configure(app, cliWorkerSecret: cliWorkerSecret)
 
-            // Load OIDC configuration after configure() so app.client is ready.
-            if app.authMode != .local {
-                let oidcConfig = try await OIDCConfiguration.load(from: app)
-                app.oidcConfig = oidcConfig
-            }
-
-            try await app.execute()
-        } catch {
-            await app.localRunnerManager.stopIfRunning(logger: app.logger)
-            try await app.asyncShutdown()
-            throw error
+        // Load OIDC configuration after configure() so app.client is ready.
+        if app.authMode != .local {
+            let oidcConfig = try await OIDCConfiguration.load(from: app)
+            app.oidcConfig = oidcConfig
         }
 
+        try await app.execute()
+    } catch {
         await app.localRunnerManager.stopIfRunning(logger: app.logger)
         try await app.asyncShutdown()
+        throw error
     }
+
+    await app.localRunnerManager.stopIfRunning(logger: app.logger)
+    try await app.asyncShutdown()
 }
 
 func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: AuthMode? = nil) throws {

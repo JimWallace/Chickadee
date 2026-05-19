@@ -9,7 +9,7 @@ import Foundation
 import Testing
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 /// Stands up the standard AssignmentRoutes test app and runs the body
 /// against it.  Shuts the app down before returning.

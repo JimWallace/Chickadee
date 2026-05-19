@@ -12,7 +12,7 @@ import Foundation
 import Testing
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite(.serialized) final class ScriptEditRoutesTests {
 

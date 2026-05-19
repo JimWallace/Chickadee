@@ -9,7 +9,7 @@ import Testing
 import XCTVapor
 
 @testable import Core
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite(.serialized) final class SubmissionRoutesTests {
 

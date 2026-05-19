@@ -14,7 +14,7 @@ import SQLKit
 import Testing
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 func configureTestDatabase(_ app: Application) async throws {
     // Read env vars while holding the async env lock so we don't see a

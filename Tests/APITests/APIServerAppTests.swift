@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import Vapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 // Tests that mutate process env vars must wrap their body in
 // `withTestEnvironment`, which acquires the shared async env lock.  The

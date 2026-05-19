@@ -15,7 +15,7 @@ import Fluent
 import Foundation
 import Testing
 
-@testable import chickadee_server
+@testable import APIServer
 
 // final class so deinit can remove the per-test temp directory.
 @Suite(.serialized)

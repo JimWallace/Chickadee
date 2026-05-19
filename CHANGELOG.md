@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.176] - 2026-05-19
+
+### Internal
+
+- **Library extraction: `APIServer` is now a `target`, `chickadee-server`
+  is a thin executable wrapper.**  Previously `chickadee-server` was a
+  single `executableTarget` containing the entire server (35K LOC, 176
+  files), and `APITests` depended on it directly.  Every `swift test`
+  re-linked the binary as a side effect.  The new layout:
+    - `Sources/APIServer/` is a `.target` (library) named `APIServer`
+      with the same source files.
+    - `Sources/chickadee-server/main.swift` is a 7-line executable
+      target that just calls `runAPIServer()` from the library.
+    - `APITests` now depends on `APIServer` instead of the executable.
+
+  The executable name and on-disk layout (`.build/release/chickadee-server`)
+  are preserved, so Dockerfiles, systemd units, and `deploy/` scripts
+  are unaffected.  All 89 `@testable import chickadee_server` test
+  imports were rewritten to `@testable import APIServer`.  No
+  behaviour change; the server's `runAPIServer()` is byte-for-byte
+  the body of the old `APIServerApp.main()`.
+
+- **`AssignmentContextTypes.swift` split into four cohesive files.**
+  The 422-line megafile contained 22 `Encodable` Leaf-context structs
+  across four unrelated views.  The split:
+    - `AssignmentListContexts.swift` — instructor dashboard listing
+      (`AssignmentRow`, `CourseSectionRow`, `AssignmentsContext`,
+      `InstructorDashboardMetric`, `EnrolledStudentRow`,
+      `AssignmentSubmissionsContext`, `AssignmentStudentRow`).
+    - `AssignmentEditorContexts.swift` — validate/new/edit pages
+      (`ValidateContext`, `NewAssignmentContext`, `EditAssignmentContext`,
+      `NewAssignmentNotebookContext`).
+    - `SuiteRowContexts.swift` — per-row types shared by new/edit
+      (`SuiteSectionShellRow`, `SuiteSectionVariableShellRow`,
+      `CurrentFileLink`, `EditableSuiteRow`, `FamilySuiteRow`).
+    - `StudentSubmissionContexts.swift` — per-student submission views.
+
+  Isolates each `Encodable` synthesis to its own translation unit so
+  touching one context no longer revalidates the others.  Field nesting
+  (`NewAssignmentContext` is still 26 stored properties) is deferred —
+  the Leaf templates reference fields flat via `#(field)`, so nesting
+  would force a template-side rewrite for marginal compile-time gain.
+
 ## [0.4.175] - 2026-05-19
 
 ### Internal

@@ -8,7 +8,7 @@ import Testing
 import Vapor
 
 @testable import Core
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite struct ManifestValidationTests {
 

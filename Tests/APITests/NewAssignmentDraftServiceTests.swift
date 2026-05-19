@@ -23,7 +23,7 @@ import Testing
 import Vapor
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite(.serialized) final class NewAssignmentDraftServiceTests {
 

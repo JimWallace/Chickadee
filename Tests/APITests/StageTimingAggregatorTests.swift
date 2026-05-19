@@ -1,7 +1,7 @@
 import Testing
 
 @testable import Core
-@testable import chickadee_server
+@testable import APIServer
 
 @Suite struct StageTimingAggregatorTests {
 
