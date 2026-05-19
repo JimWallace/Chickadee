@@ -15,160 +15,51 @@
 //   POST /instructor/:assignmentID/close           → set isOpen=false → redirect to /instructor
 //   POST /instructor/:assignmentID/delete          → remove assignment record → redirect to /instructor
 //   POST /instructor/setup/:setupID/delete         → remove orphaned (unpublished) test setup → redirect to /instructor
-//   POST /instructor/:assignmentID/section         → move assignment to a section (or ungrouped)
-//   POST /instructor/sections                      → create a new course section
-//   POST /instructor/sections/reorder              → reorder sections
-//   POST /instructor/sections/:sectionID/rename    → rename/reconfigure a section
-//   POST /instructor/sections/:sectionID/delete    → delete a section
+//
+// Section CRUD + roster (enroll-csv, enrollment-mode, unenroll) live on
+// `CourseAdminRoutes` as of v0.4.177.
 
 import Core
 import Fluent
 import Foundation
 import Vapor
 
-struct AssignmentRoutes: RouteCollection {
+struct InstructorDashboardRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        // Course-scoped instructor actions (not under the /instructor prefix).
-        routes.post("courses", ":courseID", "enrollment-mode", use: setCourseEnrollmentMode)
-        routes.post("courses", ":courseID", "enroll-csv", use: instructorBulkEnrollCSV)
-        routes.post("courses", ":courseID", "unenroll", ":userID", use: instructorUnenrollUser)
-        routes.post("courses", ":courseID", "pre-unenroll", ":preEnrollmentID", use: instructorCancelPreEnrollment)
+        // Course-scoped admin actions (enrollment mode, CSV bulk enroll,
+        // unenroll, pre-enroll cancel) and section CRUD live on
+        // `CourseAdminRoutes`.  Registered separately in `routes.swift`.
 
-        // Per-course, per-student grouped submissions view + drilldown.
-        // Lives outside the `/instructor` prefix so the URL carries the
-        // course code; the literal `students` second segment routes ahead
-        // of the vanity catch-all `/:courseCode/:assignmentSlug`.
-        routes.get(":courseCode", "students", ":urlToken", "submissions", use: courseStudentSubmissionsPage)
-        routes.get(
-            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "history",
-            use: studentAssignmentHistoryPage
-        )
-        routes.post(
-            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "retest",
-            use: retestStudentAssignment
-        )
-        routes.post(
-            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
-            use: saveStudentAssignmentExtension
-        )
-        routes.post(
-            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
-            "delete",
-            use: deleteStudentAssignmentExtension
-        )
+        // Per-course, per-student grouped submissions view + drilldown
+        // live on `StudentCourseRoutes` (registered in routes.swift).
 
         let r = routes.grouped("instructor")
         r.get(use: list)
         r.get("grades.csv", use: exportGradesCSV)
-        r.get("enroll-csv", use: enrollCSVForm)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.post(":assignmentID", "retest", use: retestAllSubmissions)
         r.post(":assignmentID", "students", ":studentID", "reset-notebook", use: resetStudentNotebook)
-        r.get("new", use: newAssignmentPage)
-        r.post("new", "draft", use: updateNewAssignmentDraft)
-        r.get("new", "draft", "solution-notebook", use: draftSolutionNotebook)
-        // Draft-scoped suite / families / scripts endpoints.  Mirror the
-        // `:assignmentID`-scoped routes below, but identify the target
-        // `APITestSetup` via a `draftID` query parameter because the
-        // assignment hasn't been published yet.  Added in v0.4.91 so the
-        // Create Assignment page can author pattern families before save.
-        r.get("new", "draft", "suite", use: getDraftSuite)
-        r.put("new", "draft", "suite", use: putDraftSuite)
-        r.put("new", "draft", "families", use: putDraftPatternFamilies)
-        // Draft-scoped notebook checks (v0.4.132 / parity PR 2 of #433).
-        // Mirrors PUT /instructor/:assignmentID/checks; uses the shared
-        // applyNotebookChecksEdit core, which also re-applies the current
-        // pattern families so both generated-script sets stay in sync.
-        r.put("new", "draft", "checks", use: putDraftNotebookChecks)
-        r.post("new", "draft", "scripts", use: createDraftScript)
-        r.delete("new", "draft", "scripts", ":filename", use: deleteDraftScript)
-        // Draft-scoped file download (v0.4.132 / parity PR 3 of #433).
-        // Used by the support-file list on the create page so instructors
-        // can click a filename to inspect the bundled data file before
-        // publish.  Mirrors `downloadCurrentSetupItem` for the assignment-
-        // scoped case.
-        r.get("new", "draft", "files", "item", use: downloadDraftSetupItem)
-        // Draft-scoped suite-section CRUD (v0.4.132, #435).  Mirrors the
-        // assignment-scoped routes registered below; identical body /
-        // validation / response shape, only the resolver and redirect
-        // target differ.  See AssignmentRoutes+DraftSections.swift.
-        r.post("new", "draft", "suite-sections", use: createDraftSuiteSection)
-        r.post("new", "draft", "suite-sections", "reorder", use: reorderDraftSuiteSections)
-        r.post("new", "draft", "suite-sections", ":sectionID", "rename", use: renameDraftSuiteSection)
-        r.post("new", "draft", "suite-sections", ":sectionID", "delete", use: deleteDraftSuiteSection)
-        r.post("new", "draft", "suite-sections", ":sectionID", "variables", use: updateDraftSuiteSectionVariables)
-        r.post("new", "save", use: saveNewAssignment)
+        // Draft-assignment authoring (create page, save, publish, draft
+        // suite / family / check / script / suite-section CRUD) lives on
+        // `DraftAssignmentRoutes` (registered in routes.swift).
         r.post("reorder", use: reorderAssignments)
-        r.post("sections", use: createSection)
-        r.post("sections", "reorder", use: reorderSections)
-        r.post("sections", ":sectionID", "rename", use: renameSection)
-        r.post("sections", ":sectionID", "delete", use: deleteSection)
-        r.post(":assignmentID", "section", use: moveToSection)
-        r.post(use: publish)
+        // Section CRUD + `:assignmentID/section` move live on
+        // `CourseAdminRoutes` (registered in routes.swift).
         r.get(":assignmentID", "validate", use: validatePage)
         r.get(":assignmentID", "edit", use: editPage)
-        r.post(":assignmentID", "edit", "save", use: saveEditedAssignment)
-        r.get(":assignmentID", "files", "notebook", use: downloadCurrentNotebookFile)
-        r.get(":assignmentID", "files", "solution", use: downloadCurrentSolutionFile)
-        r.get(":assignmentID", "files", "item", use: downloadCurrentSetupItem)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
         r.post(":assignmentID", "close", use: closeAssignment)
         r.post(":assignmentID", "delete", use: deleteAssignment)
         r.post("setup", ":setupID", "delete", use: deleteUnpublishedSetup)
-        r.post(":assignmentID", "create-solution", use: createSolutionFromAssignment)
 
-        // Script editor — inline CRUD for individual test/support files in the setup zip.
-        r.get("script-templates", use: getScriptTemplates)
-        r.post("scan-notebook", use: scanNotebook)
-        r.get(":assignmentID", "scripts", ":filename", use: getScript)
-        r.put(":assignmentID", "scripts", ":filename", use: updateScript)
-        r.post(":assignmentID", "scripts", use: createScript)
-        r.delete(":assignmentID", "scripts", ":filename", use: deleteScript)
-
-        // Pattern family editor — canonical spec lives inside the test setup
-        // manifest.  PUT replaces the full list atomically (renders scripts,
-        // mutates the zip, rewrites the manifest); GET reads the current list.
-        r.get(":assignmentID", "families", use: getPatternFamilies)
-        r.put(":assignmentID", "families", use: putPatternFamilies)
-
-        // Notebook check editor — sibling concept to pattern families.
-        // Same atomic-replace semantics as /families above.  Each check
-        // expands to exactly one generated test script at save time.
-        r.get(":assignmentID", "checks", use: getNotebookChecks)
-        r.put(":assignmentID", "checks", use: putNotebookChecks)
-
-        // Unified suite editor — GET returns the full reconciled list
-        // (scripts + families, in manifest order).  PUT replaces the whole
-        // list atomically; each mutation in the suite-edit UI sends a fresh
-        // snapshot here and replaces its local state from the response.
-        r.get(":assignmentID", "suite", use: getSuite)
-        r.put(":assignmentID", "suite", use: putSuite)
-
-        // Suite-section CRUD — per-op, form-POST + redirect (v0.4.98).
-        // Mirrors the instructor-dashboard course-section pattern
-        // (`AssignmentRoutes+Sections.swift`) so section create / rename /
-        // delete / reorder don't have to ride the whole-state `PUT /suite`
-        // pipeline.  These handlers mutate `manifest.sections` directly —
-        // they do NOT rebuild the zip or re-run `applyPatternFamilies`.
-        r.post(":assignmentID", "suite-sections", use: createSuiteSection)
-        r.post(":assignmentID", "suite-sections", "reorder", use: reorderSuiteSections)
-        r.post(":assignmentID", "suite-sections", ":sectionID", "rename", use: renameSuiteSection)
-        r.post(":assignmentID", "suite-sections", ":sectionID", "delete", use: deleteSuiteSection)
-        r.post(":assignmentID", "suite-sections", ":sectionID", "variables", use: updateSuiteSectionVariables)
-
-        // Slice 1 — assignment-scope global variables.  Same `+ Add Input`
-        // shape as section vars but visible to every pattern family,
-        // every raw test script, and every `{{name}}` placeholder in the
-        // starter notebook.  Triggers a full `applyPatternFamilies`
-        // re-render so generated tests get the new values inlined and
-        // raw scripts get re-prepended (idempotent — unchanged scripts
-        // stay byte-identical).
-        r.get(":assignmentID", "global-variables", use: getGlobalVariables)
-        r.put(":assignmentID", "global-variables", use: putGlobalVariables)
+        // Published-assignment editor surface (edit/save, file downloads,
+        // script CRUD, suite + sections + global variables + pattern
+        // families + notebook checks) lives on `PublishedAssignmentRoutes`
+        // (registered in routes.swift).
     }
 
     // MARK: - GET /instructor

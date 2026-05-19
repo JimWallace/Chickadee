@@ -74,7 +74,7 @@ func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
 ///   - whatever `applyPatternFamilies` throws for validation failures.
 func applySuiteEdit(
     setup: APITestSetup,
-    body: AssignmentRoutes.SuitePayload,
+    body: SuitePayload,
     on db: Database
 ) async throws {
     var authored: [AuthoredSuiteItem] = []

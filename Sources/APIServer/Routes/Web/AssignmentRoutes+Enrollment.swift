@@ -1,13 +1,15 @@
 // APIServer/Routes/Web/AssignmentRoutes+Enrollment.swift
 //
-// Enrollment-related handlers for AssignmentRoutes.
-// Extracted from AssignmentRoutes.swift — no behaviour changes.
+// Enrollment-related handlers.  Phase 2 of the audit refactor moved them
+// from `AssignmentRoutes` onto `CourseAdminRoutes`; the file name still
+// starts with `AssignmentRoutes+` for blame continuity until the next
+// rename pass.
 
 import Core
 import Fluent
 import Vapor
 
-extension AssignmentRoutes {
+extension CourseAdminRoutes {
     // MARK: - GET /instructor/enroll-csv
 
     @Sendable

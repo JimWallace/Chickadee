@@ -11,7 +11,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension PublishedAssignmentRoutes {
 
     // MARK: - GET /instructor/:assignmentID/families
     //

@@ -12,7 +12,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension DraftAssignmentRoutes {
 
     // MARK: - Notebook context
 

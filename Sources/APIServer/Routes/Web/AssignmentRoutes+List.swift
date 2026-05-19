@@ -23,7 +23,7 @@ struct CourseRosterData {
     let metrics: [InstructorDashboardMetric]
 }
 
-extension AssignmentRoutes {
+extension InstructorDashboardRoutes {
 
     // MARK: - Setup + assignment fetches
 

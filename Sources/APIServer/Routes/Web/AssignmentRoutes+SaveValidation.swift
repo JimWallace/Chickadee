@@ -66,7 +66,7 @@ struct ValidatedSaveNewAssignment {
     let requirementSpec: AssignmentRequirementSpec?
 }
 
-extension AssignmentRoutes {
+extension DraftAssignmentRoutes {
 
     // MARK: - Multipart fan-in
 

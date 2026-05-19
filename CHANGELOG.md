@@ -6,6 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.177] - 2026-05-19
+
+### Internal
+
+- **`AssignmentRoutes` split into five `RouteCollection`s.**  The old
+  `struct AssignmentRoutes` extended over 17 `+*.swift` files and ~6.5
+  KLOC of handlers from five conceptually independent surfaces.  Swift
+  type-checks every extension as part of the parent type, so every
+  edit to any of the 17 files forced revalidation of the whole struct.
+  Phase 2 of the audit refactor splits it into:
+
+    - `InstructorDashboardRoutes` — the dashboard list view, assignment
+      lifecycle (open/close/delete/status), validate page, grade CSV
+      export, per-assignment submissions drilldown, BrightSpace sync.
+      (Renamed from `AssignmentRoutes`; same files: `AssignmentRoutes.swift`,
+      `AssignmentRoutes+List.swift`, `AssignmentRoutes+Submissions.swift`.)
+    - `DraftAssignmentRoutes` — draft authoring (new-assignment page,
+      draft suite / family / check / script / suite-section CRUD,
+      save, publish).  Lives across `AssignmentRoutes+NewAssignment.swift`,
+      `AssignmentRoutes+NewPage.swift`, `AssignmentRoutes+SaveValidation.swift`,
+      `AssignmentRoutes+Draft.swift`, `AssignmentRoutes+DraftSections.swift`.
+    - `PublishedAssignmentRoutes` — published-assignment editing
+      (edit/save, file downloads, script CRUD, unified suite editor,
+      suite-section CRUD, global variables, pattern families, notebook
+      checks).  Lives across `AssignmentRoutes+Editor.swift`,
+      `AssignmentRoutes+Suite.swift`, `AssignmentRoutes+SuiteSections.swift`,
+      `AssignmentRoutes+GlobalVariables.swift`,
+      `AssignmentRoutes+Families.swift`, `AssignmentRoutes+Checks.swift`.
+      Also hosts the two `/instructor`-scope utilities used by both new
+      and edit pages: `script-templates` and `scan-notebook`.
+    - `StudentCourseRoutes` — per-course, per-student submission views
+      (`/:courseCode/students/:urlToken/...`, retest, deadline extensions).
+      Lives in `AssignmentRoutes+StudentCourse.swift`.
+    - `CourseAdminRoutes` — course section CRUD and roster management
+      (`/instructor/sections/...`, `/courses/:courseID/...`).
+      Lives across `AssignmentRoutes+Sections.swift` and
+      `AssignmentRoutes+Enrollment.swift`.
+
+  Each new collection's `boot()` lives in a dedicated file
+  (`InstructorDashboardRoutes` still uses `AssignmentRoutes.swift` for
+  blame continuity); the `+*.swift` extension files are unchanged on
+  disk save for swapping `extension AssignmentRoutes` for the new
+  parent.  Routes themselves and URL shape are unchanged.
+
+  Two minor support changes were needed:
+
+    - The four nested DTOs on the old `AssignmentRoutes` (`SuitePayload`,
+      `SuiteItemDTO`, `ScriptDTO`, `TestSuiteSectionDTO`) lifted into a
+      new top-level file `SuitePayloadDTOs.swift` so the draft and
+      published collections can share them.  Pure relocation; no
+      behavioural change.
+    - `preferredResultsBySubmissionID` promoted from a method on
+      `AssignmentRoutes` to a free function so `InstructorDashboardRoutes`
+      and `StudentCourseRoutes` can both call it.
+    - `draftSolutionNotebook` (a draft-scoped handler that had been
+      parked in `AssignmentRoutes+Editor.swift`) moved to
+      `AssignmentRoutes+Draft.swift` to land with the rest of
+      `DraftAssignmentRoutes`.
+
+  Deferred to a follow-up pass: renaming the `AssignmentRoutes+*.swift`
+  files to match their new parent type (`PublishedAssignmentRoutes+Suite.swift`,
+  etc.).  Kept as-is for `git blame` continuity until the next cleanup.
+
 ## [0.4.176] - 2026-05-19
 
 ### Internal

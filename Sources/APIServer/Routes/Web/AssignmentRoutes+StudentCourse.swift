@@ -8,13 +8,18 @@
 // instructor actions per row: per-student retest, and an inline form to
 // grant / edit / revoke a deadline extension that lets that one student
 // keep submitting after the assignment-wide deadline.
+//
+// Phase 2 of the audit refactor moved these handlers from
+// `AssignmentRoutes` onto `StudentCourseRoutes`; the file name still
+// starts with `AssignmentRoutes+` for blame continuity until the next
+// rename pass.
 
 import Core
 import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension StudentCourseRoutes {
 
     // MARK: - GET /:courseCode/students/:urlToken/submissions
 
@@ -491,7 +496,7 @@ extension AssignmentRoutes {
 
 // MARK: - Private helpers
 
-extension AssignmentRoutes {
+extension StudentCourseRoutes {
     /// Resolves `(course, student)` from `:courseCode` + `:urlToken`.
     /// Throws `WebAssignmentError.notFound` if either side is missing OR if
     /// the student is not currently enrolled in the course (matches the

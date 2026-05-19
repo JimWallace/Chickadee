@@ -35,7 +35,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension PublishedAssignmentRoutes {
 
     private static let reservedGlobalNames: Set<String> = ["seed"]
 
