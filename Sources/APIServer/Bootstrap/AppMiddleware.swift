@@ -13,6 +13,9 @@
 //   HTTPSRedirectMiddleware — only when enforceHTTPS, before sessions
 //   sessions.middleware
 //   UserSessionAuthenticator
+//   SessionIdleTimeoutMiddleware — runs before UserActivityMiddleware
+//                                   so it sees the previous request's
+//                                   lastSeenAt (not a freshly-refreshed one)
 //   UserActivityMiddleware
 //   UserFileNamespaceMiddleware
 //   ScanModeMiddleware      — gates destructive POSTs in scan windows
@@ -86,6 +89,13 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     }
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
+    if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
+        app.middleware.use(
+            SessionIdleTimeoutMiddleware(
+                idleTimeoutSeconds: securityConfiguration.sessionIdleTimeoutSeconds
+            )
+        )
+    }
     app.middleware.use(UserActivityMiddleware(debounceWindow: 60))
     app.middleware.use(UserFileNamespaceMiddleware())
     // Scan-mode seatbelt: when SCAN_MODE=true is set in the environment, the

@@ -13,23 +13,34 @@ struct AppSecurityConfiguration: Sendable {
     let enforceHTTPS: Bool
     let trustForwardedProto: Bool
     let sessionCookieSecure: Bool
+    /// Idle (inactivity) timeout in seconds. Zero disables the gate.
+    /// Set via `SESSION_IDLE_TIMEOUT_MINUTES` (default 30 minutes).
+    let sessionIdleTimeoutSeconds: TimeInterval
 
     static let `default` = AppSecurityConfiguration(
         publicBaseURL: nil,
         enforceHTTPS: false,
         trustForwardedProto: true,
-        sessionCookieSecure: false
+        sessionCookieSecure: false,
+        sessionIdleTimeoutSeconds: 30 * 60
     )
 
     static func fromEnvironment(authMode: AuthMode) -> Self {
         let publicBaseURL = trimmedEnv("PUBLIC_BASE_URL").flatMap(URL.init(string:))
         let publicBaseIsHTTPS = (publicBaseURL?.scheme?.lowercased() == "https")
 
+        // SESSION_IDLE_TIMEOUT_MINUTES: positive integer = idle ceiling in
+        // minutes; 0 or negative disables the gate. Default 30 satisfies the
+        // standard institutional inactivity-logout requirement.
+        let idleMinutes = environmentInt("SESSION_IDLE_TIMEOUT_MINUTES") ?? 30
+        let idleSeconds = idleMinutes > 0 ? TimeInterval(idleMinutes) * 60 : 0
+
         return AppSecurityConfiguration(
             publicBaseURL: publicBaseURL,
             enforceHTTPS: environmentBool("ENFORCE_HTTPS") ?? (authMode != .local && publicBaseIsHTTPS),
             trustForwardedProto: environmentBool("TRUST_X_FORWARDED_PROTO") ?? true,
-            sessionCookieSecure: environmentBool("SESSION_COOKIE_SECURE") ?? (publicBaseIsHTTPS || authMode != .local)
+            sessionCookieSecure: environmentBool("SESSION_COOKIE_SECURE") ?? (publicBaseIsHTTPS || authMode != .local),
+            sessionIdleTimeoutSeconds: idleSeconds
         )
     }
 }
