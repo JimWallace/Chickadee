@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.184] - 2026-05-19
+
+### Internal
+
+- **`AssignmentRoutes+Editor.swift` split into four cohesive files.**
+  Counterpart to v0.4.183 (Phase 4.1, `ManifestValidation` split).
+  The 809-LOC file mixed four conceptually distinct handler groups
+  under a single `extension PublishedAssignmentRoutes`.  Split into:
+
+    - `PublishedAssignmentRoutes+FileDownloads.swift` (109 LOC) —
+      the three `GET /instructor/:assignmentID/files/...` endpoints
+      (notebook / item / solution).
+    - `PublishedAssignmentRoutes+SaveEdit.swift` (328 LOC) —
+      `saveEditedAssignment` plus its seven file-private helpers
+      (`parseSaveEditedAssignmentForm`,
+      `resolvedAssignmentNotebookRaw`,
+      `resolveSolutionForEditedAssignment`,
+      `persistAssignmentNotebook`,
+      `extractSupportFilesForActiveSuite`,
+      `enqueueValidationForEditedAssignment`, plus the two
+      fileprivate types `SaveEditedAssignmentForm` and
+      `ResolvedSolution`).
+    - `PublishedAssignmentRoutes+ScriptCRUD.swift` (281 LOC) — the
+      four `:assignmentID/scripts` endpoints (get/put/post/delete)
+      plus the `safeScriptFilename(from:)` free helper that
+      `AssignmentRoutes+Draft.swift` also calls.
+    - `PublishedAssignmentRoutes+NotebookTools.swift` (140 LOC) —
+      `script-templates`, `scan-notebook`, and `create-solution`
+      endpoints.
+
+  Filenames now match their new parent type — the audit's deferred
+  `AssignmentRoutes+*` → `PublishedAssignmentRoutes+*` rename happens
+  here for the four split files.  Other `AssignmentRoutes+*.swift`
+  filenames stay as-is until those are next touched.
+
+  Also updated `WebAssignmentErrorTests.noRawAbortInInstructorAssignmentRoutes`
+  to reference the four new filenames in its in-scope list.
+
 ## [0.4.183] - 2026-05-19
 
 ### Internal
