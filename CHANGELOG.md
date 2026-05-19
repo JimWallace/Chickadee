@@ -6,7 +6,91 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.174] - 2026-05-19
+
 ### Internal
+
+- **Complete XCTest → Swift Testing migration.**  Phases 0–4E plus
+  final cleanup (#597–#609) ported every test file (~107) from
+  XCTest to Swift Testing and deleted the three shared
+  `XCTestCase` base classes (`WebRoutesTestCase`,
+  `AssignmentRoutesTestCase`, `AssignmentHelpersTestCase`) and the
+  `PatternFamilyTestCase` fixture.  The CI gate
+  `scripts/no-new-xctest.sh` now forbids `import XCTest` anywhere
+  under `Tests/`.
+
+  Pattern across the migration:
+  - `final class X: XCTestCase` → `@Suite struct X` (default) or
+    `@Suite final class X` with sync `init()` / `deinit` when the
+    suite owns expensive state.
+  - Shared-base subclasses replaced with free-function helpers
+    (`withWebRoutesApp`, `withAssignmentRoutesApp`,
+    `withPatternFamilyFixture`) and `wr*` / `ar*` / `ah*` / `pf*`
+    helper modules.
+  - Vapor app lifecycle wrapped per-`@Test` via
+    `try await withApp(app) { _ in ... }` so shutdown is
+    deterministic.
+  - Cross-suite serializers `withAsyncEnvLock { ... }` (env-var
+    mutations) and `withMockURLProtocolLock { ... }` (worker
+    MockURLProtocol global state).
+  - `XCTSkip` → `guard condition else { return }` for silent
+    skip-on-platform; `throw IssueRecorded("…")` for skip-as-
+    failure when setup is broken.
+  - Force unwraps in new tests use `try #require(value)` (the
+    `XCTUnwrap` equivalent); the `force_unwrapping` / `force_try`
+    / `force_cast` exemption stays in `Tests/.swiftlint.yml` until
+    a dedicated cleanup pass.
+
+  Migration scaffolding removed in #609: the 3× repeat-run CI
+  workflow (`test-isolation.yml`) and the per-file XCTest
+  allowlist (`scripts/xctest-allowlist.txt`).  See the rewritten
+  Testing Conventions section of `CLAUDE.md` for the post-
+  migration state.
+
+- **Fix `makeTestApp` partial-init SIGILL that took down
+  api-tests-postgres.**  Every test factory that built an
+  `Application` via `Application.make(.testing)` could leak a
+  half-built app if any subsequent setup step threw —
+  `Application.deinit` runs the *sync* `shutdown()`, which on a
+  testing app with NIO event loops + FluentKit pools trips an
+  assertion in `ServeCommand.deinit` → SIGILL on Linux,
+  terminating the entire xctest process and every other
+  concurrent test.  Introduces a `makeTestingApplication(setup:)`
+  helper that owns the build / asyncShutdown-on-throw contract;
+  routes every `makeApp`-style factory (`makeTestApp`,
+  `SSOAuthFlowTests.makeApp`, `AssignmentSeedStoreTests.init`,
+  `AuthModeGatingTests.makeApp`, `NotebookWebRoutesTests.init`,
+  `SecurityAndHealthTests.makeHealthApp`,
+  `withPatternFamilyFixture`) through it.
+
+- **Unify env-mutation lock across test suites.**  The previous
+  setup had two locks — `EnvTestLock.shared` (NSLock, sync
+  scopes) and `withAsyncEnvLock` (actor, async scopes) — that
+  didn't coordinate, so env writers in one suite could run while
+  env readers (`configureTestDatabase`'s
+  `testDatabaseSettingsFromEnvironment` call) in another suite
+  were in flight.  Drops the NSLock, replaces the per-suite
+  `EnvironmentScope` / `withEnvironment` helpers with a single
+  async `withTestEnvironment(_:perform:)`, and wraps
+  `configureTestDatabase`'s env read in `withAsyncEnvLock`.  The
+  actor lock is reentrant on the same task (TaskLocal) so nested
+  `withTestEnvironment` → `configureTestDatabase` calls don't
+  deadlock.
+
+- **Cap Swift Testing's internal parallel width on APITests
+  jobs.**  Swift Testing schedules class-suite instances in
+  parallel regardless of `swift test --parallel`.  Each in-flight
+  test app holds a FluentKit connection pool; at unbounded
+  parallelism the combined demand exceeded Postgres's default
+  100-connection cap (`FATAL: sorry, too many clients already`)
+  and the SQLite job's pool timeouts.  Sets
+  `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` on
+  `api-tests` and `api-tests-postgres` so at most four test apps
+  run concurrently — well under the connection cap, with most of
+  the parallelism speedup preserved.  `api-tests-postgres` is
+  back to a blocking gate.
+
+### Internal (pre-migration tranche)
 
 - **Migrate 5 standalone XCTest files to Swift Testing.**  First slice
   of round-2 review item #4 (89 XCTest files total).  Picked the
