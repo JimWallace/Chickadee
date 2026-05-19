@@ -212,39 +212,52 @@ func makeTestApp(
     appConfig: AppConfig? = nil
 ) async throws -> Application {
     let app = try await Application.make(.testing)
-    app.authMode = authMode
-    // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
-    // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
-    // sane defaults during integration tests. Callers can pass a custom
-    // `appConfig` to exercise specific config branches.
-    app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
+    // If anything below throws, the Application local goes out of scope and
+    // `Application.deinit` calls the *synchronous* `shutdown()`.  A testing
+    // Application has async lifecycle threads (NIO ELG, FluentKit pools); the
+    // sync deinit path trips `ServeCommand.deinit`'s "not properly shut down"
+    // assertion → SIGILL, which terminates the whole xctest process and takes
+    // every other concurrently-running test with it.  Wrap setup so any throw
+    // does a clean `asyncShutdown` first; the test then fails cleanly with
+    // the original error rather than crashing the run.
+    do {
+        app.authMode = authMode
+        // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
+        // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
+        // sane defaults during integration tests. Callers can pass a custom
+        // `appConfig` to exercise specific config branches.
+        app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
 
-    let tmpDir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
-        .path
-    let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-    for dir in dirs {
-        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
+            .path
+        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+        for dir in dirs {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+        app.resultsDirectory = dirs[0]
+        app.testSetupsDirectory = dirs[1]
+        app.submissionsDirectory = dirs[2]
+        // Seed the worker-secret and local-runner-autostart paths into the
+        // per-test temp directory so admin/worker-management tests don't
+        // collide with each other or with the dev .worker-secret on disk.
+        app.workerSecretFilePath = tmpDir + ".worker-secret"
+        app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
+        app.storage[TestDataDirectoryKey.self] = tmpDir
+
+        app.sessions.use(.memory)
+        app.middleware.use(app.sessions.middleware)
+
+        try await configureTestDatabase(app)
+
+        configureLeaf(app)
+        try routes(app)
+
+        return app
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
     }
-    app.resultsDirectory = dirs[0]
-    app.testSetupsDirectory = dirs[1]
-    app.submissionsDirectory = dirs[2]
-    // Seed the worker-secret and local-runner-autostart paths into the
-    // per-test temp directory so admin/worker-management tests don't
-    // collide with each other or with the dev .worker-secret on disk.
-    app.workerSecretFilePath = tmpDir + ".worker-secret"
-    app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
-    app.storage[TestDataDirectoryKey.self] = tmpDir
-
-    app.sessions.use(.memory)
-    app.middleware.use(app.sessions.middleware)
-
-    try await configureTestDatabase(app)
-
-    configureLeaf(app)
-    try routes(app)
-
-    return app
 }
 
 extension Application {
