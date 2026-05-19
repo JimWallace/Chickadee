@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.181] - 2026-05-19
+
+### Added
+
+- **Idle session timeout (institutional requirement).**  Authenticated
+  sessions that go 30 minutes without a request are now expired
+  server-side: any OIDC bearer tokens stashed in the session are
+  cleared, the user is logged out, an `auth.session_idle_timeout`
+  audit row is written, and the next request is redirected to
+  `/login?error=timeout` (browser) or returned `401 Unauthorized`
+  (API).  Applies to local and SSO auth modes alike — the gate
+  reads `users.last_seen_at`, which `UserActivityMiddleware`
+  already refreshes (debounced 60 s) on every authenticated
+  request, so no schema change is required.
+
+  Configurable via `SESSION_IDLE_TIMEOUT_MINUTES` (default 30, set
+  to 0 to disable).  The middleware sits between
+  `UserSessionAuthenticator` and `UserActivityMiddleware` in the
+  global chain so it reads the previous request's `lastSeenAt`
+  rather than the freshly-refreshed value.  New file:
+  `Sources/APIServer/Middleware/SessionIdleTimeoutMiddleware.swift`.
+
 ## [0.4.180] - 2026-05-19
 
 ### Internal

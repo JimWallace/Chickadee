@@ -24,7 +24,8 @@ import XCTVapor
             publicBaseURL: publicBaseURL.flatMap { URL(string: $0) },
             enforceHTTPS: enforceHTTPS,
             trustForwardedProto: trustForwardedProto,
-            sessionCookieSecure: false
+            sessionCookieSecure: false,
+            sessionIdleTimeoutSeconds: 0
         )
         app.middleware.use(HTTPSRedirectMiddleware(configuration: config))
         app.get("test") { _ in "ok" }

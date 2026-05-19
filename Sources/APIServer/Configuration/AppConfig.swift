@@ -65,6 +65,12 @@ struct AppConfig: Sendable {
                 "security: publicBaseURL=\(security.publicBaseURL?.absoluteString ?? "(unset)"), enforceHTTPS=\(security.enforceHTTPS), trustForwardedProto=\(security.trustForwardedProto), sessionCookieSecure=\(security.sessionCookieSecure)"
             )
         }
+        let idleTimeout = security.sessionIdleTimeoutSeconds
+        if idleTimeout > 0 {
+            logger.info("security: sessionIdleTimeoutMinutes=\(Int(idleTimeout / 60))")
+        } else {
+            logger.info("security: sessionIdleTimeout=disabled")
+        }
         if auth.mode != .local {
             logger.info(
                 "oidc: clientID=\(redactPresence(oidc.clientID)), clientSecret=\(redactPresence(oidc.clientSecret)), callbackPath=\(oidc.callbackPath), usernameClaim=\(oidc.usernameClaim), emailClaim=\(oidc.emailClaim)"

@@ -72,7 +72,8 @@ import XCTVapor
             publicBaseURL: publicBaseURL.flatMap(URL.init(string:)),
             enforceHTTPS: false,
             trustForwardedProto: true,
-            sessionCookieSecure: false
+            sessionCookieSecure: false,
+            sessionIdleTimeoutSeconds: 0
         )
         return app
     }

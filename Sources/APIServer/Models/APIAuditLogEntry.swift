@@ -95,6 +95,7 @@ enum AuditAction: String, Sendable {
     case loginSuccess = "auth.login_success"
     case loginFailure = "auth.login_failure"
     case loginLocked = "auth.login_locked"
+    case sessionIdleTimeout = "auth.session_idle_timeout"
 }
 
 enum AuditTargetType: String, Sendable {

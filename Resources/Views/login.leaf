@@ -11,6 +11,8 @@ Log in
         <p>Invalid username or password.</p>
         #elseif(error == "locked"):
         <p>Too many failed sign-in attempts. Please try again in a few minutes.</p>
+        #elseif(error == "timeout"):
+        <p>You were signed out after a period of inactivity. Please log in again.</p>
         #elseif(error == "sso_denied"):
         <p>UWaterloo sign-in was canceled or denied.</p>
         #elseif(error == "sso_not_configured"):
