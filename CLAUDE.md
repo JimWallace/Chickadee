@@ -404,44 +404,50 @@ same bytes without a build-time network fetch.
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only for new files.** The codebase is mid-
-  migration from XCTest to Swift Testing. The remaining `XCTestCase`
-  files stay until their phase migrates them; CI rejects new
-  `import XCTest` lines via `scripts/no-new-xctest.sh`.
+- **Framework: Swift Testing only.** All ~107 test files are on Swift
+  Testing as of the migration completion (PRs #597–#608). `scripts/no-new-xctest.sh`
+  blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`, and
   `@Test(arguments:)`. Avoid `CustomExecutionTrait`, hand-rolled trait
   types, and anything still labelled experimental in the Swift Testing
-  source — the API is still evolving and we don't want migration churn
-  on toolchain bumps.
-- **Struct vs class suites.** Default to `@Suite struct Foo` with each
-  `@Test` building its own fixture. Use `@Suite final class Foo` only
-  when you need `init()` / `deinit` for setup/teardown of expensive
-  shared state (e.g. temp directories with explicit cleanup). See
-  `Tests/WorkerTests/DirectorySizeBytesTests.swift` for the class
-  pattern and `Tests/APITests/COEPMiddlewareTests.swift` for the struct
-  pattern.
-- **`.serialized` on DB-touching suites.** Postgres test parallelism
-  uses per-class isolated schemas (commit `b615235`); within a suite,
-  Swift Testing runs tests in parallel by default. Suites that mutate
-  shared rows or env vars must annotate `@Suite(.serialized)`. New
-  migrated suites start `.serialized` with a TODO and relax later once
-  Phase 4 finishes.
-- **Env-var isolation: `EnvTestLock`.** Tests that call
-  `setenv`/`unsetenv` must grab `EnvTestLock.shared` (see
-  `Tests/APITests/EnvTestLock.swift`). The lock prevents concurrent
-  env-mutating tests from clobbering each other under `--parallel`.
-- **Force unwraps in new tests.** Even though `Tests/.swiftlint.yml`
-  still permits `!` / `try!` / `as!` for the legacy XCTest files, new
-  Swift Testing files must use `try #require(value)` instead — it's the
-  idiomatic equivalent of `XCTUnwrap` and gives a usable failure
-  message. After Phase 4 (XCTest fully gone), the test-folder lint
-  exemption itself will be dropped.
+  source — the API is still evolving.
+- **Struct vs class suites.**
+  - **`@Suite struct Foo`** — default. Per-test instance is cheap.
+  - **`@Suite final class Foo`** with `init()` / `deinit` — when the
+    suite needs expensive shared state per-test instance (temp
+    directories, Vapor app fixtures). For Vapor apps, store `let app`
+    and wrap each `@Test` body in `try await withApp(app) { _ in ... }`
+    so shutdown is deterministic; the next test's `init` builds a
+    fresh app.
+- **`with*App` helpers** for DB-backed suite clusters
+  (`withWebRoutesApp`, `withAssignmentRoutesApp`, `withPatternFamilyFixture`).
+  See `Tests/APITests/WebRoutesHelpers.swift` etc. for the pattern.
+- **`.serialized` on DB- or env-touching suites.** Swift Testing runs
+  tests in parallel within a suite by default; `.serialized` gates
+  within-suite parallelism. For cross-suite serialization (e.g. tests
+  that mutate process env vars), use the actor-backed
+  `withAsyncEnvLock { ... }` in `Tests/APITests/EnvTestLock.swift` or
+  `withMockURLProtocolLock { ... }` in
+  `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
+- **Force unwraps in new tests.** `Tests/.swiftlint.yml` still
+  permits `!` / `try!` / `as!` while the test corpus is being cleaned
+  up. New code should use `try #require(value)` instead — the
+  idiomatic Swift Testing replacement for `XCTUnwrap`.
+- **Skipping a test at runtime.** Don't use `Issue.record` to skip — it
+  records a failure. Either `guard condition else { return }` (silent)
+  or `throw IssueRecorded("...")` (fails with a clear message) — pick
+  based on whether the unmet condition is "expected on this platform"
+  (silent) or "test setup is broken" (failure).
 - **Pattern references.**
   - Standalone struct suite:
     [Tests/APITests/COEPMiddlewareTests.swift](Tests/APITests/COEPMiddlewareTests.swift)
-  - Class suite with `init`/`deinit`:
+  - Class suite with sync `init`/`deinit`:
     [Tests/APITests/ZipArchiverTests.swift](Tests/APITests/ZipArchiverTests.swift)
+  - Class suite with stored `app` + per-test `withApp`:
+    [Tests/APITests/AdminRoutesTests.swift](Tests/APITests/AdminRoutesTests.swift)
+  - `with*App` helper-driven suite:
+    [Tests/APITests/WebRoutesIndexTests.swift](Tests/APITests/WebRoutesIndexTests.swift)
   - Parameterized + `try #require`:
     [Tests/APITests/MarmosetImportParserTests.swift](Tests/APITests/MarmosetImportParserTests.swift)
   - Worker-side class suite:
