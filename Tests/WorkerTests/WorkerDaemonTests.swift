@@ -609,6 +609,15 @@ import Glibc
         }
         #expect(didReport, "Expected fallback report after reporter failure")
 
+        // Wait for the daemon to come back around for its second poll
+        // (post-job-completion).  Under slow CI runners `task.cancel()`
+        // could otherwise race the daemon's poll-loop resumption and
+        // leave pollCount stuck at 1.
+        let didPollAgain = await waitUntil(timeoutSeconds: 5) {
+            await poller.observedRequestCount() > 1
+        }
+        #expect(didPollAgain, "Expected daemon to resume polling after first job")
+
         task.cancel()
         do {
             try await task.value
