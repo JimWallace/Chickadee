@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.187] - 2026-05-19
+
+### Internal
+
+- **Extracted `_diagnostic-cards` Leaf partial.**
+  `assignments.leaf` and `assignment-submissions.leaf` both rendered
+  the same `#for(metric in metrics)` loop wrapping `<article
+  class="diagnostic-card">` cards.  Lifted into a new
+  `Resources/Views/_diagnostic-cards.leaf` partial; each call site
+  shrinks from a 9-line section to a 3-line `#extend("_diagnostic-cards")`.
+
+  `admin.leaf` keeps its own hardcoded 5-card structure — those cards
+  have JS-targeted `id="diag-…"` attributes filled in by polling, not
+  a Swift-side `metrics` array, so the loop pattern doesn't apply.
+
 ## [0.4.186] - 2026-05-19
 
 ### Internal

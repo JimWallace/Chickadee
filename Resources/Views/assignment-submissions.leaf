@@ -8,14 +8,7 @@
 </div>
 
 <section class="assignment-diagnostics">
-    <div class="diagnostics-cards">
-        #for(metric in metrics):
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">#(metric.label)</div>
-            <div class="diagnostic-value">#(metric.value)</div>
-        </article>
-        #endfor
-    </div>
+    #extend("_diagnostic-cards")
 </section>
 
 #if(rows.isEmpty):
