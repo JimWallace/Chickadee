@@ -16,7 +16,12 @@ import XCTVapor
 @testable import chickadee_server
 
 func configureTestDatabase(_ app: Application) async throws {
-    var settings = try testDatabaseSettingsFromEnvironment()
+    // Read env vars while holding the async env lock so we don't see a
+    // transient `TEST_DATABASE_BACKEND=postgres` set by a concurrently-
+    // running env-mutating test in another suite.
+    var settings = try await withAsyncEnvLock {
+        try testDatabaseSettingsFromEnvironment()
+    }
 
     // Per-test isolated schema for Postgres so `swift test --parallel` can
     // run XCTestCase subclasses concurrently against one shared database.
@@ -170,6 +175,34 @@ func withApp(_ app: Application, _ body: (Application) async throws -> Void) asy
     }
 }
 
+/// Creates a `.testing` Vapor Application and runs `setup`, returning the
+/// fully-configured app to the caller.  If `setup` throws, the partial
+/// Application is `asyncShutdown`-d before the error is rethrown.
+///
+/// This is the safe replacement for the bare pattern
+///
+///     let app = try await Application.make(.testing)
+///     /* setup that may throw */
+///     return app
+///
+/// which leaks a half-built `Application` on throw.  `Application.deinit`
+/// then calls the *synchronous* `shutdown()`, and on a testing app with
+/// NIO event loops + FluentKit pools that trips an assertion in
+/// `ServeCommand.deinit` → SIGILL on Linux.  That terminates the whole
+/// xctest process and kills every other concurrent test.
+func makeTestingApplication(
+    setup: (Application) async throws -> Void
+) async throws -> Application {
+    let app = try await Application.make(.testing)
+    do {
+        try await setup(app)
+        return app
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
+    }
+}
+
 // MARK: - Standard test app
 
 private struct TestDataDirectoryKey: StorageKey {
@@ -211,40 +244,39 @@ func makeTestApp(
     authMode: AuthMode = .local,
     appConfig: AppConfig? = nil
 ) async throws -> Application {
-    let app = try await Application.make(.testing)
-    app.authMode = authMode
-    // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
-    // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
-    // sane defaults during integration tests. Callers can pass a custom
-    // `appConfig` to exercise specific config branches.
-    app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
+    try await makeTestingApplication { app in
+        app.authMode = authMode
+        // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
+        // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
+        // sane defaults during integration tests. Callers can pass a custom
+        // `appConfig` to exercise specific config branches.
+        app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
 
-    let tmpDir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
-        .path
-    let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-    for dir in dirs {
-        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
+            .path
+        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+        for dir in dirs {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+        app.resultsDirectory = dirs[0]
+        app.testSetupsDirectory = dirs[1]
+        app.submissionsDirectory = dirs[2]
+        // Seed the worker-secret and local-runner-autostart paths into the
+        // per-test temp directory so admin/worker-management tests don't
+        // collide with each other or with the dev .worker-secret on disk.
+        app.workerSecretFilePath = tmpDir + ".worker-secret"
+        app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
+        app.storage[TestDataDirectoryKey.self] = tmpDir
+
+        app.sessions.use(.memory)
+        app.middleware.use(app.sessions.middleware)
+
+        try await configureTestDatabase(app)
+
+        configureLeaf(app)
+        try routes(app)
     }
-    app.resultsDirectory = dirs[0]
-    app.testSetupsDirectory = dirs[1]
-    app.submissionsDirectory = dirs[2]
-    // Seed the worker-secret and local-runner-autostart paths into the
-    // per-test temp directory so admin/worker-management tests don't
-    // collide with each other or with the dev .worker-secret on disk.
-    app.workerSecretFilePath = tmpDir + ".worker-secret"
-    app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
-    app.storage[TestDataDirectoryKey.self] = tmpDir
-
-    app.sessions.use(.memory)
-    app.middleware.use(app.sessions.middleware)
-
-    try await configureTestDatabase(app)
-
-    configureLeaf(app)
-    try routes(app)
-
-    return app
 }
 
 extension Application {

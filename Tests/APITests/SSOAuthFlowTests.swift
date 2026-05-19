@@ -108,21 +108,21 @@ import XCTVapor
         authMode: AuthMode = .sso,
         oidcConfig: OIDCConfiguration? = nil
     ) async throws -> Application {
-        let app = try await Application.make(.testing)
-        app.authMode = authMode
+        try await makeTestingApplication { app in
+            app.authMode = authMode
 
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-        app.middleware.use(UserSessionAuthenticator())
-        configureLeaf(app)
+            app.sessions.use(.memory)
+            app.middleware.use(app.sessions.middleware)
+            app.middleware.use(UserSessionAuthenticator())
+            configureLeaf(app)
 
-        try await configureTestDatabase(app)
+            try await configureTestDatabase(app)
 
-        // Inject mock OIDC config — no network calls needed
-        app.oidcConfig = oidcConfig ?? Self.mockOIDCConfig
+            // Inject mock OIDC config — no network calls needed
+            app.oidcConfig = oidcConfig ?? Self.mockOIDCConfig
 
-        try routes(app)
-        return app
+            try routes(app)
+        }
     }
 
     private func withEnvironment(

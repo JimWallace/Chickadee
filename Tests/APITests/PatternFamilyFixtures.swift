@@ -106,27 +106,40 @@ struct PFFixture {
 /// shuts the app down deterministically when the body returns.
 func withPatternFamilyFixture(_ body: (PFFixture) async throws -> Void) async throws {
     let app = try await Application.make(.testing)
-    try await configureTestDatabase(app)
-
     let tmpDir = NSTemporaryDirectory() + "pattern-family-tests-\(UUID().uuidString)/"
-    try FileManager.default.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
-    app.testSetupsDirectory = tmpDir
 
-    let courseID = UUID()
-    let course = APICourse(id: courseID, code: "PF101", name: "Pattern Family Test", enrollmentMode: .auto)
-    try await course.save(on: app.db)
+    let fixture: PFFixture
+    do {
+        try await configureTestDatabase(app)
 
-    let zipPath = tmpDir + "\(UUID().uuidString).zip"
-    try pfWriteEmptyZip(at: zipPath)
+        try FileManager.default.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
+        app.testSetupsDirectory = tmpDir
 
-    let initialManifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false)
-    let setup = APITestSetup(
-        id: "pf_test_\(UUID().uuidString.prefix(8))",
-        manifest: initialManifest, zipPath: zipPath, courseID: courseID
-    )
-    try await setup.save(on: app.db)
+        let courseID = UUID()
+        let course = APICourse(
+            id: courseID, code: "PF101", name: "Pattern Family Test", enrollmentMode: .auto)
+        try await course.save(on: app.db)
 
-    let fixture = PFFixture(app: app, setup: setup)
+        let zipPath = tmpDir + "\(UUID().uuidString).zip"
+        try pfWriteEmptyZip(at: zipPath)
+
+        let initialManifest = try makeWorkerManifestJSON(testSuites: [], includeMakefile: false)
+        let setup = APITestSetup(
+            id: "pf_test_\(UUID().uuidString.prefix(8))",
+            manifest: initialManifest, zipPath: zipPath, courseID: courseID
+        )
+        try await setup.save(on: app.db)
+
+        fixture = PFFixture(app: app, setup: setup)
+    } catch {
+        // Same SIGILL guard as `makeTestingApplication`: any throw before
+        // the fixture is fully built leaves a half-initialized Application
+        // that crashes in its sync deinit.  Shutdown explicitly first.
+        try? FileManager.default.removeItem(atPath: tmpDir)
+        try? await app.asyncShutdown()
+        throw error
+    }
+
     do {
         try await body(fixture)
         try? FileManager.default.removeItem(atPath: tmpDir)

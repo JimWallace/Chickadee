@@ -6,27 +6,65 @@
 // them in parallel.  `@Suite(.serialized)` only serializes within a
 // suite, not across.
 //
-// Sync path (`EnvTestLock.shared`): XCTest setUp/tearDown and Swift
-// Testing's struct/class init are sync; they can use the NSLock
-// directly.
-//
-// Async path (`EnvTestLock.withAsyncLock { ... }`): Swift 6 strict
-// concurrency disallows `NSLock.lock()` from async functions because
-// holding a sync lock across `await` is a deadlock hazard.  The actor-
-// backed `withAsyncLock` provides equivalent serialization without
-// holding any lock across suspension points — only one in-flight
-// closure can execute at a time across all callers.
+// `withAsyncEnvLock { ... }` is the single serialization primitive —
+// every test that mutates env vars and every helper that reads them
+// during async setup must go through it.  The lock is reentrant on the
+// same task (tracked via a TaskLocal) so wrapping `configureTestDatabase`
+// in the lock doesn't deadlock callers that are already inside a
+// `withTestEnvironment` block.
 
 import Foundation
 
-enum EnvTestLock {
-    static let shared = NSLock()
+/// Set inside the locked region so nested calls on the same task can
+/// reenter without parking.
+enum AsyncEnvLockHolding {
+    @TaskLocal static var isHeld: Bool = false
 }
 
 /// Serializes async env-mutating test bodies across suites.
-/// Only one `withAsyncLock` closure can be running at a time process-wide.
-func withAsyncEnvLock<R: Sendable>(_ body: @Sendable () async throws -> R) async rethrows -> R {
-    try await AsyncEnvLock.shared.run(body)
+/// Only one `withAsyncEnvLock` closure can be running at a time process-wide.
+/// Reentrant within the same task: nested calls run the body inline.
+func withAsyncEnvLock<R: Sendable>(_ body: @Sendable () async throws -> R) async throws -> R {
+    if AsyncEnvLockHolding.isHeld {
+        return try await body()
+    }
+    return try await AsyncEnvLock.shared.run {
+        try await AsyncEnvLockHolding.$isHeld.withValue(true) {
+            try await body()
+        }
+    }
+}
+
+/// Async helper to mutate process env vars for the duration of a test body
+/// and restore them on exit (success or throw).  Uses the same actor-backed
+/// lock as `withAsyncEnvLock` so env writers serialize against env readers
+/// (e.g. `configureTestDatabase`'s call to `testDatabaseSettingsFromEnvironment`).
+@discardableResult
+func withTestEnvironment<R: Sendable>(
+    _ overrides: [String: String?],
+    perform body: @Sendable () async throws -> R
+) async throws -> R {
+    try await withAsyncEnvLock {
+        var backup: [String: String?] = [:]
+        for (key, value) in overrides {
+            backup[key] = ProcessInfo.processInfo.environment[key]
+            if let value {
+                setenv(key, value, 1)
+            } else {
+                unsetenv(key)
+            }
+        }
+        defer {
+            for (key, value) in backup {
+                if let value {
+                    setenv(key, value, 1)
+                } else {
+                    unsetenv(key)
+                }
+            }
+        }
+        return try await body()
+    }
 }
 
 /// Backing actor for `withAsyncEnvLock`.  The single-entry actor

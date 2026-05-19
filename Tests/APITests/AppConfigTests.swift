@@ -30,30 +30,30 @@ import Vapor
     /// `fromEnvironment` builds an end-to-end config that matches the env
     /// fixture. Sentinel test fixture covers each substruct so renaming a
     /// substruct without rewiring it surfaces here.
-    @Test func fromEnvironmentReadsAllSubstructs() throws {
-        try withEnvironment(
-            set: [
-                "AUTH_MODE": "local",
-                "ENABLE_NON_SSO_AUTH_MODES": "true",
-                "PUBLIC_BASE_URL": "https://test.example",
-                "OIDC_CLIENT_ID": "id-123",
-                "OIDC_CLIENT_SECRET": "secret-abc",
-                "OIDC_CALLBACK": "/custom/callback",
-                "OIDC_USERNAME_CLAIM": "winaccountname",
-                "RUNNER_SHARED_SECRET": "primary-secret",
-                "WORKER_PUBLIC_BASE_URL": "https://callback.example/",
-                "LOGIN_RATE_LIMIT_PER_MIN": "20",
-                "LOGIN_LOCKOUT_THRESHOLD": "8",
-                "JOB_METRIC_RETENTION_DAYS": "7",
-            ],
+    @Test func fromEnvironmentReadsAllSubstructs() async throws {
+        try await withTestEnvironment([
+            "AUTH_MODE": "local",
+            "ENABLE_NON_SSO_AUTH_MODES": "true",
+            "PUBLIC_BASE_URL": "https://test.example",
+            "OIDC_CLIENT_ID": "id-123",
+            "OIDC_CLIENT_SECRET": "secret-abc",
+            "OIDC_CALLBACK": "/custom/callback",
+            "OIDC_USERNAME_CLAIM": "winaccountname",
+            "RUNNER_SHARED_SECRET": "primary-secret",
+            "WORKER_PUBLIC_BASE_URL": "https://callback.example/",
+            "LOGIN_RATE_LIMIT_PER_MIN": "20",
+            "LOGIN_LOCKOUT_THRESHOLD": "8",
+            "JOB_METRIC_RETENTION_DAYS": "7",
             // Clear DB-backend overrides so the assertion-of-default branch
             // (`.sqlite`) isn't accidentally redirected to postgres by an
             // earlier test's leaked env.
-            unset: [
-                "DATABASE_BACKEND", "DATABASE_HOST", "DATABASE_NAME", "DATABASE_USER", "DATABASE_PASSWORD",
-                "DATABASE_PORT",
-            ]
-        ) {
+            "DATABASE_BACKEND": nil,
+            "DATABASE_HOST": nil,
+            "DATABASE_NAME": nil,
+            "DATABASE_USER": nil,
+            "DATABASE_PASSWORD": nil,
+            "DATABASE_PORT": nil,
+        ]) {
             let cfg = try AppConfig.fromEnvironment(workDir: "/tmp/")
             #expect(cfg.auth.mode == .local)
             #expect(cfg.auth.nonSSOModesEnabled == true)
@@ -73,17 +73,17 @@ import Vapor
 
     /// Legacy `WORKER_SHARED_SECRET` wins only when `RUNNER_SHARED_SECRET` is
     /// unset, and the loader flags this so `logSummary` can warn.
-    @Test func legacyWorkerSecretAliasIsHonouredButFlagged() {
-        withEnvironment(
-            set: ["WORKER_SHARED_SECRET": "legacy-value"],
-            unset: ["RUNNER_SHARED_SECRET"]
-        ) {
+    @Test func legacyWorkerSecretAliasIsHonouredButFlagged() async throws {
+        try await withTestEnvironment([
+            "WORKER_SHARED_SECRET": "legacy-value",
+            "RUNNER_SHARED_SECRET": nil,
+        ]) {
             let workers = WorkerConfig.fromEnvironment()
             #expect(workers.sharedSecret == "legacy-value")
             #expect(workers.usedLegacyAlias == true)
         }
 
-        withEnvironment(set: [
+        try await withTestEnvironment([
             "RUNNER_SHARED_SECRET": "primary",
             "WORKER_SHARED_SECRET": "legacy",
         ]) {
@@ -94,8 +94,8 @@ import Vapor
     }
 
     /// SSO mode is forced when non-SSO modes are not explicitly enabled.
-    @Test func authModeDowngradesToSSOWhenNonSSODisabled() {
-        withEnvironment(set: [
+    @Test func authModeDowngradesToSSOWhenNonSSODisabled() async throws {
+        try await withTestEnvironment([
             "AUTH_MODE": "local",
             "ENABLE_NON_SSO_AUTH_MODES": "false",
         ]) {
@@ -177,39 +177,6 @@ import Vapor
 }
 
 // MARK: - Helpers
-
-/// Runs `body` with the given env vars set, restoring (or clearing) each one
-/// afterwards. Grabs `EnvTestLock` for the duration so concurrent env-touching
-/// tests in other suites (DatabaseConfigurationTests, APIServerAppTests) don't
-/// race with this one — `@Suite(.serialized)` only serializes within a suite.
-private func withEnvironment(
-    set: [String: String] = [:],
-    unset: [String] = [],
-    _ body: () throws -> Void
-) rethrows {
-    EnvTestLock.shared.lock()
-    defer { EnvTestLock.shared.unlock() }
-    let prior: [String: String?] = Dictionary(
-        uniqueKeysWithValues: (Array(set.keys) + unset).map { key in
-            (key, ProcessInfo.processInfo.environment[key])
-        }
-    )
-    for (key, value) in set { setenv(key, value, 1) }
-    for key in unset { unsetenv(key) }
-    defer {
-        for (key, value) in prior {
-            if let value { setenv(key, value, 1) } else { unsetenv(key) }
-        }
-    }
-    try body()
-}
-
-private func withEnvironment(
-    _ values: [String: String],
-    _ body: () throws -> Void
-) rethrows {
-    try withEnvironment(set: values, unset: [], body)
-}
 
 private final class LogSink: @unchecked Sendable {
     private let queue = DispatchQueue(label: "appconfig.test.log")

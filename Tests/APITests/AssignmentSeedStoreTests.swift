@@ -14,8 +14,9 @@ import XCTVapor
     let app: Application
 
     init() async throws {
-        app = try await Application.make(.testing)
-        try await configureTestDatabase(app)
+        app = try await makeTestingApplication { app in
+            try await configureTestDatabase(app)
+        }
     }
 
     // MARK: - Helpers
