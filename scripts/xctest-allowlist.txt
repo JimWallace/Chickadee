@@ -1,8 +1,3 @@
-Tests/APITests/PatternFamilyApplyTests.swift
-Tests/APITests/PatternFamilyKindsTests.swift
-Tests/APITests/PatternFamilyRendererTests.swift
-Tests/APITests/PatternFamilySectionsTests.swift
-Tests/APITests/PatternFamilyTestCase.swift
 Tests/APITests/SSOAuthFlowTests.swift
 Tests/APITests/ScriptEditRoutesTests.swift
 Tests/APITests/SubmissionQueryRoutesTests.swift
