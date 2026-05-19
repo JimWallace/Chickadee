@@ -4,22 +4,22 @@
 // tests against real zips on disk — no HTTP plumbing needed.
 
 import Foundation
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class ZipUploadValidationTests: XCTestCase {
+@Suite final class ZipUploadValidationTests {
 
-    private var tmpDir: URL!
+    private let tmpDir: URL
 
-    override func setUp() async throws {
-        tmpDir = FileManager.default.temporaryDirectory
+    init() throws {
+        self.tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-zipguard-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
     }
 
-    override func tearDown() async throws {
+    deinit {
         try? FileManager.default.removeItem(at: tmpDir)
     }
 
@@ -42,26 +42,27 @@ final class ZipUploadValidationTests: XCTestCase {
         zip.arguments = ["-q", "-r", zipPath, "."]
         try zip.run()
         zip.waitUntilExit()
-        XCTAssertEqual(zip.terminationStatus, 0, "zip command must succeed")
+        #expect(zip.terminationStatus == 0, "zip command must succeed")
         try FileManager.default.removeItem(at: workDir)
         return zipPath
     }
 
     // MARK: - Happy path
 
-    func testValidateZipUploadSize_acceptsNormalZip() throws {
+    @Test func validateZipUploadSize_acceptsNormalZip() async throws {
         let zipPath = try makeZip(
             named: "ok.zip",
             entries: [
                 ("readme.txt", Data("hello world".utf8)),
                 ("nested/a.py", Data("print('a')".utf8)),
             ])
-        XCTAssertNoThrow(try validateZipUploadSize(zipPath: zipPath))
+        try validateZipUploadSize(zipPath: zipPath)
+
     }
 
     // MARK: - Per-entry limit
 
-    func testValidateZipUploadSize_rejectsOversizedEntry() throws {
+    @Test func validateZipUploadSize_rejectsOversizedEntry() async throws {
         // Tight per-entry limit; total stays well under.
         let limits = ZipUploadLimits(
             maxTotalUncompressedBytes: 10 * 1024 * 1024,
@@ -70,18 +71,21 @@ final class ZipUploadValidationTests: XCTestCase {
         let big = Data(repeating: 0x41, count: 5_000)
         let zipPath = try makeZip(named: "big-entry.zip", entries: [("big.bin", big)])
 
-        XCTAssertThrowsError(try validateZipUploadSize(zipPath: zipPath, limits: limits)) { err in
-            guard case ZipUploadValidationError.entrySizeExceeded(let name, _, _) = err else {
-                XCTFail("Expected entrySizeExceeded, got \(err)")
-                return
+        #expect { try validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
+            guard case ZipUploadValidationError.entrySizeExceeded(let name, _, _) = error else {
+                Issue.record("Expected entrySizeExceeded, got \(error)")
+                return false
             }
-            XCTAssertTrue(name.contains("big.bin"), "Reported name should identify the offending entry")
+            #expect(name.contains("big.bin"), "Reported name should identify the offending entry")
+
+            return true
         }
+
     }
 
     // MARK: - Total limit
 
-    func testValidateZipUploadSize_rejectsOversizedTotal() throws {
+    @Test func validateZipUploadSize_rejectsOversizedTotal() async throws {
         // Per-entry generous; total tiny — every entry is under per-entry
         // but they sum past the total cap.
         let limits = ZipUploadLimits(
@@ -97,25 +101,31 @@ final class ZipUploadValidationTests: XCTestCase {
                 ("c.bin", chunk),
             ])
 
-        XCTAssertThrowsError(try validateZipUploadSize(zipPath: zipPath, limits: limits)) { err in
-            guard case ZipUploadValidationError.totalSizeExceeded = err else {
-                XCTFail("Expected totalSizeExceeded, got \(err)")
-                return
+        #expect { try validateZipUploadSize(zipPath: zipPath, limits: limits) } throws: { error in
+            guard case ZipUploadValidationError.totalSizeExceeded = error else {
+                Issue.record("Expected totalSizeExceeded, got \(error)")
+                return false
             }
+
+            return true
         }
+
     }
 
     // MARK: - Inspection failure
 
-    func testValidateZipUploadSize_failsCleanlyOnCorruptZip() throws {
+    @Test func validateZipUploadSize_failsCleanlyOnCorruptZip() async throws {
         let badPath = tmpDir.appendingPathComponent("not-a-zip.zip").path
         try Data("definitely not a zip".utf8).write(to: URL(fileURLWithPath: badPath))
 
-        XCTAssertThrowsError(try validateZipUploadSize(zipPath: badPath)) { err in
-            guard case ZipUploadValidationError.inspectionFailed = err else {
-                XCTFail("Expected inspectionFailed for a corrupt zip, got \(err)")
-                return
+        #expect { try validateZipUploadSize(zipPath: badPath) } throws: { error in
+            guard case ZipUploadValidationError.inspectionFailed = error else {
+                Issue.record("Expected inspectionFailed for a corrupt zip, got \(error)")
+                return false
             }
+
+            return true
         }
+
     }
 }

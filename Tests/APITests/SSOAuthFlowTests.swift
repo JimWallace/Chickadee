@@ -10,12 +10,12 @@
 import Fluent
 import Foundation
 import JWT
+import Testing
 import XCTVapor
-import XCTest
 
 @testable import chickadee_server
 
-final class SSOAuthFlowTests: XCTestCase {
+@Suite struct SSOAuthFlowTests {
 
     private struct EnvironmentOverride {
         let key: String
@@ -210,15 +210,15 @@ final class SSOAuthFlowTests: XCTestCase {
         try await app.asyncTest(
             .GET, path,
             afterResponse: { res in
-                XCTAssertEqual(res.status, .seeOther)
+                #expect(res.status == .seeOther)
                 sessionCookie = res.headers.first(name: .setCookie) ?? ""
                 redirectLocation = res.headers.first(name: .location) ?? ""
             })
 
-        let components = try XCTUnwrap(URLComponents(string: redirectLocation))
+        let components = try #require(URLComponents(string: redirectLocation))
         let state = components.queryItems?.first(where: { $0.name == "state" })?.value ?? ""
-        XCTAssertFalse(sessionCookie.isEmpty)
-        XCTAssertFalse(state.isEmpty)
+        #expect(sessionCookie.isEmpty == false)
+        #expect(state.isEmpty == false)
         return (sessionCookie, state)
     }
 
@@ -287,45 +287,45 @@ final class SSOAuthFlowTests: XCTestCase {
 
     // MARK: - ssoStart: redirect to IdP
 
-    func testSSOStart_redirectsToAuthorizationEndpoint() async throws {
+    @Test func sSOStart_redirectsToAuthorizationEndpoint() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/start",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
+                    #expect(res.status == .seeOther)
                     let location = res.headers.first(name: .location) ?? ""
-                    XCTAssertTrue(
+                    #expect(
                         location.hasPrefix("https://duo-test.example.com"),
                         "Expected redirect to DUO test host, got: \(location)"
                     )
-                    XCTAssertTrue(location.contains("client_id=test-client-id"))
-                    XCTAssertTrue(location.contains("response_type=code"))
-                    XCTAssertTrue(location.contains("code_challenge_method=S256"))
-                    XCTAssertTrue(location.contains("scope=openid"))
+                    #expect(location.contains("client_id=test-client-id"))
+                    #expect(location.contains("response_type=code"))
+                    #expect(location.contains("code_challenge_method=S256"))
+                    #expect(location.contains("scope=openid"))
                 })
         }
     }
 
-    func testSSOStart_includesRedirectURI() async throws {
+    @Test func sSOStart_includesRedirectURI() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/start",
                 afterResponse: { res in
                     let location = res.headers.first(name: .location) ?? ""
-                    XCTAssertTrue(location.contains("redirect_uri="))
+                    #expect(location.contains("redirect_uri="))
                 })
         }
     }
 
     // MARK: - ssoCallback: error paths
 
-    func testSSOCallback_missingStateFails() async throws {
+    @Test func sSOCallback_missingStateFails() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/callback?code=abc&state=wrong",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(
+                    #expect(res.status == .seeOther)
+                    #expect(
                         res.headers.first(name: .location)?.contains("sso_failed") == true,
                         "Expected sso_failed redirect"
                     )
@@ -333,27 +333,27 @@ final class SSOAuthFlowTests: XCTestCase {
         }
     }
 
-    func testSSOCallback_missingCodeFails() async throws {
+    @Test func sSOCallback_missingCodeFails() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/callback?state=somestate",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(
+                    #expect(res.status == .seeOther)
+                    #expect(
                         res.headers.first(name: .location)?.contains("sso_failed") == true
                     )
                 })
         }
     }
 
-    func testSSOCallback_idpErrorRedirectsToDenied() async throws {
+    @Test func sSOCallback_idpErrorRedirectsToDenied() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.asyncTest(
                 .GET,
                 "/auth/sso/callback?error=access_denied&error_description=User+denied+consent",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(
+                    #expect(res.status == .seeOther)
+                    #expect(
                         res.headers.first(name: .location)?.contains("sso_denied") == true
                     )
                 }
@@ -363,17 +363,17 @@ final class SSOAuthFlowTests: XCTestCase {
 
     // MARK: - Local mode: SSO routes absent
 
-    func testLocalMode_ssoStartNotRegistered() async throws {
+    @Test func localMode_ssoStartNotRegistered() async throws {
         try await withApp(try await makeApp(authMode: .local)) { app in
             try await app.asyncTest(
                 .GET, "/auth/sso/start",
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .notFound)
+                    #expect(res.status == .notFound)
                 })
         }
     }
 
-    func testSSOCallbackSuccessUsesFallbackTokenRequestAndUpsertsMappedUser() async throws {
+    @Test func sSOCallbackSuccessUsesFallbackTokenRequestAndUpsertsMappedUser() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
@@ -410,29 +410,29 @@ final class SSOAuthFlowTests: XCTestCase {
                         req.headers.add(name: .cookie, value: start.cookie)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location) == "/")
                     }
                 )
 
                 let fetchedUser = try await APIUser.query(on: app.db)
                     .filter(\.$externalSubject == "subject-fallback")
                     .first()
-                let user = try XCTUnwrap(fetchedUser)
-                XCTAssertEqual(user.authProvider, "duo-oidc")
-                XCTAssertEqual(user.username, "jdoe")
-                XCTAssertEqual(user.role, "instructor")
+                let user = try #require(fetchedUser)
+                #expect(user.authProvider == "duo-oidc")
+                #expect(user.username == "jdoe")
+                #expect(user.role == "instructor")
 
                 let recordedBodies = await provider.endpoint.recordedBodies()
-                XCTAssertEqual(recordedBodies.count, 3)
-                XCTAssertTrue(recordedBodies[0].contains("code_verifier="))
-                XCTAssertTrue(recordedBodies[1].contains("code_verifier="))
-                XCTAssertFalse(recordedBodies[2].contains("code_verifier="))
+                #expect(recordedBodies.count == 3)
+                #expect(recordedBodies[0].contains("code_verifier="))
+                #expect(recordedBodies[1].contains("code_verifier="))
+                #expect(recordedBodies[2].contains("code_verifier=") == false)
             }
         }
     }
 
-    func testSSOCallbackRejectsAudienceMismatchAfterTokenExchange() async throws {
+    @Test func sSOCallbackRejectsAudienceMismatchAfterTokenExchange() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",
             audience: ["wrong-client"],
@@ -468,20 +468,20 @@ final class SSOAuthFlowTests: XCTestCase {
                         req.headers.add(name: .cookie, value: start.cookie)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertTrue(res.headers.first(name: .location)?.contains("sso_failed") == true)
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location)?.contains("sso_failed") == true)
                     }
                 )
 
                 let userCount = try await APIUser.query(on: app.db)
                     .filter(\.$externalSubject == "subject-bad-aud")
                     .count()
-                XCTAssertEqual(userCount, 0)
+                #expect(userCount == 0)
             }
         }
     }
 
-    func testSSOCallbackUsesConfiguredCustomUsernameClaimAndRepairsExistingUsername() async throws {
+    @Test func sSOCallbackUsesConfiguredCustomUsernameClaimAndRepairsExistingUsername() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
@@ -533,24 +533,24 @@ final class SSOAuthFlowTests: XCTestCase {
                         req.headers.add(name: .cookie, value: start.cookie)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location) == "/")
                     }
                 )
 
                 let fetchedUser = try await APIUser.query(on: app.db)
                     .filter(\.$externalSubject == "subject-custom-claim")
                     .first()
-                let user = try XCTUnwrap(fetchedUser)
-                XCTAssertEqual(user.username, "janedoe")
-                XCTAssertEqual(user.userIdentifier, "janedoe")
-                XCTAssertEqual(user.studentID, "12345678")
-                XCTAssertEqual(user.email, "jane@example.com")
+                let user = try #require(fetchedUser)
+                #expect(user.username == "janedoe")
+                #expect(user.userIdentifier == "janedoe")
+                #expect(user.studentID == "12345678")
+                #expect(user.email == "jane@example.com")
             }
         }
     }
 
-    func testSSOCallbackPreservesExplicitUserIDClaimWhenRepairingUsername() async throws {
+    @Test func sSOCallbackPreservesExplicitUserIDClaimWhenRepairingUsername() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
@@ -604,24 +604,24 @@ final class SSOAuthFlowTests: XCTestCase {
                         req.headers.add(name: .cookie, value: start.cookie)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location) == "/")
                     }
                 )
 
                 let fetchedUser = try await APIUser.query(on: app.db)
                     .filter(\.$externalSubject == "subject-user-id-claim")
                     .first()
-                let user = try XCTUnwrap(fetchedUser)
-                XCTAssertEqual(user.username, "janedoe")
-                XCTAssertEqual(user.userIdentifier, "jd12345")
-                XCTAssertEqual(user.studentID, "12345678")
-                XCTAssertEqual(user.email, "jane@example.com")
+                let user = try #require(fetchedUser)
+                #expect(user.username == "janedoe")
+                #expect(user.userIdentifier == "jd12345")
+                #expect(user.studentID == "12345678")
+                #expect(user.email == "jane@example.com")
             }
         }
     }
 
-    func testSSOCallbackCreatesNewUserWithCustomUsernameClaim() async throws {
+    @Test func sSOCallbackCreatesNewUserWithCustomUsernameClaim() async throws {
         let subject = "subject-brand-new-user"
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",
@@ -657,7 +657,7 @@ final class SSOAuthFlowTests: XCTestCase {
                 let existingCount = try await APIUser.query(on: app.db)
                     .filter(\.$externalSubject == subject)
                     .count()
-                XCTAssertEqual(existingCount, 0)
+                #expect(existingCount == 0)
 
                 let start = try await startSSOSession(on: app)
 
@@ -668,27 +668,26 @@ final class SSOAuthFlowTests: XCTestCase {
                         req.headers.add(name: .cookie, value: start.cookie)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location) == "/")
                     }
                 )
 
                 let fetchedUser = try await APIUser.query(on: app.db)
                     .filter(\.$externalSubject == subject)
                     .first()
-                let user = try XCTUnwrap(fetchedUser)
-                XCTAssertEqual(
-                    user.username, "janedoe",
-                    "New SSO user must get username from winaccountname claim, not the sub hash"
-                )
-                XCTAssertEqual(user.userIdentifier, "janedoe")
-                XCTAssertEqual(user.email, "jane@example.com")
-                XCTAssertEqual(user.authProvider, "duo-oidc")
+                let user = try #require(fetchedUser)
+                #expect(
+                    user.username == "janedoe",
+                    "New SSO user must get username from winaccountname claim, not the sub hash")
+                #expect(user.userIdentifier == "janedoe")
+                #expect(user.email == "jane@example.com")
+                #expect(user.authProvider == "duo-oidc")
             }
         }
     }
 
-    func testLogoutRevokesAccessAndRefreshTokensAndRedirectsToEndSession() async throws {
+    @Test func logoutRevokesAccessAndRefreshTokensAndRedirectsToEndSession() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",
             audience: ["test-client-id"],
@@ -730,8 +729,8 @@ final class SSOAuthFlowTests: XCTestCase {
                         req.headers.add(name: .cookie, value: start.cookie)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertEqual(res.headers.first(name: .location), "/")
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location) == "/")
                         authCookie = mergedCookie(existing: start.cookie, from: res)
                     }
                 )
@@ -747,20 +746,20 @@ final class SSOAuthFlowTests: XCTestCase {
                         try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
                     },
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
+                        #expect(res.status == .seeOther)
                         let redirect = res.headers.first(name: .location) ?? ""
-                        XCTAssertTrue(redirect.hasPrefix("http://127.0.0.1:\(provider.port)/logout"))
-                        XCTAssertTrue(redirect.contains("id_token_hint="))
+                        #expect(redirect.hasPrefix("http://127.0.0.1:\(provider.port)/logout"))
+                        #expect(redirect.contains("id_token_hint="))
                     }
                 )
 
                 let revocations = await waitForRevocationCount(2, on: provider.endpoint)
-                XCTAssertEqual(revocations.count, 2)
-                XCTAssertTrue(
+                #expect(revocations.count == 2)
+                #expect(
                     revocations.contains(where: {
                         $0.contains("token=access-token") && $0.contains("token_type_hint=access_token")
                     }))
-                XCTAssertTrue(
+                #expect(
                     revocations.contains(where: {
                         $0.contains("token=refresh-token") && $0.contains("token_type_hint=refresh_token")
                     }))
@@ -768,7 +767,7 @@ final class SSOAuthFlowTests: XCTestCase {
         }
     }
 
-    func testSSOCallbackClearsSessionStateAfterFailedAttempt() async throws {
+    @Test func sSOCallbackClearsSessionStateAfterFailedAttempt() async throws {
         try await withApp(try await makeApp()) { app in
             let start = try await startSSOSession(on: app)
 
@@ -779,8 +778,8 @@ final class SSOAuthFlowTests: XCTestCase {
                     req.headers.add(name: .cookie, value: start.cookie)
                 },
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(res.headers.first(name: .location)?.contains("sso_failed") == true)
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("sso_failed") == true)
                 }
             )
 
@@ -791,21 +790,21 @@ final class SSOAuthFlowTests: XCTestCase {
                     req.headers.add(name: .cookie, value: start.cookie)
                 },
                 afterResponse: { res in
-                    XCTAssertEqual(res.status, .seeOther)
-                    XCTAssertTrue(res.headers.first(name: .location)?.contains("sso_failed") == true)
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("sso_failed") == true)
                 }
             )
         }
     }
 
-    func testCustomOIDCCallbackRouteUsesConfiguredPath() async throws {
+    @Test func customOIDCCallbackRouteUsesConfiguredPath() async throws {
         try await withEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
             try await withApp(try await makeApp()) { app in
                 try await app.asyncTest(
                     .GET, "/oidc/custom/callback?error=access_denied",
                     afterResponse: { res in
-                        XCTAssertEqual(res.status, .seeOther)
-                        XCTAssertTrue(res.headers.first(name: .location)?.contains("sso_denied") == true)
+                        #expect(res.status == .seeOther)
+                        #expect(res.headers.first(name: .location)?.contains("sso_denied") == true)
                     })
             }
         }

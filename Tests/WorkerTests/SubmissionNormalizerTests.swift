@@ -1,15 +1,15 @@
 import Core
 import Foundation
-import XCTest
+import Testing
 
 @testable import chickadee_runner
 
-final class SubmissionNormalizerTests: XCTestCase {
+@Suite final class SubmissionNormalizerTests {
     private var rootDir: URL!
     private var submissionDir: URL!
     private var workspaceDir: URL!
 
-    override func setUp() async throws {
+    init() throws {
         rootDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("submission-normalizer-\(UUID().uuidString)", isDirectory: true)
         submissionDir = rootDir.appendingPathComponent("submission", isDirectory: true)
@@ -18,7 +18,7 @@ final class SubmissionNormalizerTests: XCTestCase {
         try FileManager.default.createDirectory(at: workspaceDir, withIntermediateDirectories: true)
     }
 
-    override func tearDown() async throws {
+    deinit {
         try? FileManager.default.removeItem(at: rootDir)
     }
 
@@ -50,7 +50,7 @@ final class SubmissionNormalizerTests: XCTestCase {
         try String(contentsOf: workspaceDir.appendingPathComponent(name), encoding: .utf8)
     }
 
-    func testValidPythonFileCopiedUnchanged() throws {
+    @Test func validPythonFileCopiedUnchanged() throws {
         try writeSubmissionFile(name: "submission.py", contents: "print('hello')\n")
 
         let result = try SubmissionNormalizer().normalizePythonSubmission(
@@ -60,12 +60,12 @@ final class SubmissionNormalizerTests: XCTestCase {
             submissionFilename: "submission.py"
         )
 
-        XCTAssertEqual(result.warnings, [])
-        XCTAssertEqual(result.preferredStudentModule, "submission.py")
-        XCTAssertEqual(try readWorkspaceFile("submission.py"), "print('hello')\n")
+        #expect(result.warnings.isEmpty)
+        #expect(result.preferredStudentModule == "submission.py")
+        #expect(try readWorkspaceFile("submission.py") == "print('hello')\n")
     }
 
-    func testNotebookNormalizesToPyWithCellSeparators() throws {
+    @Test func notebookNormalizesToPyWithCellSeparators() throws {
         try writeSubmissionFile(
             name: "assignment.ipynb",
             contents: """
@@ -87,15 +87,15 @@ final class SubmissionNormalizerTests: XCTestCase {
             submissionFilename: "assignment.ipynb"
         )
 
-        XCTAssertEqual(result.warnings, [])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("assignment.py").path))
+        #expect(result.warnings.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("assignment.py").path))
         let extracted = try readWorkspaceFile("assignment.py")
-        XCTAssertTrue(extracted.contains("# --- cell 1 ---"))
-        XCTAssertTrue(extracted.contains("# --- cell 3 ---"))
-        XCTAssertFalse(extracted.contains("# ignored"))
+        #expect(extracted.contains("# --- cell 1 ---"))
+        #expect(extracted.contains("# --- cell 3 ---"))
+        #expect(extracted.contains("# ignored") == false)
     }
 
-    func testNotebookRenamedToPyIsDetectedByContent() throws {
+    @Test func notebookRenamedToPyIsDetectedByContent() throws {
         try writeSubmissionFile(
             name: "submission.py",
             contents: """
@@ -113,46 +113,49 @@ final class SubmissionNormalizerTests: XCTestCase {
             submissionFilename: "submission.py"
         )
 
-        XCTAssertEqual(result.preferredStudentModule, "submission.extracted.py")
-        XCTAssertTrue(result.warnings.contains { $0.contains("appears to be a Jupyter notebook") })
-        XCTAssertTrue(
+        #expect(result.preferredStudentModule == "submission.extracted.py")
+        #expect(result.warnings.contains { $0.contains("appears to be a Jupyter notebook") })
+        #expect(
             FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("submission.extracted.py").path))
     }
 
-    func testJSONFileThatIsNotNotebookFailsWithTargetedError() throws {
+    @Test func jSONFileThatIsNotNotebookFailsWithTargetedError() throws {
         try writeSubmissionFile(name: "data.json", contents: #"{"hello":"world"}"#)
 
-        XCTAssertThrowsError(
+        #expect {
             try SubmissionNormalizer().normalizePythonSubmission(
                 manifest: makeManifest(),
                 submissionDirectory: submissionDir,
                 workspaceDirectory: workspaceDir,
                 submissionFilename: "data.json"
             )
-        ) { error in
-            XCTAssertEqual(
-                error.localizedDescription,
-                "Uploaded file data.json is not a valid Python script or Jupyter notebook."
-            )
+        } throws: { error in
+            #expect(
+                error.localizedDescription
+                    == "Uploaded file data.json is not a valid Python script or Jupyter notebook.")
+
+            return true
         }
     }
 
-    func testInvalidNotebookJSONFailsEarly() throws {
+    @Test func invalidNotebookJSONFailsEarly() throws {
         try writeSubmissionFile(name: "bad.ipynb", contents: "{not json")
 
-        XCTAssertThrowsError(
+        #expect {
             try SubmissionNormalizer().normalizePythonSubmission(
                 manifest: makeManifest(),
                 submissionDirectory: submissionDir,
                 workspaceDirectory: workspaceDir,
                 submissionFilename: "bad.ipynb"
             )
-        ) { error in
-            XCTAssertEqual(error.localizedDescription, "Notebook file appears to be invalid JSON.")
+        } throws: { error in
+            #expect(error.localizedDescription == "Notebook file appears to be invalid JSON.")
+
+            return true
         }
     }
 
-    func testNotebookWithNoCodeCellsFailsEarly() throws {
+    @Test func notebookWithNoCodeCellsFailsEarly() throws {
         try writeSubmissionFile(
             name: "notes.ipynb",
             contents: """
@@ -163,19 +166,21 @@ final class SubmissionNormalizerTests: XCTestCase {
                 }
                 """)
 
-        XCTAssertThrowsError(
+        #expect {
             try SubmissionNormalizer().normalizePythonSubmission(
                 manifest: makeManifest(),
                 submissionDirectory: submissionDir,
                 workspaceDirectory: workspaceDir,
                 submissionFilename: "notes.ipynb"
             )
-        ) { error in
-            XCTAssertEqual(error.localizedDescription, "Notebook file contained no code cells to grade.")
+        } throws: { error in
+            #expect(error.localizedDescription == "Notebook file contained no code cells to grade.")
+
+            return true
         }
     }
 
-    func testMultiplePythonFilesDoNotCreateCompatibilityCopy() throws {
+    @Test func multiplePythonFilesDoNotCreateCompatibilityCopy() throws {
         try writeSubmissionFile(name: "alpha.py", contents: "x = 1\n")
         try writeSubmissionFile(name: "beta.py", contents: "y = 2\n")
 
@@ -186,11 +191,11 @@ final class SubmissionNormalizerTests: XCTestCase {
             submissionFilename: nil
         )
 
-        XCTAssertFalse(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("main.py").path))
-        XCTAssertFalse(result.warnings.contains { $0.contains("compatibility copy") })
+        #expect(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("main.py").path) == false)
+        #expect(result.warnings.contains { $0.contains("compatibility copy") } == false)
     }
 
-    func testSinglePythonSourceCreatesCompatibilityCopy() throws {
+    @Test func singlePythonSourceCreatesCompatibilityCopy() throws {
         try writeSubmissionFile(name: "submission.py", contents: "answer = 42\n")
 
         let result = try SubmissionNormalizer().normalizePythonSubmission(
@@ -200,11 +205,11 @@ final class SubmissionNormalizerTests: XCTestCase {
             submissionFilename: "submission.py"
         )
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("main.py").path))
-        XCTAssertTrue(result.warnings.contains { $0.contains("compatibility copy") })
+        #expect(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("main.py").path))
+        #expect(result.warnings.contains { $0.contains("compatibility copy") })
     }
 
-    func testUnsupportedFilesAreIgnoredWhenPythonExists() throws {
+    @Test func unsupportedFilesAreIgnoredWhenPythonExists() throws {
         try writeSubmissionFile(name: "submission.py", contents: "print('ok')\n")
         let binaryURL = submissionDir.appendingPathComponent("archive.bin")
         try Data([0x00, 0x01, 0x02]).write(to: binaryURL)
@@ -216,7 +221,7 @@ final class SubmissionNormalizerTests: XCTestCase {
             submissionFilename: nil
         )
 
-        XCTAssertTrue(result.warnings.contains { $0.contains("Ignoring unsupported file archive.bin") })
-        XCTAssertTrue(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("submission.py").path))
+        #expect(result.warnings.contains { $0.contains("Ignoring unsupported file archive.bin") })
+        #expect(FileManager.default.fileExists(atPath: workspaceDir.appendingPathComponent("submission.py").path))
     }
 }
