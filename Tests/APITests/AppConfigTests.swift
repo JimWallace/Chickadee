@@ -3,7 +3,7 @@ import Logging
 import Testing
 import Vapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 // Serialized because tests mutate process-wide env vars; running in parallel
 // would race with each other (and any other Environment.get callers in the

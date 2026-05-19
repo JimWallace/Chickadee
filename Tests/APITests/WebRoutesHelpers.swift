@@ -14,7 +14,7 @@ import Foundation
 import Testing
 import XCTVapor
 
-@testable import chickadee_server
+@testable import APIServer
 
 /// Stands up a Vapor app configured for the WebRoutes test suite and
 /// runs the supplied body against it.  The app is shut down before the

@@ -7,8 +7,8 @@ import Fluent
 import Testing
 import Vapor
 
+@testable import APIServer
 @testable import Core
-@testable import chickadee_server
 
 @Suite struct ManifestValidationTests {
 

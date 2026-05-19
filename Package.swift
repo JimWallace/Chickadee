@@ -36,9 +36,15 @@ let package = Package(
             swiftSettings: strictWarnings
         ),
 
-        // MARK: - API Server executable
-        .executableTarget(
-            name: "chickadee-server",
+        // MARK: - API Server library
+        //
+        // The bulk of the server lives in this library so tests (and any
+        // future consumers) don't need to depend on an executable target.
+        // Executable-target deps force every `swift test` to relink the
+        // binary; routing the test target through this library removes
+        // that cost.
+        .target(
+            name: "APIServer",
             dependencies: [
                 .target(name: "Core"),
                 .product(name: "Vapor", package: "vapor"),
@@ -51,6 +57,21 @@ let package = Package(
             ],
             path: "Sources/APIServer",
             exclude: ["README.md"],
+            swiftSettings: strictWarnings
+        ),
+
+        // MARK: - API Server executable (thin wrapper)
+        //
+        // Just calls `runAPIServer()` from the APIServer library.  The
+        // executable name is preserved (`chickadee-server`) so deploy
+        // scripts and Dockerfiles continue to find the binary at
+        // `.build/release/chickadee-server`.
+        .executableTarget(
+            name: "chickadee-server",
+            dependencies: [
+                .target(name: "APIServer")
+            ],
+            path: "Sources/chickadee-server",
             swiftSettings: strictWarnings
         ),
 
@@ -79,7 +100,7 @@ let package = Package(
         .testTarget(
             name: "APITests",
             dependencies: [
-                .target(name: "chickadee-server"),
+                .target(name: "APIServer"),
                 .product(name: "XCTVapor", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),

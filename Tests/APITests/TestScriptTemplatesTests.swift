@@ -3,7 +3,7 @@ import Fluent
 import Foundation
 import Testing
 
-@testable import chickadee_server
+@testable import APIServer
 
 //
 // Unit tests for TestScriptTemplates.

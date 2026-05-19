@@ -11,8 +11,8 @@ import Foundation
 import Testing
 import XCTVapor
 
+@testable import APIServer
 @testable import Core
-@testable import chickadee_server
 
 @Suite(.serialized) final class SubmissionQueryRoutesTests {
 
