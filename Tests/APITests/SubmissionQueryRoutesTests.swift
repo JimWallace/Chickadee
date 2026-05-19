@@ -11,8 +11,8 @@ import Foundation
 import Testing
 import XCTVapor
 
-@testable import Core
 @testable import APIServer
+@testable import Core
 
 @Suite(.serialized) final class SubmissionQueryRoutesTests {
 

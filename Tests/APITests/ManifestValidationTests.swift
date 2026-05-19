@@ -7,8 +7,8 @@ import Fluent
 import Testing
 import Vapor
 
-@testable import Core
 @testable import APIServer
+@testable import Core
 
 @Suite struct ManifestValidationTests {
 
