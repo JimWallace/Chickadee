@@ -358,7 +358,7 @@ import XCTVapor
             )
 
             // Reload setup from DB — manifest should now contain the new entry.
-            let updated = try await APITestSetup.find("sc_post2", on: app.db)!
+            let updated = try #require(try await APITestSetup.find("sc_post2", on: app.db))
             #expect(
                 updated.manifest.contains("test_mani.py"),
                 "Manifest should contain new entry, got: \(updated.manifest)")
@@ -512,7 +512,7 @@ import XCTVapor
                 ])
 
             // Manually add a manifest entry for the script.
-            let setup = try await APITestSetup.find("sc_del2", on: app.db)!
+            let setup = try #require(try await APITestSetup.find("sc_del2", on: app.db))
             setup.manifest = """
                 {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"script":"test_rm.py","tier":"public","order":1,"dependsOn":[],"points":1}],"timeLimitSeconds":10,"makefile":null}
                 """
@@ -532,7 +532,7 @@ import XCTVapor
                 }
             )
 
-            let updated = try await APITestSetup.find("sc_del2", on: app.db)!
+            let updated = try #require(try await APITestSetup.find("sc_del2", on: app.db))
             #expect(
                 updated.manifest.contains("test_rm.py") == false,
                 "Manifest should no longer contain deleted script, got: \(updated.manifest)")
@@ -557,7 +557,7 @@ import XCTVapor
                 ])
 
             // test_b depends on test_a.
-            let setup = try await APITestSetup.find("sc_del3", on: app.db)!
+            let setup = try #require(try await APITestSetup.find("sc_del3", on: app.db))
             setup.manifest = """
                 {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[
                   {"script":"test_a.py","tier":"public","order":1,"dependsOn":[],"points":1},

@@ -104,7 +104,7 @@ import XCTVapor
 
             let user = try await APIUser.query(on: app.db).filter(\.$username == "enr_student2").first()
             let enrollments = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user!.requireID())
+                .filter(\.$userID == (try #require(user)).requireID())
                 .all()
             #expect(enrollments.count == 1)
             #expect(enrollments.first?.$course.id == courseID)
@@ -160,7 +160,7 @@ import XCTVapor
 
             let user = try await APIUser.query(on: app.db).filter(\.$username == "enr_student4").first()
             let enrollments = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user!.requireID()).all()
+                .filter(\.$userID == (try #require(user)).requireID()).all()
             #expect(enrollments.isEmpty, "Should not be enrolled in a closed course")
 
         }
@@ -219,7 +219,7 @@ import XCTVapor
 
             let user = try await APIUser.query(on: app.db).filter(\.$username == "enr_student5").first()
             let enrollments = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user!.requireID()).all()
+                .filter(\.$userID == (try #require(user)).requireID()).all()
             #expect(enrollments.count == 1, "Should not create duplicate enrollments")
 
         }
@@ -239,7 +239,7 @@ import XCTVapor
 
             let user = try await APIUser.query(on: app.db).filter(\.$username == "aut_student1").first()
             let enrollments = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user!.requireID())
+                .filter(\.$userID == (try #require(user)).requireID())
                 .all()
             #expect(enrollments.count == 1)
             #expect(enrollments.first?.$course.id == autoID)
@@ -262,7 +262,7 @@ import XCTVapor
             let user = try await APIUser.query(on: app.db)
                 .filter(\.$username == "aut_multi_student").first()
             let enrolledIDs = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user!.requireID())
+                .filter(\.$userID == (try #require(user)).requireID())
                 .all()
                 .map { $0.$course.id }
 
@@ -290,7 +290,7 @@ import XCTVapor
                 .filter(\.$username == "aut_selectivity_student").first()
             let enrolledIDs = Set(
                 try await APICourseEnrollment.query(on: app.db)
-                    .filter(\.$userID == user!.requireID())
+                    .filter(\.$userID == (try #require(user)).requireID())
                     .all()
                     .map { $0.$course.id })
 
@@ -317,7 +317,7 @@ import XCTVapor
             let user = try await APIUser.query(on: app.db)
                 .filter(\.$username == "aut_nodup_student").first()
             let count = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == user!.requireID())
+                .filter(\.$userID == (try #require(user)).requireID())
                 .filter(\.$course.$id == autoID)
                 .count()
             #expect(count == 1, "Should not create duplicate enrollment on repeated login")

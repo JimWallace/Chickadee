@@ -63,7 +63,7 @@ import XCTVapor
             manifestDict["sections"] = sections
         }
         let manifestData = try JSONSerialization.data(withJSONObject: manifestDict, options: [.sortedKeys])
-        let manifest = String(data: manifestData, encoding: .utf8)!
+        let manifest = try #require(String(data: manifestData, encoding: .utf8))
 
         let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)

@@ -11,6 +11,7 @@ import Foundation
 import Leaf
 import LeafKit
 import SQLKit
+import Testing
 import XCTVapor
 
 @testable import chickadee_server
@@ -31,11 +32,11 @@ func configureTestDatabase(_ app: Application) async throws {
     if settings.backend == .postgres {
         let schemaName = "test_\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(12))"
         settings = .postgres(
-            host: settings.postgresHost!,
-            port: settings.postgresPort!,
-            database: settings.postgresDatabase!,
-            username: settings.postgresUsername!,
-            password: settings.postgresPassword!,
+            host: try #require(settings.postgresHost),
+            port: try #require(settings.postgresPort),
+            database: try #require(settings.postgresDatabase),
+            username: try #require(settings.postgresUsername),
+            password: try #require(settings.postgresPassword),
             searchPath: [schemaName]
         )
         app.storage[TestPostgresSchemaKey.self] = schemaName
@@ -350,7 +351,7 @@ extension Application {
             beforeRequest: beforeRequest,
             afterResponse: { captured = $0 }
         )
-        return captured!
+        return try #require(captured)
     }
 }
 

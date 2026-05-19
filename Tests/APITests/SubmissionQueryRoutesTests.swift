@@ -76,7 +76,7 @@ import XCTVapor
     ) async throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        let json = try String(data: encoder.encode(collection), encoding: .utf8)!
+        let json = try #require(String(data: encoder.encode(collection), encoding: .utf8))
         let result = APIResult(
             id: "res_\(UUID().uuidString.lowercased().prefix(8))",
             submissionID: submissionID,

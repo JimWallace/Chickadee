@@ -59,11 +59,11 @@ import XCTVapor
         try await withApp(app) { _ in
             let user = try await makeUser(username: "alice")
             let course = try await makeCourse()
-            let assignment = try await makeAssignment(courseID: course.id!)
+            let assignment = try await makeAssignment(courseID: (try course.requireID()))
 
             let seed = try await AssignmentSeedStore.ensureSeed(
-                userID: user.id!,
-                assignmentID: assignment.id!,
+                userID: (try user.requireID()),
+                assignmentID: (try assignment.requireID()),
                 on: app.db
             )
 
@@ -81,16 +81,16 @@ import XCTVapor
         try await withApp(app) { _ in
             let user = try await makeUser(username: "bob")
             let course = try await makeCourse()
-            let assignment = try await makeAssignment(courseID: course.id!)
+            let assignment = try await makeAssignment(courseID: (try course.requireID()))
 
             let first = try await AssignmentSeedStore.ensureSeed(
-                userID: user.id!, assignmentID: assignment.id!, on: app.db
+                userID: (try user.requireID()), assignmentID: (try assignment.requireID()), on: app.db
             )
             let second = try await AssignmentSeedStore.ensureSeed(
-                userID: user.id!, assignmentID: assignment.id!, on: app.db
+                userID: (try user.requireID()), assignmentID: (try assignment.requireID()), on: app.db
             )
             let third = try await AssignmentSeedStore.ensureSeed(
-                userID: user.id!, assignmentID: assignment.id!, on: app.db
+                userID: (try user.requireID()), assignmentID: (try assignment.requireID()), on: app.db
             )
 
             #expect(first == second)
@@ -106,13 +106,13 @@ import XCTVapor
             let alice = try await makeUser(username: "alice2")
             let bob = try await makeUser(username: "bob2")
             let course = try await makeCourse()
-            let assignment = try await makeAssignment(courseID: course.id!)
+            let assignment = try await makeAssignment(courseID: (try course.requireID()))
 
             let aliceSeed = try await AssignmentSeedStore.ensureSeed(
-                userID: alice.id!, assignmentID: assignment.id!, on: app.db
+                userID: (try alice.requireID()), assignmentID: (try assignment.requireID()), on: app.db
             )
             let bobSeed = try await AssignmentSeedStore.ensureSeed(
-                userID: bob.id!, assignmentID: assignment.id!, on: app.db
+                userID: (try bob.requireID()), assignmentID: (try assignment.requireID()), on: app.db
             )
 
             #expect(aliceSeed != bobSeed)
@@ -126,14 +126,14 @@ import XCTVapor
         try await withApp(app) { _ in
             let user = try await makeUser(username: "carol")
             let course = try await makeCourse()
-            let a1 = try await makeAssignment(courseID: course.id!)
-            let a2 = try await makeAssignment(courseID: course.id!)
+            let a1 = try await makeAssignment(courseID: (try course.requireID()))
+            let a2 = try await makeAssignment(courseID: (try course.requireID()))
 
             let seed1 = try await AssignmentSeedStore.ensureSeed(
-                userID: user.id!, assignmentID: a1.id!, on: app.db
+                userID: (try user.requireID()), assignmentID: (try a1.requireID()), on: app.db
             )
             let seed2 = try await AssignmentSeedStore.ensureSeed(
-                userID: user.id!, assignmentID: a2.id!, on: app.db
+                userID: (try user.requireID()), assignmentID: (try a2.requireID()), on: app.db
             )
 
             #expect(seed1 != seed2)
@@ -145,9 +145,9 @@ import XCTVapor
         try await withApp(app) { _ in
             let user = try await makeUser(username: "dave")
             let course = try await makeCourse()
-            let assignment = try await makeAssignment(courseID: course.id!)
-            let userID = user.id!
-            let assignmentID = assignment.id!
+            let assignment = try await makeAssignment(courseID: (try course.requireID()))
+            let userID = (try user.requireID())
+            let assignmentID = (try assignment.requireID())
             let db = app.db
 
             let seeds = try await withThrowingTaskGroup(of: String.self) { group -> [String] in

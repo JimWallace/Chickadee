@@ -191,8 +191,8 @@ struct CoreCodableTests {
             submissionID: "sub_job",
             testSetupID: "setup_job",
             attemptNumber: 1,
-            submissionURL: URL(string: "http://localhost:8080/worker/artifacts/sub_job")!,
-            testSetupURL: URL(string: "http://localhost:8080/api/v1/testsetups/setup_job/download")!,
+            submissionURL: testURL("http://localhost:8080/worker/artifacts/sub_job"),
+            testSetupURL: testURL("http://localhost:8080/api/v1/testsetups/setup_job/download"),
             manifest: manifest,
             submissionFilename: "warmup.py"
         )
@@ -218,8 +218,8 @@ struct CoreCodableTests {
             submissionID: "sub_zip",
             testSetupID: "setup_zip",
             attemptNumber: 3,
-            submissionURL: URL(string: "http://localhost/a")!,
-            testSetupURL: URL(string: "http://localhost/b")!,
+            submissionURL: testURL("http://localhost/a"),
+            testSetupURL: testURL("http://localhost/b"),
             manifest: manifest,
             submissionFilename: nil
         )

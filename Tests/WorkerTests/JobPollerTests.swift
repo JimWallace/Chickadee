@@ -16,7 +16,7 @@ import FoundationNetworking
 /// HTTP-only URLProtocol pipeline doesn't produce.
 @Suite(.serialized) struct JobPollerTests {
 
-    private let apiBaseURL = URL(string: "https://server.test")!
+    private let apiBaseURL = testURL("https://server.test")
 
     // MARK: Status-code branches
 
@@ -28,8 +28,8 @@ import FoundationNetworking
                 submissionID: "sub_1",
                 testSetupID: "ts_1",
                 attemptNumber: 2,
-                submissionURL: URL(string: "https://server.test/sub.zip")!,
-                testSetupURL: URL(string: "https://server.test/ts.zip")!,
+                submissionURL: testURL("https://server.test/sub.zip"),
+                testSetupURL: testURL("https://server.test/ts.zip"),
                 manifest: manifest,
                 submissionFilename: "main.py",
                 assignmentSeed: "deadbeef"

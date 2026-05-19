@@ -234,7 +234,7 @@ import XCTVapor
             let courseID = try course.requireID()
 
             let setup = try await insertSetupWithZip(id: "setup_exp_c1", courseID: courseID)
-            try await insertAssignment(testSetupID: setup.id!, courseID: courseID)
+            try await insertAssignment(testSetupID: (try setup.requireID()), courseID: courseID)
 
             var zipData = Data()
             try await app.asyncTest(
@@ -513,7 +513,7 @@ import XCTVapor
             let course = try await makeTestCourse(code: "ROUNDTRIP_CB")
             let courseID = try course.requireID()
             let setup = try await insertSetupWithZip(id: "setup_rt_cb1", courseID: courseID)
-            try await insertAssignment(testSetupID: setup.id!, title: "RT Lab", courseID: courseID)
+            try await insertAssignment(testSetupID: (try setup.requireID()), title: "RT Lab", courseID: courseID)
 
             // Export
             var exportedZip = Data()

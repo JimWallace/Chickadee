@@ -1,23 +1,19 @@
 # Child SwiftLint config for Tests/. Inherits the repo-root .swiftlint.yml
 # and only overrides what differs for test code.
-#
-# CLAUDE.md exempts test code from the no-force-unwrap rule: `XCTUnwrap`
-# is the idiomatic alternative but plenty of existing test code uses `!`
-# on values known to be present in fixtures. Disabling the rule here
-# avoids a sweeping rewrite of test code that adds no real safety.
 
 parent_config: ../.swiftlint.yml
 
 disabled_rules:
-  - force_unwrapping
-  # force_try and force_cast follow the same rationale as
-  # force_unwrapping: tests operate on controlled inputs (literal JSON,
-  # known-shape fixture data, etc.) where `try!` and `as!` are the
-  # idiomatic shorthand for "this cannot fail given the setup; if it
-  # does, the test failure is the right signal."
+  # force_try and force_cast remain disabled while their per-site
+  # cleanup follow-ups are staged.  Tests operate on controlled inputs
+  # (literal JSON, known-shape fixture data, etc.) where `try!` and
+  # `as!` are the idiomatic shorthand for "this cannot fail given the
+  # setup; if it does, the test failure is the right signal."
+  # TODO: convert remaining sites to `try` (+ `throws` on the test
+  # signature) and `try #require(x as? T)`, then drop these too.
   - force_try
   - force_cast
-  # `type_body_length` is disabled for tests: large XCTest classes
+  # `type_body_length` is disabled for tests: large suites
   # (WorkerDaemonTests at 800 lines, AssignmentRoutesPublishTests at
   # 700+, etc.) group dozens of related tests by area.  Splitting them
   # would scatter cohesive test fixtures across many files without

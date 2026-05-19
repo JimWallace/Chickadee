@@ -194,13 +194,14 @@ import Vapor
                 filename: "publictest_handmade.py",
                 content: "# handmade\npassed('ok')\n"
             )
-            fixture.setup.manifest = updateManifestAddingScript(
-                manifestJSON: fixture.setup.manifest,
-                entry: ConfiguredSuiteEntry(
-                    script: "publictest_handmade.py", tier: "public", order: 1,
-                    dependsOn: [], points: 1, displayName: nil, generatedBy: nil
-                )
-            )!
+            fixture.setup.manifest = try #require(
+                updateManifestAddingScript(
+                    manifestJSON: fixture.setup.manifest,
+                    entry: ConfiguredSuiteEntry(
+                        script: "publictest_handmade.py", tier: "public", order: 1,
+                        dependsOn: [], points: 1, displayName: nil, generatedBy: nil
+                    )
+                ))
             try await fixture.setup.save(on: fixture.app.db)
 
             _ = try await applyPatternFamilies(
@@ -226,13 +227,14 @@ import Vapor
                 filename: "publictest_bmi_category_01.py",
                 content: "# handmade clash\npassed('ok')\n"
             )
-            fixture.setup.manifest = updateManifestAddingScript(
-                manifestJSON: fixture.setup.manifest,
-                entry: ConfiguredSuiteEntry(
-                    script: "publictest_bmi_category_01.py", tier: "public", order: 1,
-                    dependsOn: [], points: 1, displayName: nil
-                )
-            )!
+            fixture.setup.manifest = try #require(
+                updateManifestAddingScript(
+                    manifestJSON: fixture.setup.manifest,
+                    entry: ConfiguredSuiteEntry(
+                        script: "publictest_bmi_category_01.py", tier: "public", order: 1,
+                        dependsOn: [], points: 1, displayName: nil
+                    )
+                ))
             try await fixture.setup.save(on: fixture.app.db)
             let manifestBefore = fixture.setup.manifest
             let zipEntriesBefore = Set(listZipEntries(zipPath: fixture.setup.zipPath))
