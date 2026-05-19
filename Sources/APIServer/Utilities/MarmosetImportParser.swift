@@ -12,6 +12,7 @@
 // Only `test.class.*` fields from test.properties are read; all `build.*`
 // fields are ignored — Chickadee always uses its own Makefile handling.
 
+import Core
 import Foundation
 
 // MARK: - Parsed Marmoset project

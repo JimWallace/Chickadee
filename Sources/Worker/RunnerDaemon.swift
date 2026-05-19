@@ -26,6 +26,15 @@ struct JobStageTimings {
         return result
     }
 
+    /// Async-closure variant of `measureSync`, used by stages that need
+    /// to call `await`-able helpers (e.g. `extractZipArchive` from Core).
+    mutating func measure<T>(_ stage: String, operation: () async throws -> T) async rethrows -> T {
+        let start = Date()
+        let result = try await operation()
+        values[stage] = millisecondsSince(start)
+        return result
+    }
+
     mutating func record(_ stage: String, milliseconds: Int) {
         values[stage] = milliseconds
     }
@@ -506,7 +515,7 @@ actor WorkerDaemon {
                         return classifyHTTPRetry(statusCode: statusCode, body: body)
                     case .downloadFailed(let failedURL):
                         return .terminal("Failed to download \(failedURL.absoluteString)")
-                    case .unzipFailed, .makeFailed, .insufficientDiskSpace:
+                    case .makeFailed, .insufficientDiskSpace:
                         return .terminal(String(describing: workerError))
                     }
                 }
@@ -552,16 +561,9 @@ actor WorkerDaemon {
         )
     }
 
-    nonisolated func unzip(_ zipFile: URL, to directory: URL) throws {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        proc.arguments = ["-q", "-o", zipFile.path, "-d", directory.path]
-        try proc.run()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else {
-            throw WorkerDaemonError.unzipFailed(zipFile)
-        }
-    }
+    // `unzip(_:to:)` was removed in v0.4.178; job processing now calls
+    // `extractZipArchive(zipPath:into:)` from the `Core` library, which
+    // shares the same lock + EFAULT-retry as the server-side zip helpers.
 
     func runMake(in directory: URL, target: String?) throws {
         let proc = Process()
@@ -892,7 +894,6 @@ extension TestStatus {
 enum WorkerDaemonError: Error, LocalizedError {
     case downloadFailed(URL)
     case httpDownloadFailure(statusCode: Int, body: String)
-    case unzipFailed(URL)
     case makeFailed(String?)
     case insufficientDiskSpace(path: String, freeMB: Int, requiredMB: Int)
 
@@ -901,7 +902,6 @@ enum WorkerDaemonError: Error, LocalizedError {
         case .downloadFailed(let url): return "Failed to download \(url)"
         case .httpDownloadFailure(let statusCode, let body):
             return "HTTP \(statusCode) while downloading artifacts: \(body)"
-        case .unzipFailed(let url): return "Failed to unzip \(url.lastPathComponent)"
         case .makeFailed(let target): return "make \(target ?? "") failed"
         case .insufficientDiskSpace(let path, let freeMB, let requiredMB):
             return

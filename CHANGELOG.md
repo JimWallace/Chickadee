@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.179] - 2026-05-19
+
+### Fixed
+
+- **Worker's `unzip` had the same EFAULT race the server fixed in
+  v0.4.178.**  `RunnerDaemon.unzip(_:to:)` was a naked
+  `Process.run()` against `/usr/bin/unzip` — no lock, no retry.  When
+  the runner ran with `--max-jobs > 1`, two concurrent jobs could hit
+  the same Foundation `Process` race that the server-side
+  `ZipArchiver` defended against.  Fixed by routing the runner
+  through the same lock + retry as the server.
+
+### Internal
+
+- **Lifted `ZipArchiver` + `ZipProcessSerialization` from
+  `Sources/APIServer/Utilities/` to `Sources/Core/`.**  Functions and
+  the `ZipArchiverError` type are now `public`; both the API server
+  and the runner import them from `Core`.  Worker's
+  `unzip(_:to:)` method and `WorkerDaemonError.unzipFailed` case are
+  gone — the two job-processing call sites now `await
+  extractZipArchive(zipPath:into:)` from Core.  `JobStageTimings`
+  grew an async-closure variant (`measure(_:operation:)`) so the
+  submission-unpack stage timing keeps working through the new
+  `await`.
+
+  Core's footprint stayed narrow before this lift — pure DTOs +
+  `Hashing.swift` / `ManifestCodec.swift`.  Subprocess plumbing is a
+  noticeable expansion of that surface, but the shared lock is now
+  meaningfully shared (closes the runner race), and the alternative
+  was two side-by-side copies with the bug still present in one of
+  them.
+
 ## [0.4.178] - 2026-05-19
 
 ### Fixed

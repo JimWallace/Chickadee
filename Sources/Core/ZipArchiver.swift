@@ -1,7 +1,14 @@
-// APIServer/Utilities/ZipArchiver.swift
+// Core/ZipArchiver.swift
 //
 // Async helpers for ZIP creation and extraction via subprocess.
 // Wraps /usr/bin/zip and /usr/bin/unzip (consistent with existing codebase usage).
+//
+// Lives in `Core` (v0.4.178+) so both `chickadee-server` and the
+// `chickadee-runner` worker share one implementation.  Before the
+// lift, the worker had its own `nonisolated func unzip(_:to:)` on
+// `RunnerDaemon` that did a naked `Process.run()` — vulnerable to
+// the same Foundation Process EFAULT race that ZipArchiver mitigates
+// on the server side.
 //
 // All functions are free (not methods) to keep callsites clean.
 // Process execution uses withCheckedThrowingContinuation + terminationHandler;
@@ -11,21 +18,18 @@
 // The two mitigations against the Foundation Process EFAULT race
 // (process-wide lock + run-with-retry) live in
 // `ZipProcessSerialization.swift` so every zip subprocess in the
-// codebase — including the synchronous helpers in
-// `TestSetupZipHelpers.swift` — shares the same lock.  Before that
-// refactor, those helpers issued naked `Process.run()` calls that
-// raced against ZipArchiver's lock-protected calls and each other.
+// codebase shares the same lock.
 
 import Foundation
 
 // MARK: - Errors
 
-enum ZipArchiverError: Error, CustomStringConvertible {
+public enum ZipArchiverError: Error, CustomStringConvertible {
     case processFailed(String, Int32)
     case executableNotFound(String)
     case pathTraversalDetected(String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .processFailed(let cmd, let code):
             return "\(cmd) exited with status \(code)"
@@ -43,7 +47,7 @@ enum ZipArchiverError: Error, CustomStringConvertible {
 /// The resulting archive contains paths relative to `sourceDir` (no parent dir prefix).
 ///
 /// Equivalent to: cd <sourceDir> && /usr/bin/zip -r <outputPath> .
-func createZipArchive(sourceDir: URL, outputPath: String) async throws {
+public func createZipArchive(sourceDir: URL, outputPath: String) async throws {
     try await runZipProcess(
         executablePath: "/usr/bin/zip",
         arguments: ["-r", outputPath, "."],
@@ -57,7 +61,7 @@ func createZipArchive(sourceDir: URL, outputPath: String) async throws {
 ///
 /// Guards against zip-slip path traversal by validating every entry's resolved
 /// path stays inside `destinationDir` before invoking the extractor.
-func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
+public func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
     // --- Zip-slip guard ---
     // List all entries first and reject any that would land outside destinationDir
     // after resolving ".."-style components or absolute paths.
@@ -93,7 +97,7 @@ func extractZipArchive(zipPath: String, into destinationDir: URL) async throws {
 
 /// Returns the list of filenames inside a ZIP archive.
 /// Uses `unzip -Z1` (zipinfo one-name-per-line format).
-func listZipContents(zipPath: String) throws -> [String] {
+public func listZipContents(zipPath: String) throws -> [String] {
     guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
         throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
     }
