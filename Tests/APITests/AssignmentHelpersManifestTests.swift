@@ -65,8 +65,8 @@ final class AssignmentHelpersManifestTests {
         #expect(submissionFilenameForStorage(uploadedName: "   ", fallback: "solution.ipynb") == "solution.ipynb")
     }
 
-    @Test func manifestDependentsReturnsScriptsThatReferenceDependency() {
-        let manifest = try! makeWorkerManifestJSON(
+    @Test func manifestDependentsReturnsScriptsThatReferenceDependency() throws {
+        let manifest = try makeWorkerManifestJSON(
             testSuites: [
                 ConfiguredSuiteEntry(
                     script: "01_public.py",

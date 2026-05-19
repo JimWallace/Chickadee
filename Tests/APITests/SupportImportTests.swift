@@ -75,12 +75,12 @@ import Testing
         #expect(onDisk == instructorOwn)
     }
 
-    @Test func extractor_skipsEmptyNotebook() {
+    @Test func extractor_skipsEmptyNotebook() throws {
         let nb: [String: Any] = [
             "cells": [["cell_type": "markdown", "source": "Just text"]],
             "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
         ]
-        let data = try! JSONSerialization.data(withJSONObject: nb)
+        let data = try JSONSerialization.data(withJSONObject: nb)
         let didWrite = SolutionNotebookExtractor.writeSolutionPyIfNeeded(
             notebookData: data, sharedDirectory: tempDir.path + "/"
         )
