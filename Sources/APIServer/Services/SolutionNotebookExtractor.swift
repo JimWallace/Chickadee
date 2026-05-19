@@ -14,6 +14,7 @@
 // `solution.ipynb` in the test setup zip.  Skipped when the instructor
 // uploaded a `solution.py` of their own — explicit beats derived.
 
+import Core
 import Foundation
 
 enum SolutionNotebookExtractor {
@@ -22,10 +23,7 @@ enum SolutionNotebookExtractor {
     /// notebook JSON into a single Python file.  Markdown / raw cells
     /// are skipped.  Returns nil when the input isn't a valid notebook.
     static func extractCodeToPython(notebookData: Data) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: notebookData),
-            let nb = obj as? [String: Any],
-            let cells = nb["cells"] as? [[String: Any]]
-        else { return nil }
+        guard let cells = NotebookCellSources.cells(from: notebookData) else { return nil }
 
         var lines: [String] = [
             "# Auto-generated from solution.ipynb by Chickadee.",
@@ -35,15 +33,11 @@ enum SolutionNotebookExtractor {
             "",
         ]
 
-        for cell in cells {
-            guard let kind = cell["cell_type"] as? String, kind == "code" else { continue }
-            let source = readCellSource(cell)
-            // Concatenate cells with a blank line between them so module
-            // top-level statements don't accidentally merge into a single
-            // line.  Strip trailing whitespace from each cell to keep the
-            // output tidy.
-            let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
+        // Concatenate cells with a blank line between them so module
+        // top-level statements don't accidentally merge into a single
+        // line.  `codeCellSources` already trims each cell's whitespace
+        // and skips empty cells.
+        for trimmed in NotebookCellSources.codeCellSources(cells) {
             lines.append(trimmed)
             lines.append("")
         }
@@ -93,13 +87,6 @@ enum SolutionNotebookExtractor {
         }
     }
 
-    // MARK: - Private
-
-    /// nbformat's `source` field is either a string or an array of
-    /// strings; tolerate both.
-    private static func readCellSource(_ cell: [String: Any]) -> String {
-        if let s = cell["source"] as? String { return s }
-        if let arr = cell["source"] as? [String] { return arr.joined() }
-        return ""
-    }
+    // Cell-source reading (`readCellSource`) moved to
+    // `Core/NotebookCellSources.swift` (`cellSource(_:)`) in v0.4.181.
 }

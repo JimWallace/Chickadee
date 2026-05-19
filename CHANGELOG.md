@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.182] - 2026-05-19
+
+### Internal
+
+- **Shared notebook cell extraction in Core.**  Both
+  `Sources/Worker/NotebookExtractor.swift` and
+  `Sources/APIServer/Services/SolutionNotebookExtractor.swift`
+  open-coded the same three primitives: parsing notebook JSON,
+  iterating `code` cells, and reading the `source` field
+  (string-or-array).  Each side's *post-processing* genuinely
+  diverges (Worker's `sanitizeCellForModule` strips IPython magics
+  and wraps top-level code in `if __name__ == "__main__":` for safe
+  import; Server preserves cells as-is for `solution.py`), but the
+  shape-level work was duplicated.
+
+  Lifted into a small new
+  `Sources/Core/NotebookCellSources.swift` namespace:
+
+    - `NotebookCellSources.cells(from notebookData: Data)` — best-effort
+      JSON parse returning the `cells` array.
+    - `NotebookCellSources.cellSource(_ cell:)` — reads the `source`
+      field, tolerating either nbformat representation.
+    - `NotebookCellSources.codeCellSources(_ cells:)` — extracts and
+      trims non-empty `code`-cell sources for the simple concat path.
+
+  Net diff across the two consumers: −29 LOC.  Each side keeps its
+  own post-processing.  Smaller win than the audit estimated (the
+  diverging intent is structural, not accidental), but a clean
+  removal of the shape-level duplication.
+
 ## [0.4.181] - 2026-05-19
 
 ### Added
