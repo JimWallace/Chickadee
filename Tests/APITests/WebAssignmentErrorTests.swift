@@ -65,7 +65,12 @@ import Vapor
             "AssignmentRoutes+Checks.swift",
             "AssignmentRoutes+Draft.swift",
             "AssignmentRoutes+DraftSections.swift",
-            "AssignmentRoutes+Editor.swift",
+            // `AssignmentRoutes+Editor.swift` was split in v0.4.183
+            // (Phase 4.2) into the four files below.
+            "PublishedAssignmentRoutes+FileDownloads.swift",
+            "PublishedAssignmentRoutes+SaveEdit.swift",
+            "PublishedAssignmentRoutes+ScriptCRUD.swift",
+            "PublishedAssignmentRoutes+NotebookTools.swift",
             "AssignmentRoutes+Enrollment.swift",
             "AssignmentRoutes+Families.swift",
             "AssignmentRoutes+List.swift",
