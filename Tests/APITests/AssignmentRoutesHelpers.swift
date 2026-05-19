@@ -137,6 +137,12 @@ func arEnrollStudentInTestCourse(_ student: APIUser, on app: Application) async 
 
 // MARK: - Multipart body builders
 
+// The two specialized builders below are thin wrappers around the generic
+// `arMultipartBody(boundary:fields:files:)` further down — they collect the
+// fields/files into the right shape and delegate.  Pre-v0.4.186 each
+// reimplemented the multipart serialization with its own
+// `appendField`/`appendFile` closures.
+
 func arMultipartAssignmentBody(
     boundary: String,
     csrf: String,
@@ -146,48 +152,22 @@ func arMultipartAssignmentBody(
     suiteFiles: [(filename: String, contentType: String, content: String)] = [],
     suiteConfig: String? = nil
 ) -> ByteBuffer {
-    var body = ByteBufferAllocator().buffer(capacity: 4096)
-
-    func appendField(_ name: String, _ value: String) {
-        body.writeString("--\(boundary)\r\n")
-        body.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
-        body.writeString(value)
-        body.writeString("\r\n")
-    }
-
-    func appendFile(_ name: String, filename: String, contentType: String = "application/json", data: Data) {
-        body.writeString("--\(boundary)\r\n")
-        body.writeString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
-        body.writeString("Content-Type: \(contentType)\r\n\r\n")
-        body.writeBytes(data)
-        body.writeString("\r\n")
-    }
-
-    appendField("_csrf", csrf)
-    appendField("assignmentName", assignmentName)
-    appendFile(
-        "assignmentNotebookFile",
-        filename: "assignment.ipynb",
-        data: Data(assignmentNotebook.utf8)
-    )
-    appendFile(
-        "solutionNotebookFile",
-        filename: "solution.ipynb",
-        data: Data(solutionNotebook.utf8)
-    )
-    for suiteFile in suiteFiles {
-        appendFile(
-            "suiteFiles",
-            filename: suiteFile.filename,
-            contentType: suiteFile.contentType,
-            data: Data(suiteFile.content.utf8)
-        )
-    }
+    var fields: [(String, String)] = [
+        ("_csrf", csrf),
+        ("assignmentName", assignmentName),
+    ]
     if let suiteConfig {
-        appendField("suiteConfig", suiteConfig)
+        fields.append(("suiteConfig", suiteConfig))
     }
-    body.writeString("--\(boundary)--\r\n")
-    return body
+    // swiftlint:disable:next large_tuple
+    var files: [(name: String, filename: String, contentType: String, data: Data)] = [
+        ("assignmentNotebookFile", "assignment.ipynb", "application/json", Data(assignmentNotebook.utf8)),
+        ("solutionNotebookFile", "solution.ipynb", "application/json", Data(solutionNotebook.utf8)),
+    ]
+    for suiteFile in suiteFiles {
+        files.append(("suiteFiles", suiteFile.filename, suiteFile.contentType, Data(suiteFile.content.utf8)))
+    }
+    return arMultipartBody(boundary: boundary, fields: fields, files: files)
 }
 
 func arMultipartEditBody(
@@ -198,38 +178,18 @@ func arMultipartEditBody(
     solutionNotebook: String,
     suiteConfig: String
 ) -> ByteBuffer {
-    var body = ByteBufferAllocator().buffer(capacity: 4096)
-
-    func appendField(_ name: String, _ value: String) {
-        body.writeString("--\(boundary)\r\n")
-        body.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
-        body.writeString(value)
-        body.writeString("\r\n")
-    }
-
-    func appendFile(_ name: String, filename: String, contentType: String = "application/json", data: Data) {
-        body.writeString("--\(boundary)\r\n")
-        body.writeString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
-        body.writeString("Content-Type: \(contentType)\r\n\r\n")
-        body.writeBytes(data)
-        body.writeString("\r\n")
-    }
-
-    appendField("_csrf", csrf)
-    appendField("assignmentName", assignmentName)
-    appendFile(
-        "assignmentNotebookFile",
-        filename: "assignment.ipynb",
-        data: Data(assignmentNotebook.utf8)
+    arMultipartBody(
+        boundary: boundary,
+        fields: [
+            ("_csrf", csrf),
+            ("assignmentName", assignmentName),
+            ("suiteConfig", suiteConfig),
+        ],
+        files: [
+            ("assignmentNotebookFile", "assignment.ipynb", "application/json", Data(assignmentNotebook.utf8)),
+            ("solutionNotebookFile", "solution.ipynb", "application/json", Data(solutionNotebook.utf8)),
+        ]
     )
-    appendFile(
-        "solutionNotebookFile",
-        filename: "solution.ipynb",
-        data: Data(solutionNotebook.utf8)
-    )
-    appendField("suiteConfig", suiteConfig)
-    body.writeString("--\(boundary)--\r\n")
-    return body
 }
 
 func arMultipartBody(

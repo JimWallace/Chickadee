@@ -23,6 +23,11 @@ import XCTVapor
         return (boundCookie, token)
     }
 
+    // Suite-specific defaults that wrap the centralized fixture
+    // builders in Tests/APITests/Fixtures.swift.  Kept as private
+    // wrappers (not call-site `makeTestCourse(on: app, ...)`) so the
+    // many call sites below don't churn.
+
     @discardableResult
     private func makeCourse(
         code: String = "ADM101",
@@ -30,20 +35,12 @@ import XCTVapor
         archived: Bool = false,
         mode: CourseEnrollmentMode = .open
     ) async throws -> APICourse {
-        let course = APICourse(code: code, name: name, isArchived: archived, enrollmentMode: mode)
-        try await course.save(on: app.db)
-        return course
+        try await makeTestCourse(on: app, code: code, name: name, archived: archived, mode: mode)
     }
 
     @discardableResult
     private func makeUser(username: String, role: String = "student") async throws -> APIUser {
-        let user = APIUser(
-            username: username,
-            passwordHash: try Bcrypt.hash("pw"),
-            role: role
-        )
-        try await user.save(on: app.db)
-        return user
+        try await makeTestUser(on: app, username: username, role: role)
     }
 
     @discardableResult
@@ -52,27 +49,7 @@ import XCTVapor
         courseID: UUID,
         withNotebook: Bool = true
     ) async throws -> APITestSetup {
-        let manifest = """
-            {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-            """
-        let zipPath = app.testSetupsDirectory + "\(id).zip"
-        let notebookPath = app.testSetupsDirectory + "\(id).ipynb"
-        try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
-            .write(to: URL(fileURLWithPath: zipPath))
-        if withNotebook {
-            try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
-                .write(to: URL(fileURLWithPath: notebookPath), atomically: true, encoding: .utf8)
-        }
-
-        let setup = APITestSetup(
-            id: id,
-            manifest: manifest,
-            zipPath: zipPath,
-            notebookPath: withNotebook ? notebookPath : nil,
-            courseID: courseID
-        )
-        try await setup.save(on: app.db)
-        return setup
+        try await makeTestSetup(on: app, id: id, courseID: courseID, withNotebook: withNotebook)
     }
 
     @discardableResult
@@ -81,22 +58,12 @@ import XCTVapor
         courseID: UUID,
         title: String = "Admin Lab"
     ) async throws -> APIAssignment {
-        let assignment = APIAssignment(
-            testSetupID: testSetupID,
-            title: title,
-            dueAt: nil,
-            isOpen: true,
-            courseID: courseID
-        )
-        try await assignment.save(on: app.db)
-        return assignment
+        try await makeTestAssignment(on: app, testSetupID: testSetupID, courseID: courseID, title: title)
     }
 
     @discardableResult
     private func makeEnrollment(userID: UUID, courseID: UUID) async throws -> APICourseEnrollment {
-        let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-        try await enrollment.save(on: app.db)
-        return enrollment
+        try await makeTestEnrollment(on: app, userID: userID, courseID: courseID)
     }
 
     @discardableResult
@@ -105,33 +72,12 @@ import XCTVapor
         setupID: String,
         userID: UUID
     ) async throws -> APISubmission {
-        let path = app.submissionsDirectory + "\(id).ipynb"
-        try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
-            .write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
-        let submission = APISubmission(
-            id: id,
-            testSetupID: setupID,
-            zipPath: path,
-            attemptNumber: 1,
-            status: "complete",
-            filename: "\(id).ipynb",
-            userID: userID,
-            kind: APISubmission.Kind.student
-        )
-        try await submission.save(on: app.db)
-        return submission
+        try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
     }
 
     @discardableResult
     private func makeResult(submissionID: String) async throws -> APIResult {
-        let result = APIResult(
-            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID: submissionID,
-            collectionJSON: #"{"submissionID":"\#(submissionID)","outcomes":[]}"#,
-            source: "worker"
-        )
-        try await result.save(on: app.db)
-        return result
+        try await makeTestResult(on: app, submissionID: submissionID)
     }
 
     @Test func changeRoleUpdatesUserRole() async throws {

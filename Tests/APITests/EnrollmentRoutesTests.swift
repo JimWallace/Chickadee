@@ -33,10 +33,7 @@ import XCTVapor
         mode: CourseEnrollmentMode = .open,
         archived: Bool = false
     ) async throws -> APICourse {
-        let c = APICourse(code: code, name: "Course \(code)", enrollmentMode: mode)
-        c.isArchived = archived
-        try await c.save(on: app.db)
-        return c
+        try await makeTestCourse(on: app, code: code, archived: archived, mode: mode)
     }
 
     // MARK: - GET /enroll

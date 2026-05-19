@@ -23,20 +23,12 @@ import XCTVapor
 
     // MARK: - Helpers
 
-    private func makeCourse(
-        code: String,
-        mode: CourseEnrollmentMode = .closed
-    ) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Test \(code)", enrollmentMode: mode)
-        try await course.save(on: app.db)
-        return course
+    private func makeCourse(code: String, mode: CourseEnrollmentMode = .closed) async throws -> APICourse {
+        try await makeTestCourse(on: app, code: code, name: "Test \(code)", mode: mode)
     }
 
     private func makeStudent(username: String) async throws -> APIUser {
-        let hash = try Bcrypt.hash("pw")
-        let user = APIUser(username: username, passwordHash: hash, role: "student")
-        try await user.save(on: app.db)
-        return user
+        try await makeTestStudent(on: app, username: username)
     }
 
     private func enroll(user: APIUser, in course: APICourse) async throws {
