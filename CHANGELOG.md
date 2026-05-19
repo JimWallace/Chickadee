@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.186] - 2026-05-19
+
+### Internal
+
+- **Test fixture consolidation.**  Six suites
+  (`AdminRoutesTests`, `AccountRoutesTests`, `AssignmentEnrollmentTests`,
+  `EnrollmentRoutesTests`, and others) each defined their own
+  `private func makeCourse / makeUser / makeSetup / makeAssignment /
+  makeEnrollment / makeSubmission / makeResult` wrappers — same shape,
+  slightly different defaults.  When the underlying model gained a
+  field, every copy needed updating.
+
+  Lifted the canonical fixture bodies into a new
+  `Tests/APITests/Fixtures.swift` exposing free functions
+  `makeTestCourse(on:…)`, `makeTestUser(on:…)`, `makeTestStudent(on:…)`,
+  `makeTestSetup(on:…)`, `makeTestAssignment(on:…)`,
+  `makeTestEnrollment(on:…)`, `makeTestSubmission(on:…)`, and
+  `makeTestResult(on:…)`.  Each suite keeps its own private wrapper
+  for its suite-specific defaults (e.g. `AdminRoutesTests`'s
+  `"ADM101"` / `"Admin Test Course"` defaults), but the body is now
+  a one-line delegation.
+
+  Also consolidated the three multipart body builders in
+  `AssignmentRoutesHelpers.swift`.  `arMultipartAssignmentBody` and
+  `arMultipartEditBody` are now thin wrappers around the generic
+  `arMultipartBody(boundary:fields:files:)`; the inner `appendField`
+  / `appendFile` closures lived in triplicate before this PR.
+
+  Net diff: −113 LOC across 5 files, +180 LOC of consolidated
+  `Fixtures.swift`.  The real win is single source of truth: future
+  `APICourse` / `APIUser` / etc. field additions touch one helper
+  instead of seven.
+
 ## [0.4.185] - 2026-05-19
 
 ### Internal
