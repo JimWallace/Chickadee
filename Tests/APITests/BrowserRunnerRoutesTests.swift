@@ -510,7 +510,7 @@ import XCTVapor
               {"cell_type":"code","source":["x = 1"],"metadata":{},"outputs":[]}
             ]}
             """
-        return json.data(using: .utf8)!
+        return Data(json.utf8)
     }
 
     private func multipartBody(

@@ -167,7 +167,8 @@ struct NotebookFunctionScannerTests {
     }
 
     @Test func isShadowedDecodes() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "name": "tax",
               "paramNames": ["price"],
@@ -175,7 +176,7 @@ struct NotebookFunctionScannerTests {
               "hasDocstring": false,
               "isShadowed": true
             }
-            """.data(using: .utf8)!
+            """.utf8)
         let decoded = try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
         #expect(decoded.isShadowed == true)
     }
@@ -183,14 +184,15 @@ struct NotebookFunctionScannerTests {
     @Test func isShadowedDecodeRequiresField() {
         // v0.6.0 removed the `decodeIfPresent ?? false` fallback; missing
         // `isShadowed` is now a decode error rather than silently false.
-        let json = """
+        let json = Data(
+            """
             {
               "name": "tax",
               "paramNames": ["price"],
               "hasTypeHints": true,
               "hasDocstring": false
             }
-            """.data(using: .utf8)!
+            """.utf8)
         #expect(throws: DecodingError.self) {
             try JSONDecoder().decode(NotebookFunctionInfo.self, from: json)
         }

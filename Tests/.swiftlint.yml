@@ -17,14 +17,6 @@ disabled_rules:
   # does, the test failure is the right signal."
   - force_try
   - force_cast
-  # `non_optional_string_data_conversion` flags
-  # `<string>.data(using: .utf8)` and suggests `Data(<string>.utf8)`.
-  # All 29 violations are in test fixtures with controlled multi-line
-  # `"""…"""` literals where `.data(using: .utf8)!` is the standard
-  # idiom.  The transformation would require wrapping every fixture in
-  # `Data(... .utf8)` for negligible benefit.  The companion
-  # force_unwrapping exemption above covers the same reasoning.
-  - non_optional_string_data_conversion
   # `type_body_length` is disabled for tests: large XCTest classes
   # (WorkerDaemonTests at 800 lines, AssignmentRoutesPublishTests at
   # 700+, etc.) group dozens of related tests by area.  Splitting them

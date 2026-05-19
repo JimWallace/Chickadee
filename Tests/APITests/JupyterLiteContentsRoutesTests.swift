@@ -50,9 +50,10 @@ import XCTVapor
     @Test func allJSONListsNotebook() async throws {
         try await withApp(app) { _ in
             let notebookName = "setup_test-assignment.ipynb"
-            let notebookData = """
+            let notebookData = Data(
+                """
                 {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}
-                """.data(using: .utf8)!
+                """.utf8)
             try notebookData.write(to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName))
 
             try await app.asyncTest(
@@ -75,7 +76,7 @@ import XCTVapor
             let notebookJSON = """
                 {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["hello"]}]}
                 """
-            try notebookJSON.data(using: .utf8)!.write(
+            try Data(notebookJSON.utf8).write(
                 to: URL(fileURLWithPath: publicDir + "jupyterlite/files/" + notebookName)
             )
 
