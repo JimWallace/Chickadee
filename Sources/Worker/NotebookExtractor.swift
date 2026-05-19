@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 struct NotebookExtraction {
@@ -40,16 +41,8 @@ struct NotebookExtractor {
         for (index, cell) in cells.enumerated() {
             guard cell["cell_type"] as? String == "code" else { continue }
 
-            let rawSource: String
-            if let sourceLines = cell["source"] as? [String] {
-                rawSource = sourceLines.joined()
-            } else if let sourceString = cell["source"] as? String {
-                rawSource = sourceString
-            } else {
-                continue
-            }
-
-            let trimmedSource = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedSource = NotebookCellSources.cellSource(cell)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedSource.isEmpty else { continue }
 
             let cellSource = sanitizeCellForModule(trimmedSource)
@@ -327,16 +320,7 @@ func extractNotebooksToCode(in directory: URL) throws {
         let extractor = NotebookExtractor()
         for cell in cells {
             guard cell["cell_type"] as? String == "code" else { continue }
-            let raw: String
-            if let arr = cell["source"] as? [String] {
-                raw = arr.joined()
-            } else if let str = cell["source"] as? String {
-                raw = str
-            } else {
-                continue
-            }
-
-            var src = raw
+            var src = NotebookCellSources.cellSource(cell)
             while src.last?.isWhitespace == true { src.removeLast() }
             guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
 
