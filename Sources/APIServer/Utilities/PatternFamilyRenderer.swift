@@ -265,6 +265,30 @@ private func combinedVariableDecls(
     TestScriptVariablePrepender.emit(sectionVariables + family.variables)
 }
 
+/// The two-line header every generated case starts with:
+///
+///     # Test: <case label>
+///     # Generated from pattern family "<name>" [<id>] spec_hash=<hash> — edit the family, not this file.
+///
+/// The `# Test:` line MUST come first so `test_runtime._first_comment_label()`
+/// picks up the case label.  Consolidated in v0.4.185 (Phase 5.A) — pre-fix
+/// this header was open-coded in all 7 kind-specific render functions.
+private func generatedCaseHeader(family: PatternFamily, case c: PatternCase, specHash: String) -> String {
+    """
+    # Test: \(c.label)
+    # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+    """
+}
+
+/// The Python expression every kind interpolates into its failure-message
+/// `hint=...` slot: either `"Hint: <escaped text>"` (when the case or
+/// family default provides hint text) or `""` (no hint).  Consolidated in
+/// v0.4.185 (Phase 5.A); previously open-coded in all 7 kinds.
+private func generatedCaseHintLineExpr(_ c: PatternCase, family: PatternFamily) -> String {
+    let resolvedHint = c.resolvedHint(defaults: family.defaults)
+    return resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+}
+
 private func renderBoundaryEquality(
     family: PatternFamily,
     case c: PatternCase,
@@ -273,8 +297,7 @@ private func renderBoundaryEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
@@ -284,8 +307,7 @@ private func renderBoundaryEquality(
     // this file sees which family produced it, but the runtime label stays
     // student-readable.
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
         expected = \(c.expected.pythonLiteral)
@@ -353,8 +375,7 @@ private func renderApproximateEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let tolerance = family.defaults.tolerance ?? defaultApproxTolerance
     // Use JSONValue's Python rendering so whole-number tolerances come out
@@ -365,8 +386,7 @@ private func renderApproximateEquality(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
         expected = \(c.expected.pythonLiteral)
@@ -446,12 +466,10 @@ private func renderVariableEquality(
         return name
     }()
     let nameLiteral = "\"" + escapeForPythonStringLiteral(variableName) + "\""
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         variable_name = \(nameLiteral)
         expected      = \(c.expected.pythonLiteral)
@@ -521,8 +539,7 @@ private func renderReturnTypeCheck(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     // expected is a JSON string naming the type (e.g. "DataFrame").
     let typeName: String = {
@@ -536,8 +553,7 @@ private func renderReturnTypeCheck(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
         expected_type_name = \(typeNameLiteral)
@@ -581,8 +597,7 @@ private func renderExceptionExpected(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let exceptionName: String = {
         if case .string(let s) = c.expected { return s }
@@ -594,8 +609,7 @@ private func renderExceptionExpected(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
         expected_exception_name = \(exceptionLiteral)
@@ -645,8 +659,7 @@ private func renderPerformanceThreshold(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let thresholdMs: Double = {
         switch c.expected {
@@ -661,8 +674,7 @@ private func renderPerformanceThreshold(
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         import time as _time
 
@@ -719,15 +731,13 @@ private func renderStdoutEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    let hintLine = resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
+    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
     return """
-        # Test: \(c.label)
-        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(specHash) — edit the family, not this file.
+        \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
         import io as _io
         import contextlib as _contextlib

@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.185] - 2026-05-19
+
+### Internal
+
+- **`PatternFamilyRenderer.swift` duplicate-pattern dedup.**  The
+  seven kind-specific `renderXxx` functions each open-coded the same
+  two-line `# Test:` / `# Generated from pattern family … spec_hash=…`
+  header block (7 copies, byte-identical) and the same
+  `resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral(\$0))\"" } ?? "\"\""`
+  hint-line expression (7 copies).  Extracted two helpers,
+  `generatedCaseHeader(family:case:specHash:)` and
+  `generatedCaseHintLineExpr(_:family:)`, so the header format and
+  hint shape live in one place — a future tweak (extending the
+  spec_hash prefix length, changing the comment lead, etc.) touches
+  one site instead of seven.
+
+  Generated Python output is byte-identical to the pre-refactor
+  rendering (66/66 pattern-family tests pass), so `spec_hash` /
+  `TestSetupCache` keys stay stable across the upgrade.
+
 ## [0.4.184] - 2026-05-19
 
 ### Internal
