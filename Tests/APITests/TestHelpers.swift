@@ -16,7 +16,12 @@ import XCTVapor
 @testable import chickadee_server
 
 func configureTestDatabase(_ app: Application) async throws {
-    var settings = try testDatabaseSettingsFromEnvironment()
+    // Read env vars while holding the async env lock so we don't see a
+    // transient `TEST_DATABASE_BACKEND=postgres` set by a concurrently-
+    // running env-mutating test in another suite.
+    var settings = try await withAsyncEnvLock {
+        try testDatabaseSettingsFromEnvironment()
+    }
 
     // Per-test isolated schema for Postgres so `swift test --parallel` can
     // run XCTestCase subclasses concurrently against one shared database.
