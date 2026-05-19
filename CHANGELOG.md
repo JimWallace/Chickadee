@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.183] - 2026-05-19
+
+### Internal
+
+- **`ManifestValidation.swift` split into per-concern validators.**
+  The 817-LOC megafile mixed three independent validation concerns:
+  dependency-graph cycle detection, pattern-family schema validation,
+  and notebook-check schema validation.  Every edit to one concern
+  revalidated the whole file under Swift's type checker.  Split into
+  four files, each under 400 LOC:
+
+    - `ManifestValidation.swift` (72 LOC) — DAG cycle detection only.
+      Kept the original filename so blame for the DAG part stays
+      attached.
+    - `PatternFamilyValidator.swift` (351 LOC) —
+      `validatePatternFamilies` and its four private helpers
+      (`validatePatternFamilyHeader`,
+      `validatePatternCaseHeader`,
+      `validatePatternCaseKindSpecific`,
+      `validateFamilyVariablesAndArgRefs`).
+    - `NotebookCheckValidator.swift` (392 LOC) —
+      `validateNotebookChecks` plus its
+      `swiftlint:disable cyclomatic_complexity function_body_length`
+      wrapper.
+    - `IdentifierValidation.swift` (36 LOC) —
+      `isValidPythonIdentifier`, `isValidIdentifierFragment`,
+      `pythonKeywords`.  Tiny shared helpers that all three
+      validators reference.
+
+  Public API unchanged — `validateManifestDependencies`,
+  `validatePatternFamilies`, `validateNotebookChecks` keep the same
+  signatures, so `PatternFamilyApplication.swift`,
+  `TestSetupRoutes.swift`, and the tests don't need to change.
+
 ## [0.4.182] - 2026-05-19
 
 ### Internal
