@@ -110,9 +110,10 @@ struct CourseBundleManifestTests {
     // MARK: - bundledCourseEnrollmentMode resolver
 
     @Test func bundledCourseEnrollmentModePresent() throws {
-        let json = """
+        let json = Data(
+            """
             { "code": "CS101", "name": "Intro CS", "enrollmentMode": "auto" }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let course = try decoder.decode(BundledCourse.self, from: json)
         #expect(course.enrollmentMode == .auto)

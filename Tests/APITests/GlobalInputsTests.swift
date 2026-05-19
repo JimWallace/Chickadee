@@ -354,9 +354,10 @@ import Testing
     }
 
     @Test func testProperties_missingGlobalVariablesDecodesAsEmpty() throws {
-        let json = #"""
+        let json = Data(
+            #"""
             {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}
-            """#.data(using: .utf8)!
+            """#.utf8)
         let decoded = try JSONDecoder().decode(TestProperties.self, from: json)
         #expect(decoded.globalVariables.isEmpty)
     }

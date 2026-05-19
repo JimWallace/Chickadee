@@ -41,7 +41,8 @@ struct CoreCodableTests {
     // MARK: - TestOutcome — custom decoder (points defaults to 1)
 
     @Test func testOutcomePointsDefaultsToOne() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "testName": "testFoo",
               "tier": "public",
@@ -51,7 +52,7 @@ struct CoreCodableTests {
               "attemptNumber": 1,
               "isFirstPassSuccess": true
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let outcome = try decoder.decode(TestOutcome.self, from: json)
         #expect(outcome.points == 1)
@@ -61,7 +62,8 @@ struct CoreCodableTests {
     }
 
     @Test func testOutcomeExplicitPoints() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "testName": "testBar",
               "tier": "release",
@@ -73,7 +75,7 @@ struct CoreCodableTests {
               "attemptNumber": 2,
               "isFirstPassSuccess": false
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let outcome = try decoder.decode(TestOutcome.self, from: json)
         #expect(outcome.points == 3)
@@ -104,7 +106,8 @@ struct CoreCodableTests {
 
     @Test func collectionTotalPointsFallsBackToTotalTests() throws {
         // Old JSON without totalPoints/earnedPoints/warnings/jobStartedAt
-        let json = """
+        let json = Data(
+            """
             {
               "submissionID": "sub_001",
               "testSetupID": "setup_001",
@@ -120,7 +123,7 @@ struct CoreCodableTests {
               "runnerVersion": "shell-runner/1.0",
               "timestamp": "1970-01-01T00:00:00Z"
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let col = try decoder.decode(TestOutcomeCollection.self, from: json)
         #expect(col.totalPoints == 5)  // falls back to totalTests
@@ -179,9 +182,10 @@ struct CoreCodableTests {
     @Test func jobRoundTrip() throws {
         let manifest = try decoder.decode(
             TestProperties.self,
-            from: """
+            from: Data(
+                """
                 { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 }
-                """.data(using: .utf8)!)
+                """.utf8))
 
         let job = Job(
             submissionID: "sub_job",
@@ -205,9 +209,10 @@ struct CoreCodableTests {
     @Test func jobSubmissionFilenameNilRoundTrip() throws {
         let manifest = try decoder.decode(
             TestProperties.self,
-            from: """
+            from: Data(
+                """
                 { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
-                """.data(using: .utf8)!)
+                """.utf8))
 
         let job = Job(
             submissionID: "sub_zip",
@@ -342,7 +347,7 @@ struct CoreCodableTests {
               "expectedColumns": ["a", "b"]
             }
             """
-        let decoded = try decoder.decode(NotebookCheck.self, from: json.data(using: .utf8)!)
+        let decoded = try decoder.decode(NotebookCheck.self, from: Data(json.utf8))
         #expect(decoded.columnMatch == nil)
     }
 
@@ -579,7 +584,7 @@ struct CoreCodableTests {
               "expectedCSV": "a,b\\n1,2\\n"
             }
             """
-        let decoded = try decoder.decode(NotebookCheck.self, from: json.data(using: .utf8)!)
+        let decoded = try decoder.decode(NotebookCheck.self, from: Data(json.utf8))
         #expect(decoded.checkDtype == nil)
         #expect(decoded.checkLike == nil)
         #expect(decoded.rtol == nil)
@@ -607,9 +612,10 @@ struct CoreCodableTests {
         // decoder must default to [].
         let manifest = try decoder.decode(
             TestProperties.self,
-            from: """
+            from: Data(
+                """
                 { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 10 }
-                """.data(using: .utf8)!)
+                """.utf8))
         #expect(manifest.notebookChecks.isEmpty)
     }
 
@@ -704,7 +710,8 @@ struct CoreCodableTests {
         // Older runners predate the disk-usage fields. Verify the synthesized
         // Codable decoder still accepts those payloads with the new optional
         // fields landing as nil.
-        let legacyJSON = """
+        let legacyJSON = Data(
+            """
             {
                 "runnerID": "runner-legacy",
                 "startedAt": "2024-01-01T00:00:00Z",
@@ -720,7 +727,7 @@ struct CoreCodableTests {
                 "stderrBytes": null,
                 "stageTimings": null
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

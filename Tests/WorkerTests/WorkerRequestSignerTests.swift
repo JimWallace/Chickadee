@@ -15,7 +15,7 @@ import FoundationNetworking
         let url = URL(string: "http://localhost:8080/internal/worker/ping")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.httpBody = #"{"submission":"sub_1"}"#.data(using: .utf8)
+        request.httpBody = Data(#"{"submission":"sub_1"}"#.utf8)
 
         let timestamp: Int64 = 1_700_000_000
         let nonce = "nonce-abc"

@@ -145,7 +145,7 @@ import FoundationNetworking
     @Test func report_terminatesOn401() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            MockURLProtocol.enqueue(.status(401, body: "unauthorized".data(using: .utf8)!))
+            MockURLProtocol.enqueue(.status(401, body: Data("unauthorized".utf8)))
             let reporter = makeReporter(uploadMaxAttempts: 5)
             await expectHTTPError(401) { try await reporter.report(self.sampleExecutionReport()) }
             #expect(MockURLProtocol.capturedRequests.count == 1)

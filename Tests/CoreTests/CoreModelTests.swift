@@ -47,7 +47,7 @@ struct CoreModelTests {
     // MARK: - GradingMode
 
     @Test func gradingModeDefaultsWorkerWhenAbsent() throws {
-        let json = #"{ "schemaVersion": 1 }"#.data(using: .utf8)!
+        let json = Data(#"{ "schemaVersion": 1 }"#.utf8)
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.gradingMode == .worker)
     }
@@ -61,7 +61,7 @@ struct CoreModelTests {
             [GradingMode.browser, GradingMode.worker]
         ))
     func gradingModeExplicit(json: String, expected: GradingMode) throws {
-        let manifest = try decoder.decode(TestProperties.self, from: json.data(using: .utf8)!)
+        let manifest = try decoder.decode(TestProperties.self, from: Data(json.utf8))
         #expect(manifest.gradingMode == expected)
     }
 
@@ -75,7 +75,8 @@ struct CoreModelTests {
     // MARK: - TestProperties (no Makefile)
 
     @Test func testPropertiesRoundTrip() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "schemaVersion": 1,
               "gradingMode": "worker",
@@ -86,7 +87,7 @@ struct CoreModelTests {
               ],
               "timeLimitSeconds": 10
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.schemaVersion == 1)
@@ -106,7 +107,8 @@ struct CoreModelTests {
     // MARK: - TestProperties (with Makefile)
 
     @Test func testPropertiesWithMakefileRoundTrip() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "schemaVersion": 1,
               "gradingMode": "worker",
@@ -117,7 +119,7 @@ struct CoreModelTests {
               "timeLimitSeconds": 10,
               "makefile": { "target": "build" }
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.makefile != nil)
@@ -129,7 +131,8 @@ struct CoreModelTests {
     }
 
     @Test func testPropertiesWithDefaultMakeTarget() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "schemaVersion": 1,
               "gradingMode": "worker",
@@ -140,7 +143,7 @@ struct CoreModelTests {
               "timeLimitSeconds": 10,
               "makefile": { "target": null }
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.makefile != nil)
@@ -150,14 +153,14 @@ struct CoreModelTests {
     // MARK: - TestSuiteEntry dependsOn
 
     @Test func testSuiteEntryDefaultsEmptyDependsOn() throws {
-        let json = #"{ "tier": "public", "script": "test_foo.sh" }"#.data(using: .utf8)!
+        let json = Data(#"{ "tier": "public", "script": "test_foo.sh" }"#.utf8)
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
         #expect(entry.dependsOn.isEmpty)
     }
 
     @Test func testSuiteEntryWithDependsOnRoundTrip() throws {
-        let json = #"{ "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }"#
-            .data(using: .utf8)!
+        let json = Data(
+            #"{ "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }"#.utf8)
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
         #expect(entry.script == "test_bar.sh")
         #expect(entry.dependsOn == ["test_foo.sh"])
@@ -168,7 +171,8 @@ struct CoreModelTests {
     }
 
     @Test func testPropertiesWithDependencyChainRoundTrip() throws {
-        let json = """
+        let json = Data(
+            """
             {
               "schemaVersion": 1,
               "gradingMode": "worker",
@@ -179,7 +183,7 @@ struct CoreModelTests {
               ],
               "timeLimitSeconds": 10
             }
-            """.data(using: .utf8)!
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.testSuites.count == 3)

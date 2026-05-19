@@ -113,7 +113,7 @@ import XCTVapor
         let notebookPath = tmpDir + "testsetups/\(id).ipynb"
         let entries = zipEntries.isEmpty ? [("assignment.ipynb", notebookJSON)] : zipEntries
         try makeZipAt(zipPath: zipPath, entries: entries)
-        try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
+        try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
 
         let setup = APITestSetup(
             id: id,
@@ -153,7 +153,7 @@ import XCTVapor
         attemptNumber: Int = 1
     ) async throws -> APISubmission {
         let path = tmpDir + "submissions/\(id).ipynb"
-        try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: path))
+        try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: path))
         let submission = APISubmission(
             id: id,
             testSetupID: testSetupID,
@@ -341,8 +341,7 @@ import XCTVapor
                 atPath: (workingCopy as NSString).deletingLastPathComponent,
                 withIntermediateDirectories: true
             )
-            try notebookJSON(markdown: "Saved working copy")
-                .data(using: .utf8)!
+            try Data(notebookJSON(markdown: "Saved working copy").utf8)
                 .write(to: URL(fileURLWithPath: workingCopy))
 
             try await app.asyncTest(
@@ -386,8 +385,7 @@ import XCTVapor
                 atPath: (staleCopyPath as NSString).deletingLastPathComponent,
                 withIntermediateDirectories: true
             )
-            try notebookJSON(markdown: "Stale working copy")
-                .data(using: .utf8)!
+            try Data(notebookJSON(markdown: "Stale working copy").utf8)
                 .write(to: URL(fileURLWithPath: staleCopyPath))
 
             try await app.asyncTest(
@@ -436,7 +434,7 @@ import XCTVapor
 
             let sharedDir = tmpDir + "testsetups/shared/\(setupID)/"
             try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
-            try "def bmi():\n    return 22\n".data(using: .utf8)!.write(
+            try Data("def bmi():\n    return 22\n".utf8).write(
                 to: URL(fileURLWithPath: sharedDir + "bmi.py")
             )
 

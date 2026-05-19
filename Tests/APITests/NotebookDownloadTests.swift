@@ -52,7 +52,7 @@ import XCTVapor
         // Write a dummy zip (the flat .ipynb takes priority in getAssignment).
         let dummyZipPath = app.testSetupsDirectory + "\(setupID).zip"
         try Data().write(to: URL(fileURLWithPath: dummyZipPath))
-        try notebookJSON.data(using: .utf8)!.write(to: URL(fileURLWithPath: notebookPath))
+        try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
 
         let courseID = try await app.testCourseID(enrollmentMode: .auto)
         let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: dummyZipPath, courseID: courseID)
@@ -260,7 +260,7 @@ import XCTVapor
                   {"cell_type":"code","source":["x = 99"],"metadata":{},"outputs":[]}
                 ]}
                 """
-            let studentNotebookData = studentNotebookJSON.data(using: .utf8)!
+            let studentNotebookData = Data(studentNotebookJSON.utf8)
 
             // Build a minimal valid TestOutcomeCollection JSON.
             let collectionJSON = """
@@ -341,7 +341,7 @@ import XCTVapor
             let cookie = try await loginAsStudent()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-            let notebookData = mixedNotebookJSON.data(using: .utf8)!
+            let notebookData = Data(mixedNotebookJSON.utf8)
             let collectionJSON = """
                 {"submissionID":"","testSetupID":"\(setupID)","attemptNumber":1,
                  "buildStatus":"passed","compilerOutput":null,"outcomes":[],
@@ -423,7 +423,7 @@ import XCTVapor
                   {"cell_type":"code","source":["y = 77"],"metadata":{},"outputs":[]}
                 ]}
                 """
-            let studentNotebookData = studentNotebookJSON.data(using: .utf8)!
+            let studentNotebookData = Data(studentNotebookJSON.utf8)
 
             var savedSubID = ""
 

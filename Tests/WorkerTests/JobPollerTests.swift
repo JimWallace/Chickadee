@@ -65,7 +65,7 @@ import FoundationNetworking
     @Test func throwsDuplicateWorkerID_on409_withJSONBody() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            let body = #"{"error":"worker already registered"}"#.data(using: .utf8)!
+            let body = Data(#"{"error":"worker already registered"}"#.utf8)
             MockURLProtocol.enqueue(.status(409, body: body))
             let poller = makePoller()
 
@@ -84,7 +84,7 @@ import FoundationNetworking
     @Test func throwsDuplicateWorkerID_on409_withPlainBody() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            let body = "worker conflict".data(using: .utf8)!
+            let body = Data("worker conflict".utf8)
             MockURLProtocol.enqueue(.status(409, body: body))
             let poller = makePoller()
 
@@ -103,7 +103,7 @@ import FoundationNetworking
     @Test func throwsHTTPError_on500() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            let body = "internal server error".data(using: .utf8)!
+            let body = Data("internal server error".utf8)
             MockURLProtocol.enqueue(.status(500, body: body))
             let poller = makePoller()
 
@@ -123,7 +123,7 @@ import FoundationNetworking
     @Test func throwsHTTPError_on400() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            MockURLProtocol.enqueue(.status(400, body: "bad request".data(using: .utf8)!))
+            MockURLProtocol.enqueue(.status(400, body: Data("bad request".utf8)))
             let poller = makePoller()
 
             do {
@@ -161,7 +161,7 @@ import FoundationNetworking
     @Test func throwsTransportError_onMalformedJson200() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
-            MockURLProtocol.enqueue(.status(200, body: "not json".data(using: .utf8)!))
+            MockURLProtocol.enqueue(.status(200, body: Data("not json".utf8)))
             let poller = makePoller()
 
             do {
