@@ -16,6 +16,26 @@ enum ScriptZipError: Error {
     case zipFailed
 }
 
+/// Packs `sourceDir` into `zipPath` via `/usr/bin/zip -q -r`, running
+/// under the shared zip process lock (see `ZipProcessSerialization.swift`)
+/// so it can't race the async helpers in `ZipArchiver.swift` or the
+/// other sync zip helpers in this file.  Throws `ScriptZipError.zipFailed`
+/// on any failure — caller decides whether to translate to a higher-level
+/// error.
+func repackZipFromDirectory(zipPath: String, sourceDir: URL) throws {
+    try withZipProcessLock {
+        let zip = Process()
+        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        zip.currentDirectoryURL = sourceDir
+        zip.arguments = ["-q", "-r", zipPath, "."]
+        zip.standardOutput = Pipe()
+        zip.standardError = Pipe()
+        try runProcessWithEFAULTRetry(zip)
+        zip.waitUntilExit()
+        guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+    }
+}
+
 // MARK: - Zip upload size guard
 
 /// Upper bounds applied to a freshly-uploaded test-setup zip before it is
@@ -58,20 +78,23 @@ enum ZipUploadValidationError: Error, CustomStringConvertible {
 /// dashed separator lines; each entry has seven space-separated columns
 /// (Length, Method, Size, Cmpr, Date, Time, CRC-32) before the name.
 func validateZipUploadSize(zipPath: String, limits: ZipUploadLimits = .default) throws {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    process.arguments = ["-v", zipPath]
-    let out = Pipe()
-    process.standardOutput = out
-    process.standardError = Pipe()
-    do {
-        try process.run()
-    } catch {
-        throw ZipUploadValidationError.inspectionFailed
+    let (status, data): (Int32, Data) = try withZipProcessLock {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-v", zipPath]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = Pipe()
+        do {
+            try runProcessWithEFAULTRetry(process)
+        } catch {
+            throw ZipUploadValidationError.inspectionFailed
+        }
+        let captured = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, captured)
     }
-    let data = out.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0,
+    guard status == 0,
         let text = String(data: data, encoding: .utf8)
     else {
         throw ZipUploadValidationError.inspectionFailed
@@ -113,23 +136,21 @@ struct RunnerSetupPackage {
 }
 
 func listZipEntries(zipPath: String) -> [String] {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    process.arguments = ["-Z1", zipPath]
-
-    let out = Pipe()
-    process.standardOutput = out
-    process.standardError = Pipe()
-
-    do {
-        try process.run()
-    } catch {
-        return []
+    let result: (Int32, Data)? = try? withZipProcessLock {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-Z1", zipPath]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = Pipe()
+        try runProcessWithEFAULTRetry(process)
+        let captured = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, captured)
     }
-    let data = out.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else { return [] }
-    guard let text = String(data: data, encoding: .utf8) else { return [] }
+    guard let (status, data) = result, status == 0,
+        let text = String(data: data, encoding: .utf8)
+    else { return [] }
     return
         text
         .split(separator: "\n")
@@ -177,15 +198,7 @@ func updateScriptInZip(zipPath: String, filename: String, content: String) throw
 
     // Remove old zip and re-create from temp directory.
     try? fm.removeItem(atPath: zipPath)
-    let zip = Process()
-    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    zip.currentDirectoryURL = tempDir
-    zip.arguments = ["-q", "-r", zipPath, "."]
-    zip.standardOutput = Pipe()
-    zip.standardError = Pipe()
-    try zip.run()
-    zip.waitUntilExit()
-    guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+    try repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
 }
 
 /// Applies a batch of script writes and deletions to a test setup zip in a
@@ -227,15 +240,7 @@ func applyScriptChangesToZip(
     }
 
     try? fm.removeItem(atPath: zipPath)
-    let zip = Process()
-    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    zip.currentDirectoryURL = tempDir
-    zip.arguments = ["-q", "-r", zipPath, "."]
-    zip.standardOutput = Pipe()
-    zip.standardError = Pipe()
-    try zip.run()
-    zip.waitUntilExit()
-    guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+    try repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
 }
 
 /// Removes a file from the test setup zip.
@@ -261,32 +266,23 @@ func removeScriptFromZip(zipPath: String, filename: String) throws {
 
     // Remove old zip and re-create.
     try? fm.removeItem(atPath: zipPath)
-    let zip = Process()
-    zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-    zip.currentDirectoryURL = tempDir
-    zip.arguments = ["-q", "-r", zipPath, "."]
-    zip.standardOutput = Pipe()
-    zip.standardError = Pipe()
-    try zip.run()
-    zip.waitUntilExit()
-    guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
+    try repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
 }
 
 func extractZipEntry(zipPath: String, entryName: String) -> Data? {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    process.arguments = ["-p", zipPath, entryName]
-    let out = Pipe()
-    process.standardOutput = out
-    process.standardError = Pipe()
-    do {
-        try process.run()
-    } catch {
-        return nil
+    let result: (Int32, Data)? = try? withZipProcessLock {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-p", zipPath, entryName]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = Pipe()
+        try runProcessWithEFAULTRetry(process)
+        let captured = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, captured)
     }
-    let data = out.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else { return nil }
+    guard let (status, data) = result, status == 0 else { return nil }
     return data
 }
 
@@ -369,13 +365,9 @@ func createRunnerSetupZip(
         // that are absent from the new source directory, which makes deleted
         // suite/support files reappear on the next edit.
         try? fm.removeItem(atPath: zipPath)
-        let zip = Process()
-        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-        zip.currentDirectoryURL = tempDir
-        zip.arguments = ["-q", "-r", zipPath, "."]
-        try zip.run()
-        zip.waitUntilExit()
-        guard zip.terminationStatus == 0 else {
+        do {
+            try repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
+        } catch {
             throw WebAssignmentError.internalFailure(reason: "Failed to package setup zip")
         }
     }

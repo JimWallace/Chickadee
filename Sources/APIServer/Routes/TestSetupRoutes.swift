@@ -186,8 +186,8 @@ func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
 
 private func notebookCandidateEntryNames(for setup: APITestSetup, entries: [String]) -> [String] {
     let manifestStarterName: String? = {
-        guard let data = setup.manifest.data(using: .utf8),
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        guard let props = setup.decodedManifest()
+
         else {
             return nil
         }
@@ -441,8 +441,8 @@ struct TestSetupRoutes: RouteCollection {
         guard allEntries.contains(filename) else { throw Abort(.notFound) }
 
         let testScripts: Set<String> = {
-            guard let data = setup.manifest.data(using: .utf8),
-                let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            guard let props = setup.decodedManifest()
+
             else { return [] }
             return Set(props.testSuites.map(\.script))
         }()

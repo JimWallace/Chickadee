@@ -368,8 +368,8 @@ extension InstructorDashboardRoutes {
             let assignment = assignmentBySetup[setup.id ?? ""]
             let setupID = setup.id ?? ""
             let suiteCount: Int = {
-                guard let data = setup.manifest.data(using: .utf8),
-                    let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+                guard let props = setup.decodedManifest()
+
                 else { return 0 }
                 return props.testSuites.count
             }()

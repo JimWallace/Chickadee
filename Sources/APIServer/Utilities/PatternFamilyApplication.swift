@@ -142,8 +142,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
 ) async throws -> PatternFamilyApplyResult {
 
     let oldManifest = setup.manifest
-    guard let data = oldManifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: oldManifest)
+
     else {
         throw Abort(.internalServerError, reason: "Test setup manifest is not valid JSON")
     }
@@ -694,7 +694,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // will actually consume.  It must not contain any `family:<id>` tokens,
     // must reference only existing scripts, and must still be acyclic.
     if let postData = newManifest.data(using: .utf8),
-        let postProps = try? ManifestCodec.decoder.decode(TestProperties.self, from: postData)
+        let postProps = decodeManifest(from: postData)
     {
         try validateManifestDependencies(postProps)
     }

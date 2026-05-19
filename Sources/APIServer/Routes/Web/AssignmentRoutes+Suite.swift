@@ -68,8 +68,8 @@ extension PublishedAssignmentRoutes {
 /// suite list, collapsing fully-expanded family filename sets back into
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
 func buildSuitePayload(fromManifest manifest: String) -> SuitePayload {
-    guard let data = manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifest)
+
     else {
         return SuitePayload(items: [], sections: [])
     }
@@ -188,8 +188,8 @@ func suiteStateJSON(fromManifest manifest: String) -> String {
 ///
 /// Empty array when the manifest is unparseable or has no inputs.
 func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVariableShellRow] {
-    guard let data = manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifest)
+
     else {
         return []
     }
@@ -215,8 +215,8 @@ func globalVariableShellRows(fromManifest manifest: String) -> [SuiteSectionVari
 /// (single unlabelled table), preserving back-compat with legacy
 /// assignments.
 func suiteSectionShellRows(fromManifest manifest: String) -> [SuiteSectionShellRow] {
-    guard let data = manifest.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifest)
+
     else {
         return [
             SuiteSectionShellRow(

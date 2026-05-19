@@ -291,7 +291,7 @@ private func collectClaimCandidates(
     for candidate in studentSubmissions {
         guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
         let data = Data(setup.manifest.utf8)
-        guard let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else {
+        guard let manifest = decodeManifest(from: data) else {
             continue
         }
         // Accept both worker-mode and browser-mode pending submissions.

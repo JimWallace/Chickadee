@@ -180,8 +180,8 @@ func applyNotebookChecksEdit(
     on db: Database
 ) async throws {
     let currentFamilies: [PatternFamily] = {
-        guard let data = setup.manifest.data(using: .utf8),
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+        guard let props = setup.decodedManifest()
+
         else { return [] }
         return props.patternFamilies
     }()

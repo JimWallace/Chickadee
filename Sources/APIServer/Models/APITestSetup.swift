@@ -54,3 +54,30 @@ final class APITestSetup: Model, Content, @unchecked Sendable {
         self.courseID = courseID
     }
 }
+
+extension APITestSetup {
+    /// Decodes the canonical `TestProperties` from this setup's stored
+    /// `manifest` string.  Returns `nil` if the JSON is missing or
+    /// malformed — for the vast majority of callers that's exactly the
+    /// "treat as empty defaults" branch the inline `try?` decode used
+    /// to express.  Centralized in v0.4.178 so the ~30 inline
+    /// `ManifestCodec.decoder.decode(TestProperties.self, from: ...)`
+    /// sites can all read through one helper.
+    func decodedManifest() -> TestProperties? {
+        decodeManifest(from: Data(manifest.utf8))
+    }
+}
+
+/// Free helper for the sites that already have raw `Data` bytes (HTTP
+/// body, zip-extracted manifest, etc.) rather than an `APITestSetup`
+/// model.  Same lenient semantics as `APITestSetup.decodedManifest()`.
+func decodeManifest(from data: Data) -> TestProperties? {
+    try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+}
+
+/// String overload for call sites that have the manifest as a JSON
+/// string (e.g. `manifestJSON: String` parameters in
+/// `ManifestFileHelpers.swift`).
+func decodeManifest(fromJSON json: String) -> TestProperties? {
+    decodeManifest(from: Data(json.utf8))
+}

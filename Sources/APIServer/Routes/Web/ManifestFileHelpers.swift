@@ -12,8 +12,8 @@ import Vapor
 
 /// Returns the scripts in the manifest that list `filename` in their `dependsOn`.
 func manifestDependents(manifestJSON: String, filename: String) -> [String] {
-    guard let data = manifestJSON.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
     else {
         return []
     }
@@ -27,8 +27,8 @@ func manifestDependents(manifestJSON: String, filename: String) -> [String] {
 /// entries.  Used by the raw-script edit/delete endpoints to reject edits
 /// that must instead go through the family editor.
 func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
-    guard let data = manifestJSON.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
     else {
         return nil
     }
@@ -39,8 +39,8 @@ func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
 /// (raw script or generated-by-family).  Used by `saveEditedAssignment`
 /// to refuse saving an empty suite.
 func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
-    guard let data = manifestJSON.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
     else { return false }
     return !props.testSuites.isEmpty
 }
@@ -53,8 +53,8 @@ func updateManifestAddingScript(
     manifestJSON: String,
     entry: ConfiguredSuiteEntry
 ) -> String? {
-    guard let data = manifestJSON.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
     else {
         return nil
     }
@@ -93,8 +93,8 @@ func updateManifestAddingScript(
 /// Also clears references to `filename` in other entries' `dependsOn` arrays.
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
-    guard let data = manifestJSON.data(using: .utf8),
-        let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
     else {
         return nil
     }

@@ -8,46 +8,15 @@
 // no DispatchQueue bridging is needed because process setup is non-blocking
 // and Foundation calls terminationHandler from its own internal monitoring queue.
 //
-// Foundation's `Process` has a known race under concurrent invocation
-// that surfaces as `NSPOSIXErrorDomain Code=14 "Bad address"` (EFAULT).
-// The race spans more than just `posix_spawn` itself (Pipe allocation +
-// child fd setup + spawn share global state) and reaches across the whole
-// Process API surface — so even a tight intra-file lock can't fully fix
-// it, because Process invocations originating elsewhere (test setup
-// helpers, etc.) still race against ours.
-//
-// We use two complementary mitigations:
-//   1. `zipProcessLock` serializes the entire zip Process lifecycle for
-//      ZipArchiver-originated calls, so they never race each other.
-//   2. `runProcessWithEFAULTRetry` retries `Process.run()` once on
-//      transient EFAULT, with a brief sleep, to absorb cross-call races
-//      we can't lock against.
-// ZIP operations are infrequent (test setup upload, course bundle
-// import, suite save), so the cost of both mitigations is negligible.
+// The two mitigations against the Foundation Process EFAULT race
+// (process-wide lock + run-with-retry) live in
+// `ZipProcessSerialization.swift` so every zip subprocess in the
+// codebase — including the synchronous helpers in
+// `TestSetupZipHelpers.swift` — shares the same lock.  Before that
+// refactor, those helpers issued naked `Process.run()` calls that
+// raced against ZipArchiver's lock-protected calls and each other.
 
 import Foundation
-
-/// Process-wide lock held across the **entire** zip subprocess
-/// lifecycle: Process / Pipe construction, property setting, `run()`,
-/// and (for sync paths) the wait.  Async paths release the lock
-/// inside the continuation closure once the spawn returns, which is
-/// safe because Foundation's terminationHandler runs on its own queue.
-private let zipProcessLock = NSLock()
-
-/// Calls `proc.run()`, retrying once after a 10 ms backoff if it throws
-/// `NSPOSIXErrorDomain` / `EFAULT` (Foundation Process race; see notes
-/// at top of file).  `proc` must not have been started yet.
-private func runProcessWithEFAULTRetry(_ proc: Process) throws {
-    do {
-        try proc.run()
-    } catch let error as NSError
-        where
-        error.domain == NSPOSIXErrorDomain && error.code == Int(EFAULT)
-    {
-        Thread.sleep(forTimeInterval: 0.01)
-        try proc.run()
-    }
-}
 
 // MARK: - Errors
 
@@ -128,24 +97,24 @@ func listZipContents(zipPath: String) throws -> [String] {
     guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
         throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
     }
-    // Serialize the entire Process lifecycle (see zipProcessLock comment
-    // at top of file).  Sync path holds the lock across read + wait too
-    // since both touch the same Pipe / Process state.
-    zipProcessLock.lock()
-    defer { zipProcessLock.unlock() }
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-Z1", zipPath]
-    let outPipe = Pipe()
-    proc.standardOutput = outPipe
-    proc.standardError = Pipe()  // discard
-    try runProcessWithEFAULTRetry(proc)
-    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
-    // unzip -Z1 exits 0 (OK) or 11 (no matching files) — both are fine here.
-    let output = String(data: data, encoding: .utf8) ?? ""
-    return output.split(separator: "\n", omittingEmptySubsequences: true)
-        .map(String.init)
+    // Serialize the entire Process lifecycle (see ZipProcessSerialization.swift).
+    // Sync path holds the lock across read + wait too since both touch
+    // the same Pipe / Process state.
+    return try withZipProcessLock {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments = ["-Z1", zipPath]
+        let outPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = Pipe()  // discard
+        try runProcessWithEFAULTRetry(proc)
+        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        // unzip -Z1 exits 0 (OK) or 11 (no matching files) — both are fine here.
+        let output = String(data: data, encoding: .utf8) ?? ""
+        return output.split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+    }
 }
 
 // MARK: - Private helper
@@ -166,10 +135,10 @@ private func runZipProcess(
     }
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
         // Serialize Process / Pipe construction + setup + spawn (see
-        // zipProcessLock comment at top of file).  Released after spawn;
+        // ZipProcessSerialization.swift).  Released after spawn;
         // terminationHandler runs on Foundation's queue and resumes the
         // continuation independently.
-        zipProcessLock.lock()
+        acquireZipProcessLock()
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executablePath)
         proc.arguments = arguments
@@ -189,9 +158,9 @@ private func runZipProcess(
         }
         do {
             try runProcessWithEFAULTRetry(proc)
-            zipProcessLock.unlock()
+            releaseZipProcessLock()
         } catch {
-            zipProcessLock.unlock()
+            releaseZipProcessLock()
             continuation.resume(throwing: error)
         }
     }

@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.178] - 2026-05-19
+
+### Fixed
+
+- **Latent concurrency hole: every zip subprocess now shares one lock.**
+  `ZipArchiver.swift` defended itself against the Foundation `Process`
+  EFAULT race with a private `NSLock` + retry pair, but the sibling zip
+  helpers in `TestSetupZipHelpers.swift` and `MarmosetImportParser.swift`
+  issued naked `Process.run()` calls on `/usr/bin/zip` / `/usr/bin/unzip`
+  that raced against ZipArchiver's lock-protected calls and each other.
+  Lifted the lock + retry helpers into a shared
+  `ZipProcessSerialization.swift` (free functions `withZipProcessLock`,
+  `acquireZipProcessLock` / `releaseZipProcessLock`,
+  `runProcessWithEFAULTRetry`); every zip Process site in the codebase
+  now runs under the same serialization.  Sites updated:
+    - `ZipArchiver.swift` — uses the shared helpers (no behaviour change).
+    - `TestSetupZipHelpers.swift` — `validateZipUploadSize`,
+      `listZipEntries`, `extractZipEntry`, plus the three repack paths
+      (`updateScriptInZip`, `applyScriptChangesToZip`,
+      `removeScriptFromZip`, `createRunnerSetupZip`).  New
+      `repackZipFromDirectory(zipPath:sourceDir:)` extracts the
+      "remove zip + `zip -q -r` from temp dir" idiom that those three
+      paths previously inlined.
+    - `MarmosetImportParser.swift` — `extractFileFromZip`.
+
+### Internal
+
+- **Single manifest accessor (collapsed ~30 inline decodes).**  Added
+  `APITestSetup.decodedManifest() -> TestProperties?` plus free
+  helpers `decodeManifest(from data: Data)` and
+  `decodeManifest(fromJSON json: String)` for the call sites that have
+  raw bytes or a string instead of a setup model.  Migrated every
+  lenient `try? ManifestCodec.decoder.decode(TestProperties.self, ...)`
+  site (~30 across 17 files) to the new helpers; the 3 strict-throw
+  sites (`try`, not `try?`) keep their inline decode because they
+  want exceptions to propagate.
+
+### Deferred
+
+- **Migration of remaining `Abort(...)` calls in `Routes/Web/`** to
+  `WebAssignmentError`.  The audit flagged 48 sites in
+  `AdminRoutes*`, `EnrollmentRoutes`, `AccountRoutes`, `VanityURLRoutes`,
+  `CourseBundleRoutes`, `MarmosetImportRoutes`, `AuthRoutes`,
+  `WebRoutes*`.  The existing
+  `WebAssignmentErrorTests.noRawAbortInInstructorAssignmentRoutes`
+  test deliberately exempts these with the comment "they have their
+  own typed-error work in flight."  Migrating now risks conflicting
+  with that work; defer to a separate PR once that effort lands.
+
 ## [0.4.177] - 2026-05-19
 
 ### Internal

@@ -452,7 +452,7 @@ extension DraftAssignmentRoutes {
                 return suiteConfigRaw
             }
             return validated.draftSetup?.manifest.data(using: .utf8).flatMap { data in
-                guard let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data) else { return nil }
+                guard let props = decodeManifest(from: data) else { return nil }
                 let rows = props.testSuites.enumerated().map { index, entry in
                     ReindexedSuiteConfigRow(
                         index: index,
@@ -505,7 +505,7 @@ extension DraftAssignmentRoutes {
             guard let existingManifest = draftSetup?.manifest,
                 let data = existingManifest.data(using: .utf8)
             else { return nil }
-            return try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
+            return decodeManifest(from: data)
         }()
         return PreservedDraftDescriptors(
             props: draftProps,

@@ -82,7 +82,7 @@ extension WebRoutes {
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
         // Browser-graded assignments are submitted from the notebook page, not this form.
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
+        if let manifest = decodeManifest(from: manifestData),
             manifest.gradingMode == .browser
         {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
@@ -115,7 +115,7 @@ extension WebRoutes {
 
         // Browser-graded assignments must be submitted from the notebook page.
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
+        if let manifest = decodeManifest(from: manifestData),
             manifest.gradingMode == .browser
         {
             return req.redirect(to: "/testsetups/\(setupID)/notebook")
@@ -439,7 +439,7 @@ extension WebRoutes {
         var entries: [TestSuiteEntry] = []
         if let setup = try? await APITestSetup.find(testSetupID, on: db),
             let manifestData = setup.manifest.data(using: .utf8),
-            let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+            let props = decodeManifest(from: manifestData)
         {
             sections = props.sections
             entries = props.testSuites

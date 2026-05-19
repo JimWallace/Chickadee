@@ -142,7 +142,7 @@ struct BrowserResultRoutes: RouteCollection {
         _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
 
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData),
+        if let manifest = decodeManifest(from: manifestData),
             manifest.gradingMode == .browser
         {
             throw AppError.badRequest(
@@ -189,7 +189,7 @@ struct BrowserResultRoutes: RouteCollection {
         // waking the local native runner would waste resources and claim nothing
         // (WorkerJobRoutes filters out browser-mode submissions).
         let isWorkerMode =
-            (try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData))
+            (decodeManifest(from: manifestData))
             .map { $0.gradingMode == .worker } ?? true
         if isWorkerMode {
             await ensureLocalRunnerForSubmissionIfNeeded(req: req)
