@@ -7,6 +7,7 @@
 // directory.  Extracted from AssignmentHelpers.swift (issue #442) — no
 // behaviour changes.
 
+import Core
 import Foundation
 import Vapor
 

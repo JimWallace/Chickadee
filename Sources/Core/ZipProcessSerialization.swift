@@ -1,7 +1,11 @@
-// APIServer/Utilities/ZipProcessSerialization.swift
+// Core/ZipProcessSerialization.swift
 //
 // Process-wide serialization + EFAULT-retry helpers shared by every
 // `/usr/bin/zip` / `/usr/bin/unzip` Process invocation in the codebase.
+//
+// Lives in `Core` (v0.4.178+) so both `chickadee-server` and
+// `chickadee-runner` get the same lock + retry without each having
+// to roll their own.
 //
 // Foundation's `Process` has a known race under concurrent invocation
 // that surfaces as `NSPOSIXErrorDomain Code=14 "Bad address"` (EFAULT).
@@ -41,7 +45,7 @@ private let zipProcessLock = NSLock()
 /// codebase.  Use for the synchronous extract / list / extract-entry
 /// paths.  Async paths can hold the lock just for the spawn — see
 /// `ZipArchiver.swift`'s `runZipProcess`.
-func withZipProcessLock<T>(_ body: () throws -> T) rethrows -> T {
+public func withZipProcessLock<T>(_ body: () throws -> T) rethrows -> T {
     zipProcessLock.lock()
     defer { zipProcessLock.unlock() }
     return try body()
@@ -51,19 +55,19 @@ func withZipProcessLock<T>(_ body: () throws -> T) rethrows -> T {
 /// async paths that need to hold the lock from before Process setup
 /// through the spawn, then release before awaiting the
 /// terminationHandler.  Prefer `withZipProcessLock { ... }` for sync.
-func acquireZipProcessLock() {
+public func acquireZipProcessLock() {
     zipProcessLock.lock()
 }
 
 /// Pair with `acquireZipProcessLock()`.
-func releaseZipProcessLock() {
+public func releaseZipProcessLock() {
     zipProcessLock.unlock()
 }
 
 /// Calls `proc.run()`, retrying once after a 10 ms backoff if it throws
 /// `NSPOSIXErrorDomain` / `EFAULT` (Foundation Process race; see file
 /// header).  `proc` must not have been started yet.
-func runProcessWithEFAULTRetry(_ proc: Process) throws {
+public func runProcessWithEFAULTRetry(_ proc: Process) throws {
     do {
         try proc.run()
     } catch let error as NSError

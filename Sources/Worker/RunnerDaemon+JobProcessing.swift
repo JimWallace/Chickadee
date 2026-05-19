@@ -313,7 +313,7 @@ extension WorkerDaemon {
             let stagingDir = paths.workDir.appendingPathComponent("testsetup_staging", isDirectory: true)
             try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
             try await self.download(url: job.testSetupURL, to: stagingZip)
-            try self.unzip(stagingZip, to: stagingDir)
+            try await extractZipArchive(zipPath: stagingZip.path, into: stagingDir)
             return stagingDir
         }
         let testSetupDir = acquireResult.directory
@@ -331,7 +331,7 @@ extension WorkerDaemon {
 
         let manifest = job.manifest
 
-        try stageSubmissionIntoWorkspace(
+        try await stageSubmissionIntoWorkspace(
             job: job,
             paths: paths,
             stageTimings: &stageTimings
@@ -381,8 +381,8 @@ extension WorkerDaemon {
         job: Job,
         paths: JobWorkspacePaths,
         stageTimings: inout JobStageTimings
-    ) throws {
-        try stageTimings.measureSync("submission_unpack") {
+    ) async throws {
+        try await stageTimings.measure("submission_unpack") {
             if let filename = job.submissionFilename {
                 let dest = stagedSubmissionDestination(
                     submissionDirectory: paths.submissionDir,
@@ -395,7 +395,10 @@ extension WorkerDaemon {
                 try? FileManager.default.removeItem(at: dest)
                 try FileManager.default.copyItem(at: paths.submissionZip, to: dest)
             } else {
-                try unzip(paths.submissionZip, to: paths.submissionDir)
+                try await extractZipArchive(
+                    zipPath: paths.submissionZip.path,
+                    into: paths.submissionDir
+                )
             }
         }
     }
