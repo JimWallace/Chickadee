@@ -170,6 +170,34 @@ func withApp(_ app: Application, _ body: (Application) async throws -> Void) asy
     }
 }
 
+/// Creates a `.testing` Vapor Application and runs `setup`, returning the
+/// fully-configured app to the caller.  If `setup` throws, the partial
+/// Application is `asyncShutdown`-d before the error is rethrown.
+///
+/// This is the safe replacement for the bare pattern
+///
+///     let app = try await Application.make(.testing)
+///     /* setup that may throw */
+///     return app
+///
+/// which leaks a half-built `Application` on throw.  `Application.deinit`
+/// then calls the *synchronous* `shutdown()`, and on a testing app with
+/// NIO event loops + FluentKit pools that trips an assertion in
+/// `ServeCommand.deinit` → SIGILL on Linux.  That terminates the whole
+/// xctest process and kills every other concurrent test.
+func makeTestingApplication(
+    setup: (Application) async throws -> Void
+) async throws -> Application {
+    let app = try await Application.make(.testing)
+    do {
+        try await setup(app)
+        return app
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
+    }
+}
+
 // MARK: - Standard test app
 
 private struct TestDataDirectoryKey: StorageKey {
@@ -211,16 +239,7 @@ func makeTestApp(
     authMode: AuthMode = .local,
     appConfig: AppConfig? = nil
 ) async throws -> Application {
-    let app = try await Application.make(.testing)
-    // If anything below throws, the Application local goes out of scope and
-    // `Application.deinit` calls the *synchronous* `shutdown()`.  A testing
-    // Application has async lifecycle threads (NIO ELG, FluentKit pools); the
-    // sync deinit path trips `ServeCommand.deinit`'s "not properly shut down"
-    // assertion → SIGILL, which terminates the whole xctest process and takes
-    // every other concurrently-running test with it.  Wrap setup so any throw
-    // does a clean `asyncShutdown` first; the test then fails cleanly with
-    // the original error rather than crashing the run.
-    do {
+    try await makeTestingApplication { app in
         app.authMode = authMode
         // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
         // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
@@ -252,11 +271,6 @@ func makeTestApp(
 
         configureLeaf(app)
         try routes(app)
-
-        return app
-    } catch {
-        try? await app.asyncShutdown()
-        throw error
     }
 }
 

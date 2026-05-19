@@ -15,40 +15,49 @@ import XCTVapor
     let app: Application
 
     init() async throws {
-        self.app = try await Application.make(.testing)
-
-        repoRoot = FileManager.default.currentDirectoryPath
-        tmpRoot =
+        let repoRoot = FileManager.default.currentDirectoryPath
+        let tmpRoot =
             FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-notebook-web-\(UUID().uuidString)")
             .path + "/"
-        tmpDir = tmpRoot
-        app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
-        publicDir = app.directory.publicDirectory
+        var publicDir = ""
 
-        try FileManager.default.createDirectory(atPath: tmpRoot, withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(
-            atPath: tmpRoot + "Resources",
-            withDestinationPath: repoRoot + "/Resources"
-        )
-        try FileManager.default.createDirectory(atPath: publicDir, withIntermediateDirectories: true)
+        self.app = try await makeTestingApplication { app in
+            app.directory = DirectoryConfiguration(workingDirectory: tmpRoot)
+            publicDir = app.directory.publicDirectory
 
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                atPath: tmpRoot, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(
+                atPath: tmpRoot + "Resources",
+                withDestinationPath: repoRoot + "/Resources"
+            )
+            try FileManager.default.createDirectory(
+                atPath: publicDir, withIntermediateDirectories: true)
+
+            let dirs = ["results/", "testsetups/", "submissions/"].map { tmpRoot + $0 }
+            for dir in dirs {
+                try FileManager.default.createDirectory(
+                    atPath: dir, withIntermediateDirectories: true)
+            }
+
+            app.resultsDirectory = dirs[0]
+            app.testSetupsDirectory = dirs[1]
+            app.submissionsDirectory = dirs[2]
+
+            app.sessions.use(.memory)
+            app.middleware.use(app.sessions.middleware)
+
+            try await configureTestDatabase(app)
+
+            configureLeaf(app)
+            try routes(app)
         }
 
-        app.resultsDirectory = dirs[0]
-        app.testSetupsDirectory = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
+        self.repoRoot = repoRoot
+        self.tmpRoot = tmpRoot
+        self.tmpDir = tmpRoot
+        self.publicDir = publicDir
     }
 
     private func loginAsStudent(username: String) async throws -> String {

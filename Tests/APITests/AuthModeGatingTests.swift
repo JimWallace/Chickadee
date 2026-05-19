@@ -18,16 +18,16 @@ import XCTVapor
 @Suite(.serialized) struct AuthModeGatingTests {
 
     private func makeApp(authMode: AuthMode) async throws -> Application {
-        let app = try await Application.make(.testing)
-        app.authMode = authMode
+        try await makeTestingApplication { app in
+            app.authMode = authMode
 
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
+            app.sessions.use(.memory)
+            app.middleware.use(app.sessions.middleware)
 
-        try await configureTestDatabase(app)
+            try await configureTestDatabase(app)
 
-        try routes(app)
-        return app
+            try routes(app)
+        }
     }
 
     // MARK: - Local mode: SSO routes absent

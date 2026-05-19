@@ -70,12 +70,12 @@ import XCTVapor
     }
 
     private func makeHealthApp(withDatabase: Bool) async throws -> Application {
-        let app = try await Application.make(.testing)
-        if withDatabase {
-            try await configureTestDatabase(app)
+        try await makeTestingApplication { app in
+            if withDatabase {
+                try await configureTestDatabase(app)
+            }
+            try app.register(collection: HealthRoutes())
         }
-        try app.register(collection: HealthRoutes())
-        return app
     }
 
     @Test func userFileNamespaceAllowsStudentOwnNamespace() async throws {
