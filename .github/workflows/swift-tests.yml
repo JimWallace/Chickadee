@@ -95,16 +95,17 @@ jobs:
           done
 
       - name: Run APITests
-        # Sequential: Swift Testing schedules many class-suite instances
-        # in parallel regardless of the swift test --parallel flag.  Each
-        # test app opens its own SQLite connection pool with one
-        # connection per EventLoop, and under heavy parallel load the
-        # combined pool requests time out (AsyncKit "Connection request
-        # timed out").  `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=1`
-        # caps Swift Testing's internal scheduler to one in-flight test
-        # at a time.
+        # Swift Testing schedules many class-suite instances in parallel
+        # regardless of the swift test --parallel flag.  Each test app
+        # opens its own SQLite connection pool with one connection per
+        # EventLoop, and at unbounded parallelism the combined pool
+        # requests time out (AsyncKit "Connection request timed out").
+        # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
+        # Testing's internal scheduler to four in-flight tests at a
+        # time — enough headroom for the connection pool to keep up,
+        # with most of the parallelism speedup preserved.
         env:
-          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "1"
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: swift test --filter APITests
 
   api-tests-postgres:
@@ -157,17 +158,17 @@ jobs:
           done
 
       - name: Run APITests against PostgreSQL
-        # Sequential: Swift Testing schedules many class-suite instances
-        # in parallel regardless of the swift test --parallel flag, and
-        # during the FluentKit migration step each Application opens
-        # multiple Postgres connections briefly.  That pushes past the
-        # default 100-connection cap even with per-test withApp shutdown
-        # (the shutdown happens at the END of the test body — during the
-        # body, several apps overlap).
-        # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=1` caps Swift
-        # Testing's internal scheduler to one in-flight test at a time.
+        # Swift Testing schedules many class-suite instances in parallel
+        # regardless of the swift test --parallel flag, and during the
+        # FluentKit migration step each Application opens multiple
+        # Postgres connections briefly.  At unbounded parallelism that
+        # pushes past the default 100-connection cap.
+        # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
+        # Testing's internal scheduler to four in-flight tests at a
+        # time — well under the connection cap, with most of the
+        # parallelism speedup preserved.
         env:
-          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "1"
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: swift test --filter APITests
 
   browser-runner-tests:
