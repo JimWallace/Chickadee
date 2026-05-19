@@ -15,14 +15,7 @@
 </div>
 #endif
 <section class="instructor-diagnostics">
-    <div class="diagnostics-cards">
-        #for(metric in metrics):
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">#(metric.label)</div>
-            <div class="diagnostic-value">#(metric.value)</div>
-        </article>
-        #endfor
-    </div>
+    #extend("_diagnostic-cards")
 </section>
 <div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
     <!-- Add Section inline form -->
