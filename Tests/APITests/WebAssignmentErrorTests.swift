@@ -49,6 +49,12 @@ import Vapor
     /// own typed-error work in flight.
     @Test
     func noRawAbortInInstructorAssignmentRoutes() throws {
+        // v0.4.188 (Phase 5.D) renamed the `AssignmentRoutes+*` files
+        // to match their post-Phase-2 parent collection
+        // (`InstructorDashboardRoutes`, `DraftAssignmentRoutes`,
+        // `PublishedAssignmentRoutes`, `CourseAdminRoutes`,
+        // `StudentCourseRoutes`).  File paths below reflect the new
+        // names.
         let inScope: [String] = [
             "AssignmentHelpers.swift",
             "AssignmentDraftHelpers.swift",
@@ -61,25 +67,26 @@ import Vapor
             "SuiteRowHelpers.swift",
             "TestSetupZipHelpers.swift",
             "SuiteEditHelpers.swift",
-            "AssignmentRoutes.swift",
-            "AssignmentRoutes+Checks.swift",
-            "AssignmentRoutes+Draft.swift",
-            "AssignmentRoutes+DraftSections.swift",
-            // `AssignmentRoutes+Editor.swift` was split in v0.4.183
-            // (Phase 4.2) into the four files below.
+            "InstructorDashboardRoutes.swift",
+            "InstructorDashboardRoutes+List.swift",
+            "InstructorDashboardRoutes+Submissions.swift",
+            "DraftAssignmentRoutes+NewAssignment.swift",
+            "DraftAssignmentRoutes+NewPage.swift",
+            "DraftAssignmentRoutes+SaveValidation.swift",
+            "DraftAssignmentRoutes+SuiteEditing.swift",
+            "DraftAssignmentRoutes+Sections.swift",
+            "PublishedAssignmentRoutes+Checks.swift",
+            "PublishedAssignmentRoutes+Families.swift",
             "PublishedAssignmentRoutes+FileDownloads.swift",
+            "PublishedAssignmentRoutes+GlobalVariables.swift",
+            "PublishedAssignmentRoutes+NotebookTools.swift",
             "PublishedAssignmentRoutes+SaveEdit.swift",
             "PublishedAssignmentRoutes+ScriptCRUD.swift",
-            "PublishedAssignmentRoutes+NotebookTools.swift",
-            "AssignmentRoutes+Enrollment.swift",
-            "AssignmentRoutes+Families.swift",
-            "AssignmentRoutes+List.swift",
-            "AssignmentRoutes+NewPage.swift",
-            "AssignmentRoutes+SaveValidation.swift",
-            "AssignmentRoutes+Sections.swift",
-            "AssignmentRoutes+Submissions.swift",
-            "AssignmentRoutes+Suite.swift",
-            "AssignmentRoutes+SuiteSections.swift",
+            "PublishedAssignmentRoutes+Suite.swift",
+            "PublishedAssignmentRoutes+SuiteSections.swift",
+            "CourseAdminRoutes+Sections.swift",
+            "CourseAdminRoutes+Enrollment.swift",
+            "StudentCourseRoutes+History.swift",
         ]
 
         let webDir = sourceWebRoutesDirectory()

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+GlobalVariables.swift
+// APIServer/Routes/Web/PublishedAssignmentRoutes+GlobalVariables.swift
 //
 // Slice 1 + Slice 2 — assignment-scope global inputs.
 // GET returns the current variables + expressions; PUT replaces both

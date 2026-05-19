@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+SuiteSections.swift
+// APIServer/Routes/Web/PublishedAssignmentRoutes+SuiteSections.swift
 //
 // Per-operation CRUD endpoints for the test-suite Sections feature
 // (introduced in v0.4.96, refactored in v0.4.98 to mirror the dashboard

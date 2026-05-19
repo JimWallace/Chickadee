@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+DraftSections.swift
+// APIServer/Routes/Web/DraftAssignmentRoutes+Sections.swift
 //
 // Draft-scoped siblings of the test-suite section CRUD endpoints in
 // `AssignmentRoutes+SuiteSections.swift`.  Same body shapes, same

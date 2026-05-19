@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Enrollment.swift
+// APIServer/Routes/Web/CourseAdminRoutes+Enrollment.swift
 //
 // Enrollment-related handlers.  Phase 2 of the audit refactor moved them
 // from `AssignmentRoutes` onto `CourseAdminRoutes`; the file name still

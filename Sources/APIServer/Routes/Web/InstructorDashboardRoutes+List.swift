@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+List.swift
+// APIServer/Routes/Web/InstructorDashboardRoutes+List.swift
 //
 // Helpers for the GET /instructor handler (`AssignmentRoutes.list`).
 // Split out per #443: the original handler interleaved Fluent queries,

@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Suite.swift
+// APIServer/Routes/Web/PublishedAssignmentRoutes+Suite.swift
 //
 // The unified suite-editor endpoint.  GET returns the full reconciled
 // author-facing view of the suite list (scripts + families, in manifest

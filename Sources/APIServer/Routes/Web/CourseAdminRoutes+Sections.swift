@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Sections.swift
+// APIServer/Routes/Web/CourseAdminRoutes+Sections.swift
 //
 // Section-management handlers.  Phase 2 of the audit refactor moved them
 // from `AssignmentRoutes` onto `CourseAdminRoutes`; the file name still

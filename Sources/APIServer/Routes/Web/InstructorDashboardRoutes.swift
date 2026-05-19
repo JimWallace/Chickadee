@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes.swift
+// APIServer/Routes/Web/InstructorDashboardRoutes.swift
 //
 // Instructor-facing assignment management routes.
 // Requires instructor or admin role (enforced by routes.swift).

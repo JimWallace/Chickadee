@@ -1,4 +1,4 @@
-// APIServer/Routes/Web/AssignmentRoutes+Families.swift
+// APIServer/Routes/Web/PublishedAssignmentRoutes+Families.swift
 //
 // Pattern family editor endpoints.  The canonical spec for a family lives in
 // the test setup manifest (TestProperties.patternFamilies); these endpoints
