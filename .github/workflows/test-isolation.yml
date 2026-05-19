@@ -48,9 +48,13 @@ jobs:
           done
 
       - name: Run CoreTests + APITests three times in a row
+        # Sequential: Swift Testing's class-suite Application fixtures
+        # over-pressure the SQLite connection pool under --parallel
+        # (see api-tests job comment).  The 3× repeat catches ordering
+        # flakes regardless of parallelism.
         run: |
           for i in 1 2 3; do
             echo "::group::Iteration $i of 3"
-            swift test --parallel --filter CoreTests --filter APITests
+            swift test --filter CoreTests --filter APITests
             echo "::endgroup::"
           done
