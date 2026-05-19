@@ -8,7 +8,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension PublishedAssignmentRoutes {
     // MARK: - GET /instructor/:assignmentID/files/notebook
 
     @Sendable
@@ -662,38 +662,9 @@ extension AssignmentRoutes {
         return .noContent
     }
 
-    // MARK: - GET /instructor/new/draft/solution-notebook
-    //
-    // Returns the draft solution notebook JSON so the scan-for-functions flow
-    // works after an upload round-trip (file input is empty on reload).
-
-    @Sendable
-    func draftSolutionNotebook(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        guard let userID = user.id else {
-            throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
-        }
-
-        guard let draftID = try? req.query.get(String.self, at: "draftID"),
-            !draftID.isEmpty,
-            try await APITestSetup.find(draftID, on: req.db) != nil
-        else { throw WebAssignmentError.notFound(resource: "Draft assignment") }
-
-        // setup.id equals draftID (lookup key); use the query parameter
-        // directly so we don't have to force-unwrap setup.id.
-        let fallbackPath = draftSolutionNotebookPath(
-            testSetupsDirectory: req.application.testSetupsDirectory, setupID: draftID)
-        guard
-            let data = draftNotebookData(
-                req: req, setupID: draftID, userID: userID,
-                fileKind: .solution, fallbackPath: fallbackPath)
-        else { throw WebAssignmentError.notFound(resource: "Draft solution notebook") }
-
-        return Response(
-            status: .ok,
-            headers: ["Content-Type": "application/json"],
-            body: .init(data: data))
-    }
+    // `draftSolutionNotebook` moved to `AssignmentRoutes+Draft.swift` in
+    // v0.4.177 (it serves a `/instructor/new/draft/...` URL and now lives
+    // on `DraftAssignmentRoutes`).
 
     // MARK: - GET /instructor/script-templates
     //

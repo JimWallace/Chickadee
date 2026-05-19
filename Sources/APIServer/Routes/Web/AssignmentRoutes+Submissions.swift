@@ -7,7 +7,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension InstructorDashboardRoutes {
 
     // MARK: - GET /instructor/grades.csv
 
@@ -626,33 +626,36 @@ extension AssignmentRoutes {
     }
 }
 
-extension AssignmentRoutes {
-    func preferredResultsBySubmissionID(
-        for submissionIDs: [String],
-        on db: Database
-    ) async throws -> [String: APIResult] {
-        let results =
-            submissionIDs.isEmpty
-            ? []
-            : try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .sort(\.$receivedAt, .descending)
-                .all()
+/// Loads `APIResult` rows for the given submission IDs and reduces them
+/// to one preferred result per submission, preferring `source == "worker"`
+/// over a browser-runner submission when both exist.  Promoted to a free
+/// function in v0.4.177 so the submissions and per-student views can
+/// share it across `RouteCollection`s.
+func preferredResultsBySubmissionID(
+    for submissionIDs: [String],
+    on db: Database
+) async throws -> [String: APIResult] {
+    let results =
+        submissionIDs.isEmpty
+        ? []
+        : try await APIResult.query(on: db)
+            .filter(\.$submissionID ~~ submissionIDs)
+            .sort(\.$receivedAt, .descending)
+            .all()
 
-        var preferredResultBySubmissionID: [String: APIResult] = [:]
-        for result in results {
-            let key = result.submissionID
-            if let existing = preferredResultBySubmissionID[key] {
-                let existingSource = existing.source ?? "worker"
-                let candidateSource = result.source ?? "worker"
-                if existingSource == "worker" { continue }
-                if candidateSource == "worker" {
-                    preferredResultBySubmissionID[key] = result
-                }
-            } else {
+    var preferredResultBySubmissionID: [String: APIResult] = [:]
+    for result in results {
+        let key = result.submissionID
+        if let existing = preferredResultBySubmissionID[key] {
+            let existingSource = existing.source ?? "worker"
+            let candidateSource = result.source ?? "worker"
+            if existingSource == "worker" { continue }
+            if candidateSource == "worker" {
                 preferredResultBySubmissionID[key] = result
             }
+        } else {
+            preferredResultBySubmissionID[key] = result
         }
-        return preferredResultBySubmissionID
     }
+    return preferredResultBySubmissionID
 }

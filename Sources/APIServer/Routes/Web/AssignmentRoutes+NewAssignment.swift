@@ -10,7 +10,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension DraftAssignmentRoutes {
     // MARK: - GET /instructor/new
 
     @Sendable

@@ -12,65 +12,11 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension PublishedAssignmentRoutes {
 
-    // MARK: - DTOs
-
-    /// One row in the unified suite list, in either direction (GET response
-    /// or PUT request body).  Array order is authoritative for UI order.
-    struct SuiteItemDTO: Content {
-        /// "script", "family", or "check".
-        var kind: String
-        /// Present when kind == "script".
-        var script: ScriptDTO?
-        /// Present when kind == "family".
-        var family: PatternFamily?
-        /// Present when kind == "check".  Carried so the editor can render
-        /// label/tier/points read-only without a separate `/checks` GET.
-        var check: NotebookCheck?
-        /// Present when kind == "family".  Family-level deps live on the
-        /// family spec too, but we echo them here at the row level for
-        /// editor-UI convenience.
-        var dependsOn: [String]?
-        /// Id into `SuitePayload.sections` (all kinds).  Nil = ungrouped.
-        var sectionID: String?
-    }
-
-    struct ScriptDTO: Content {
-        var script: String  // filename
-        var tier: TestTier
-        var points: Int
-        var displayName: String?
-        var dependsOn: [String]  // may contain "family:<id>" tokens
-    }
-
-    /// Name + opaque id of a single section.  Order of `SuitePayload.sections`
-    /// is authoritative for display order in the editor and the student view.
-    struct TestSuiteSectionDTO: Content {
-        var id: String
-        var name: String
-    }
-
-    struct SuitePayload: Content {
-        var items: [SuiteItemDTO]
-        /// Ordered list of sections.  Clients predating v0.4.96 may omit
-        /// this field; it decodes to `[]` in that case.  Always populated
-        /// on GET responses.
-        var sections: [TestSuiteSectionDTO]
-
-        init(items: [SuiteItemDTO], sections: [TestSuiteSectionDTO] = []) {
-            self.items = items
-            self.sections = sections
-        }
-
-        enum CodingKeys: String, CodingKey { case items, sections }
-
-        init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decodeIfPresent([SuiteItemDTO].self, forKey: .items) ?? []
-            sections = try c.decodeIfPresent([TestSuiteSectionDTO].self, forKey: .sections) ?? []
-        }
-    }
+    // Suite editor DTOs (SuitePayload / SuiteItemDTO / ScriptDTO /
+    // TestSuiteSectionDTO) live in `SuitePayloadDTOs.swift` so the
+    // published and draft route collections can share them.
 
     // MARK: - GET /instructor/:assignmentID/suite
 
@@ -121,11 +67,11 @@ extension AssignmentRoutes {
 /// Reads a persisted manifest and builds the author-facing view of the
 /// suite list, collapsing fully-expanded family filename sets back into
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
-func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuitePayload {
+func buildSuitePayload(fromManifest manifest: String) -> SuitePayload {
     guard let data = manifest.data(using: .utf8),
         let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: data)
     else {
-        return AssignmentRoutes.SuitePayload(items: [], sections: [])
+        return SuitePayload(items: [], sections: [])
     }
 
     let familyByID = Dictionary(uniqueKeysWithValues: props.patternFamilies.map { ($0.id, $0) })
@@ -165,7 +111,7 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
     // form) rather than from the expanded per-case entries.  Each row
     // carries the underlying entry's `sectionID` so the client can
     // rebuild its grouped view.
-    var items: [AssignmentRoutes.SuiteItemDTO] = []
+    var items: [SuiteItemDTO] = []
     var emittedFamilyIDs: Set<String> = []
     var emittedCheckIDs: Set<String> = []
     for entry in props.testSuites {
@@ -173,7 +119,7 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
             guard !emittedFamilyIDs.contains(fid), let family = familyByID[fid] else { continue }
             emittedFamilyIDs.insert(fid)
             items.append(
-                AssignmentRoutes.SuiteItemDTO(
+                SuiteItemDTO(
                     kind: "family",
                     script: nil,
                     family: family,
@@ -185,7 +131,7 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
             guard !emittedCheckIDs.contains(cid), let check = checkByID[cid] else { continue }
             emittedCheckIDs.insert(cid)
             items.append(
-                AssignmentRoutes.SuiteItemDTO(
+                SuiteItemDTO(
                     kind: "check",
                     script: nil,
                     family: nil,
@@ -195,9 +141,9 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
                 ))
         } else {
             items.append(
-                AssignmentRoutes.SuiteItemDTO(
+                SuiteItemDTO(
                     kind: "script",
-                    script: AssignmentRoutes.ScriptDTO(
+                    script: ScriptDTO(
                         script: entry.script,
                         tier: entry.tier,
                         points: entry.points,
@@ -213,9 +159,9 @@ func buildSuitePayload(fromManifest manifest: String) -> AssignmentRoutes.SuiteP
     }
 
     let sections = props.sections.map {
-        AssignmentRoutes.TestSuiteSectionDTO(id: $0.id, name: $0.name)
+        TestSuiteSectionDTO(id: $0.id, name: $0.name)
     }
-    return AssignmentRoutes.SuitePayload(items: items, sections: sections)
+    return SuitePayload(items: items, sections: sections)
 }
 
 /// Convenience: full `GET /suite` payload as sorted-keys JSON string.

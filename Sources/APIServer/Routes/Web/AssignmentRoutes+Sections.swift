@@ -1,12 +1,14 @@
 // APIServer/Routes/Web/AssignmentRoutes+Sections.swift
 //
-// Section-management handlers for AssignmentRoutes.
-// Extracted from AssignmentRoutes.swift — no behaviour changes.
+// Section-management handlers.  Phase 2 of the audit refactor moved them
+// from `AssignmentRoutes` onto `CourseAdminRoutes`; the file name still
+// starts with `AssignmentRoutes+` for blame continuity until the next
+// rename pass.
 
 import Fluent
 import Vapor
 
-extension AssignmentRoutes {
+extension CourseAdminRoutes {
 
     // MARK: - POST /instructor/sections
 

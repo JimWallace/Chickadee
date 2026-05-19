@@ -26,7 +26,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension PublishedAssignmentRoutes {
 
     // MARK: - POST /instructor/:assignmentID/suite-sections
 

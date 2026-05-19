@@ -27,7 +27,7 @@ import Fluent
 import Foundation
 import Vapor
 
-extension AssignmentRoutes {
+extension DraftAssignmentRoutes {
 
     // MARK: - POST /instructor/new/draft/suite-sections
 
