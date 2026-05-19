@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.180] - 2026-05-19
+
+### Internal
+
+- **One source of truth for worker HMAC signing.**  Before this change,
+  `chickadee-server`'s `WorkerHMACAuthMiddleware.swift` and
+  `chickadee-runner`'s `WorkerRequestSigner.swift` each held a private
+  copy of `hmacSHA256Hex(...)`, a private `Data.hexEncodedString()`
+  extension, and the signed-payload format
+  (`METHOD\nPATH\nBODY_SHA256\nTIMESTAMP\nNONCE`).  Server and runner
+  agreement was a hand-aligned convention spread across two files;
+  any one-sided edit would silently 401 every worker request.
+
+  Lifted into a new `Sources/Core/WorkerHMACSigning.swift`:
+
+    - `WorkerHMACSigning.Header.{timestamp, nonce, bodyHash, signature, workerID}`
+      — header-name constants both sides reference instead of literals.
+    - `signedHeaders(method:path:body:secret:workerID:timestamp:nonce:)`
+      — produces the full `SignedHeaders` struct for the signer.
+    - `verify(method:path:headers:secret:)` — constant-time signature
+      check for the verifier.
+    - `signedPayload(...)`, `hmacSHA256Hex(...)`,
+      `constantTimeEquals(...)` — exposed so future tooling (and
+      `BrightSpaceAPIClient`'s separate HMAC site) can stay consistent.
+
+  Algorithm drift is now a compile error rather than a silent auth
+  break.  No behaviour change — the over-the-wire signing format and
+  header names are byte-for-byte identical.
+
+- **`ScriptOutput` moved to Core.**  The 14-LOC DTO returned by
+  `ScriptRunner` (worker side) now lives in `Sources/Core/` next to
+  `RunnerResult.swift` and `TestOutcome.swift`.  Made `public` +
+  `Sendable` with a public memberwise initializer so future tooling
+  can reference the shape.
+
 ## [0.4.179] - 2026-05-19
 
 ### Fixed
