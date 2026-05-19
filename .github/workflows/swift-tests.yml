@@ -95,7 +95,14 @@ jobs:
           done
 
       - name: Run APITests
-        run: swift test --parallel --filter APITests
+        # Sequential: Swift Testing schedules many class-suite instances
+        # in parallel regardless of the swift test --parallel flag.  Each
+        # test app opens its own SQLite connection pool with one
+        # connection per EventLoop, and under heavy parallel load the
+        # combined pool requests time out (AsyncKit "Connection request
+        # timed out").  Sequential keeps in-flight apps to 1.  Wall time
+        # increases but stays well under the 20m timeout.
+        run: swift test --filter APITests
 
   api-tests-postgres:
     runs-on: ubuntu-latest
