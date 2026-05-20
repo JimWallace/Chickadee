@@ -455,32 +455,37 @@ import Glibc
         return await condition()
     }
 
+    // Mutates process env for the duration of `perform`, then restores the
+    // prior values.  The whole region runs under `withEnvLock` so the
+    // window during which the spawned daemon reads these variables back
+    // can't be clobbered by another env-mutating test running in parallel
+    // (Swift Testing parallelizes within a suite by default, and several
+    // `workerDaemonRetriesPollingAfter*` tests set the same RUNNER_RETRY_*
+    // vars).
     private func withEnvironment(
         _ values: [String: String],
-        perform: () async throws -> Void
+        perform: @Sendable () async throws -> Void
     ) async throws {
-        let originals = Dictionary(
-            uniqueKeysWithValues: values.keys.map { key in
-                (key, ProcessInfo.processInfo.environment[key])
-            })
+        try await withEnvLock {
+            let originals = Dictionary(
+                uniqueKeysWithValues: values.keys.map { key in
+                    (key, ProcessInfo.processInfo.environment[key])
+                })
 
-        for (key, value) in values {
-            setEnvironmentValue(value, forKey: key)
-        }
-        defer {
-            for (key, original) in originals {
-                setEnvironmentValue(original, forKey: key)
+            for (key, value) in values {
+                setenv(key, value, 1)
             }
-        }
+            defer {
+                for (key, original) in originals {
+                    if let original {
+                        setenv(key, original, 1)
+                    } else {
+                        unsetenv(key)
+                    }
+                }
+            }
 
-        try await perform()
-    }
-
-    private func setEnvironmentValue(_ value: String?, forKey key: String) {
-        if let value {
-            setenv(key, value, 1)
-        } else {
-            unsetenv(key)
+            try await perform()
         }
     }
 
