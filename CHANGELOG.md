@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.200] - 2026-05-20
+
+### Changed
+
+- **Snapshots now record the *running* build's identity, and `restore.sh`
+  checks it against the build it's restoring into.**  `snapshot.sh` previously
+  recorded only `chickadee_version` from the source-tree `VERSION` file, which
+  can drift from the image actually deployed (a stale `:latest`, a cloned VM).
+  The manifest now also carries `build_version` (from the running server's
+  `/health`) and `image_ref` / `image_digest` (from the running container).
+  `restore.sh` reads those, compares them against the build currently running
+  on the target host (its `/health` version and image digest), and warns —
+  requiring `--yes` — when they differ.  This catches the exact skew that was
+  previously invisible: a snapshot's data being restored into a *different*
+  build than the one that produced it, where the `VERSION` files happened to
+  match.  Old snapshots without the new fields still restore (the check is
+  skipped when either side's identity is unknown).
+
 ## [0.4.199] - 2026-05-20
 
 ### Fixed
