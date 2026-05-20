@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.193] - 2026-05-20
+
+### Internal
+
+- **CI: Docker image build no longer recompiles from scratch (#523
+  follow-up).**  The `build-and-push` job used to `swift build -c release`
+  *inside* the Dockerfile, so any `Sources/` change busted the compile
+  layer and triggered a cold ~13-min release rebuild on every push.  The
+  release compile now happens in a dedicated `build-release` job that uses
+  the same `actions/cache` + `git-restore-mtime` incremental scheme as the
+  `build` job in `swift-tests.yml` (its own `-release-` cache namespace,
+  keyed on `Sources/**` + manifest — Tests don't affect it).  It uploads
+  the two static binaries as a workflow artifact; `build-and-push` then
+  just downloads them and assembles the runtime image (seconds).
+
+- **`Dockerfile` binary source is now a build arg.**  `ARG BINARIES`
+  selects between `compile` (default — build from source in-image, used by
+  `docker build .` and `docker compose up --build`) and `prebuilt` (copy
+  the binaries CI staged in `./artifacts/`).  BuildKit prunes the unused
+  stage, so a `prebuilt` build never pulls the Swift toolchain image.
+  Standalone and dev builds are unchanged; only CI passes
+  `--build-arg BINARIES=prebuilt`.  Debug-for-tests and release-for-ship
+  remain two separate cached compiles — tests are never built in release,
+  which would weaken the test signal.
+
 ## [0.4.192] - 2026-05-20
 
 ### Fixed

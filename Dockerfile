@@ -1,9 +1,25 @@
+# syntax=docker/dockerfile:1
 # ============================================================
-# Stage 1 — Build
-# To update Swift: change the version tag here and in Stage 2.
-# Current: Swift 6.3 on Ubuntu 22.04 (jammy)
+# Binary source — selectable so CI can skip the in-image compile.
+#
+#   BINARIES=compile  (default) — build from source in this image.
+#       Used by `docker build .` and `docker compose up --build`.
+#   BINARIES=prebuilt           — copy release binaries already built
+#       and placed in ./artifacts/ by the CI `build-release` job, so
+#       the image build does not recompile on every push.
+#
+# Both paths must use the same Swift / Ubuntu version so the
+# statically-linked-stdlib binaries match the runtime glibc.
+# To update Swift: change the tag here and in the runtime stage.
+# Current: Swift 6.3 on Ubuntu 22.04 (jammy).
 # ============================================================
-FROM swift:6.3-jammy AS build
+
+# Global ARG — must be declared before the first FROM so it can be used in
+# the `FROM ${BINARIES}` stage-selector below.
+ARG BINARIES=compile
+
+# ── Compile from source ─────────────────────────────────────
+FROM swift:6.3-jammy AS compile
 
 WORKDIR /build
 
@@ -20,12 +36,28 @@ COPY Sources ./Sources
 COPY Tests   ./Tests
 
 # Build products one at a time so each gets its own log output.
-# --static-swift-stdlib embeds the runtime so Stage 2 needs no Swift libs.
+# --static-swift-stdlib embeds the runtime so the runtime stage needs no Swift libs.
 RUN swift build -c release --static-swift-stdlib --product chickadee-server
 RUN swift build -c release --static-swift-stdlib --product chickadee-runner
+RUN mkdir -p /out \
+    && cp .build/release/chickadee-server .build/release/chickadee-runner /out/
 
-# Verify both binaries were produced — fail fast with a clear message if not.
-RUN ls -lh .build/release/chickadee-server .build/release/chickadee-runner
+# ── Prebuilt binaries from the build context ────────────────
+# Only built when BINARIES=prebuilt; its COPY paths are not evaluated
+# otherwise.  CI downloads the `build-release` artifact into ./artifacts/.
+FROM ubuntu:22.04 AS prebuilt
+
+WORKDIR /out
+COPY artifacts/chickadee-server artifacts/chickadee-runner /out/
+# Artifact upload/download can drop the executable bit; restore it.
+RUN chmod +x /out/chickadee-server /out/chickadee-runner
+
+# ── Select the binary source ────────────────────────────────
+# (BINARIES is the global ARG declared at the top of this file.)
+FROM ${BINARIES} AS binaries
+
+# Verify both binaries are present — fail fast with a clear message if not.
+RUN ls -lh /out/chickadee-server /out/chickadee-runner
 
 # ============================================================
 # Stage 2 — Runtime
@@ -70,9 +102,9 @@ RUN useradd --system --user-group --create-home chickadee
 
 WORKDIR /app
 
-# Compiled binaries.
-COPY --from=build /build/.build/release/chickadee-server  ./chickadee-server
-COPY --from=build /build/.build/release/chickadee-runner  ./chickadee-runner
+# Compiled binaries (from whichever binary source was selected above).
+COPY --from=binaries /out/chickadee-server  ./chickadee-server
+COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 
 # Static assets — the server reads these from its working directory at runtime.
 # The entrypoint script syncs them to the data volume (/data) on each startup,
