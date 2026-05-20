@@ -96,4 +96,44 @@ struct MigrationNamespaceReconcilerTests {
             #expect(before == after)
         }
     }
+
+    /// End-to-end forward-chain check: a database that is *behind* (missing a
+    /// recent migration) and recorded under a legacy namespace must, after
+    /// reconciliation, have its already-applied migrations recognized AND the
+    /// missing one applied forward by `autoMigrate` — the 0.4.172→latest restore
+    /// scenario in miniature.
+    @Test func appliesNewMigrationsForwardAfterReconcile() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            // Simulate a DB from before AddUrlTokenToUsers existed: undo its
+            // schema and drop its history row so it looks unapplied.
+            try await AddUrlTokenToUsers().revert(on: app.db)
+            for log in try await MigrationLog.query(on: app.db)
+                .filter(\.$name == "chickadee.AddUrlTokenToUsers").all()
+            {
+                try await log.delete(force: true, on: app.db)
+            }
+
+            // Put the remaining history under a legacy namespace.
+            for log in try await MigrationLog.query(on: app.db).all()
+            where log.name.hasPrefix("chickadee.") {
+                log.name = "chickadee_server." + String(log.name.dropFirst("chickadee.".count))
+                try await log.save(on: app.db)
+            }
+
+            try reconcileLegacyMigrationNamespace(on: app)
+
+            // Must skip the (now-canonical) already-applied migrations and run
+            // only the missing AddUrlTokenToUsers forward — no 42P07 collision.
+            try await app.autoMigrate()
+
+            // The reverted column is back: a query that selects it succeeds.
+            _ = try await APIUser.query(on: app.db).all()
+            let names = try await migrationNames(app.db)
+            #expect(names.contains("chickadee.AddUrlTokenToUsers"))
+            #expect(!names.contains { $0.hasPrefix("chickadee_server.") })
+        }
+    }
 }
