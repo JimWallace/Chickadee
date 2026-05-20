@@ -1,4 +1,16 @@
-name: Test Coverage
+name: Nightly Clean Build & Coverage
+
+# This is the project's clean-build canary.  It compiles the whole package
+# from scratch every night: it caches only `.build/checkouts` (vendored
+# dependency *source*), never the compiled `.build/<triple>` artifacts, and
+# uses a different cache-key namespace (`-spm-`) than swift-tests.yml's
+# incremental `build` job (`-build-`).  So it catches any break that the
+# per-PR incremental build cache (restore-keys + git-restore-mtime) could
+# mask via a stale object that never got recompiled.
+#
+# DO NOT add compiled-artifact caching here (the swift-tests.yml `.build`
+# cache, `--skip-build`, etc.) — that would defeat the canary's purpose.
+# On failure the `report-failure` job opens/updates a tracking issue.
 
 on:
   workflow_dispatch:
@@ -102,3 +114,61 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Surface a failed nightly clean build as an actionable, deduplicated
+  # GitHub issue instead of a red run that no one watches.  Runs on the host
+  # (not the swift container) so `gh` is available.
+  report-failure:
+    runs-on: ubuntu-latest
+    needs: coverage
+    if: ${{ always() && needs.coverage.result == 'failure' }}
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Nightly clean build failing"
+          label="nightly-clean-build"
+
+          # Ensure the label exists (idempotent).
+          gh label create "$label" --color B60205 \
+            --description "Nightly from-scratch clean build canary failed" \
+            --force >/dev/null 2>&1 || true
+
+          body=$(cat <<EOF
+          The nightly from-scratch clean build (\`test-coverage.yml\`) failed.
+
+          **Run:** $RUN_URL
+
+          This is the clean-build canary — it compiles the whole package from
+          scratch with no compiled-artifact cache, so no incremental build
+          cache can mask the result. A failure here means one of:
+
+          - a genuine compile break on a clean tree,
+          - a test failure, or
+          - the coverage floor was not met.
+
+          Check the run to see which step failed. If the per-PR jobs in
+          \`swift-tests.yml\` were green but this is red, suspect a stale
+          object slipping past the incremental \`.build\` cache and prefer a
+          clean rebuild while investigating.
+          EOF
+          )
+
+          existing=$(gh issue list --repo "$REPO" --state open --label "$label" \
+            --search "$title in:title" --json number,title \
+            --jq "map(select(.title==\"$title\")) | (.[0].number // empty)")
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+            echo "Commented on existing issue #$existing"
+          else
+            gh issue create --repo "$REPO" --title "$title" --label "$label" --body "$body"
+          fi
