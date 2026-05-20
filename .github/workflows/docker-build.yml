@@ -10,15 +10,99 @@ env:
   IMAGE: ghcr.io/jimwallace/chickadee
 
 jobs:
-  # ── Build & push Docker image ─────────────────────────────────────────────
+  # ── Compile the release binaries once, with caching ───────────────────────
+  # The image build used to `swift build -c release` inside the Dockerfile, so
+  # any source change busted the compile layer and triggered a cold ~13 min
+  # rebuild every push.  Compiling here instead — with the same actions/cache +
+  # git-restore-mtime incremental scheme as swift-tests.yml's `build` job — lets
+  # a source-only change recompile incrementally, and the image build below
+  # just packages the prebuilt binaries (seconds).  Debug-for-tests and
+  # release-for-ship stay two separate caches; tests are never built in release.
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: swift:6.3-jammy
+
+    steps:
+      # Full (blobless) history so `git restore-mtime` can read commit times.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Install git-restore-mtime
+        run: |
+          for i in 1 2 3; do
+            apt-get update -qq && apt-get install -y --no-install-recommends git-restore-mtime && break
+            echo "apt-get failed (attempt $i), retrying in 15s..."
+            sleep 15
+          done
+
+      # Reset source mtimes to commit times so llbuild recompiles only files
+      # touched by new commits.  The container runs git as a different uid than
+      # checkout used, so mark the workspace safe first.
+      - name: Restore source mtimes from git history
+        run: |
+          git config --global --add safe.directory '*'
+          git restore-mtime
+
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Release cache is keyed on Sources + manifest only (no Tests/** — the
+      # release products don't build the test targets), in its own `-release-`
+      # namespace, separate from the debug `-build-` cache.
+      - name: Cache release build artifacts
+        id: build-cache
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-release-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**') }}
+          restore-keys: |
+            ${{ runner.os }}-release-${{ steps.toolchain.outputs.key }}-
+
+      # Skip only on an exact cache hit (artifacts already match this tree); a
+      # restore-keys partial hit recompiles incrementally over the older tree.
+      - name: Build release products
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: |
+          swift build -c release --static-swift-stdlib --product chickadee-server
+          swift build -c release --static-swift-stdlib --product chickadee-runner
+
+      - name: Stage binaries for the image build
+        run: |
+          mkdir -p artifacts
+          cp .build/release/chickadee-server .build/release/chickadee-runner artifacts/
+          ls -lh artifacts/
+
+      - name: Upload release binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-binaries
+          path: artifacts/
+          retention-days: 1
+          if-no-files-found: error
+
+  # ── Assemble, scan & push the Docker image ────────────────────────────────
   build-and-push:
     runs-on: ubuntu-latest
+    needs: build-release
     permissions:
       contents: read
       packages: write
 
     steps:
       - uses: actions/checkout@v6
+
+      # Prebuilt release binaries from the build-release job land in ./artifacts;
+      # the Dockerfile's `prebuilt` stage COPYs them in (BINARIES=prebuilt).
+      - name: Download release binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: release-binaries
+          path: artifacts
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -49,13 +133,15 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          # Use the prebuilt binaries instead of compiling in-image.
+          build-args: |
+            BINARIES=prebuilt
           # Always load locally so Trivy can scan it; push separately below.
           load: true
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # BuildKit layer cache: dependency fetch is cached across runs
-          # unless Package.swift or Package.resolved changes.
+          # BuildKit layer cache for the runtime image (apt deps, asset copies).
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -73,6 +159,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: |
+            BINARIES=prebuilt
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
