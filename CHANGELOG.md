@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.4.202] - 2026-05-20
+## [0.4.206] - 2026-05-20
 
 ### Added
 
@@ -29,6 +29,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   family/check lists, so runners never decode a `PatternKind` /
   `NotebookCheckKind` case they don't know. No behaviour change for the
   runner, the grading pipeline, or generated script bytes.
+
+## [0.4.205] - 2026-05-20
+
+### Added
+
+- **`OUTBOUND_HTTP_PROXY` — route the server's outbound HTTP client through a
+  forward proxy.**  On networks where direct egress is blocked and all traffic
+  must traverse a proxy (e.g. the UWaterloo NAT'd VLAN), the OIDC discovery
+  fetch at startup `connectTimeout`s and crash-loops the server, because Vapor's
+  HTTP client (AsyncHTTPClient) ignores the standard `HTTP_PROXY`/`HTTPS_PROXY`
+  env vars and the Docker daemon proxy only covers image pulls.  Setting
+  `OUTBOUND_HTTP_PROXY` (e.g. `http://172.16.136.36:3128`) now applies the proxy
+  to `app.http.client` before first use, so OIDC discovery/JWKS/token calls —
+  and BrightSpace grade-sync — go through it.  Flows through `AppConfig`
+  (`appConfig.outboundProxy`) and is reported in the redacted startup summary.
+  Unset = direct egress, unchanged behaviour.
+
+## [0.4.204] - 2026-05-20
+
+### Changed
+
+- **The instructor dashboard "Students With Browser Errors" card now counts
+  only students who are *actually stuck*, not everyone who hit a transient
+  hiccup.**  The in-browser editor records a client diagnostic
+  (`preflight_fail` / `watchdog_timeout`) even when the student reloads and
+  submits fine, so a slow Pyodide cold start that clears on reload was
+  inflating the card.  A student who errored on a setup but then got a
+  submission in for that setup is now treated as recovered and excluded;
+  what remains is the set of students who errored and never submitted —
+  the signal an instructor can act on.  Diagnostics are still scoped to the
+  course's setups, the 24h window, active students, and a non-null
+  `test_setup_id`, exactly as before.
+
+## [0.4.203] - 2026-05-20
+
+### Added
+
+- **`scripts/restore-from-share.sh`** — version-controls the consumer-side
+  wrapper a non-production box runs from cron to track production data: it
+  rsync's the latest snapshot down from the shared mount, finds the newest
+  *complete* snapshot, and restores it via `scripts/restore.sh`
+  (`--yes --regenerate-secrets`). Idempotent (a `.last-restored` marker skips a
+  snapshot already restored) and a clean skip when the share isn't mounted. The
+  share path and PII scrubbing are configurable via
+  `CHICKADEE_SNAPSHOT_SHARE_MOUNT` / `CHICKADEE_SNAPSHOT_SHARE_DIR` /
+  `CHICKADEE_RESTORE_SCRUB_PII`, defaulting to the UWaterloo AHS share and no
+  scrub. Pairs with `snapshot.sh` (producer) and `restore.sh` (engine).
+
+## [0.4.202] - 2026-05-20
+
+### Internal
+
+- **Forward-chain regression test for the namespace reconciler.**  Adds
+  `appliesNewMigrationsForwardAfterReconcile`, which simulates a database that is
+  *behind* (a recent migration reverted + its history row removed) and recorded
+  under a legacy namespace, then asserts that after
+  `reconcileLegacyMigrationNamespace` the already-applied migrations are
+  recognized AND the missing one is applied forward by `autoMigrate` without a
+  collision — the 0.4.172→latest restore scenario in miniature. Complements the
+  real-world coverage from the nightly restore-from-share on prod data.
 
 ## [0.4.201] - 2026-05-20
 
