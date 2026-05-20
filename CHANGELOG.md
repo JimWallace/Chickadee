@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.198] - 2026-05-20
+
+### Fixed
+
+- **Latest builds can now migrate a database created by a pre-rename build
+  (e.g. a restored v0.4.172 snapshot).**  Fluent identifies a migration by its
+  module-qualified type name (`<module>.<Type>`).  When the server code was
+  refactored out of the `chickadee-server` executable module into the
+  `APIServer` library target, every migration identifier changed from
+  `chickadee_server.*` to `APIServer.*`.  A database produced by the old build
+  records `chickadee_server.CreateUsers`; the current build looked for
+  `APIServer.CreateUsers`, decided it was unapplied, re-ran `CreateUsers`, and
+  crash-looped on `CREATE TABLE "users"` (Postgres `42P07`).  A new idempotent
+  reconciliation step (`reconcileLegacyMigrationNamespace`) runs between
+  `registerMigrations` and `autoMigrate`, rewriting legacy-namespace history
+  rows to the current module's namespace (dropping any duplicate rather than
+  colliding).  No-op on fresh databases and when no legacy rows are present.
+
 ## [0.4.197] - 2026-05-20
 
 ### Internal
