@@ -1,7 +1,20 @@
 name: Build and Push Docker Image
 
 on:
+  # On PRs this is the longest job in the suite, so only run it when something
+  # that can actually affect the image build or the Trivy scan changes — the
+  # Dockerfile, the dependency graph, the entrypoint/deploy config, or this
+  # workflow itself.  Source-only PRs skip it: the debug build in
+  # swift-tests.yml already proves the code compiles, and ongoing base-image
+  # CVE drift is caught by the unconditional push-to-main / tag builds below.
   pull_request:
+    paths:
+      - "Dockerfile"
+      - "Package.swift"
+      - "Package.resolved"
+      - "docker-compose.yml"
+      - "deploy/**"
+      - ".github/workflows/docker-build.yml"
   push:
     branches: [main]
     tags: ["v*"]

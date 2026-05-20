@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.197] - 2026-05-20
+
+### Internal
+
+- **CI: only run the Docker image build on PRs that can affect the image.**
+  `Build and Push Docker Image` is the longest job in the suite (~10–18 min
+  on PRs), and it already builds + Trivy-scans without pushing on PRs.  Its
+  `pull_request` trigger is now `paths`-filtered to the inputs that can
+  actually change the build or the scan result — `Dockerfile`,
+  `Package.swift`, `Package.resolved`, `docker-compose.yml`, `deploy/**`,
+  and the workflow file itself — so the ~90% of PRs that only touch
+  `Sources/`, `Tests/`, or front-end assets no longer pay for it.  The
+  `push` (main) and tag triggers stay unconditional, so every merge to main
+  and every release tag still gets a full build + Trivy scan + push; that
+  also keeps catching base-image CVE drift independent of code changes.  The
+  release *compile* signal dropped from source-only PRs is already covered
+  by the debug build in `swift-tests.yml`.  (`main` has no required status
+  checks, so a skipped run does not block PR merges.)
+
 ## [0.4.196] - 2026-05-20
 
 ### Internal
