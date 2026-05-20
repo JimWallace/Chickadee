@@ -80,8 +80,12 @@ jobs:
 
       # Normalise source mtimes to commit times so the restored `.build/`
       # stays valid for unchanged files and only new commits recompile.
+      # The container runs git as a different uid than checkout used, so mark
+      # the workspace safe before invoking git.
       - name: Restore source mtimes from git history
-        run: git restore-mtime
+        run: |
+          git config --global --add safe.directory '*'
+          git restore-mtime
 
       - name: Resolve toolchain cache key
         id: toolchain
