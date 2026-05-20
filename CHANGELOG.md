@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.199] - 2026-05-20
+
+### Fixed
+
+- **`WorkerTests` intermittent `SIGABRT` (signal 6) under parallel
+  execution.**  The `rscriptAvailable()` helper launched a `Process`
+  (`/usr/bin/env Rscript --version`) with `try? proc.run()`, swallowing
+  any launch error, then unconditionally read `proc.terminationStatus`.
+  When `run()` intermittently failed — e.g. `posix_spawn` returning
+  `EAGAIN` under the spawn pressure of Swift Testing's default in-suite
+  parallelism, where the R / zip / runner subprocess tests all fork at
+  once — `terminationStatus` on a never-launched task raised an uncaught
+  Objective-C `NSInvalidArgumentException` (`task not launched`) that
+  aborted the whole test process (~1 in 12 local runs, and reproducible
+  in CI's `swift test --filter WorkerTests`).  The helper now guards the
+  launch in `do/catch` and returns `false` (skip the optional R tests)
+  when the process fails to start, so `terminationStatus` is only read
+  after a confirmed launch.  Test-only; no production code touched.
+
 ## [0.4.198] - 2026-05-20
 
 ### Fixed

@@ -397,7 +397,15 @@ import Testing
         proc.arguments = ["Rscript", "--version"]
         proc.standardOutput = FileHandle.nullDevice
         proc.standardError = FileHandle.nullDevice
-        try? proc.run()
+        // Only query terminationStatus after a confirmed launch. If run()
+        // fails (e.g. posix_spawn returns EAGAIN under heavy parallel spawn
+        // pressure), terminationStatus on a never-launched task raises an
+        // uncaught NSInvalidArgumentException that aborts the whole process.
+        do {
+            try proc.run()
+        } catch {
+            return false
+        }
         proc.waitUntilExit()
         return proc.terminationStatus == 0
     }
