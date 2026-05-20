@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.195] - 2026-05-20
+
+### Fixed
+
+- **`WorkerTests` env-passthrough race (follow-up to v0.4.194).**  v0.4.194
+  serialized `WorkerDaemonTests`' env mutation but left the two env tests in
+  `WorkerTests` unguarded.  `scriptEnvVarUnsetWhenNoOverride` calls
+  `unsetenv("CHICKADEE_ASSIGNMENT_SEED")`, while `scriptReceivesEnvVarFromRunner`
+  drives `UnsandboxedScriptRunner`, whose `mergedScriptEnvironment` reads
+  `ProcessInfo.processInfo.environment` (walking the C `environ` array) to build
+  the child env.  Under Swift Testing's in-suite parallelism the unset could
+  clobber `environ` while the other test read it back, so both env regions now
+  run under the same process-wide `withEnvLock`
+  (`Tests/WorkerTests/Support/EnvTestLock.swift`).  The unset test also restores
+  the prior `CHICKADEE_ASSIGNMENT_SEED` value on exit instead of leaving it
+  cleared.  Test-only; no production code touched.
+
 ## [0.4.194] - 2026-05-20
 
 ### Fixed
