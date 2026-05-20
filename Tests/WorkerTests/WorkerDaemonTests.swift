@@ -432,8 +432,16 @@ import Glibc
         )
     }
 
+    // Generous default: `waitUntil` short-circuits the instant `condition`
+    // holds, so a large ceiling adds nothing to passing runs — it only buys
+    // slack on a loaded machine.  These gates spawn `Task { daemon.run() }`
+    // and wait for it to poll; under the cold-cache nightly's saturated
+    // cooperative thread pool (every one of ~1280 tests running in parallel,
+    // plus blocking Thread.sleep in mocks/teardown) that Task can be starved
+    // for several seconds before it gets to run.  A tight 2–4s window made
+    // these tests flaky there; 10s removes the class of failure.
     private func waitUntil(
-        timeoutSeconds: TimeInterval = 2,
+        timeoutSeconds: TimeInterval = 10,
         pollIntervalNanos: UInt64 = 50_000_000,
         condition: @escaping @Sendable () async -> Bool
     ) async -> Bool {
@@ -533,7 +541,7 @@ import Glibc
             try await daemon.run()
         }
 
-        let didReport = await waitUntil(timeoutSeconds: 5) {
+        let didReport = await waitUntil(timeoutSeconds: 10) {
             await !reporter.snapshot().isEmpty
         }
         #expect(didReport, "Expected fallback failure report after processing error")
@@ -604,7 +612,7 @@ import Glibc
             try await daemon.run()
         }
 
-        let didReport = await waitUntil(timeoutSeconds: 5) {
+        let didReport = await waitUntil(timeoutSeconds: 10) {
             await !reporter.snapshot().isEmpty
         }
         #expect(didReport, "Expected fallback report after reporter failure")
@@ -613,7 +621,7 @@ import Glibc
         // (post-job-completion).  Under slow CI runners `task.cancel()`
         // could otherwise race the daemon's poll-loop resumption and
         // leave pollCount stuck at 1.
-        let didPollAgain = await waitUntil(timeoutSeconds: 5) {
+        let didPollAgain = await waitUntil(timeoutSeconds: 10) {
             await poller.observedRequestCount() > 1
         }
         #expect(didPollAgain, "Expected daemon to resume polling after first job")
@@ -680,7 +688,7 @@ import Glibc
             try await daemon.run()
         }
 
-        let didProcessBoth = await waitUntil(timeoutSeconds: 5) {
+        let didProcessBoth = await waitUntil(timeoutSeconds: 10) {
             await reporter.snapshot().count == 2
         }
         #expect(didProcessBoth, "Expected daemon to report both failed and successful jobs")
@@ -751,7 +759,7 @@ import Glibc
         )
 
         let task = Task { try await daemon.run() }
-        _ = await waitUntil(timeoutSeconds: 5) { await reporter.snapshot().count == 1 }
+        _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
         task.cancel()
         try? await task.value
 
@@ -806,7 +814,7 @@ import Glibc
             try await daemon.run()
         }
 
-        let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+        let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
             await poller.observedRequestCount() > 1
         }
         #expect(didKeepPolling, "Runner should continue polling while heartbeat retries fail")
@@ -872,7 +880,7 @@ import Glibc
                 try await daemon.run()
             }
 
-            let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+            let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
                 await poller.observedRequestCount() >= 3
             }
             #expect(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
@@ -906,7 +914,7 @@ import Glibc
                 try await daemon.run()
             }
 
-            let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+            let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
                 await poller.observedRequestCount() >= 3
             }
             #expect(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
@@ -940,7 +948,7 @@ import Glibc
                 try await daemon.run()
             }
 
-            let didKeepPolling = await waitUntil(timeoutSeconds: 4) {
+            let didKeepPolling = await waitUntil(timeoutSeconds: 10) {
                 await poller.observedRequestCount() >= 3
             }
             #expect(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
@@ -1140,7 +1148,7 @@ import Glibc
         )
 
         let task = Task { try await daemon.run() }
-        _ = await waitUntil(timeoutSeconds: 5) { await reporter.snapshot().count == 1 }
+        _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
         task.cancel()
         try? await task.value
 
