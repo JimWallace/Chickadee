@@ -150,6 +150,16 @@ func makeWorkerManifestJSON(
     }
     try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
     try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)
+    // Unified, canonical test-item list.  Built in authored order by
+    // walking the (pre-topo-sort) testSuites and emitting each family /
+    // check at its first generated entry; specs not referenced by any
+    // generated entry are appended.  The `patternFamilies` /
+    // `notebookChecks` keys above stay mirrored for cross-version readers
+    // (see `TestProperties.encode`).
+    try spliceEncodedArray(
+        into: &manifest, key: "testItems",
+        values: orderedTestItems(
+            testSuites: testSuites, patternFamilies: patternFamilies, notebookChecks: notebookChecks))
     // Route sections through JSONEncoder so all fields — including
     // `variables` (v0.4.100+) — round-trip through the manifest.
     // Pre-v0.4.102 we hand-rolled a minimal `[id, name]` dict that
@@ -163,6 +173,35 @@ func makeWorkerManifestJSON(
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+/// Builds the unified `[TestItem]` list in authored order for the manifest.
+/// `testSuites` is expected pre-topological-sort (i.e. authored order); each
+/// family / check is emitted once, at its first generated entry, with any
+/// unreferenced specs appended so nothing is dropped.
+private func orderedTestItems(
+    testSuites: [ConfiguredSuiteEntry],
+    patternFamilies: [PatternFamily],
+    notebookChecks: [NotebookCheck]
+) -> [TestItem] {
+    let familyByID = Dictionary(patternFamilies.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let checkByID = Dictionary(notebookChecks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    var items: [TestItem] = []
+    var seen = Set<String>()
+    for entry in testSuites {
+        if let fid = entry.generatedBy, let fam = familyByID[fid], seen.insert(fid).inserted {
+            items.append(TestItem(family: fam))
+        } else if let cid = entry.generatedByCheck, let chk = checkByID[cid], seen.insert(cid).inserted {
+            items.append(TestItem(check: chk))
+        }
+    }
+    for fam in patternFamilies where seen.insert(fam.id).inserted {
+        items.append(TestItem(family: fam))
+    }
+    for chk in notebookChecks where seen.insert(chk.id).inserted {
+        items.append(TestItem(check: chk))
+    }
+    return items
 }
 
 private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any] {

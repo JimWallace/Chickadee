@@ -167,16 +167,29 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// tests so grading scripts don't confuse it with the student's submission.
     /// Nil when the assignment has no notebook template.
     public let starterNotebook: String?
-    /// Pattern families whose expansion produced some of the entries in
-    /// `testSuites`.  The runner ignores this field entirely — families are
-    /// a save-time authoring concern; by the time the zip reaches the runner
-    /// every generated `.py` is an ordinary test script.
-    public let patternFamilies: [PatternFamily]
-    /// Notebook checks whose expansion produced some of the entries in
-    /// `testSuites`.  Same save-time-only model as `patternFamilies`:
-    /// stripped from the runner-facing manifest by `runnerSanitized()`
-    /// so older runners never see new `NotebookCheckKind` cases.
-    public let notebookChecks: [NotebookCheck]
+    /// The unified list of instructor-authored test-item specs — pattern
+    /// families and notebook checks both — that expand into some of the
+    /// entries in `testSuites`.  This is the single source of truth; the
+    /// `patternFamilies` / `notebookChecks` accessors below are derived
+    /// views kept for the many existing read sites.  The runner ignores
+    /// this field entirely (families and checks are a save-time authoring
+    /// concern; by the time the zip reaches the runner every generated
+    /// `.py` is an ordinary test script), and `runnerSanitized()` empties
+    /// it so older runners never decode a `PatternKind` / `NotebookCheckKind`
+    /// case they don't know.
+    ///
+    /// Legacy manifests (pre-`testItems`) carry separate `patternFamilies`
+    /// and `notebookChecks` arrays; `init(from:)` migrates them into
+    /// `testItems` on read, and `encode(to:)` mirrors both legacy keys back
+    /// out (derived from `testItems`) so cross-version readers stay happy.
+    public let testItems: [TestItem]
+
+    /// Pattern-family specs, derived from `testItems`.  Order follows the
+    /// item list.  A save-time authoring concern only.
+    public var patternFamilies: [PatternFamily] { testItems.compactMap(\.family) }
+    /// Notebook-check specs, derived from `testItems`.  Order follows the
+    /// item list.  A save-time authoring concern only.
+    public var notebookChecks: [NotebookCheck] { testItems.compactMap(\.check) }
     /// Ordered list of sections that group `testSuites` for display only.
     /// Empty = "no grouping"; the student and instructor UIs render
     /// identically to the pre-sections layout.  Entries in `testSuites`
@@ -226,7 +239,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         notebookChecks: [NotebookCheck] = [],
         sections: [TestSuiteSection] = [],
         globalVariables: [FamilyVariable] = [],
-        globalExpressions: [PersonalizationExpression] = []
+        globalExpressions: [PersonalizationExpression] = [],
+        testItems: [TestItem]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.gradingMode = gradingMode
@@ -235,8 +249,13 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.timeLimitSeconds = timeLimitSeconds
         self.makefile = makefile
         self.starterNotebook = starterNotebook
-        self.patternFamilies = patternFamilies
-        self.notebookChecks = notebookChecks
+        // `testItems` wins when supplied; otherwise synthesize it from the
+        // legacy `patternFamilies` / `notebookChecks` arguments (families
+        // first, then checks) so every existing call site keeps working.
+        self.testItems =
+            testItems
+            ?? (patternFamilies.map(TestItem.init(family:))
+                + notebookChecks.map(TestItem.init(check:)))
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
@@ -251,8 +270,19 @@ public struct TestProperties: Codable, Equatable, Sendable {
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
         makefile = try c.decodeIfPresent(MakefileConfig.self, forKey: .makefile)
         starterNotebook = try c.decodeIfPresent(String.self, forKey: .starterNotebook)
-        patternFamilies = try c.decodeIfPresent([PatternFamily].self, forKey: .patternFamilies) ?? []
-        notebookChecks = try c.decodeIfPresent([NotebookCheck].self, forKey: .notebookChecks) ?? []
+        // `testItems` is the canonical unified list when present.  A legacy
+        // manifest carries the separate `patternFamilies` / `notebookChecks`
+        // arrays instead — migrate them on read.  (An explicitly-empty
+        // `testItems` is treated the same as absent so an old + new pair
+        // that disagree never silently drops specs.)
+        let decodedItems = try c.decodeIfPresent([TestItem].self, forKey: .testItems) ?? []
+        if decodedItems.isEmpty {
+            let fams = try c.decodeIfPresent([PatternFamily].self, forKey: .patternFamilies) ?? []
+            let checks = try c.decodeIfPresent([NotebookCheck].self, forKey: .notebookChecks) ?? []
+            testItems = fams.map(TestItem.init(family:)) + checks.map(TestItem.init(check:))
+        } else {
+            testItems = decodedItems
+        }
         sections = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections) ?? []
         globalVariables = try c.decodeIfPresent([FamilyVariable].self, forKey: .globalVariables) ?? []
         globalExpressions =
@@ -261,14 +291,53 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 forKey: .globalExpressions) ?? []
     }
 
+    // `patternFamilies` / `notebookChecks` are computed (derived from
+    // `testItems`) so they're absent from the synthesized `CodingKeys`;
+    // declare the keys explicitly so `init(from:)` can still read the
+    // legacy arrays and `encode(to:)` can mirror them back out.
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case gradingMode
+        case requiredFiles
+        case testSuites
+        case timeLimitSeconds
+        case makefile
+        case starterNotebook
+        case testItems
+        case patternFamilies
+        case notebookChecks
+        case sections
+        case globalVariables
+        case globalExpressions
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(schemaVersion, forKey: .schemaVersion)
+        try c.encode(gradingMode, forKey: .gradingMode)
+        try c.encode(requiredFiles, forKey: .requiredFiles)
+        try c.encode(testSuites, forKey: .testSuites)
+        try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)
+        try c.encodeIfPresent(makefile, forKey: .makefile)
+        try c.encodeIfPresent(starterNotebook, forKey: .starterNotebook)
+        try c.encode(testItems, forKey: .testItems)
+        // Mirror the legacy arrays (derived from `testItems`, so they can
+        // never drift) for cross-version readers that predate `testItems`.
+        try c.encode(patternFamilies, forKey: .patternFamilies)
+        try c.encode(notebookChecks, forKey: .notebookChecks)
+        try c.encode(sections, forKey: .sections)
+        try c.encode(globalVariables, forKey: .globalVariables)
+        try c.encode(globalExpressions, forKey: .globalExpressions)
+    }
+
     /// Manifest view shipped to runners.  Pattern families and notebook
     /// checks are save-time authoring concerns — by the time the zip
     /// reaches the runner every generated `.py` is already an ordinary
-    /// test script — so both fields are stripped before encode.  Keeping
-    /// them in the payload would force every runner binary to know every
-    /// `PatternKind` / `NotebookCheckKind` case the server ever introduces
-    /// (a new raw value crashes the enum decoder), defeating rolling
-    /// deployments.
+    /// test script — so they are stripped before encode (which empties
+    /// the derived `testItems` list as well).  Keeping them in the payload
+    /// would force every runner binary to know every `PatternKind` /
+    /// `NotebookCheckKind` case the server ever introduces (a new raw value
+    /// crashes the enum decoder), defeating rolling deployments.
     public func runnerSanitized() -> TestProperties {
         TestProperties(
             schemaVersion: schemaVersion,
