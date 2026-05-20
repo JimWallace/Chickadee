@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.203] - 2026-05-20
+
+### Changed
+
+- **The instructor dashboard "Students With Browser Errors" card now counts
+  only students who are *actually stuck*, not everyone who hit a transient
+  hiccup.**  The in-browser editor records a client diagnostic
+  (`preflight_fail` / `watchdog_timeout`) even when the student reloads and
+  submits fine, so a slow Pyodide cold start that clears on reload was
+  inflating the card.  A student who errored on a setup but then got a
+  submission in for that setup is now treated as recovered and excluded;
+  what remains is the set of students who errored and never submitted —
+  the signal an instructor can act on.  Diagnostics are still scoped to the
+  course's setups, the 24h window, active students, and a non-null
+  `test_setup_id`, exactly as before.
+
 ## [0.4.202] - 2026-05-20
 
 ### Internal
