@@ -25,6 +25,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   by the debug build in `swift-tests.yml`.  (`main` has no required status
   checks, so a skipped run does not block PR merges.)
 
+- **CI: cancel superseded in-progress Docker runs on PRs.**  Added a
+  `concurrency` group to `docker-build.yml` keyed on workflow + ref with
+  `cancel-in-progress` gated to `pull_request` events, so re-pushing a PR
+  cancels its prior in-flight run instead of queueing a second copy of the
+  longest job.  `main` and tag builds are never cancelled — they push
+  images and must not be interrupted mid-flight.
+
+- **CI: action bumps (supersedes Dependabot #315, #423).**
+  `actions/setup-node@v5 → v6` (`swift-tests.yml`) and
+  `aquasecurity/trivy-action@v0.35.0 → v0.36.0` (`docker-build.yml`).
+  Both are drop-in: setup-node v6 stays on Node 24 with the same inputs,
+  and trivy-action v0.36.0 only bumps the bundled Trivy binary (no
+  action-interface change to the `image-ref` / `severity` / `exit-code`
+  inputs we use).
+
 ## [0.4.196] - 2026-05-20
 
 ### Internal
