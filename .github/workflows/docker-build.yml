@@ -1,10 +1,30 @@
 name: Build and Push Docker Image
 
 on:
+  # On PRs this is the longest job in the suite, so only run it when something
+  # that can actually affect the image build or the Trivy scan changes — the
+  # Dockerfile, the dependency graph, the entrypoint/deploy config, or this
+  # workflow itself.  Source-only PRs skip it: the debug build in
+  # swift-tests.yml already proves the code compiles, and ongoing base-image
+  # CVE drift is caught by the unconditional push-to-main / tag builds below.
   pull_request:
+    paths:
+      - "Dockerfile"
+      - "Package.swift"
+      - "Package.resolved"
+      - "docker-compose.yml"
+      - "deploy/**"
+      - ".github/workflows/docker-build.yml"
   push:
     branches: [main]
     tags: ["v*"]
+
+# Cancel a superseded in-progress run when a PR is pushed again, but never
+# cancel main / tag builds — those push images and must not be interrupted
+# mid-flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   IMAGE: ghcr.io/jimwallace/chickadee
@@ -146,7 +166,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: table

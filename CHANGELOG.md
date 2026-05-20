@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.197] - 2026-05-20
+
+### Internal
+
+- **CI: only run the Docker image build on PRs that can affect the image.**
+  `Build and Push Docker Image` is the longest job in the suite (~10–18 min
+  on PRs), and it already builds + Trivy-scans without pushing on PRs.  Its
+  `pull_request` trigger is now `paths`-filtered to the inputs that can
+  actually change the build or the scan result — `Dockerfile`,
+  `Package.swift`, `Package.resolved`, `docker-compose.yml`, `deploy/**`,
+  and the workflow file itself — so the ~90% of PRs that only touch
+  `Sources/`, `Tests/`, or front-end assets no longer pay for it.  The
+  `push` (main) and tag triggers stay unconditional, so every merge to main
+  and every release tag still gets a full build + Trivy scan + push; that
+  also keeps catching base-image CVE drift independent of code changes.  The
+  release *compile* signal dropped from source-only PRs is already covered
+  by the debug build in `swift-tests.yml`.  (`main` has no required status
+  checks, so a skipped run does not block PR merges.)
+
+- **CI: cancel superseded in-progress Docker runs on PRs.**  Added a
+  `concurrency` group to `docker-build.yml` keyed on workflow + ref with
+  `cancel-in-progress` gated to `pull_request` events, so re-pushing a PR
+  cancels its prior in-flight run instead of queueing a second copy of the
+  longest job.  `main` and tag builds are never cancelled — they push
+  images and must not be interrupted mid-flight.
+
+- **CI: action bumps (supersedes Dependabot #315, #423).**
+  `actions/setup-node@v5 → v6` (`swift-tests.yml`) and
+  `aquasecurity/trivy-action@v0.35.0 → v0.36.0` (`docker-build.yml`).
+  Both are drop-in: setup-node v6 stays on Node 24 with the same inputs,
+  and trivy-action v0.36.0 only bumps the bundled Trivy binary (no
+  action-interface change to the `image-ref` / `severity` / `exit-code`
+  inputs we use).
+
 ## [0.4.196] - 2026-05-20
 
 ### Internal
