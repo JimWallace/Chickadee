@@ -14,6 +14,10 @@
 # Current: Swift 6.3 on Ubuntu 22.04 (jammy).
 # ============================================================
 
+# Global ARG — must be declared before the first FROM so it can be used in
+# the `FROM ${BINARIES}` stage-selector below.
+ARG BINARIES=compile
+
 # ── Compile from source ─────────────────────────────────────
 FROM swift:6.3-jammy AS compile
 
@@ -49,7 +53,7 @@ COPY artifacts/chickadee-server artifacts/chickadee-runner /out/
 RUN chmod +x /out/chickadee-server /out/chickadee-runner
 
 # ── Select the binary source ────────────────────────────────
-ARG BINARIES=compile
+# (BINARIES is the global ARG declared at the top of this file.)
 FROM ${BINARIES} AS binaries
 
 # Verify both binaries are present — fail fast with a clear message if not.
