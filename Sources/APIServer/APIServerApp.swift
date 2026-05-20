@@ -48,11 +48,26 @@ func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: A
     )
     app.appConfig = appConfig
 
+    // Route the shared outbound HTTP client (OIDC discovery/JWKS/token,
+    // BrightSpace) through a proxy when configured. Must happen before the first
+    // `app.client` use (the OIDC discovery fetch in `runAPIServer`), since the
+    // shared client is built lazily from this configuration.
+    applyOutboundProxy(app, appConfig.outboundProxy)
+
     try bootstrapAppDirectories(app, workDir: workDir, cliWorkerSecret: cliWorkerSecret)
     bootstrapAppMiddleware(app, appConfig: appConfig)
     try bootstrapAppServices(app, appConfig: appConfig)
 
     try routes(app)
+}
+
+/// Routes Vapor's shared outbound HTTP client through `proxy` when set; no-op
+/// otherwise. Vapor builds `app.http.client.shared` lazily from this
+/// configuration, so this must run before the first `app.client` request.
+private func applyOutboundProxy(_ app: Application, _ proxy: OutboundProxyConfig?) {
+    guard let proxy else { return }
+    app.http.client.configuration.proxy = .server(host: proxy.host, port: proxy.port)
+    app.logger.info("Outbound HTTP client routed through proxy \(proxy.host):\(proxy.port)")
 }
 
 /// Either resolves the env-derived `AppConfig`, or, if a test has preloaded
@@ -84,7 +99,8 @@ private func resolveAppConfig(
                 workers: preloaded.workers,
                 brightspace: preloaded.brightspace,
                 diagnostics: preloaded.diagnostics,
-                alerts: preloaded.alerts
+                alerts: preloaded.alerts,
+                outboundProxy: preloaded.outboundProxy
             )
         } ?? preloaded
     }

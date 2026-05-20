@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.205] - 2026-05-20
+
+### Added
+
+- **`OUTBOUND_HTTP_PROXY` — route the server's outbound HTTP client through a
+  forward proxy.**  On networks where direct egress is blocked and all traffic
+  must traverse a proxy (e.g. the UWaterloo NAT'd VLAN), the OIDC discovery
+  fetch at startup `connectTimeout`s and crash-loops the server, because Vapor's
+  HTTP client (AsyncHTTPClient) ignores the standard `HTTP_PROXY`/`HTTPS_PROXY`
+  env vars and the Docker daemon proxy only covers image pulls.  Setting
+  `OUTBOUND_HTTP_PROXY` (e.g. `http://172.16.136.36:3128`) now applies the proxy
+  to `app.http.client` before first use, so OIDC discovery/JWKS/token calls —
+  and BrightSpace grade-sync — go through it.  Flows through `AppConfig`
+  (`appConfig.outboundProxy`) and is reported in the redacted startup summary.
+  Unset = direct egress, unchanged behaviour.
+
 ## [0.4.204] - 2026-05-20
 
 ### Changed
