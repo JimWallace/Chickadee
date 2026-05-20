@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.207] - 2026-05-20
+
+### Changed
+
+- **`PUT /suite` is now authoritative for the whole test-item list — scripts,
+  pattern families, AND notebook checks (Phase B of the test-item
+  unification).**  Previously a suite save only persisted check *positions*
+  (id + sectionID); check *specs* had to be saved separately through
+  `PUT /checks`.  `applySuiteEdit` now collects each check row's spec into a
+  full-replace `nextChecks` list (symmetric with `nextFamilies`), so a single
+  suite save round-trips scripts, families, and checks together.  The editor
+  already sends every row's current spec in the `PUT /suite` body (the seed is
+  refreshed after each modal save), so this is a server-only change with no
+  client change required; the dedicated `PUT /checks` endpoint stays for the
+  check modal.  Covered by `put_suitePersistsChangedCheckSpec` and
+  `put_suiteOmittingCheckRemovesIt`.
+
 ## [0.4.206] - 2026-05-20
 
 ### Added

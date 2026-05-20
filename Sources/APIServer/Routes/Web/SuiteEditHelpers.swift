@@ -79,6 +79,7 @@ func applySuiteEdit(
 ) async throws {
     var authored: [AuthoredSuiteItem] = []
     var nextFamilies: [PatternFamily] = []
+    var nextChecks: [NotebookCheck] = []
     for item in body.items {
         switch item.kind {
         case "script":
@@ -121,17 +122,22 @@ func applySuiteEdit(
             authored.append(.family(id: f.id, sectionID: item.sectionID))
             nextFamilies.append(f)
         case "check":
-            // Notebook-check rows carry their full spec for editor display
-            // but the suite-edit path only acts on (id, sectionID).  The
-            // spec itself flows through `PUT /checks`; here we just stamp
-            // the authored position so applyPatternFamilies expands the
-            // check's generated entry at the right slot.
+            // Notebook-check rows carry their full spec.  As of the
+            // suite-save unification (Phase B) `PUT /suite` is authoritative
+            // for the whole test-item list — scripts, families, AND checks
+            // — so we collect the spec into `nextChecks` (full-replace,
+            // symmetric with `nextFamilies`) and stamp the authored
+            // position.  The editor always sends every row's current spec
+            // (the seed is refreshed after each `PUT /checks` modal save),
+            // so a reorder save round-trips check specs unchanged.  The
+            // dedicated `PUT /checks` endpoint stays for the check modal.
             guard let c = item.check else {
                 throw WebAssignmentError.invalidParameter(
                     name: "items",
                     reason: "Suite item kind=check is missing `check` payload.")
             }
             authored.append(.check(id: c.id, sectionID: item.sectionID))
+            nextChecks.append(c)
         default:
             throw WebAssignmentError.invalidParameter(
                 name: "items",
@@ -146,6 +152,7 @@ func applySuiteEdit(
     _ = try await applyPatternFamilies(
         to: setup,
         nextFamilies: nextFamilies,
+        nextChecks: nextChecks,
         authoredItems: authored,
         sections: nil,
         on: db
