@@ -109,12 +109,19 @@ import Testing
             exit 0
             """)
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(
-            script: script,
-            workDir: tmpDir,
-            timeLimitSeconds: 5,
-            env: ["CHICKADEE_ASSIGNMENT_SEED": "deadbeef" + String(repeating: "c0ffee", count: 9) + "ba"]
-        )
+        let workDir = tmpDir
+        // `runner.run` reads `ProcessInfo.processInfo.environment` (walking the
+        // C `environ` array) to build the child env. Run it under the env lock
+        // so a concurrent `unsetenv` in another test can't mutate `environ`
+        // mid-read.
+        let output = try await withEnvLock {
+            await runner.run(
+                script: script,
+                workDir: workDir,
+                timeLimitSeconds: 5,
+                env: ["CHICKADEE_ASSIGNMENT_SEED": "deadbeef" + String(repeating: "c0ffee", count: 9) + "ba"]
+            )
+        }
         #expect(output.exitCode == 0)
         #expect(
             output.stderr.contains("seed=deadbeef"),
@@ -132,14 +139,28 @@ import Testing
             exit 0
             """)
         let runner = UnsandboxedScriptRunner()
-        // Ensure parent doesn't have the var set in this test's environment.
-        unsetenv("CHICKADEE_ASSIGNMENT_SEED")
-        let output = await runner.run(
-            script: script,
-            workDir: tmpDir,
-            timeLimitSeconds: 5,
-            env: [:]
-        )
+        let workDir = tmpDir
+        // Mutating + reading `environ` runs under the env lock so it never
+        // overlaps another env-touching test; the prior value is restored on
+        // exit rather than left cleared.
+        let output = try await withEnvLock {
+            let original = ProcessInfo.processInfo.environment["CHICKADEE_ASSIGNMENT_SEED"]
+            defer {
+                if let original {
+                    setenv("CHICKADEE_ASSIGNMENT_SEED", original, 1)
+                } else {
+                    unsetenv("CHICKADEE_ASSIGNMENT_SEED")
+                }
+            }
+            // Ensure parent doesn't have the var set in this test's environment.
+            unsetenv("CHICKADEE_ASSIGNMENT_SEED")
+            return await runner.run(
+                script: script,
+                workDir: workDir,
+                timeLimitSeconds: 5,
+                env: [:]
+            )
+        }
         #expect(output.exitCode == 0)
         #expect(
             output.stderr.contains("seed=[]"),
