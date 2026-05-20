@@ -284,9 +284,11 @@ import XCTVapor
 
     /// Dashboard card "Students With Browser Errors" counts distinct
     /// students who posted a client-side diagnostic (preflight or watchdog
-    /// failure) on one of this course's test setups within the 24h window.
-    /// Diagnostics outside the window, on other courses' setups, or with
-    /// a null test_setup_id (stale) must not inflate the count.
+    /// failure) on one of this course's test setups within the 24h window
+    /// **and have no submission for that setup** (i.e. actually stuck).
+    /// Diagnostics outside the window, on other courses' setups, with a null
+    /// test_setup_id (stale), or from a student who later submitted (recovered)
+    /// must not inflate the count.
     @Test func instructorDashboardCountsStudentsWithBrowserErrors() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
@@ -361,7 +363,26 @@ import XCTVapor
             )
             try await dOrphan.save(on: app.db)
 
-            // Expected: 2 distinct students (s1, s2).
+            // A student who hit a watchdog timeout but then reloaded and got a
+            // submission in for that setup has self-recovered → must NOT count.
+            let recovered = try await arInsertStudent(username: "browserErr_recovered", on: app)
+            try await arEnrollStudentInTestCourse(recovered, on: app)
+            let dRecovered = APIClientDiagnostic(
+                userID: try recovered.requireID(),
+                testSetupID: "setup_browser_err",
+                kind: "watchdog_timeout",
+                failedChecks: "kernel-unhealthy",
+                userAgent: "TestUA"
+            )
+            try await dRecovered.save(on: app.db)
+            _ = try await arInsertSubmission(
+                id: "sub_browser_recovered",
+                testSetupID: "setup_browser_err",
+                userID: try recovered.requireID(),
+                on: app
+            )
+
+            // Expected: 2 distinct stuck students (s1, s2).
             try await app.asyncTest(
                 .GET, "/instructor",
                 beforeRequest: { req in
@@ -381,9 +402,10 @@ import XCTVapor
                         return
                     }
                     let countMsg: Comment = """
-                        Expected 2 students (s1 + s2 with recent diagnostics).  \
-                        Out-of-window diagnostics and diagnostics with a null \
-                        test_setup_id must not inflate the count.
+                        Expected 2 stuck students (s1 + s2: recent diagnostics, \
+                        no submission).  Out-of-window diagnostics, diagnostics \
+                        with a null test_setup_id, and students who errored but \
+                        later submitted (recovered) must not inflate the count.
                         """
                     #expect(String(html[valueRange]) == "2", countMsg)
                 })

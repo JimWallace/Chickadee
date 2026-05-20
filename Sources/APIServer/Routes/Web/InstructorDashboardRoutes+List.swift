@@ -286,13 +286,16 @@ extension InstructorDashboardRoutes {
     }
 
     /// Students With Browser Errors: distinct students who posted a
-    /// client-side diagnostic (preflight_fail or watchdog_timeout) for
-    /// one of this course's test setups within the 24h window.  Captures
-    /// the in-browser editor failing to start — JupyterLite / Pyodide
-    /// blocked by browser policy, IndexedDB disabled, service worker
-    /// blocked, etc. — before the student can even open the assignment.
-    /// Diagnostics with a null test_setup_id (the supplied setup ID didn't
-    /// resolve) are excluded since they can't be attributed to a course.
+    /// client-side diagnostic (preflight_fail or watchdog_timeout) for one of
+    /// this course's test setups within the 24h window **and never got a
+    /// submission in for that setup**.  The in-browser editor records a
+    /// diagnostic even when the student reloads and submits fine, so counting
+    /// raw diagnostics over-reports transient hiccups (a slow Pyodide cold
+    /// start that clears on reload).  A student who errored on a setup but has
+    /// a submission for it has self-recovered and drops out — what remains is
+    /// the actually-stuck signal.  Diagnostics with a null test_setup_id (the
+    /// supplied setup ID didn't resolve) are excluded since they can't be
+    /// attributed to a course.
     private func countStudentsWithBrowserErrors(
         req: Request,
         allSetupIDs: [String],
@@ -306,13 +309,35 @@ extension InstructorDashboardRoutes {
             : try await APIClientDiagnostic.query(on: req.db)
                 .filter(\.$createdAt >= windowStart)
                 .all()
+
+        // (student, setup) pairs that hit a browser error attributable to this course.
+        let errorPairs = recentClientDiagnostics.compactMap { record -> (userID: UUID, setupID: String)? in
+            guard let setupID = record.testSetupID,
+                setupIDSet.contains(setupID),
+                activeStudentIDs.contains(record.userID)
+            else { return nil }
+            return (record.userID, setupID)
+        }
+        if errorPairs.isEmpty { return 0 }
+
+        // A student "recovered" — and drops out of the stuck count — if they
+        // have a submission for the setup they errored on, even though the
+        // diagnostic row remains.
+        let erroredSetupIDs = Array(Set(errorPairs.map(\.setupID)))
+        let recoverySubmissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID ~~ erroredSetupIDs)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+        let recoveredKeys = Set(
+            recoverySubmissions.compactMap { submission -> String? in
+                guard let userID = submission.userID else { return nil }
+                return "\(userID.uuidString)|\(submission.testSetupID)"
+            }
+        )
+
         return Set(
-            recentClientDiagnostics.compactMap { record -> UUID? in
-                guard let setupID = record.testSetupID,
-                    setupIDSet.contains(setupID),
-                    activeStudentIDs.contains(record.userID)
-                else { return nil }
-                return record.userID
+            errorPairs.compactMap { pair -> UUID? in
+                recoveredKeys.contains("\(pair.userID.uuidString)|\(pair.setupID)") ? nil : pair.userID
             }
         ).count
     }
