@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.190] - 2026-05-19
+
+### Internal
+
+- **CI: shared build job caches compiled `.build/` across Swift test
+  jobs (#523).**  Previously every Swift test job in
+  `swift-tests.yml` (`core-tests`, `api-tests`, `api-tests-postgres`,
+  `worker-tests`) did a full compile from scratch — roughly 40 minutes
+  of wall-clock compile time per PR across five near-identical Linux
+  containers building the same package graph.
+
+  A new `build` job now compiles the whole package plus all test
+  targets once (`swift build --build-tests`) and caches the resulting
+  `.build/` tree.  Each test job declares `needs: build`, restores that
+  cache, and runs `swift test --skip-build --filter <Target>`, skipping
+  the compile entirely on a cache hit.
+
+  Cache key combines the toolchain fingerprint (`swift --version`) with
+  a content hash of `Package.resolved`, `Package.swift`, `Sources/**`,
+  and `Tests/**`.  `restore-keys` lets a content-hash miss restore the
+  most recent prior `.build/` for the same toolchain, so a miss
+  recompiles incrementally rather than cold — no slower than today.
+  Each test job falls back to a plain `swift test` build if the cache
+  is unexpectedly absent.
+
+  The `build` job's status is intended to be a required check so a
+  compile break surfaces once instead of fanning out to four red test
+  jobs (configure in branch protection).
+
+  Out of scope: the `docker-build` / `release` Docker pipelines and the
+  nightly `test-coverage` workflow, which exercise different build
+  paths.  `worker-tests` stays sequential (no `--parallel`) — the
+  MockURLProtocol global-state constraint is unchanged.
+
 ## [0.4.189] - 2026-05-19
 
 ### Internal

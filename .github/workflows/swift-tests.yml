@@ -41,8 +41,49 @@ jobs:
       - name: Block new XCTest imports
         run: scripts/no-new-xctest.sh
 
+  # Single shared compile of the whole package + all test targets.  The
+  # resulting `.build/` tree is cached and reused by every test job below
+  # via `swift test --skip-build`, replacing five from-scratch compiles
+  # (~40 min of wall-clock) with one (#523).
+  #
+  # Cache key combines the toolchain (swift --version) with a content hash
+  # of the source + manifest.  `restore-keys` lets a cache miss restore the
+  # most recent prior `.build/` for the same toolchain so the compile is
+  # incremental rather than cold — keeping a miss no slower than today.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: swift:6.3-jammy
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache build artifacts
+        id: build-cache
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-
+
+      # Skip only on an exact cache hit: the restored artifacts already match
+      # this source tree, and a bare `swift build` would needlessly recompile
+      # because `actions/checkout` resets source mtimes ahead of the cached
+      # objects.  On a restore-keys partial hit `cache-hit` is false, so we
+      # still run an incremental build over the older `.build/`.
+      - name: Build all targets and tests
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: swift build --build-tests
+
   core-tests:
     runs-on: ubuntu-latest
+    needs: build
     timeout-minutes: 20
     container:
       image: swift:6.3-jammy
@@ -51,22 +92,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Compute SPM cache key
-        id: spm-cache-key
-        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache SPM checkouts
-        uses: actions/cache@v5
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
         with:
-          path: .build/checkouts
-          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
-          restore-keys: ${{ runner.os }}-spm-
+          path: .build
+          key: ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Run CoreTests
-        run: swift test --parallel --filter CoreTests
+        run: |
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+            swift test --skip-build --parallel --filter CoreTests
+          else
+            swift test --parallel --filter CoreTests
+          fi
 
   api-tests:
     runs-on: ubuntu-latest
+    needs: build
     timeout-minutes: 20
     container:
       image: swift:6.3-jammy
@@ -75,16 +122,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Compute SPM cache key
-        id: spm-cache-key
-        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache SPM checkouts
-        uses: actions/cache@v5
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
         with:
-          path: .build/checkouts
-          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
-          restore-keys: ${{ runner.os }}-spm-
+          path: .build
+          key: ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
         run: |
@@ -106,10 +153,16 @@ jobs:
         # with most of the parallelism speedup preserved.
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-        run: swift test --filter APITests
+        run: |
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+            swift test --skip-build --filter APITests
+          else
+            swift test --filter APITests
+          fi
 
   api-tests-postgres:
     runs-on: ubuntu-latest
+    needs: build
     timeout-minutes: 25
     container:
       image: swift:6.3-jammy
@@ -138,16 +191,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Compute SPM cache key
-        id: spm-cache-key
-        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache SPM checkouts
-        uses: actions/cache@v5
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
         with:
-          path: .build/checkouts
-          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
-          restore-keys: ${{ runner.os }}-spm-
+          path: .build
+          key: ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
         run: |
@@ -169,7 +222,12 @@ jobs:
         # parallelism speedup preserved.
         env:
           SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-        run: swift test --filter APITests
+        run: |
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+            swift test --skip-build --filter APITests
+          else
+            swift test --filter APITests
+          fi
 
   browser-runner-tests:
     runs-on: ubuntu-latest
@@ -187,6 +245,7 @@ jobs:
 
   worker-tests:
     runs-on: ubuntu-latest
+    needs: build
     timeout-minutes: 20
     # Sequential to avoid MockURLProtocol global-state races between
     # ReporterTests + JobPollerTests (both use the same process-wide
@@ -200,19 +259,24 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Compute SPM cache key
-        id: spm-cache-key
-        run: echo "value=$(sha256sum Package.resolved | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache SPM checkouts
-        uses: actions/cache@v5
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
         with:
-          path: .build/checkouts
-          key: ${{ runner.os }}-spm-${{ steps.spm-cache-key.outputs.value }}
-          restore-keys: ${{ runner.os }}-spm-
+          path: .build
+          key: ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install worker test dependencies
         run: apt-get update -qq && apt-get install -y --no-install-recommends file
 
       - name: Run WorkerTests
-        run: swift test --filter WorkerTests
+        run: |
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
+            swift test --skip-build --filter WorkerTests
+          else
+            swift test --filter WorkerTests
+          fi
