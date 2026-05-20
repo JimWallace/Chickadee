@@ -21,6 +21,7 @@ struct AppConfig: Sendable {
     let brightspace: BrightSpaceSyncConfig?
     let diagnostics: DiagnosticsConfiguration
     let alerts: ServerHealthAlertConfiguration
+    let outboundProxy: OutboundProxyConfig?
 
     /// Loads the entire config tree from `Environment.get(...)`.
     ///
@@ -50,7 +51,8 @@ struct AppConfig: Sendable {
             workers: WorkerConfig.fromEnvironment(),
             brightspace: BrightSpaceSyncConfig.fromEnvironment(),
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
-            alerts: ServerHealthAlertConfiguration.fromEnvironment()
+            alerts: ServerHealthAlertConfiguration.fromEnvironment(),
+            outboundProxy: OutboundProxyConfig.fromEnvironment()
         )
     }
 
@@ -99,6 +101,9 @@ struct AppConfig: Sendable {
             logger.info(
                 "alerts: enabled, checkInterval=\(alerts.checkIntervalSeconds)s, cooldown=\(alerts.cooldownSeconds)s, webhook=\(redactPresence(alerts.webhookURLFromEnvironment))"
             )
+        }
+        if let proxy = outboundProxy {
+            logger.info("outboundProxy: \(proxy.host):\(proxy.port)")
         }
     }
 }
@@ -183,7 +188,8 @@ extension AppConfig {
                 pruneIntervalHours: 24,
                 auditLogRetentionDays: 90
             ),
-            alerts: .default
+            alerts: .default,
+            outboundProxy: nil
         )
     }
 }
