@@ -21,7 +21,7 @@ import Fluent
 import SQLKit
 import Vapor
 
-struct AddUrlTokenToUsers: AsyncMigration {
+struct AddUrlTokenToUsers: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("users")
             .field("url_token", .string)

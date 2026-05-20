@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.201] - 2026-05-20
+
+### Changed
+
+- **Migration identifiers are now module-independent, so a future module rename
+  can't break migration history again.**  Fluent's default migration `name` is
+  `String(reflecting: Self.self)` (module-qualified), which is exactly why the
+  `chickadee-server` → `APIServer` split orphaned every history row.  All 23 of
+  our migrations now adopt a `ChickadeeMigration` protocol whose `name` is pinned
+  to `"chickadee.<TypeName>"`, decoupled from the Swift module.  Vapor's own
+  migrations (e.g. `SessionRecord`) are unaffected.
+- **`reconcileLegacyMigrationNamespace` now maps both legacy namespaces** —
+  `chickadee_server.*` (executable-module era) and `APIServer.*` (library-split
+  era, v0.4.198–0.4.200) — onto `chickadee.*`.  Still idempotent and a no-op on
+  fresh/already-canonical databases; the first boot of this build rewrites an
+  older database's history once.
+
 ## [0.4.200] - 2026-05-20
 
 ### Changed

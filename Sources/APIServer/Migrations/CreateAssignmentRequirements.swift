@@ -1,6 +1,6 @@
 import Fluent
 
-struct CreateAssignmentRequirements: AsyncMigration {
+struct CreateAssignmentRequirements: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema(AssignmentRequirement.schema)
             .id()
