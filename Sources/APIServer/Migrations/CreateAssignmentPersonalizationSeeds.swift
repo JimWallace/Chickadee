@@ -7,7 +7,7 @@
 
 import Fluent
 
-struct CreateAssignmentPersonalizationSeeds: AsyncMigration {
+struct CreateAssignmentPersonalizationSeeds: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("assignment_personalization_seeds")
             .id()

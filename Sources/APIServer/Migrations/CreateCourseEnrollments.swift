@@ -2,7 +2,7 @@
 
 import Fluent
 
-struct CreateCourseEnrollments: AsyncMigration {
+struct CreateCourseEnrollments: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("course_enrollments")
             .id()

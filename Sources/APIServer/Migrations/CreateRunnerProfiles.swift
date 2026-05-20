@@ -1,6 +1,6 @@
 import Fluent
 
-struct CreateRunnerProfiles: AsyncMigration {
+struct CreateRunnerProfiles: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema(RunnerProfile.schema)
             .id()

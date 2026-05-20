@@ -1,7 +1,7 @@
 import Fluent
 import SQLKit
 
-struct CreatePerformanceIndexes: AsyncMigration {
+struct CreatePerformanceIndexes: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         guard let sql = database as? SQLDatabase else { return }
 

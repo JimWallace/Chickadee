@@ -17,7 +17,7 @@
 import Fluent
 import SQLKit
 
-struct CreateAssignments: AsyncMigration {
+struct CreateAssignments: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("assignments")
             .id()

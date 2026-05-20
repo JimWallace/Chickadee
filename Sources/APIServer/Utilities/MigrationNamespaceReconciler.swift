@@ -1,42 +1,42 @@
 // APIServer/Utilities/MigrationNamespaceReconciler.swift
 //
 // One-time, idempotent reconciliation of Fluent migration-history rows written
-// under the server's previous Swift module name. See the doc comment on
+// under a previous, module-derived migration namespace. See the doc comment on
 // `reconcileLegacyMigrationNamespace`.
 
 import Fluent
 import Vapor
 
-// The server code lived in the `chickadee-server` executable module before
-// `APIServer` was extracted into its own library target; Swift sanitizes the
-// dash, so the old module name is `chickadee_server`.
-private let legacyMigrationModulePrefix = "chickadee_server."
+// Canonical, module-independent namespace produced by `ChickadeeMigration`
+// (e.g. "chickadee.CreateUsers"). All of our migrations record under this now.
+private let canonicalMigrationPrefix = "chickadee."
 
-/// Rewrites `_fluent_migrations` rows from the legacy module namespace
-/// (`chickadee_server.*`) to the build's current module namespace, so a database
-/// produced by a pre-rename build (e.g. a restored v0.4.172 prod snapshot)
-/// migrates cleanly instead of re-running already-applied migrations.
+// Namespaces produced by older builds, before migration names were pinned:
+//   - "chickadee_server." — when the server code was the `chickadee-server`
+//     executable module (≤ v0.4.172-ish).
+//   - "APIServer."        — after `APIServer` was split into its own library
+//     target, but before `ChickadeeMigration` pinned the names (v0.4.198–0.4.200).
+// Both used Fluent's default `String(reflecting: Self.self)` identifier.
+private let legacyMigrationPrefixes = ["chickadee_server.", "APIServer."]
+
+/// Rewrites `_fluent_migrations` history rows from any legacy, module-derived
+/// namespace to the canonical `chickadee.*` namespace, so a database produced by
+/// an older build (e.g. a restored pre-rename prod snapshot) migrates cleanly
+/// instead of re-running already-applied migrations.
 ///
-/// Fluent identifies a migration by its module-qualified type name
-/// (`"<module>.<Type>"`). When `APIServer` was split into its own target the
-/// module name changed, so every one of our migration identifiers changed with
-/// it. A DB created by the old build records `chickadee_server.CreateUsers`; the
-/// current build looks for `APIServer.CreateUsers`, decides it is unapplied,
-/// re-runs `CreateUsers`, and collides with the existing `users` table (Postgres
-/// 42P07), crash-looping the server on boot.
+/// Fluent identifies a migration by `name`, which defaulted to the
+/// module-qualified type name (`"<module>.<Type>"`). Renaming/splitting the
+/// module therefore changed every identifier, so the new build saw the old
+/// history as unapplied, re-ran `CreateUsers`, and collided with the existing
+/// `users` table (Postgres 42P07), crash-looping on boot. `ChickadeeMigration`
+/// now pins names to a module-independent form; this step migrates databases
+/// still carrying a legacy namespace onto it.
 ///
 /// Must run AFTER `registerMigrations` and BEFORE `autoMigrate` — that's where
 /// applied/unapplied state is evaluated. Idempotent: a no-op when there are no
 /// legacy rows (the normal case) and on a fresh database where the
 /// `_fluent_migrations` table does not exist yet.
 func reconcileLegacyMigrationNamespace(on app: Application) throws {
-    // Derive the current module prefix from a known migration type, so this keeps
-    // working if the module is ever renamed again. Fluent's default migration
-    // name is the module-qualified type name, e.g. "APIServer.CreateUsers".
-    let currentModule = String(String(reflecting: CreateUsers.self).prefix { $0 != "." })
-    let currentPrefix = currentModule + "."
-    guard currentPrefix != legacyMigrationModulePrefix else { return }
-
     // `_fluent_migrations` may not exist yet on a brand-new database (autoMigrate
     // creates it). A failed read means there's nothing to reconcile.
     let logs: [MigrationLog]
@@ -49,25 +49,30 @@ func reconcileLegacyMigrationNamespace(on app: Application) throws {
         return
     }
 
-    let existingNames = Set(logs.map(\.name))
+    var existingNames = Set(logs.map(\.name))
     var renamed = 0
     var dropped = 0
-    for log in logs where log.name.hasPrefix(legacyMigrationModulePrefix) {
-        let canonical = currentPrefix + String(log.name.dropFirst(legacyMigrationModulePrefix.count))
+    for log in logs {
+        guard let legacy = legacyMigrationPrefixes.first(where: { log.name.hasPrefix($0) }) else {
+            continue
+        }
+        let canonical = canonicalMigrationPrefix + String(log.name.dropFirst(legacy.count))
         if existingNames.contains(canonical) {
-            // The canonical row is already present — drop the duplicate legacy
-            // row rather than rename it into a name collision.
+            // A canonical row already exists (a fresh row, or another legacy
+            // namespace already mapped here) — drop the duplicate legacy row
+            // rather than rename it into a name collision.
             try log.delete(force: true, on: app.db).wait()
             dropped += 1
         } else {
             log.name = canonical
             try log.save(on: app.db).wait()
+            existingNames.insert(canonical)
             renamed += 1
         }
     }
 
     guard renamed > 0 || dropped > 0 else { return }
     app.logger.notice(
-        "Reconciled legacy migration namespace '\(legacyMigrationModulePrefix)' -> '\(currentPrefix)': \(renamed) renamed, \(dropped) duplicate(s) removed"
+        "Reconciled legacy migration namespaces \(legacyMigrationPrefixes) -> '\(canonicalMigrationPrefix)': \(renamed) renamed, \(dropped) duplicate(s) removed"
     )
 }

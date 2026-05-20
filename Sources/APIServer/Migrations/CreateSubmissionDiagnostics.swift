@@ -1,6 +1,6 @@
 import Fluent
 
-struct CreateSubmissionDiagnostics: AsyncMigration {
+struct CreateSubmissionDiagnostics: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("submission_diagnostics")
             .field(

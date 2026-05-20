@@ -2,7 +2,7 @@
 
 import Fluent
 
-struct CreateResults: AsyncMigration {
+struct CreateResults: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("results")
             .field("id", .string, .identifier(auto: false))
