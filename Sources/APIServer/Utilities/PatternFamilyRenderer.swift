@@ -104,37 +104,9 @@ private func renderCase(
     sectionVariables: [FamilyVariable],
     specHash: String
 ) -> GeneratedScript {
-    let source: String
-    switch family.kind {
-    case .boundaryEquality:
-        source = renderBoundaryEquality(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    case .approximateEquality:
-        source = renderApproximateEquality(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    case .variableEquality:
-        source = renderVariableEquality(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    case .returnTypeCheck:
-        source = renderReturnTypeCheck(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    case .exceptionExpected:
-        source = renderExceptionExpected(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    case .performanceThreshold:
-        source = renderPerformanceThreshold(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    case .stdoutEquality:
-        source = renderStdoutEquality(
-            family: family, case: c,
-            sectionVariables: sectionVariables, specHash: specHash)
-    }
+    let source = patternKindHandler(for: family.kind).render(
+        family: family, case: c,
+        sectionVariables: sectionVariables, specHash: specHash)
 
     let tier = c.resolvedTier(defaults: family.defaults)
     return GeneratedScript(
@@ -289,7 +261,7 @@ private func generatedCaseHintLineExpr(_ c: PatternCase, family: PatternFamily) 
     return resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
 }
 
-private func renderBoundaryEquality(
+func renderBoundaryEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
@@ -367,7 +339,7 @@ private let defaultApproxTolerance: Double = 1e-6
 /// that rejects non-numeric returns cleanly.  The failure message
 /// includes the tolerance and the actual delta so students see exactly
 /// how far off they are.
-private func renderApproximateEquality(
+func renderApproximateEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
@@ -443,7 +415,7 @@ private func renderApproximateEquality(
 /// string) and the expected value in `case.expected`.  A sentinel default
 /// on `getattr` distinguishes "not defined at all" from "defined as None"
 /// so students get a useful error message in both cases.
-private func renderVariableEquality(
+func renderVariableEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
@@ -531,7 +503,7 @@ private func returnTypeCheckExpression(typeName: String) -> String {
     }
 }
 
-private func renderReturnTypeCheck(
+func renderReturnTypeCheck(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
@@ -589,7 +561,7 @@ private func renderReturnTypeCheck(
 
 // MARK: - exceptionExpected
 
-private func renderExceptionExpected(
+func renderExceptionExpected(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
@@ -651,7 +623,7 @@ private func renderExceptionExpected(
 
 // MARK: - performanceThreshold
 
-private func renderPerformanceThreshold(
+func renderPerformanceThreshold(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
@@ -723,7 +695,7 @@ private func renderPerformanceThreshold(
 /// The function's return value is intentionally discarded — instructors
 /// who care about both stdout and the return value should write two
 /// families.
-private func renderStdoutEquality(
+func renderStdoutEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],

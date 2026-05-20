@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.189] - 2026-05-19
+
+### Internal
+
+- **Per-kind handler registry for `PatternKind` / `NotebookCheckKind`.**
+  Replaced the parallel `switch family.kind` / `switch check.kind`
+  dispatch — previously smeared across `PatternFamilyRenderer`,
+  `PatternFamilyValidator`, `NotebookCheckRenderer`, and
+  `NotebookCheckValidator` — with two per-kind handler protocols
+  (`PatternKindHandler`, `NotebookCheckKindHandler`), one conforming
+  type per case, each resolved through a single exhaustive
+  switch-factory (`patternKindHandler(for:)`,
+  `notebookCheckKindHandler(for:)`).  Adding or changing a kind now
+  touches one handler plus its resolver, and a new enum case fails to
+  compile until the resolver gains an entry — restoring the
+  compile-time exhaustiveness the scattered switches provided.
+
+  The two enums stay the Codable wire format unchanged (raw values
+  byte-identical; `Sources/Core` untouched), so stored manifests and
+  `.chickadee` bundles are unaffected.  Render bodies stay in place and
+  the handlers delegate to them, so generated script bytes — and
+  therefore every `spec_hash` header and runner-side `TestSetupCache`
+  key — are identical.  Pure structural refactor: no behaviour change.
+
 ## [0.4.188] - 2026-05-19
 
 ### Internal
