@@ -153,10 +153,29 @@ echo "    Wrote $DATA_BYTES bytes."
 VERSION_STR="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]')"
 HOST_STR="$(hostname)"
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Authoritative identity of the *running* server build. `chickadee_version`
+# above comes from the source tree's VERSION file, which can drift from the
+# image actually deployed (a stale `:latest`, a cloned VM, etc.). Recording the
+# running build's version (from /health) and its image digest lets restore.sh
+# detect a real version skew instead of being fooled by a matching VERSION file.
+BUILD_VERSION="$(curl -sf http://localhost:8080/health 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
+SERVER_CID="$($COMPOSE ps -q server 2>/dev/null | head -n1 || true)"
+IMAGE_REF=""
+IMAGE_DIGEST=""
+if [[ -n "$SERVER_CID" ]]; then
+  IMAGE_REF="$(docker inspect --format '{{.Config.Image}}' "$SERVER_CID" 2>/dev/null || true)"
+  IMAGE_DIGEST="$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$SERVER_CID" 2>/dev/null || true)"
+fi
+
 cat > "$DIR/manifest.json" <<EOF
 {
   "timestamp": "$NOW_ISO",
   "chickadee_version": "$VERSION_STR",
+  "build_version": "$BUILD_VERSION",
+  "image_ref": "$IMAGE_REF",
+  "image_digest": "$IMAGE_DIGEST",
   "label": "$LABEL",
   "db_size_bytes": $DB_BYTES,
   "data_size_bytes": $DATA_BYTES,
