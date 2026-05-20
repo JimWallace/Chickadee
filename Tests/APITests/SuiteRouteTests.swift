@@ -497,6 +497,103 @@ import XCTVapor
         }
     }
 
+    // Phase B (suite-save unification): `PUT /suite` is now authoritative
+    // for check specs, not just (id, sectionID).  A spec edit carried in the
+    // suite payload persists into the manifest's notebookChecks — the editor
+    // always sends each row's current spec, so a save round-trips them.
+    @Test func put_suitePersistsChangedCheckSpec() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            // Install a check via PUT /checks.
+            let checksBody = #"""
+                [{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+                  "tier":"public","points":1,"variable":"x"}]
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/checks",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: checksBody)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // PUT /suite carrying the SAME check id but an edited spec:
+            // different variable, name, tier, and points.
+            let suiteBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","name":"y exists","kind":"variable_exists",
+                      "tier":"release","points":3,"dependsOn":[],"variable":"y"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: suiteBody)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            let check = try #require(props.notebookChecks.first(where: { $0.id == "var_exists_x" }))
+            #expect(check.variable == "y")
+            #expect(check.name == "y exists")
+            #expect(check.tier == .release)
+            #expect(check.points == 3)
+        }
+    }
+
+    // Symmetric with families: a `PUT /suite` whose payload omits an
+    // existing check removes it (full-replace).  The editor always sends
+    // every row, so omission means deletion.
+    @Test func put_suiteOmittingCheckRemovesIt() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let checksBody = #"""
+                [{"id":"var_exists_x","kind":"variable_exists","tier":"public","points":1,"variable":"x"}]
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/checks",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: checksBody)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // PUT /suite with no items at all — the check should be gone.
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"items":[]}"#)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            #expect(props.notebookChecks.isEmpty)
+            #expect(props.testSuites.allSatisfy { $0.generatedByCheck == nil })
+        }
+    }
+
     @Test func put_studentCannotEdit() async throws {
         try await withApp(app) { _ in
             let id = try await makeAssignment()
