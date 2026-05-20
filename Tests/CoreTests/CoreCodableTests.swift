@@ -285,6 +285,107 @@ struct CoreCodableTests {
         #expect(sanitized.testSuites.first?.generatedByCheck == "df_shape")
     }
 
+    // MARK: - TestItem / unified manifest list
+
+    @Test func testItemFamilyRoundTripsThroughJSON() throws {
+        let item = TestItem(
+            family: PatternFamily(
+                id: "bmi", name: "BMI boundaries", kind: .boundaryEquality,
+                functionName: "classify_bmi"))
+        let decoded = try decoder.decode(TestItem.self, from: try encoder.encode(item))
+        #expect(decoded == item)
+        #expect(decoded.type == .family)
+        #expect(decoded.id == "bmi")
+        #expect(decoded.family != nil)
+        #expect(decoded.check == nil)
+    }
+
+    @Test func testItemCheckRoundTripsThroughJSON() throws {
+        let item = TestItem(
+            check: NotebookCheck(
+                id: "df_shape", kind: .dataFrameShape, tier: .pub, points: 1,
+                variable: "df", expectedRows: 250, expectedCols: 13))
+        let decoded = try decoder.decode(TestItem.self, from: try encoder.encode(item))
+        #expect(decoded == item)
+        #expect(decoded.type == .check)
+        #expect(decoded.id == "df_shape")
+        #expect(decoded.check != nil)
+        #expect(decoded.family == nil)
+    }
+
+    @Test func testPropertiesInitSynthesizesTestItemsFromLegacyArgs() throws {
+        let fam = PatternFamily(
+            id: "bmi", name: "BMI", kind: .boundaryEquality, functionName: "classify_bmi")
+        let chk = NotebookCheck(id: "df_shape", kind: .dataFrameShape, variable: "df")
+        let props = TestProperties(patternFamilies: [fam], notebookChecks: [chk])
+        #expect(props.testItems.count == 2)
+        // Families first, then checks (matches the documented synthesis order).
+        #expect(props.testItems.first?.type == .family)
+        #expect(props.testItems.last?.type == .check)
+        #expect(props.patternFamilies == [fam])
+        #expect(props.notebookChecks == [chk])
+    }
+
+    @Test func testPropertiesEncodeMirrorsLegacyKeysAndEmitsTestItems() throws {
+        let props = TestProperties(
+            patternFamilies: [
+                PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
+            ],
+            notebookChecks: [NotebookCheck(id: "c", kind: .figureCount, minFigures: 1)])
+        let obj =
+            try JSONSerialization.jsonObject(with: try encoder.encode(props)) as? [String: Any]
+        #expect(obj?["testItems"] != nil)
+        #expect((obj?["patternFamilies"] as? [Any])?.count == 1)
+        #expect((obj?["notebookChecks"] as? [Any])?.count == 1)
+    }
+
+    @Test func testPropertiesMigratesLegacyManifestOnRead() throws {
+        // A pre-testItems manifest carries the separate arrays only.
+        let legacy = """
+            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+            "patternFamilies":[{"id":"bmi","name":"BMI","kind":"boundary_equality",\
+            "functionName":"classify_bmi"}],\
+            "notebookChecks":[{"id":"df","kind":"data_frame_shape","variable":"df",\
+            "expectedRows":1,"expectedCols":1}]}
+            """
+        let props = try decoder.decode(TestProperties.self, from: Data(legacy.utf8))
+        #expect(props.testItems.count == 2)
+        #expect(props.patternFamilies.first?.id == "bmi")
+        #expect(props.notebookChecks.first?.id == "df")
+        #expect(props.testItems.first?.type == .family)
+        #expect(props.testItems.last?.type == .check)
+    }
+
+    @Test func testPropertiesPrefersTestItemsKeyWhenPresent() throws {
+        let json = """
+            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+            "testItems":[{"type":"family","spec":{"id":"only","name":"Only",\
+            "kind":"boundary_equality","functionName":"f"}}]}
+            """
+        let props = try decoder.decode(TestProperties.self, from: Data(json.utf8))
+        #expect(props.testItems.count == 1)
+        #expect(props.patternFamilies.first?.id == "only")
+        #expect(props.notebookChecks.isEmpty)
+    }
+
+    @Test func runnerSanitizedStripsTestItems() throws {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "a.py")],
+            patternFamilies: [
+                PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
+            ],
+            notebookChecks: [NotebookCheck(id: "c", kind: .figureCount, minFigures: 1)])
+        let sanitized = props.runnerSanitized()
+        #expect(sanitized.testItems.isEmpty)
+        #expect(sanitized.patternFamilies.isEmpty)
+        #expect(sanitized.notebookChecks.isEmpty)
+        #expect(sanitized.testSuites == props.testSuites)
+        // Round-trips clean through the runner's decoder too.
+        let rt = try decoder.decode(
+            TestProperties.self, from: try encoder.encode(sanitized))
+        #expect(rt.testItems.isEmpty)
+    }
+
     @Test func notebookCheckRoundTripsThroughJSON() throws {
         let check = NotebookCheck(
             id: "df_shape_full",

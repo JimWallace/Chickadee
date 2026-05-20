@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.206] - 2026-05-20
+
+### Added
+
+- **Unified `TestItem` manifest model (Phase A of the test-item unification).**
+  Pattern families and notebook checks are now both represented by a single
+  `TestItem` type in Core — a tagged union (`.family(PatternFamily)` /
+  `.check(NotebookCheck)`) with shared envelope accessors (`id`,
+  `displayName`, `dependsOn`, `type`). `TestProperties` gains a `testItems`
+  list as the canonical source of truth; `patternFamilies` / `notebookChecks`
+  become derived views so every existing read site keeps working unchanged.
+
+### Changed
+
+- **Manifests now persist a `testItems` array.** Legacy manifests (which carry
+  separate `patternFamilies` / `notebookChecks` arrays) migrate to `testItems`
+  on read; `encode` mirrors both legacy keys back out (derived from
+  `testItems`, so they can't drift) for cross-version readers, and
+  `makeWorkerManifestJSON` emits `testItems` in authored order.
+  `runnerSanitized()` empties `testItems` exactly as it already empties the
+  family/check lists, so runners never decode a `PatternKind` /
+  `NotebookCheckKind` case they don't know. No behaviour change for the
+  runner, the grading pipeline, or generated script bytes.
+
 ## [0.4.205] - 2026-05-20
 
 ### Added
