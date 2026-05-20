@@ -33,127 +33,6 @@ private func validatePatternCaseHeader(
     }
 }
 
-// swiftlint:disable cyclomatic_complexity function_body_length
-/// Validates the `args` / `expected` shape of a single case against its
-/// family's `kind`.  Each branch corresponds to one `PatternKind`.
-private func validatePatternCaseKindSpecific(family: PatternFamily, c: PatternCase) throws {
-    switch family.kind {
-    case .variableEquality:
-        // Exactly one arg, which must be a non-empty string naming
-        // the module-level variable to check.  `paramNames` is
-        // ignored — for this kind it's purely a UI hint (column
-        // header), not something the renderer or validator cares
-        // about.
-        guard c.args.count == 1 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' must have exactly one arg (the variable name); got \(c.args.count)"
-            )
-        }
-        guard case .string(let varName) = c.args[0],
-            !varName.trimmingCharacters(in: .whitespaces).isEmpty
-        else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)"
-            )
-        }
-        guard isValidPythonIdentifier(varName) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name '\(varName)' is not a valid Python identifier"
-            )
-        }
-    case .boundaryEquality, .approximateEquality:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-    case .returnTypeCheck:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        guard case .string(let expectedType) = c.expected,
-            !expectedType.trimmingCharacters(in: .whitespaces).isEmpty
-        else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")"
-            )
-        }
-    case .exceptionExpected:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        guard case .string(let exceptionType) = c.expected,
-            !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty
-        else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' expected must be a non-empty string naming the exception class (e.g. \"ValueError\")"
-            )
-        }
-    case .performanceThreshold:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        let threshold: Double? = {
-            switch c.expected {
-            case .double(let d): return d
-            case .int(let i): return Double(i)
-            default: return nil
-            }
-        }()
-        guard let t = threshold, t.isFinite, t > 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)"
-            )
-        }
-    case .stdoutEquality:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        // Empty string is intentionally allowed — it means "this
-        // function should print nothing", a legitimate case for
-        // a beginner exercise where the assignment is to add the
-        // print() call.
-        guard case .string = c.expected else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)"
-            )
-        }
-    }
-}
-// swiftlint:enable cyclomatic_complexity function_body_length
-
 /// Validates family-scoped variables (`PatternFamily.variables`) and any
 /// `$name` arg references in `PatternCase.argVarRefs`.  Each variable
 /// must be a valid identifier, unique within the family, and must not
@@ -223,11 +102,12 @@ private func validatePatternFamilyHeader(
             .unprocessableEntity,
             reason: "Duplicate pattern family id '\(family.id)'")
     }
-    // `functionName` is ignored for .variableEquality families (they
-    // check module-level variables, not function calls), so skip the
-    // identifier check in that case — an empty or placeholder value is
-    // acceptable.  Every other kind still requires a valid identifier.
-    if family.kind != .variableEquality {
+    // `functionName` is ignored for kinds that inspect module-level state
+    // rather than calling a function (`.variableEquality`), so skip the
+    // identifier check for those — an empty or placeholder value is
+    // acceptable.  Every function-calling kind still requires a valid
+    // identifier.
+    if patternKindHandler(for: family.kind).requiresFunctionName {
         guard isValidPythonIdentifier(family.functionName) else {
             throw Abort(
                 .unprocessableEntity,
@@ -309,20 +189,16 @@ func validatePatternFamilies(
     for family in families {
         try validatePatternFamilyHeader(family: family, seenFamilyIDs: &seenFamilyIDs)
 
+        let handler = patternKindHandler(for: family.kind)
         var seenCaseKeys: Set<String> = []
         for c in family.cases {
             try validatePatternCaseHeader(family: family, c: c, seenCaseKeys: &seenCaseKeys)
-            try validatePatternCaseKindSpecific(family: family, c: c)
+            try handler.validateCase(family: family, case: c)
         }
 
-        // Kind-specific rules: approximateEquality needs a non-negative tolerance.
-        if family.kind == .approximateEquality {
-            if let tol = family.defaults.tolerance, tol < 0 || !tol.isFinite {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Pattern family '\(family.id)': tolerance must be a non-negative finite number.")
-            }
-        }
+        // Family-level, kind-specific rules (e.g. approximateEquality's
+        // non-negative tolerance bound).
+        try handler.validateFamily(family)
 
         // v0.4.94: family-scoped variables.  Each name must be a valid
         // Python identifier, unique within the family, and not collide
