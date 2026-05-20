@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.191] - 2026-05-20
+
+### Internal
+
+- **CI: true incremental builds via `git restore-mtime`, plus a nightly
+  clean-build canary (#523 follow-up).**  The `build` job in
+  `swift-tests.yml` already restored a prior `.build/` on a content-hash
+  miss, but `actions/checkout` stamps every source file with a fresh
+  mtime, so llbuild treated all sources as changed and recompiled from
+  scratch.  The job now checks out full history (`fetch-depth: 0` +
+  `filter: blob:none`, so the vendored Pyodide blob isn't pulled) and
+  runs `git restore-mtime` to reset each file's mtime to its last-commit
+  time.  llbuild then recompiles only the files touched by new commits —
+  a typical source-only PR drops the `build` job from a near-cold
+  recompile to a small incremental one.
+
+- **`test-coverage.yml` is now the documented clean-build canary.**  It
+  compiles the whole package from scratch nightly (caches only
+  `.build/checkouts`, never compiled artifacts, and uses the `-spm-`
+  key namespace, never the `-build-` one), so it catches any break that
+  the per-PR incremental cache could mask via a stale object.  A new
+  `report-failure` job opens (or comments on) a deduplicated
+  "Nightly clean build failing" tracking issue when the run fails, so a
+  dirty-cache regression surfaces as an actionable item instead of a
+  red run no one watches.  The workflow is renamed
+  "Nightly Clean Build & Coverage" to reflect the dual purpose.
+
 ## [0.4.190] - 2026-05-19
 
 ### Internal

@@ -48,8 +48,11 @@ jobs:
   #
   # Cache key combines the toolchain (swift --version) with a content hash
   # of the source + manifest.  `restore-keys` lets a cache miss restore the
-  # most recent prior `.build/` for the same toolchain so the compile is
-  # incremental rather than cold — keeping a miss no slower than today.
+  # most recent prior `.build/` for the same toolchain.  `git restore-mtime`
+  # then resets each source file's mtime to its last-commit time, so
+  # llbuild's freshness check recompiles only the files touched by new
+  # commits — true incremental builds.  Without it the fresh mtimes
+  # `actions/checkout` stamps make llbuild rebuild everything from scratch.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -57,7 +60,32 @@ jobs:
       image: swift:6.3-jammy
 
     steps:
+      # Full (blobless) history so `git restore-mtime` can read each file's
+      # last-commit time.  `blob:none` keeps commits + trees (all the mtime
+      # walk needs) while skipping the large vendored blobs (Pyodide) in
+      # history; the working-tree checkout still fetches only the HEAD blobs,
+      # same as a shallow checkout.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Install git-restore-mtime
+        run: |
+          for i in 1 2 3; do
+            apt-get update -qq && apt-get install -y --no-install-recommends git-restore-mtime && break
+            echo "apt-get failed (attempt $i), retrying in 15s..."
+            sleep 15
+          done
+
+      # Normalise source mtimes to commit times so the restored `.build/`
+      # stays valid for unchanged files and only new commits recompile.
+      # The container runs git as a different uid than checkout used, so mark
+      # the workspace safe before invoking git.
+      - name: Restore source mtimes from git history
+        run: |
+          git config --global --add safe.directory '*'
+          git restore-mtime
 
       - name: Resolve toolchain cache key
         id: toolchain
@@ -72,11 +100,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-
 
-      # Skip only on an exact cache hit: the restored artifacts already match
-      # this source tree, and a bare `swift build` would needlessly recompile
-      # because `actions/checkout` resets source mtimes ahead of the cached
-      # objects.  On a restore-keys partial hit `cache-hit` is false, so we
-      # still run an incremental build over the older `.build/`.
+      # Exact cache hit: artifacts already match this tree, skip even the
+      # near-no-op build.  Restore-keys partial hit (cache-hit is false): the
+      # git-normalised mtimes let `swift build` recompile only the files
+      # changed since the restored `.build/` was produced.
       - name: Build all targets and tests
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: swift build --build-tests
