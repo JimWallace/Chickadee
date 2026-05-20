@@ -78,7 +78,7 @@ jobs:
           ls -lh artifacts/
 
       - name: Upload release binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-binaries
           path: artifacts/
@@ -99,7 +99,7 @@ jobs:
       # Prebuilt release binaries from the build-release job land in ./artifacts;
       # the Dockerfile's `prebuilt` stage COPYs them in (BINARIES=prebuilt).
       - name: Download release binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-binaries
           path: artifacts

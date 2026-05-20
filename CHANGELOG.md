@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.196] - 2026-05-20
+
+### Internal
+
+- **CI: migrate every Node.js 20 GitHub Action to Node.js 24.**  GitHub is
+  forcing Node.js 20 JavaScript actions onto Node.js 24 starting 2026-06-02
+  and removing the Node 20 runtime from runners on 2026-09-16
+  ([changelog](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)).
+  Bumped every action that still declared `runs.using: node20`:
+  - `actions/upload-artifact@v4 → v7` (`docker-build`, `zap-baseline`) —
+    the action that produced the visible deprecation warning.
+  - `actions/download-artifact@v4 → v8` (`docker-build`).  v8 defaults a
+    download hash mismatch to *error* (was warn); harmless for the
+    same-workflow zipped upload→download here.
+  - `actions/setup-python@v5 → v6` (`jupyterlite`).
+  - `softprops/action-gh-release@v2 → v3` (`release`).
+  - `codecov/codecov-action@v5 → v6` (`test-coverage`) — v5 is a composite
+    action that internally pinned `actions/github-script@v7.0.1` (Node 20);
+    v6 moves it to github-script v8 (Node 24), so it was a hidden offender.
+
+  Already on Node 24 and left unchanged: `actions/checkout@v6`,
+  `actions/cache@v5`, `actions/setup-node@v5`, `github/codeql-action@v4`,
+  and the `docker/*` actions; `aquasecurity/trivy-action` is a composite
+  action with no Node runtime.  `upload-artifact@v6+` /
+  `download-artifact@v7+` require Actions Runner ≥2.327.1, satisfied by the
+  GitHub-hosted `ubuntu-latest` runners these jobs use.  Supersedes
+  Dependabot PRs #368, #316, #314.
+
 ## [0.4.193] - 2026-05-20
 
 ### Internal
