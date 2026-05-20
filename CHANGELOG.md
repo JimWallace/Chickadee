@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.192] - 2026-05-20
+
+### Fixed
+
+- **Nightly clean-build coverage flake in `WorkerDaemonTests`.**  The
+  daemon polling gates (`workerDaemonCanBeCancelledWhilePollingForNoWork`,
+  `workerDaemonRetriesPollingAfterTransientHTTP500`, et al.) waited on a
+  spawned `Task { daemon.run() }` to poll within a 2–4s window.  On the
+  cold-cache nightly — where all ~1280 tests run in parallel on a
+  saturated cooperative thread pool — that Task can be starved for
+  several seconds before it first runs, so the gates intermittently
+  timed out (one run failed `didPoll` / `didKeepPolling` while the
+  identically-shaped HTTP401 and duplicate-worker-ID variants passed,
+  confirming timing variance rather than a logic bug).  Widened every
+  `waitUntil` window in the suite to a uniform 10s.  `waitUntil`
+  short-circuits the instant its condition holds (the tests still pass
+  in ~0.05s locally), so the larger ceiling costs passing runs nothing
+  and only buys slack on a loaded machine.
+
 ## [0.4.191] - 2026-05-20
 
 ### Internal
