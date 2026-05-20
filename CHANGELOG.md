@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.202] - 2026-05-20
+
+### Internal
+
+- **Forward-chain regression test for the namespace reconciler.**  Adds
+  `appliesNewMigrationsForwardAfterReconcile`, which simulates a database that is
+  *behind* (a recent migration reverted + its history row removed) and recorded
+  under a legacy namespace, then asserts that after
+  `reconcileLegacyMigrationNamespace` the already-applied migrations are
+  recognized AND the missing one is applied forward by `autoMigrate` without a
+  collision — the 0.4.172→latest restore scenario in miniature. Complements the
+  real-world coverage from the nightly restore-from-share on prod data.
+
 ## [0.4.201] - 2026-05-20
 
 ### Changed
