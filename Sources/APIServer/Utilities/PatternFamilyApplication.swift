@@ -399,11 +399,10 @@ func applyPatternFamilies(
     // produce sidecar files (e.g. `_expected_<id>.csv` for
     // `.dataFrameEquality`); both the script and the sidecars are
     // tracked here so removing a check cleans up all of its files.
-    let oldGeneratedFilenames = Set(
-        props.patternFamilies.flatMap(patternFamilyAllGeneratedFilenames)
-    ).union(
-        props.notebookChecks.flatMap(notebookCheckAllGeneratedFilenames)
-    )
+    let oldSpecs: [any GeneratedTestSpec] =
+        props.patternFamilies.map { $0 as any GeneratedTestSpec }
+        + props.notebookChecks.map { $0 as any GeneratedTestSpec }
+    let oldGeneratedFilenames = Set(oldSpecs.flatMap(allGeneratedFilenames))
 
     // Build a familyID → sectionID map from the authored items, so we can
     // look up each family's home section and prepend its variables.  If
@@ -423,28 +422,39 @@ func applyPatternFamilies(
         guard let sid = familySectionID[fid] else { return [] }
         return sectionVarsByID[sid] ?? []
     }
-
-    var renderedByFilename: [String: GeneratedScript] = [:]
-    for family in nextFamilies {
-        for generated in renderPatternFamily(
-            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables)
-        {
-            renderedByFilename[generated.filename] = generated
-        }
+    // The variable scope a family's generated tests see: assignment-global
+    // variables plus the family's home-section variables.  Bundled into a
+    // `TestRenderContext` so family rendering flows through the unified
+    // `renderTestSpec` seam.  (The `=`-expression phase extends this
+    // context; the seam means it only has to be threaded once.)
+    func contextForFamily(_ fid: String) -> TestRenderContext {
+        TestRenderContext(
+            sectionVariables: sectionVars(forFamily: fid),
+            globalVariables: resolvedGlobalVariables)
     }
-    // Render notebook checks alongside pattern families so a single zip
-    // mutation pass writes everything.  Each check produces one `.py`
-    // file plus zero or more sidecar files (e.g. `_expected_<id>.csv`
+
+    // Render both generators through the unified `renderTestSpec` seam so
+    // a single zip mutation pass writes everything.  A family yields one
+    // `GeneratedScript` per enabled case and no sidecars; a check yields
+    // one script plus zero or more sidecar files (e.g. `_expected_<id>.csv`
     // for `.dataFrameEquality`).  Sidecars don't have a `GeneratedScript`
     // — they aren't entries in the suite — but they DO need to be in
     // `newGeneratedFilenames` so stale ones get diffed away when a check
     // changes kind or is removed.
+    var renderedByFilename: [String: GeneratedScript] = [:]
     var renderedCheckByID: [String: GeneratedScript] = [:]
     var sidecarFilesToWrite: [String: String] = [:]
+    for family in nextFamilies {
+        for generated in renderTestSpec(family, context: contextForFamily(family.id)).scripts {
+            renderedByFilename[generated.filename] = generated
+        }
+    }
     for check in resolvedChecks {
-        let bundle = renderNotebookCheck(check)
-        renderedByFilename[bundle.script.filename] = bundle.script
-        renderedCheckByID[check.id] = bundle.script
+        let bundle = renderTestSpec(check, context: TestRenderContext())
+        if let script = bundle.scripts.first {
+            renderedByFilename[script.filename] = script
+            renderedCheckByID[check.id] = script
+        }
         for (name, content) in bundle.sidecars {
             sidecarFilesToWrite[name] = content
         }
@@ -568,9 +578,7 @@ func applyPatternFamilies(
             guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
             emittedFamilyIDs.insert(fid)
             let inherited = expandDeps(family.dependsOn)
-            for generated in renderPatternFamily(
-                family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables)
-            {
+            for generated in renderTestSpec(family, context: contextForFamily(fid)).scripts {
                 order += 1
                 let prior = oldEntryByScript[generated.filename]
                 let perCase = expandDeps(prior?.dependsOn ?? [])
@@ -621,9 +629,7 @@ func applyPatternFamilies(
     // the caller forgot to include a newly added family).
     for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
         let inherited = expandDeps(family.dependsOn)
-        for generated in renderPatternFamily(
-            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables)
-        {
+        for generated in renderTestSpec(family, context: contextForFamily(family.id)).scripts {
             order += 1
             let prior = oldEntryByScript[generated.filename]
             let perCase = expandDeps(prior?.dependsOn ?? [])

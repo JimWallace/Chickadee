@@ -70,6 +70,59 @@ final class PatternFamilyRendererTests: PatternFamilyTestCase {
         XCTAssertEqual(first, second, "Same input must produce byte-identical output")
     }
 
+    // MARK: - GeneratedTestSpec dispatch (Phase A seam)
+
+    func testRenderTestSpecMatchesConcreteFamilyRenderer() {
+        let family = bmiFamily()
+        let viaConcrete = renderPatternFamily(family)
+        let viaDispatch = renderTestSpec(family, context: TestRenderContext())
+        XCTAssertEqual(
+            viaDispatch.scripts, viaConcrete,
+            "Dispatch must produce byte-identical scripts to renderPatternFamily")
+        XCTAssertTrue(viaDispatch.sidecars.isEmpty, "Families produce no sidecars")
+    }
+
+    func testRenderTestSpecForwardsFamilyVariableScope() {
+        // The context's variable scope must reach the family renderer
+        // exactly as a direct call would — otherwise the seam would
+        // silently drop section/global variables.
+        let family = bmiFamily()
+        let section = [FamilyVariable(name: "threshold", value: .double(18.5))]
+        let globals = [FamilyVariable(name: "label", value: .string("x"))]
+        let viaConcrete = renderPatternFamily(
+            family, sectionVariables: section, globalVariables: globals)
+        let viaDispatch = renderTestSpec(
+            family,
+            context: TestRenderContext(sectionVariables: section, globalVariables: globals))
+        XCTAssertEqual(viaDispatch.scripts, viaConcrete)
+    }
+
+    func testRenderTestSpecMatchesConcreteCheckRenderer() {
+        // `.dataFrameEquality` exercises the sidecar path too.
+        let check = NotebookCheck(
+            id: "df_eq", name: "frame matches", kind: .dataFrameEquality,
+            variable: "df", expectedCSV: "a,b\n1,2\n")
+        let viaConcrete = renderNotebookCheck(check)
+        let viaDispatch = renderTestSpec(check, context: TestRenderContext())
+        XCTAssertEqual(
+            viaDispatch.scripts, [viaConcrete.script],
+            "Dispatch must produce the same script as renderNotebookCheck")
+        XCTAssertEqual(
+            viaDispatch.sidecars, viaConcrete.sidecars,
+            "Dispatch must carry the check's sidecars unchanged")
+    }
+
+    func testAllGeneratedFilenamesMatchesConcreteHelpers() {
+        let family = bmiFamily()
+        XCTAssertEqual(
+            allGeneratedFilenames(family), patternFamilyAllGeneratedFilenames(family))
+        let check = NotebookCheck(
+            id: "df_eq", kind: .dataFrameEquality, variable: "df",
+            expectedCSV: "a,b\n1,2\n")
+        XCTAssertEqual(
+            allGeneratedFilenames(check), notebookCheckAllGeneratedFilenames(check))
+    }
+
     func testRendererSkipsDisabledCases() {
         var cases = bmiFamily().cases
         cases[1] = PatternCase(
