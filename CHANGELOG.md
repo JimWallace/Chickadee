@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.203] - 2026-05-20
+
+### Added
+
+- **`scripts/restore-from-share.sh`** — version-controls the consumer-side
+  wrapper a non-production box runs from cron to track production data: it
+  rsync's the latest snapshot down from the shared mount, finds the newest
+  *complete* snapshot, and restores it via `scripts/restore.sh`
+  (`--yes --regenerate-secrets`). Idempotent (a `.last-restored` marker skips a
+  snapshot already restored) and a clean skip when the share isn't mounted. The
+  share path and PII scrubbing are configurable via
+  `CHICKADEE_SNAPSHOT_SHARE_MOUNT` / `CHICKADEE_SNAPSHOT_SHARE_DIR` /
+  `CHICKADEE_RESTORE_SCRUB_PII`, defaulting to the UWaterloo AHS share and no
+  scrub. Pairs with `snapshot.sh` (producer) and `restore.sh` (engine).
+
 ## [0.4.202] - 2026-05-20
 
 ### Internal
