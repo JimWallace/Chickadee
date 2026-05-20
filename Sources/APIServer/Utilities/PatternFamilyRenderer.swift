@@ -497,40 +497,6 @@ private func renderVariableEquality(
 
 // MARK: - returnTypeCheck
 
-/// Maps the instructor-typed type name to a runtime check expression.
-/// For Python builtins, `isinstance(result, <name>)` works directly.  For
-/// pandas / numpy types, the renderer walks the result's class MRO so
-/// the check works without forcing those imports at the top of the
-/// generated test (matters for Pyodide grading where loadPackagesFromImports
-/// drives package availability).
-private func returnTypeCheckExpression(typeName: String) -> String {
-    switch typeName {
-    // Python builtins — straightforward isinstance.
-    case "int": return "isinstance(result, int) and not isinstance(result, bool)"
-    case "float": return "isinstance(result, float)"
-    case "bool": return "isinstance(result, bool)"
-    case "str": return "isinstance(result, str)"
-    case "list": return "isinstance(result, list)"
-    case "tuple": return "isinstance(result, tuple)"
-    case "dict": return "isinstance(result, dict)"
-    case "set": return "isinstance(result, set)"
-    case "NoneType": return "result is None"
-    // Library types — walk the MRO by class name so we don't have to
-    // import the library to do the check.  Same trick as
-    // `is_matplotlib_figure` in notebook_runtime.
-    case "DataFrame":
-        return #"any(getattr(b, "__name__", "") == "DataFrame" for b in type(result).__mro__)"#
-    case "Series":
-        return #"any(getattr(b, "__name__", "") == "Series" for b in type(result).__mro__)"#
-    case "ndarray":
-        return #"any(getattr(b, "__name__", "") == "ndarray" for b in type(result).__mro__)"#
-    default:
-        // Fallback: treat as a class name to MRO-walk.  Catches
-        // student-defined classes referenced by name.
-        return "any(getattr(b, \"__name__\", \"\") == \"\(typeName)\" for b in type(result).__mro__)"
-    }
-}
-
 private func renderReturnTypeCheck(
     family: PatternFamily,
     case c: PatternCase,
@@ -547,7 +513,7 @@ private func renderReturnTypeCheck(
         return "object"
     }()
     let typeNameLiteral = "\"" + escapeForPythonStringLiteral(typeName) + "\""
-    let typeCheckExpr = returnTypeCheckExpression(typeName: typeName)
+    let typeCheckExpr = pythonTypeCheckExpression(typeName: typeName, valueExpr: "result")
 
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"

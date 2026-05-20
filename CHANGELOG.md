@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.189] - 2026-05-19
+
+### Internal
+
+- **Extracted the shared type-check expression builder used by both
+  Python-script renderers (#497).**  `NotebookCheckRenderer` (the
+  `.variableExists` type branch) and `PatternFamilyRenderer` (the
+  `.returnTypeCheck` kind) each carried a byte-for-byte copy of the
+  type-name → `isinstance` / MRO-walk expression builder.  Both now call
+  a single `pythonTypeCheckExpression(typeName:valueExpr:)` in
+  `Sources/APIServer/Utilities/PythonScriptHelpers.swift`, parameterised
+  on the Python value variable (`"actual"` for variable checks, `"result"`
+  for return-type checks).  Pure refactor — generated test-script bytes
+  are unchanged, so `spec_hash` headers and `TestSetupCache` keys stay
+  stable.  New `PythonTypeCheckExpressionTests` adds golden byte-stability
+  assertions on the helper and verifies both renderers embed its output.
+
+  The issue's "default-label generators" item was intentionally left
+  alone: those helpers all take a `NotebookCheck` and have no
+  `PatternFamily` counterpart, so they are not cross-file duplication.
+
 ## [0.4.188] - 2026-05-19
 
 ### Internal

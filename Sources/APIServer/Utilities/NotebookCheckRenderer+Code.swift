@@ -102,39 +102,6 @@ func defaultVariableExistsLabel(_ check: NotebookCheck) -> String {
     return "`\(name)` is defined"
 }
 
-/// Maps an instructor-typed Python type name to a runtime check
-/// expression against an arbitrary value variable.  Mirrors
-/// `PatternFamilyRenderer.returnTypeCheckExpression` byte-for-byte
-/// (parameterised by the value variable so we don't have to import a
-/// shared helper; the comment at the bottom of this file calls out the
-/// duplication convention).  Builtins use `isinstance` directly; library
-/// types are matched by walking the MRO by class name so we don't have to
-/// import pandas/numpy at the top of the generated test.
-func variableExistsTypeCheckExpression(typeName: String, valueExpr: String) -> String {
-    switch typeName {
-    case "int": return "isinstance(\(valueExpr), int) and not isinstance(\(valueExpr), bool)"
-    case "float": return "isinstance(\(valueExpr), float)"
-    case "bool": return "isinstance(\(valueExpr), bool)"
-    case "str": return "isinstance(\(valueExpr), str)"
-    case "list": return "isinstance(\(valueExpr), list)"
-    case "tuple": return "isinstance(\(valueExpr), tuple)"
-    case "dict": return "isinstance(\(valueExpr), dict)"
-    case "set": return "isinstance(\(valueExpr), set)"
-    case "NoneType": return "\(valueExpr) is None"
-    case "DataFrame":
-        return #"any(getattr(b, "__name__", "") == "DataFrame" for b in type(\#(valueExpr)).__mro__)"#
-    case "Series":
-        return #"any(getattr(b, "__name__", "") == "Series" for b in type(\#(valueExpr)).__mro__)"#
-    case "ndarray":
-        return #"any(getattr(b, "__name__", "") == "ndarray" for b in type(\#(valueExpr)).__mro__)"#
-    default:
-        // Fallback: treat the name as a class to MRO-walk.  Catches
-        // student-defined classes referenced by name and lets new
-        // library types work without a Swift edit.
-        return "any(getattr(b, \"__name__\", \"\") == \"\(typeName)\" for b in type(\(valueExpr)).__mro__)"
-    }
-}
-
 func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
     let name = check.variable ?? "variable"
     let label = check.name ?? defaultVariableExistsLabel(check)
@@ -144,7 +111,7 @@ func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
     let passMessage: String
     if let typeName = check.expectedType, !typeName.isEmpty {
         let typeNameLiteral = "\"" + escapeForPythonStringLiteral(typeName) + "\""
-        let typeCheckExpr = variableExistsTypeCheckExpression(typeName: typeName, valueExpr: "actual")
+        let typeCheckExpr = pythonTypeCheckExpression(typeName: typeName, valueExpr: "actual")
         typeCheck = """
             expected_type_name = \(typeNameLiteral)
             if not (\(typeCheckExpr)):
