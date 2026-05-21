@@ -94,6 +94,17 @@ struct AdminRunnerSnapshotRow: Encodable {
     let lastPollAt: String?
 }
 
+struct AdminStorageRow: Encodable {
+    let label: String
+    let formatted: String
+}
+
+struct AdminStorageContext: Encodable {
+    let rows: [AdminStorageRow]
+    let totalFormatted: String
+    let dbBackend: String
+}
+
 struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
     let users: [AdminUserRow]
@@ -101,6 +112,7 @@ struct AdminContext: Encodable {
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
+    let storage: AdminStorageContext
     let version: String
 }
 

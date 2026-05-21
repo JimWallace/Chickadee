@@ -111,6 +111,8 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
+        let storage = try await makeStorageContext(req: req)
+
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             users: userRows,
@@ -118,9 +120,60 @@ struct AdminRoutes: RouteCollection {
             workerSecret: effectiveSecret,
             localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
             courses: courseRows,
+            storage: storage,
             version: ChickadeeVersion.current
         )
         return try await req.view.render("admin", ctx)
+    }
+
+    // MARK: - Storage breakdown
+
+    /// Measures the persistent-volume sinks (submission/test-setup uploads,
+    /// the results+logs dir, the static asset tree) and the database so an
+    /// admin can see where disk is going.  Directory walks are blocking, so
+    /// they run on the thread pool off the event loop.
+    private func makeStorageContext(req: Request) async throws -> AdminStorageContext {
+        let submissionsDir = req.application.submissionsDirectory
+        let testSetupsDir = req.application.testSetupsDirectory
+        let resultsDir = req.application.resultsDirectory
+        let publicDir = req.application.directory.publicDirectory
+
+        func dirSize(_ path: String) async throws -> Int {
+            try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
+                directorySizeBytes(at: path)
+            }.get()
+        }
+
+        async let submissionsBytes = dirSize(submissionsDir)
+        async let testSetupsBytes = dirSize(testSetupsDir)
+        async let resultsBytes = dirSize(resultsDir)
+        async let publicBytes = dirSize(publicDir)
+        async let dbBytes = databaseSizeBytes(
+            on: req.db, settings: req.application.appConfig.database)
+
+        let submissions = try await submissionsBytes
+        let testSetups = try await testSetupsBytes
+        let results = try await resultsBytes
+        let publicAssets = try await publicBytes
+        let database = await dbBytes
+
+        var rows = [
+            AdminStorageRow(label: "Submissions", formatted: humanReadableBytes(submissions)),
+            AdminStorageRow(label: "Test Setups", formatted: humanReadableBytes(testSetups)),
+            AdminStorageRow(label: "Results & Logs", formatted: humanReadableBytes(results)),
+            AdminStorageRow(label: "Static Assets", formatted: humanReadableBytes(publicAssets)),
+        ]
+        rows.append(
+            AdminStorageRow(
+                label: "Database",
+                formatted: database.map(humanReadableBytes) ?? "—"))
+
+        let total = submissions + testSetups + results + publicAssets + (database ?? 0)
+        return AdminStorageContext(
+            rows: rows,
+            totalFormatted: humanReadableBytes(total),
+            dbBackend: req.application.appConfig.database.backend.rawValue
+        )
     }
 
     // MARK: - POST /admin/users/:id/role

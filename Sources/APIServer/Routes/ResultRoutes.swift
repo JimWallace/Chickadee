@@ -1,7 +1,7 @@
 // APIServer/Routes/ResultRoutes.swift
 //
-// Phase 2: persists TestOutcomeCollection to both the DB (results table) and
-// to a JSON file on disk, then marks the originating submission as complete.
+// Persists TestOutcomeCollection to the DB (results table), then marks the
+// originating submission as complete.
 
 import Core
 import Fluent
@@ -35,10 +35,7 @@ struct ResultRoutes: RouteCollection {
         }
         let collection = report.collection
 
-        async let dbPersist: Void = persistToDB(collection, on: req)
-        async let diskPersist: Void = persistToDisk(collection, on: req)
-        try await dbPersist
-        try await diskPersist
+        try await persistToDB(collection, on: req)
 
         // Advance the submission's state machine to "complete".
         if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {
@@ -130,23 +127,6 @@ struct ResultRoutes: RouteCollection {
         }
 
         try await result.save(on: req.db)
-    }
-
-    // MARK: - Disk persistence (kept for easy inspection / debugging)
-
-    private func persistToDisk(_ collection: TestOutcomeCollection, on req: Request) async throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
-        let data = try encoder.encode(collection)
-        let timestamp = ISO8601DateFormatter().string(from: collection.timestamp)
-            .replacingOccurrences(of: ":", with: "-")
-        let filename = "\(collection.submissionID)_\(timestamp).json"
-        let filePath = req.application.resultsDirectory + filename
-
-        try await req.fileio.writeFile(.init(data: data), at: filePath)
-        req.logger.info("Stored result for submission \(collection.submissionID) at \(filePath)")
     }
 }
 
