@@ -299,6 +299,26 @@ import Testing
         #expect(extractor.pythonStringLiteral("say \"hi\"") == "\"say \\\"hi\\\"\"")
     }
 
+    @Test func pythonStringLiteralDoesNotEscapeForwardSlash() {
+        // `\/` is valid JSON but an INVALID Python escape; emitting it would make
+        // the per-cell compile() raise SyntaxError, dropping any cell with a `/`
+        // (e.g. `daily_l = daily_ml / 1000`). Regression guard for v0.4.220.
+        #expect(extractor.pythonStringLiteral("daily_l = daily_ml / 1000") == "\"daily_l = daily_ml / 1000\"")
+        #expect(!extractor.pythonStringLiteral("a / b").contains("\\/"))
+    }
+
+    @Test func divisionCellSurvivesExtraction() throws {
+        // End-to-end guard: a cell using `/` must keep the `/` in the generated
+        // module so its exec(compile()) doesn't fail and its variables resolve.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]]
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.contains("daily_ml / 1000"))
+        #expect(!result.source.contains("\\/"))
+    }
+
     // MARK: - Per-cell exec(compile()) isolation
 
     @Test func wrapEmitsExecCompile() {
