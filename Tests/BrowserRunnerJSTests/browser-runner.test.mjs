@@ -641,8 +641,8 @@ test('extractNotebook writes python and R student module hints correctly', async
   assert.equal(
     harness.py.FS.readFile('/course/submission.py', { encoding: 'utf8' }),
     '# Generated from submission.ipynb\n\n'
-      + 'try:\n    x = 1\nexcept Exception:\n    pass\n\n'
-      + 'try:\n    print(x)\nexcept Exception:\n    pass\n\n',
+      + 'try:\n    exec(compile("x = 1", "cell 2", "exec"), globals())\nexcept Exception:\n    pass\n\n'
+      + 'try:\n    exec(compile("print(x)", "cell 3", "exec"), globals())\nexcept Exception:\n    pass\n\n',
   );
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
@@ -699,11 +699,46 @@ test('extractNotebook sequesters each Python cell so one broken cell cannot fail
 
   // IPython magic stripped, real code preserved.
   assert.ok(!generated.includes('%matplotlib'), 'magic line must be stripped');
-  // Each cell wrapped independently.
-  assert.equal(generated.split('try:').length - 1, 2, 'each code cell wrapped in its own try block');
-  assert.ok(generated.includes('    resting_hr = 72'));
-  assert.ok(generated.includes('    daily_ml = ____'));
+  // Each cell is compiled+exec'd as its own unit.
+  assert.equal(generated.split('exec(compile(').length - 1, 2, 'each code cell compiled independently');
+  assert.ok(generated.includes('exec(compile("resting_hr = 72"'));
+  assert.ok(generated.includes('exec(compile("daily_ml = ____"'));
   assert.equal(generated.split('except Exception:').length - 1, 2);
+});
+
+test('extractNotebook compiles each cell as a string so syntax errors and comment-only cells are isolated', async () => {
+  const harness = await loadRunnerHarness();
+  const { extractNotebook } = harness.hooks;
+
+  harness.py.FS.mkdir('/lab2');
+
+  await extractNotebook(
+    harness.py,
+    '/lab2',
+    'submission.ipynb',
+    JSON.stringify({
+      nbformat: 4,
+      metadata: { kernelspec: { name: 'python3' } },
+      cells: [
+        { cell_type: 'code', source: ['# Your code here\n'], metadata: {} },   // comment-only
+        { cell_type: 'code', source: ['good = 1\n'], metadata: {} },
+        { cell_type: 'code', source: ['broken = (\n'], metadata: {} },          // syntax error
+      ],
+    }),
+  );
+
+  const generated = harness.py.FS.readFile('/lab2/submission.py', { encoding: 'utf8' });
+
+  // All three cells become their own exec(compile()) unit — none can fail the
+  // whole-module compile.
+  assert.equal(generated.split('exec(compile(').length - 1, 3);
+  // Comment-only cell is a compiled string, NOT a bare `try:\n    # comment`
+  // (which would be an empty try body → SyntaxError zeroing the notebook).
+  assert.ok(generated.includes('exec(compile("# Your code here"'));
+  assert.ok(!generated.includes('try:\n    # Your code here'));
+  // The syntactically-broken source lives inside a compile() string literal.
+  assert.ok(generated.includes('exec(compile("good = 1"'));
+  assert.ok(generated.includes('broken = ('));
 });
 
 test('failure detail strips the trailing JSON envelope so students never see the raw payload', async () => {
