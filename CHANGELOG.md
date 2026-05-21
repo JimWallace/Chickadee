@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.208] - 2026-05-20
+
+### Fixed
+
+- **HTTPS enforcement no longer blocks the internal worker API.** When
+  `ENFORCE_HTTPS=true`, the global `HTTPSRedirectMiddleware` ran on every
+  request — including the runner's plain-HTTP `POST /api/v1/worker/*` polls on
+  the internal Docker network (no TLS, no `X-Forwarded-Proto`) — and rejected
+  them with `426 Upgrade Required` before `WorkerHMACAuthMiddleware` could
+  authenticate them. The runner retried forever and never registered in the
+  admin dashboard. The middleware now exempts the HMAC-authenticated worker
+  endpoints (`/api/v1/worker/*`) and the container healthcheck (`/health`) from
+  HTTPS enforcement, since both are internal service-to-service calls that
+  legitimately speak plain HTTP. Covered by `workerPostPassesThroughOverPlainHTTP`
+  and `healthGetPassesThroughOverPlainHTTP`. This is what lets a co-located
+  runner use `--api-base-url http://server:8080` (the internal Docker service)
+  with HTTPS enforcement left on, instead of being forced through the public
+  TLS endpoint.
+
+### Changed
+
+- **`docker-compose.yml` forwards `OUTBOUND_HTTP_PROXY` to the server.** v0.4.205
+  added app-side support for routing the outbound HTTP client (OIDC discovery /
+  JWKS / token, BrightSpace) through a forward proxy, but the var was never
+  listed in the server service's `environment:` block, so it could not reach the
+  container even when set in `.env`. Added the passthrough and documented it in
+  `.env.example`.
+
 ## [0.4.207] - 2026-05-20
 
 ### Changed

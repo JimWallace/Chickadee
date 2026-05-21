@@ -30,6 +30,9 @@ import XCTVapor
         app.middleware.use(HTTPSRedirectMiddleware(configuration: config))
         app.get("test") { _ in "ok" }
         app.post("submit") { _ in "submitted" }
+        // Internal endpoints that must stay reachable over plain HTTP.
+        app.post("api", "v1", "worker", "request") { _ in "polled" }
+        app.get("health") { _ in "healthy" }
         return app
     }
 
@@ -89,6 +92,36 @@ import XCTVapor
                 },
                 afterResponse: { res async in
                     #expect(res.status == .upgradeRequired)
+                })
+        }
+    }
+
+    // MARK: - Internal endpoints exempt from enforcement
+
+    @Test func workerPostPassesThroughOverPlainHTTP() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(
+                .POST, "/api/v1/worker/request",
+                beforeRequest: { req async in
+                    req.headers.add(name: .host, value: "example.com")
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string == "polled")
+                })
+        }
+    }
+
+    @Test func healthGetPassesThroughOverPlainHTTP() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(
+                .GET, "/health",
+                beforeRequest: { req async in
+                    req.headers.add(name: .host, value: "example.com")
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string == "healthy")
                 })
         }
     }
