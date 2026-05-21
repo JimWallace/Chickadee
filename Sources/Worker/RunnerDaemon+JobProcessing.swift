@@ -630,60 +630,7 @@ extension WorkerDaemon {
         attemptNumber: Int,
         isFirstAttempt: Bool
     ) -> TestOutcome {
-        let status: TestStatus
-        if output.timedOut {
-            status = .timeout
-        } else {
-            switch output.exitCode {
-            case 0: status = .pass
-            case 1: status = .fail
-            case 3: status = .fail  // chickadee.py (Marmoset) uses exit 3 for "failed"
-            default: status = .error
-            }
-        }
-
-        // Parse the last non-empty stdout line as optional JSON for score/shortResult.
-        let lastLine = output.stdout
-            .components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .last(where: { !$0.isEmpty })
-
-        var shortResult: String
-
-        if let line = lastLine,
-            let data = line.data(using: .utf8),
-            let json = try? JSONDecoder().decode(ScriptResultJSON.self, from: data)
-        {
-            shortResult = json.shortResult ?? status.defaultShortResult
-            // json.score reserved for Phase 5 gamification
-        } else if let line = lastLine {
-            shortResult = line
-        } else {
-            shortResult = status.defaultShortResult
-        }
-
-        let stderrText = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Strip the JSON footer line from stdout before displaying to students.
-        // The footer is the last non-empty line; if it parsed as JSON above we
-        // remove it so only human-readable output appears in longResult.
-        let strippedStdout: String = {
-            guard let line = lastLine,
-                let data = line.data(using: .utf8),
-                (try? JSONDecoder().decode(ScriptResultJSON.self, from: data)) != nil
-            else { return output.stdout }
-            var lines = output.stdout.components(separatedBy: "\n")
-            if let lastIdx = lines.indices.last(where: { !lines[$0].trimmingCharacters(in: .whitespaces).isEmpty }) {
-                lines.remove(at: lastIdx)
-            }
-            return lines.joined(separator: "\n")
-        }()
-        let stdoutText = strippedStdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        let longResult: String? = {
-            var sections: [String] = []
-            if !stdoutText.isEmpty { sections.append("stdout:\n\(stdoutText)") }
-            if !stderrText.isEmpty { sections.append("stderr:\n\(stderrText)") }
-            return sections.isEmpty ? nil : sections.joined(separator: "\n\n")
-        }()
+        let interpreted = interpretScriptOutput(output)
         let baseName = (entry.script as NSString).deletingPathExtension
         let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
 
@@ -691,14 +638,14 @@ extension WorkerDaemon {
             testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
             testClass: nil,
             tier: entry.tier,
-            status: status,
-            shortResult: shortResult,
-            longResult: longResult,
+            status: interpreted.status,
+            shortResult: interpreted.shortResult,
+            longResult: interpreted.longResult,
             points: entry.points,
             executionTimeMs: output.executionTimeMs,
             memoryUsageBytes: nil,
             attemptNumber: attemptNumber,
-            isFirstPassSuccess: isFirstAttempt && status == .pass
+            isFirstPassSuccess: isFirstAttempt && interpreted.status == .pass
         )
     }
 
@@ -742,4 +689,78 @@ extension WorkerDaemon {
         )
     }
 
+}
+
+// MARK: - Script output interpretation (pure contract)
+
+/// The status + display strings derived from a single script's raw output.
+/// Extracted from `interpretOutput` so the stdout/stderr/exit-code → result
+/// contract can be unit-tested in isolation and locked against the browser
+/// runner (see Tests/Fixtures/output-contract.json).
+struct InterpretedScriptResult: Equatable {
+    let status: TestStatus
+    let shortResult: String
+    let longResult: String?
+}
+
+/// Pure interpretation of a script's `ScriptOutput` into status + display
+/// strings.  Behaviour MUST stay in lock-step with the browser runner's
+/// `runPyScript` (Public/browser-runner.js) for `status`; the corpus test
+/// documents where the `shortResult`/`longResult` formatting still differs.
+func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptResult {
+    let status: TestStatus
+    if output.timedOut {
+        status = .timeout
+    } else {
+        switch output.exitCode {
+        case 0: status = .pass
+        case 1: status = .fail
+        case 3: status = .fail  // chickadee.py (Marmoset) uses exit 3 for "failed"
+        default: status = .error
+        }
+    }
+
+    // Parse the last non-empty stdout line as optional JSON for score/shortResult.
+    let lastLine = output.stdout
+        .components(separatedBy: "\n")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .last(where: { !$0.isEmpty })
+
+    let shortResult: String
+    if let line = lastLine,
+        let data = line.data(using: .utf8),
+        let json = try? JSONDecoder().decode(ScriptResultJSON.self, from: data)
+    {
+        shortResult = json.shortResult ?? status.defaultShortResult
+        // json.score reserved for Phase 5 gamification
+    } else if let line = lastLine {
+        shortResult = line
+    } else {
+        shortResult = status.defaultShortResult
+    }
+
+    let stderrText = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Strip the JSON footer line from stdout before displaying to students.
+    // The footer is the last non-empty line; if it parsed as JSON above we
+    // remove it so only human-readable output appears in longResult.
+    let strippedStdout: String = {
+        guard let line = lastLine,
+            let data = line.data(using: .utf8),
+            (try? JSONDecoder().decode(ScriptResultJSON.self, from: data)) != nil
+        else { return output.stdout }
+        var lines = output.stdout.components(separatedBy: "\n")
+        if let lastIdx = lines.indices.last(where: { !lines[$0].trimmingCharacters(in: .whitespaces).isEmpty }) {
+            lines.remove(at: lastIdx)
+        }
+        return lines.joined(separator: "\n")
+    }()
+    let stdoutText = strippedStdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    let longResult: String? = {
+        var sections: [String] = []
+        if !stdoutText.isEmpty { sections.append("stdout:\n\(stdoutText)") }
+        if !stderrText.isEmpty { sections.append("stderr:\n\(stderrText)") }
+        return sections.isEmpty ? nil : sections.joined(separator: "\n\n")
+    }()
+
+    return InterpretedScriptResult(status: status, shortResult: shortResult, longResult: longResult)
 }

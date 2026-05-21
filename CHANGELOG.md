@@ -6,6 +6,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.218] - 2026-05-21
+
+### Fixed
+
+- **One broken notebook cell no longer fails every test.** Browser-graded labs
+  extract the student notebook into a single Python module that the test
+  scripts import. Previously every cell was concatenated raw, so one cell that
+  raised at import time — an unfilled `x = ____` placeholder, or a reference to
+  a variable the student hasn't defined yet — aborted the *entire* module load.
+  `student_module` became `None` and every `variableExists`/function check
+  reported "not defined", including tests for cells the student got right.
+  Each Python cell is now wrapped in its own `try/except` during extraction
+  (`extractPythonCell` in `Public/browser-runner.js`), so a failing cell only
+  withholds the names *it* would have defined; correct cells still load and
+  their tests still pass. IPython magics (`%`/`!`) are stripped (they are
+  SyntaxErrors in plain Python and would break the whole-file compile, which
+  `try/except` cannot catch); `from __future__` imports stay unwrapped at
+  module top. The native worker's `NotebookExtractor.sanitizeCellForModule`
+  applies the same per-cell wrapping for parity with the browser backstop.
+- **Raw JSON result envelope no longer leaks into student-facing output.** The
+  native runner already strips the trailing machine-readable JSON line that
+  `test_runtime`'s `failed()`/`errored()` print after the human-readable
+  message, but the browser runner returned raw stdout — so students saw the
+  `{"shortResult": …, "status": …}` blob beneath the message. `runPyScript`
+  now strips that footer line before building `longResult`, matching
+  `RunnerDaemon+JobProcessing.swift`.
+
+### Changed
+
+- **Browser/native runner parity hardening.** Two long-standing divergences
+  between the browser (Pyodide) runner and the native worker were closed so
+  the two grade consistently: (1) `require_function`'s no-module path in the
+  browser's embedded `test_runtime` now prints the load traceback and reports
+  `"SyntaxError in submission"`, matching the canonical/native copy (it had
+  drifted to a generic "could not load" message); (2) the browser runner now
+  maps process exit code `3` to `fail` (the Marmoset `chickadee.py` convention)
+  instead of `error`, via a shared `statusFromExitCode` helper. Added
+  `Tools/runner-support/sitecustomize.py` as the canonical source for the
+  bootstrap that both runners embed.
+- **Drift guards for the duplicated runtime helpers.** New tests fail CI if the
+  embedded `test_runtime`/`sitecustomize` copies in
+  `Sources/Worker/TestRuntimeSources.swift` or `Public/browser-runner.js` drift
+  (in executable code) from the canonical `Tools/runner-support/*` sources
+  (`Tests/WorkerTests/RuntimeSourceDriftTests.swift`,
+  `Tests/BrowserRunnerJSTests/runtime-drift.test.mjs`).
+- **Output-interpretation contract corpus.** The native stdout/stderr/exit-code
+  → status/shortResult/longResult logic was extracted into a pure
+  `interpretScriptOutput` function. A shared fixture corpus
+  (`Tests/Fixtures/output-contract.json`) is run against both runners
+  (`Tests/WorkerTests/OutputContractTests.swift`,
+  `Tests/BrowserRunnerJSTests/output-contract.test.mjs`): grading `status` must
+  be identical across runners and neither may leak the raw JSON envelope into
+  student-facing strings. (The `shortResult`/`longResult` *formatting* still
+  differs between runners — tracked for a future unification.)
+
 ## [0.4.217] - 2026-05-21
 
 ### Changed

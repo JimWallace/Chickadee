@@ -281,4 +281,44 @@ import Testing
         #expect(moduleLevel(in: output).contains("else_result = 0"))
         #expect(!output.contains("if __name__"))
     }
+
+    // MARK: - Per-cell error isolation (sequestering broken cells)
+
+    @Test func moduleLevelAssignmentWrappedInTryExcept() {
+        // A placeholder/undefined-name assignment that fails at import time is
+        // wrapped so it can't abort loading the rest of the module.
+        let output = extractor.sanitizeCellForModule("daily_ml = ____")
+        #expect(output.contains("try:"))
+        #expect(output.contains("daily_ml = ____"))
+        #expect(output.contains("except Exception:"))
+    }
+
+    @Test func definedConstantStillAccessibleWhenWrapped() {
+        // The wrapped block keeps the assignment at module scope (try blocks
+        // don't create a new namespace), so the value remains importable.
+        let output = extractor.sanitizeCellForModule("resting_hr = 72")
+        #expect(output.contains("resting_hr = 72"))
+        #expect(output.contains("try:"))
+    }
+
+    @Test func futureImportNotWrapped() {
+        // `from __future__` must remain at module top — wrapping it would be a
+        // SyntaxError that breaks the whole-file compile.
+        let output = extractor.sanitizeCellForModule("from __future__ import annotations")
+        #expect(output.contains("from __future__ import annotations"))
+        #expect(!output.contains("try:"))
+    }
+
+    @Test func eachCellWrappedIndependently() throws {
+        // A NameError in cell 2 must not prevent cell 1's variable from loading.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["resting_hr = 72\n"]],
+            ["cell_type": "code", "source": ["max_hr = 220 - age\n"]],
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.components(separatedBy: "try:").count - 1 == 2)
+        #expect(result.source.contains("resting_hr = 72"))
+        #expect(result.source.contains("max_hr = 220 - age"))
+    }
 }

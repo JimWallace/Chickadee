@@ -155,7 +155,7 @@ struct NotebookExtractor {
         let defBlock = defLines.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !defBlock.isEmpty {
-            parts.append(defBlock)
+            parts.append(resilientModuleBlock(defBlock))
         }
 
         let usageBlock = usageLines.joined(separator: "\n")
@@ -170,6 +170,25 @@ struct NotebookExtractor {
         }
 
         return parts.joined(separator: "\n\n")
+    }
+
+    // Wraps a cell's module-level code in `try/except` so a runtime error in one
+    // cell — an unfilled `x = ____` placeholder, a reference to a variable the
+    // student hasn't defined yet — doesn't abort importing the whole module and
+    // fail every test.  Mirrors the browser runner's per-cell wrapping
+    // (Public/browser-runner.js extractPythonCell).  `from __future__` imports
+    // are left unwrapped: they must stay at the top of the module and never fail
+    // at runtime anyway.
+    private func resilientModuleBlock(_ block: String) -> String {
+        if block.contains("from __future__") {
+            return block
+        }
+        let indented =
+            block
+            .components(separatedBy: "\n")
+            .map { $0.isEmpty ? $0 : "    " + $0 }
+            .joined(separator: "\n")
+        return "try:\n\(indented)\nexcept Exception:\n    pass"
     }
 }
 

@@ -1,0 +1,53 @@
+{
+  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to BOTH the native worker (interpretScriptOutput in Sources/Worker/RunnerDaemon+JobProcessing.swift) and the browser runner (runPyScript in Public/browser-runner.js). `status` is asserted by BOTH runners — grading parity is lock-step. `native` records the exact native display strings as a regression lock. The browser runner is asserted to (a) agree on `status` and (b) never leak the raw JSON envelope into the student-facing strings. The browser runner's shortResult/longResult FORMATTING still differs from native (it omits the `stdout:`/`stderr:` section prefixes and strips the leading `label: `); making those byte-identical is the runner-unification follow-up, not asserted here. Consumed by Tests/WorkerTests/OutputContractTests.swift and Tests/BrowserRunnerJSTests/output-contract.test.mjs.",
+  "cases": [
+    {
+      "name": "pass with JSON footer only",
+      "stdout": "{\"shortResult\":\"t: passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "t: passed", "longResult": null }
+    },
+    {
+      "name": "fail with human message then JSON footer",
+      "stdout": "msg line1\nmsg line2\n{\"shortResult\":\"t: msg line1\",\"status\":\"fail\",\"test\":\"t\",\"error\":\"msg line1\"}\n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "t: msg line1", "longResult": "stdout:\nmsg line1\nmsg line2" }
+    },
+    {
+      "name": "error with JSON footer",
+      "stdout": "{\"shortResult\":\"t: boom\",\"status\":\"error\",\"test\":\"t\",\"error\":\"boom\"}\n",
+      "stderr": "",
+      "exitCode": 2,
+      "status": "error",
+      "native": { "shortResult": "t: boom", "longResult": null }
+    },
+    {
+      "name": "plain-text last line (no JSON)",
+      "stdout": "all good\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "all good", "longResult": "stdout:\nall good" }
+    },
+    {
+      "name": "exit code 3 maps to fail (Marmoset convention), stderr only",
+      "stdout": "",
+      "stderr": "boom\n",
+      "exitCode": 3,
+      "status": "fail",
+      "native": { "shortResult": "failed", "longResult": "stderr:\nboom" }
+    },
+    {
+      "name": "empty output, exit 1",
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "failed", "longResult": null }
+    }
+  ]
+}
