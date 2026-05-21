@@ -48,7 +48,8 @@ struct NotebookExtractor {
             let cellSource = sanitizeCellForModule(trimmedSource)
             guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
             codeCellCount += 1
-            parts.append("# --- cell \(index + 1) ---\n\(cellSource)")
+            let wrapped = wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)")
+            parts.append("# --- cell \(index + 1) ---\n\(wrapped)")
         }
 
         guard !parts.isEmpty else {
@@ -155,7 +156,7 @@ struct NotebookExtractor {
         let defBlock = defLines.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !defBlock.isEmpty {
-            parts.append(resilientModuleBlock(defBlock))
+            parts.append(defBlock)
         }
 
         let usageBlock = usageLines.joined(separator: "\n")
@@ -172,23 +173,46 @@ struct NotebookExtractor {
         return parts.joined(separator: "\n\n")
     }
 
-    // Wraps a cell's module-level code in `try/except` so a runtime error in one
-    // cell — an unfilled `x = ____` placeholder, a reference to a variable the
-    // student hasn't defined yet — doesn't abort importing the whole module and
-    // fail every test.  Mirrors the browser runner's per-cell wrapping
-    // (Public/browser-runner.js extractPythonCell).  `from __future__` imports
-    // are left unwrapped: they must stay at the top of the module and never fail
-    // at runtime anyway.
-    private func resilientModuleBlock(_ block: String) -> String {
-        if block.contains("from __future__") {
-            return block
+    // Wraps one cell's sanitized body so it loads independently of every other
+    // cell: the body is compiled and executed as its own unit inside try/except.
+    //
+    //   • A *syntax error* in this cell (a typo, an unfilled comment-only cell)
+    //     is raised by compile() and caught here — only this cell is skipped,
+    //     the rest of the module still loads.  (A plain inline wrap can't do
+    //     this: one bad cell would fail the whole-module compile.)
+    //   • A *runtime error* (e.g. `x = ____` → NameError) is raised by exec()
+    //     and caught here too.
+    //   • exec(..., globals()) defines names in the module namespace, so
+    //     functions/variables defined in one cell remain visible to later cells
+    //     and to the test scripts — identical to plain module scope.
+    //
+    // `from __future__` imports must stay at the top of the module as raw
+    // statements (a per-cell compile would scope them to that cell only), so
+    // those cells are emitted unwrapped.
+    func wrapCellForResilientLoad(_ body: String, label: String) -> String {
+        if body.contains("from __future__") {
+            return body
         }
-        let indented =
-            block
-            .components(separatedBy: "\n")
-            .map { $0.isEmpty ? $0 : "    " + $0 }
-            .joined(separator: "\n")
-        return "try:\n\(indented)\nexcept Exception:\n    pass"
+        return """
+            try:
+                exec(compile(\(pythonStringLiteral(body)), \(pythonStringLiteral(label)), "exec"), globals())
+            except Exception:
+                pass
+            """
+    }
+
+    // Encodes a Swift string as a Python string literal.  A JSON string literal
+    // is a valid Python string literal for every escape JSONSerialization emits
+    // (`\"`, `\\`, `\n`, `\r`, `\t`, `\uXXXX`, raw UTF-8), so we reuse it.
+    func pythonStringLiteral(_ s: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: [s]),
+            let json = String(data: data, encoding: .utf8),
+            json.count >= 2
+        else {
+            return "\"\""
+        }
+        // JSONSerialization emits a compact `["...."]`; drop the brackets.
+        return String(json.dropFirst().dropLast())
     }
 }
 
@@ -337,7 +361,7 @@ func extractNotebooksToCode(in directory: URL) throws {
 
         var output = "# Generated from \(item.lastPathComponent)\n\n"
         let extractor = NotebookExtractor()
-        for cell in cells {
+        for (index, cell) in cells.enumerated() {
             guard cell["cell_type"] as? String == "code" else { continue }
             var src = NotebookCellSources.cellSource(cell)
             while src.last?.isWhitespace == true { src.removeLast() }
@@ -346,7 +370,7 @@ func extractNotebooksToCode(in directory: URL) throws {
             if language == "python" {
                 let cellSource = extractor.sanitizeCellForModule(src)
                 guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                output += cellSource + "\n\n"
+                output += extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
             } else {
                 output += src + "\n\n"
             }

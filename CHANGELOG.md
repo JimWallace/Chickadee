@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.219] - 2026-05-21
+
+### Fixed
+
+- **A syntax error (or an untouched comment-only cell) in one notebook cell no
+  longer zeros the whole submission.** v0.4.218 wrapped each cell's body in
+  `try/except`, which isolates *runtime* errors (e.g. `x = ____` → `NameError`)
+  but not *syntax* errors: a single bad-syntax cell still failed the
+  whole-module compile before any `try/except` could run, so the student got
+  `0` on every question — including the ones they got right. A comment-only
+  cell was even worse: `try:` + a lone comment is itself a `SyntaxError`
+  (empty try body), so an untouched `# Your code here` cell zeroed the
+  notebook.
+
+  Both extractors now compile and execute **each cell as its own unit**:
+  `exec(compile(<cell source>, "cell N", "exec"), globals())` wrapped in
+  `try/except`. A syntax error is raised by `compile()` and caught per-cell —
+  only that cell is skipped — and a comment-only cell compiles to a harmless
+  empty unit. Runtime-error and incremental-progress isolation from v0.4.218 is
+  preserved (now via the same per-cell `exec`), and the native runner keeps the
+  `if __name__` quarantine so module-level `assert`/loops/`print()`/side effects
+  still don't run at import. `exec(..., globals())` keeps every name at module
+  scope, so functions/variables defined in one cell stay visible to later cells
+  and to the test scripts. Tracebacks now carry clean `cell N` filenames.
+  Verified against real student submissions: each now scores its correct cells,
+  with a single broken cell skipped. (`NotebookExtractor.swift`
+  `wrapCellForResilientLoad`, `Public/browser-runner.js` `extractPythonCell`.)
+
+### Notes
+
+- Submission-extraction change only — instructor test setups, generated test
+  scripts, manifests, `spec_hash`, and the `TestSetupCache` are untouched, so
+  no test suites need regenerating. Existing submissions pick up the fix on
+  **retest** (re-extraction runs fresh on every grade); new submissions get it
+  automatically. Backwards compatible: a submission that already graded
+  correctly produces the same names and quarantine behavior, so no grade
+  regresses.
+
 ## [0.4.218] - 2026-05-21
 
 ### Fixed

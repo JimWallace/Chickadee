@@ -282,43 +282,81 @@ import Testing
         #expect(!output.contains("if __name__"))
     }
 
-    // MARK: - Per-cell error isolation (sequestering broken cells)
+    // MARK: - sanitizeCellForModule keeps the cell body raw
 
-    @Test func moduleLevelAssignmentWrappedInTryExcept() {
-        // A placeholder/undefined-name assignment that fails at import time is
-        // wrapped so it can't abort loading the rest of the module.
+    @Test func sanitizeKeepsSafeCodeRawNotTryWrapped() {
+        // The per-cell try/except now lives in wrapCellForResilientLoad; the
+        // sanitized body is the plain safe code so it can be compiled as a unit.
         let output = extractor.sanitizeCellForModule("daily_ml = ____")
-        #expect(output.contains("try:"))
-        #expect(output.contains("daily_ml = ____"))
+        #expect(output == "daily_ml = ____")
+    }
+
+    // MARK: - Python string literal encoding
+
+    @Test func pythonStringLiteralEscapes() {
+        #expect(extractor.pythonStringLiteral("x") == "\"x\"")
+        #expect(extractor.pythonStringLiteral("a\nb") == "\"a\\nb\"")
+        #expect(extractor.pythonStringLiteral("say \"hi\"") == "\"say \\\"hi\\\"\"")
+    }
+
+    // MARK: - Per-cell exec(compile()) isolation
+
+    @Test func wrapEmitsExecCompile() {
+        let output = extractor.wrapCellForResilientLoad("daily_ml = ____", label: "cell 7")
+        #expect(output.hasPrefix("try:"))
+        #expect(output.contains("exec(compile(\"daily_ml = ____\", \"cell 7\", \"exec\"), globals())"))
         #expect(output.contains("except Exception:"))
     }
 
-    @Test func definedConstantStillAccessibleWhenWrapped() {
-        // The wrapped block keeps the assignment at module scope (try blocks
-        // don't create a new namespace), so the value remains importable.
-        let output = extractor.sanitizeCellForModule("resting_hr = 72")
-        #expect(output.contains("resting_hr = 72"))
-        #expect(output.contains("try:"))
+    @Test func wrapLeavesFutureImportRaw() {
+        // `from __future__` must stay a raw module-top statement (a per-cell
+        // compile would scope it to that cell only).
+        let output = extractor.wrapCellForResilientLoad("from __future__ import annotations", label: "cell 1")
+        #expect(output == "from __future__ import annotations")
+        #expect(!output.contains("exec(compile"))
     }
 
-    @Test func futureImportNotWrapped() {
-        // `from __future__` must remain at module top — wrapping it would be a
-        // SyntaxError that breaks the whole-file compile.
-        let output = extractor.sanitizeCellForModule("from __future__ import annotations")
-        #expect(output.contains("from __future__ import annotations"))
-        #expect(!output.contains("try:"))
-    }
-
-    @Test func eachCellWrappedIndependently() throws {
-        // A NameError in cell 2 must not prevent cell 1's variable from loading.
+    @Test func eachCellCompiledIndependently() throws {
+        // A NameError in cell 2 must not prevent cell 1's variable from loading;
+        // each cell is its own exec(compile()) unit.
         let cells: [[String: Any]] = [
             ["cell_type": "code", "source": ["resting_hr = 72\n"]],
             ["cell_type": "code", "source": ["max_hr = 220 - age\n"]],
         ]
         let notebook: [String: Any] = ["cells": cells]
         let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
-        #expect(result.source.components(separatedBy: "try:").count - 1 == 2)
+        #expect(result.source.components(separatedBy: "exec(compile(").count - 1 == 2)
         #expect(result.source.contains("resting_hr = 72"))
         #expect(result.source.contains("max_hr = 220 - age"))
+    }
+
+    @Test func syntaxErrorCellIsCompiledAsAStringNotInlined() throws {
+        // The bad cell's source lives inside a compile() string literal, so it
+        // can't fail the whole-module compile — only its own exec is skipped at
+        // load. The good cell is emitted as its own unit alongside it.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["good = 1\n"]],
+            ["cell_type": "code", "source": ["broken = (\n"]],  // syntax error
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.components(separatedBy: "exec(compile(").count - 1 == 2)
+        #expect(result.source.contains("good = 1"))
+        // The broken source is quoted inside compile(...), never emitted as bare code.
+        #expect(result.source.contains("\"broken = (\""))
+    }
+
+    @Test func commentOnlyCellDoesNotProduceEmptyTryBody() throws {
+        // Regression: an untouched comment-only cell must not become
+        // `try:\n    # comment` (an empty try body → SyntaxError that zeros the
+        // whole notebook). It is compiled as a string instead.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["# Your code here\n"]],
+            ["cell_type": "code", "source": ["age = 20\n"]],
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.contains("compile(\"# Your code here\""))
+        #expect(result.source.contains("age = 20"))
     }
 }

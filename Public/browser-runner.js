@@ -305,12 +305,12 @@ for _module_name in student_module_names_in_load_order():
         const outPath = `${workDir}/${stem}.${ext}`;
 
         let code = `# Generated from ${filename}\n\n`;
-        for (const cell of (notebook.cells || [])) {
+        for (const [i, cell] of (notebook.cells || []).entries()) {
             if (cell.cell_type !== 'code') continue;
             const src = Array.isArray(cell.source)
                 ? cell.source.join('')
                 : (cell.source || '');
-            const block = isR ? extractRCell(src) : extractPythonCell(src);
+            const block = isR ? extractRCell(src) : extractPythonCell(src, `cell ${i + 1}`);
             if (block) code += block + '\n\n';
         }
 
@@ -326,15 +326,21 @@ for _module_name in student_module_names_in_load_order():
         return trimmed.trim() ? trimmed : '';
     }
 
-    // Each Python cell is wrapped in try/except so that a runtime error in one
-    // cell — an unfilled `x = ____` placeholder, a reference to a variable the
-    // student hasn't defined yet — does NOT abort importing the rest of the
-    // module.  Without this, one broken cell leaves every variable/function
-    // undefined and fails every test, even tests for cells the student got
-    // right.  IPython magics (% / !) are stripped because they are SyntaxErrors
-    // in plain Python and would break the whole-file compile that try/except
-    // cannot catch.  `from __future__` imports must stay unwrapped at module top.
-    function extractPythonCell(src) {
+    // Each Python cell is compiled and executed as its own unit inside
+    // try/except so that one broken cell can't take down the rest of the module:
+    //   • a SYNTAX error (a typo, or an unfilled comment-only "# Your code here"
+    //     cell) is raised by compile() and caught here — only this cell is
+    //     skipped.  A plain inline wrap can't do this: a syntax error anywhere
+    //     fails the whole-module compile before any try/except runs.
+    //   • a RUNTIME error (e.g. `x = ____` → NameError) is raised by exec() and
+    //     caught here too.
+    //   • exec(..., globals()) defines names in the module namespace, so
+    //     functions/variables defined in one cell stay visible to later cells
+    //     and to the test scripts — identical to plain module scope.
+    // IPython magics (% / !) are stripped so a cell that mixes a magic with real
+    // code still runs the real code.  `from __future__` imports must stay at
+    // module top as raw statements (a per-cell compile would scope them away).
+    function extractPythonCell(src, label) {
         const cleaned = src
             .split('\n')
             .filter(line => {
@@ -347,11 +353,8 @@ for _module_name in student_module_names_in_load_order():
 
         if (/(^|\n)\s*from\s+__future__\s+import\b/.test(trimmed)) return trimmed;
 
-        const indented = trimmed
-            .split('\n')
-            .map(line => (line.trim() ? '    ' + line : line))
-            .join('\n');
-        return `try:\n${indented}\nexcept Exception:\n    pass`;
+        return `try:\n    exec(compile(${JSON.stringify(trimmed)}, ${JSON.stringify(label)}, "exec"), globals())\n`
+            + `except Exception:\n    pass`;
     }
 
     // -------------------------------------------------------------------------
