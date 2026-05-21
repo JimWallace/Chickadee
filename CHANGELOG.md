@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.210] - 2026-05-20
+
+### Changed
+
+- **Admin dashboard counts now aggregate in the database instead of loading
+  whole tables into memory.** `makeWorkerRows` (the `/admin/runners` table)
+  loaded the *entire* `submissions` table via `.all()` and tallied
+  assigned/processed counts per worker in a Swift loop — a full-table scan that
+  grows every term. It now issues a single `GROUP BY worker_id, status` count.
+  Likewise `assignmentCountsByCourse` (admin course cards) replaced its
+  load-all-assignments-then-loop with a `GROUP BY course_id` count. Both fall
+  back to the previous in-memory tally on a non-SQL driver (none ship today).
+  No change to displayed numbers; covered by new dual-backend tests
+  (`assignmentCountsByCourseGroupsPerCourse`,
+  `adminRunnersCountsAssignedAndProcessedPerWorker`) that run against both
+  SQLite and Postgres in CI.
+
 ## [0.4.209] - 2026-05-20
 
 ### Changed

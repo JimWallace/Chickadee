@@ -704,4 +704,83 @@ import XCTVapor
 
         }
     }
+
+    // Validates the DB-side GROUP BY in assignmentCountsByCourse (incl. UUID
+    // decode) on whichever backend the suite runs against — SQLite locally and
+    // in the `api-tests` CI job, Postgres in `api-tests-postgres`.
+    @Test func assignmentCountsByCourseGroupsPerCourse() async throws {
+        try await withApp(app) { _ in
+            let courseA = try await makeCourse(code: "GRPA", name: "Group A")
+            let courseB = try await makeCourse(code: "GRPB", name: "Group B")
+            let aID = try courseA.requireID()
+            let bID = try courseB.requireID()
+            // Three assignments in A, one in B (distinct setups per assignment).
+            for index in 1...3 {
+                let setup = try await makeSetup(id: "setup_grp_a\(index)", courseID: aID)
+                _ = try await makeAssignment(
+                    testSetupID: try setup.requireID(), courseID: aID, title: "A\(index)")
+            }
+            let setupB = try await makeSetup(id: "setup_grp_b1", courseID: bID)
+            _ = try await makeAssignment(testSetupID: try setupB.requireID(), courseID: bID, title: "B1")
+
+            let counts = try await assignmentCountsByCourse(on: app.db)
+            #expect(counts[aID] == 3)
+            #expect(counts[bID] == 1)
+        }
+    }
+
+    // Validates the (worker_id, status) GROUP BY in makeWorkerRows: assigned
+    // jobs counted separately from processed (complete + failed), per worker.
+    @Test func adminRunnersCountsAssignedAndProcessedPerWorker() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "WRK101", name: "Worker Course")
+            let courseID = try course.requireID()
+            let setup = try await makeSetup(id: "setup_wrk_counts", courseID: courseID)
+            let setupID = try setup.requireID()
+            let student = try await makeUser(username: "wrk_counts_student", role: "student")
+            let studentID = try student.requireID()
+
+            func makeWorkerSubmission(_ id: String, worker: String, status: String) async throws {
+                let submission = try await makeTestSubmission(
+                    on: app, id: id, setupID: setupID, userID: studentID, status: status)
+                submission.workerID = worker
+                try await submission.update(on: app.db)
+            }
+            // runner-A: 2 complete + 1 failed = 3 processed, plus 1 assigned.
+            try await makeWorkerSubmission("sub_wc1", worker: "runner-A", status: "complete")
+            try await makeWorkerSubmission("sub_wc2", worker: "runner-A", status: "complete")
+            try await makeWorkerSubmission("sub_wc3", worker: "runner-A", status: "failed")
+            try await makeWorkerSubmission("sub_wc4", worker: "runner-A", status: "assigned")
+            // runner-B: 1 complete.
+            try await makeWorkerSubmission("sub_wc5", worker: "runner-B", status: "complete")
+
+            for worker in ["runner-A", "runner-B"] {
+                await app.workerActivityStore.markActive(
+                    workerID: worker,
+                    hostname: "runner-host",
+                    runnerVersion: "runner/1.0",
+                    maxConcurrentJobs: 2,
+                    activeJobs: 0,
+                    lastHeartbeatAt: Date()
+                )
+            }
+
+            try await app.asyncTest(
+                .GET, "/admin/runners",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let json = try JSONSerialization.jsonObject(with: Data(buffer: res.body)) as? [[String: Any]]
+                    let rowA = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-A" }))
+                    let rowB = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-B" }))
+                    #expect(rowA["assignedJobs"] as? Int == 1)
+                    #expect(rowA["jobsProcessed"] as? Int == 3)
+                    #expect(rowB["assignedJobs"] as? Int == 0)
+                    #expect(rowB["jobsProcessed"] as? Int == 1)
+                })
+        }
+    }
 }
