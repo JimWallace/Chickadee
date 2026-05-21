@@ -825,6 +825,38 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     margin-bottom: .875rem;
 }
 
+/* ── Admin tab bar ───────────────────────────────────── */
+/* Inlined into each admin page rather than a Leaf fragment: LeafKit 1.x
+   raises a false-positive "cyclically referenced" error on #extend of a
+   shared partial here. */
+
+.admin-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+}
+
+.admin-tab {
+    padding: .55rem .9rem;
+    text-decoration: none;
+    color: var(--gray-600);
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.admin-tab:hover {
+    color: var(--gray-900);
+}
+
+.admin-tab[aria-current="page"] {
+    color: var(--gray-900);
+    font-weight: 600;
+    border-bottom-color: var(--gray-900);
+}
+
 /* ── Assignment status badge variants ────────────────── */
 
 .tier-open {

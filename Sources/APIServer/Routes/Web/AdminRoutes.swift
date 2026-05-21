@@ -19,6 +19,8 @@ struct AdminRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
+        admin.get("users", use: usersPage)
+        admin.get("storage", use: storagePage)
         admin.get("runners", use: runners)
         admin.get("runners", ":runnerID", use: runnerDetail)
         admin.get("workers", use: workers)
@@ -50,6 +52,49 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func dashboard(req: Request) async throws -> View {
+        let workerRows = try await makeWorkerRows(req: req)
+        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
+        let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
+
+        // Course management data — all three queries are independent so run in parallel.
+        async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
+        async let enrollmentsFetch = enrolledStudentCountsByCourse(on: req.db)
+        async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
+        let (allCourses, enrollmentCounts, assignmentCounts) =
+            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
+        let bsSyncEnabled = req.application.brightSpaceClient != nil
+        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
+            guard let id = course.id else { return nil }
+            return AdminCourseRow(
+                id: id.uuidString,
+                code: course.code,
+                name: course.name,
+                isArchived: course.isArchived,
+                enrollmentMode: course.enrollmentMode.rawValue,
+                enrollmentCount: enrollmentCounts[id] ?? 0,
+                assignmentCount: assignmentCounts[id] ?? 0,
+                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                brightspaceOrgUnitID: course.brightspaceOrgUnitID,
+                brightspaceSyncEnabled: bsSyncEnabled
+            )
+        }
+
+        let ctx = AdminContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "overview",
+            workers: workerRows,
+            workerSecret: effectiveSecret,
+            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
+            courses: courseRows,
+            version: ChickadeeVersion.current
+        )
+        return try await req.view.render("admin", ctx)
+    }
+
+    // MARK: - GET /admin/users
+
+    @Sendable
+    func usersPage(req: Request) async throws -> View {
         let users = try await APIUser.query(on: req.db)
             .all()
             .sorted { lhs, rhs in
@@ -84,46 +129,25 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
-        let workerRows = try await makeWorkerRows(req: req)
-        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
-        let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
-
-        // Course management data — all three queries are independent so run in parallel.
-        async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
-        async let enrollmentsFetch = enrolledStudentCountsByCourse(on: req.db)
-        async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
-        let (allCourses, enrollmentCounts, assignmentCounts) =
-            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
-        let bsSyncEnabled = req.application.brightSpaceClient != nil
-        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
-            guard let id = course.id else { return nil }
-            return AdminCourseRow(
-                id: id.uuidString,
-                code: course.code,
-                name: course.name,
-                isArchived: course.isArchived,
-                enrollmentMode: course.enrollmentMode.rawValue,
-                enrollmentCount: enrollmentCounts[id] ?? 0,
-                assignmentCount: assignmentCounts[id] ?? 0,
-                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                brightspaceOrgUnitID: course.brightspaceOrgUnitID,
-                brightspaceSyncEnabled: bsSyncEnabled
-            )
-        }
-
-        let storage = try await makeStorageContext(req: req)
-
-        let ctx = AdminContext(
+        let ctx = AdminUsersContext(
             currentUser: req.currentUserContext,
-            users: userRows,
-            workers: workerRows,
-            workerSecret: effectiveSecret,
-            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
-            courses: courseRows,
-            storage: storage,
-            version: ChickadeeVersion.current
+            activeAdminTab: "users",
+            users: userRows
         )
-        return try await req.view.render("admin", ctx)
+        return try await req.view.render("admin-users", ctx)
+    }
+
+    // MARK: - GET /admin/storage
+
+    @Sendable
+    func storagePage(req: Request) async throws -> View {
+        let storage = try await makeStorageContext(req: req)
+        let ctx = AdminStoragePageContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "storage",
+            storage: storage
+        )
+        return try await req.view.render("admin-storage", ctx)
     }
 
     // MARK: - Storage breakdown
@@ -294,7 +318,8 @@ struct AdminRoutes: RouteCollection {
         }
         return try await req.view.render(
             "admin-audit",
-            AdminAuditContext(currentUser: req.currentUserContext, rows: rows)
+            AdminAuditContext(
+                currentUser: req.currentUserContext, activeAdminTab: "audit", rows: rows)
         )
     }
 
@@ -328,6 +353,7 @@ struct AdminRoutes: RouteCollection {
 
         let ctx = AdminAlertsContext(
             currentUser: req.currentUserContext,
+            activeAdminTab: "alerts",
             enabled: configuration.enabled,
             webhookURL: effectiveURL,
             webhookURLFromEnvironment: !envURL.isEmpty,

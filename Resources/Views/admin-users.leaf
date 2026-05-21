@@ -1,0 +1,247 @@
+#extend("base"):
+#export("title"):
+Users
+#endexport
+#export("content"):
+<nav class="admin-tabs" aria-label="Admin sections">
+    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+</nav>
+<section class="admin-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">Users</h2>
+        <input id="users-filter" class="form-input" type="search" autocomplete="off"
+               placeholder="Filter by name, username or role…"
+               style="width:280px" aria-label="Filter users"
+               readonly onfocus="this.removeAttribute('readonly')">
+    </div>
+    <table class="results-table" id="users-table">
+        <thead>
+            <tr>
+                <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
+                <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
+                <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
+                <th class="time" data-sort-key="last-seen" data-sort-type="date" tabindex="0" aria-sort="none">Last Seen</th>
+                <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(user in users):
+            <tr>
+                <td>
+                    #if(user.displayName):
+                        #(user.displayName)
+                    #else:
+                        —
+                    #endif
+                </td>
+                <td><code>#(user.username)</code></td>
+                <td>
+                    <form method="post" action="/admin/users/#(user.id)/role"
+                          style="display:flex;gap:.4rem;align-items:center">
+                        #csrfFormField()
+                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
+                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+                            <option value="student"    #if(user.role == "student"):selected#endif>student</option>
+                            <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
+                            <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>
+                        </select>
+                        <button class="btn action-btn" type="submit">Save</button>
+                    </form>
+                </td>
+                <td class="time js-relative-time" data-iso="#(user.lastSeenAt)">
+                    #if(user.lastSeenAt):
+                        #(user.lastSeenAt)
+                    #else:
+                        —
+                    #endif
+                </td>
+                <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:.35rem">
+                        <a href="/admin/users/#(user.id)"
+                           class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
+                        <form method="post" action="/admin/users/#(user.id)/delete" style="display:inline">
+                            #csrfFormField()
+                            <button class="btn action-btn action-danger" type="submit"
+                                    title="Delete user" aria-label="Delete user" style="padding:.3rem .45rem"
+                                    onclick="return confirm('Delete this user? Their enrollments will be removed. They can log in again to restore their account.')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table>
+</section>
+<style>
+#users-table th[data-sort-key] {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+#users-table th[data-sort-key]::after {
+    content: "  ⇅";
+    color: var(--gray-500);
+    font-size: .75rem;
+}
+#users-table th[data-sort-key].sort-asc::after {
+    content: "  ↑";
+}
+#users-table th[data-sort-key].sort-desc::after {
+    content: "  ↓";
+}
+</style>
+<script>
+(function () {
+    'use strict';
+
+    var usersTable = document.getElementById('users-table');
+    if (!usersTable) return;
+    var usersBody = usersTable.querySelector('tbody');
+    if (!usersBody) return;
+
+    var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+    function formatRelative(isoString) {
+        var date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) return isoString;
+        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
+        var abs = Math.abs(seconds);
+        if (abs < 60) return relativeFormatter.format(seconds, 'second');
+        var minutes = Math.round(seconds / 60);
+        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
+        var hours = Math.round(minutes / 60);
+        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
+        var days = Math.round(hours / 24);
+        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
+        var weeks = Math.round(days / 7);
+        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
+        var months = Math.round(days / 30);
+        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
+        var years = Math.round(days / 365);
+        return relativeFormatter.format(years, 'year');
+    }
+
+    function applyRelativeTimes(root) {
+        var scope = root || document;
+        scope.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
+            var iso = el.getAttribute('data-iso');
+            if (!iso) return;
+            var date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return;
+            el.textContent = formatRelative(iso);
+            el.title = date.toLocaleString();
+        });
+    }
+
+    var userHeaders = Array.from(usersTable.querySelectorAll('th[data-sort-key]'));
+    var activeUserHeader = null;
+    var activeUserDirection = 'asc';
+
+    function clearUserSortIndicators() {
+        userHeaders.forEach(function (header) {
+            header.classList.remove('sort-asc', 'sort-desc');
+            header.setAttribute('aria-sort', 'none');
+        });
+    }
+
+    function dateValueFromCell(cell) {
+        if (!cell) return 0;
+        var iso = cell.getAttribute('data-iso');
+        var date = iso ? new Date(iso) : new Date((cell.textContent || '').trim());
+        return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+    }
+
+    function readUserCellValue(row, index, type, sortKey) {
+        var cell = row.children[index];
+        if (!cell) return '';
+        if (type === 'date') {
+            return dateValueFromCell(cell);
+        }
+        if (sortKey === 'role') {
+            var roleSelect = cell.querySelector('select[name="role"]');
+            if (roleSelect) return roleSelect.value || '';
+        }
+        return (cell.textContent || '').trim();
+    }
+
+    function sortUsersByHeader(header, direction) {
+        var index = userHeaders.indexOf(header);
+        if (index < 0) return;
+        var type = header.getAttribute('data-sort-type') || 'text';
+        var sortKey = header.getAttribute('data-sort-key') || '';
+        var rows = Array.from(usersBody.querySelectorAll('tr'));
+        rows.sort(function (lhs, rhs) {
+            var lv = readUserCellValue(lhs, index, type, sortKey);
+            var rv = readUserCellValue(rhs, index, type, sortKey);
+            var result = 0;
+            if (type === 'date') {
+                result = lv - rv;
+            } else {
+                result = collator.compare(String(lv), String(rv));
+            }
+            if (result === 0) {
+                var lhsUsername = (lhs.children[1] && lhs.children[1].textContent || '').trim();
+                var rhsUsername = (rhs.children[1] && rhs.children[1].textContent || '').trim();
+                result = collator.compare(lhsUsername, rhsUsername);
+            }
+            return direction === 'asc' ? result : -result;
+        });
+        rows.forEach(function (row) { usersBody.appendChild(row); });
+        clearUserSortIndicators();
+        header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+        activeUserHeader = header;
+        activeUserDirection = direction;
+    }
+
+    userHeaders.forEach(function (header) {
+        header.addEventListener('click', function () {
+            var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
+            sortUsersByHeader(header, nextDirection);
+        });
+        header.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
+            sortUsersByHeader(header, nextDirection);
+        });
+    });
+
+    applyRelativeTimes(document);
+
+    if (userHeaders.length) {
+        var defaultUserHeader = userHeaders.find(function (header) {
+            return header.getAttribute('data-sort-key') === 'last-seen';
+        }) || userHeaders[0];
+        sortUsersByHeader(defaultUserHeader, 'desc');
+    }
+
+    var usersFilter = document.getElementById('users-filter');
+    if (usersFilter) {
+        usersFilter.addEventListener('input', function () {
+            var query = usersFilter.value.trim().toLowerCase();
+            Array.from(usersBody.querySelectorAll('tr')).forEach(function (row) {
+                if (!query) { row.hidden = false; return; }
+                var name     = ((row.children[0] && row.children[0].textContent) || '').toLowerCase();
+                var username = ((row.children[1] && row.children[1].textContent) || '').toLowerCase();
+                var roleEl   = row.children[2] && row.children[2].querySelector('select[name="role"]');
+                var role     = roleEl ? roleEl.value.toLowerCase() : '';
+                row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
+            });
+        });
+    }
+})();
+</script>
+#endexport
+#endextend

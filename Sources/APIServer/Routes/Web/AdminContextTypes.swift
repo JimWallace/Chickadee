@@ -107,13 +107,24 @@ struct AdminStorageContext: Encodable {
 
 struct AdminContext: Encodable {
     let currentUser: CurrentUserContext?
-    let users: [AdminUserRow]
+    let activeAdminTab: String
     let workers: [AdminWorkerRow]
     let workerSecret: String
     let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
-    let storage: AdminStorageContext
     let version: String
+}
+
+struct AdminUsersContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    let users: [AdminUserRow]
+}
+
+struct AdminStoragePageContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    let storage: AdminStorageContext
 }
 
 struct AdminUserDetailContext: Encodable {
@@ -175,6 +186,7 @@ struct AdminAlertsRuleRow: Encodable {
 
 struct AdminAlertsContext: Encodable {
     let currentUser: CurrentUserContext?
+    let activeAdminTab: String
     let enabled: Bool
     let webhookURL: String
     let webhookURLFromEnvironment: Bool
@@ -202,5 +214,6 @@ struct AdminAuditRow: Encodable {
 
 struct AdminAuditContext: Encodable {
     let currentUser: CurrentUserContext?
+    let activeAdminTab: String
     let rows: [AdminAuditRow]
 }
