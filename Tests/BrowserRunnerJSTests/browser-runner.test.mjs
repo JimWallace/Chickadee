@@ -640,7 +640,9 @@ test('extractNotebook writes python and R student module hints correctly', async
 
   assert.equal(
     harness.py.FS.readFile('/course/submission.py', { encoding: 'utf8' }),
-    '# Generated from submission.ipynb\n\nx = 1\n\nprint(x)\n\n',
+    '# Generated from submission.ipynb\n\n'
+      + 'try:\n    x = 1\nexcept Exception:\n    pass\n\n'
+      + 'try:\n    print(x)\nexcept Exception:\n    pass\n\n',
   );
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
@@ -670,5 +672,79 @@ test('extractNotebook writes python and R student module hints correctly', async
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
     'lab.R',
+  );
+});
+
+test('extractNotebook sequesters each Python cell so one broken cell cannot fail the rest', async () => {
+  const harness = await loadRunnerHarness();
+  const { extractNotebook } = harness.hooks;
+
+  harness.py.FS.mkdir('/lab');
+
+  await extractNotebook(
+    harness.py,
+    '/lab',
+    'submission.ipynb',
+    JSON.stringify({
+      nbformat: 4,
+      metadata: { kernelspec: { name: 'python3' } },
+      cells: [
+        { cell_type: 'code', source: ['%matplotlib inline\nresting_hr = 72\n'], metadata: {} },
+        { cell_type: 'code', source: ['daily_ml = ____\n'], metadata: {} },
+      ],
+    }),
+  );
+
+  const generated = harness.py.FS.readFile('/lab/submission.py', { encoding: 'utf8' });
+
+  // IPython magic stripped, real code preserved.
+  assert.ok(!generated.includes('%matplotlib'), 'magic line must be stripped');
+  // Each cell wrapped independently.
+  assert.equal(generated.split('try:').length - 1, 2, 'each code cell wrapped in its own try block');
+  assert.ok(generated.includes('    resting_hr = 72'));
+  assert.ok(generated.includes('    daily_ml = ____'));
+  assert.equal(generated.split('except Exception:').length - 1, 2);
+});
+
+test('failure detail strips the trailing JSON envelope so students never see the raw payload', async () => {
+  const errorText = 'Variable `age` is not defined in the student notebook.\n'
+    + '  expected: a module-level variable named `age`\n';
+  const jsonFooter = JSON.stringify({
+    shortResult: 'Test: `age` is defined: Variable `age` is not defined in the student notebook.',
+    status: 'fail',
+    test: 'Test: `age` is defined',
+    error: errorText,
+  });
+
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'publictest_age.py': '# Test: `age` is defined\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'publictest_age.py', tier: 'public', name: 'Test: `age` is defined' },
+      ],
+    },
+    scriptBehaviors: {
+      'publictest_age.py': {
+        stdout: `${errorText}${jsonFooter}\n`,
+        stderr: '',
+        exitCode: 1,
+      },
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_age',
+  );
+
+  const outcome = result.outcomes[0];
+  assert.equal(outcome.status, 'fail');
+  assert.ok(!outcome.longResult.includes('"shortResult"'), 'JSON envelope must be stripped from longResult');
+  assert.ok(!outcome.longResult.includes('{'), 'no JSON braces should remain in student-facing detail');
+  assert.equal(
+    outcome.longResult,
+    'Variable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
   );
 });

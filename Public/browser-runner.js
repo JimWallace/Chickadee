@@ -310,14 +310,48 @@ for _module_name in student_module_names_in_load_order():
             const src = Array.isArray(cell.source)
                 ? cell.source.join('')
                 : (cell.source || '');
-            const trimmed = src.replace(/\s+$/, '');
-            if (trimmed.trim()) code += trimmed + '\n\n';
+            const block = isR ? extractRCell(src) : extractPythonCell(src);
+            if (block) code += block + '\n\n';
         }
 
         py.FS.writeFile(outPath, code);
 
         // Write .chickadee_student_module hint so test_runtime.py can find the file.
         py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.${ext}`);
+    }
+
+    // R cells are emitted verbatim — the browser R path (WebR) is not yet active.
+    function extractRCell(src) {
+        const trimmed = src.replace(/\s+$/, '');
+        return trimmed.trim() ? trimmed : '';
+    }
+
+    // Each Python cell is wrapped in try/except so that a runtime error in one
+    // cell — an unfilled `x = ____` placeholder, a reference to a variable the
+    // student hasn't defined yet — does NOT abort importing the rest of the
+    // module.  Without this, one broken cell leaves every variable/function
+    // undefined and fails every test, even tests for cells the student got
+    // right.  IPython magics (% / !) are stripped because they are SyntaxErrors
+    // in plain Python and would break the whole-file compile that try/except
+    // cannot catch.  `from __future__` imports must stay unwrapped at module top.
+    function extractPythonCell(src) {
+        const cleaned = src
+            .split('\n')
+            .filter(line => {
+                const s = line.trim();
+                return !s.startsWith('%') && !s.startsWith('!');
+            })
+            .join('\n');
+        const trimmed = cleaned.replace(/\s+$/, '');
+        if (!trimmed.trim()) return '';
+
+        if (/(^|\n)\s*from\s+__future__\s+import\b/.test(trimmed)) return trimmed;
+
+        const indented = trimmed
+            .split('\n')
+            .map(line => (line.trim() ? '    ' + line : line))
+            .join('\n');
+        return `try:\n${indented}\nexcept Exception:\n    pass`;
     }
 
     // -------------------------------------------------------------------------
@@ -416,13 +450,13 @@ sys.stderr = sys.__stderr__
         // fall back to JS-side pyErr if the wrapper itself threw.
         if (brExitCode !== null && brExitCode !== undefined) {
             const code = typeof brExitCode === 'number' ? brExitCode : parseInt(brExitCode) || 1;
-            status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
+            status = statusFromExitCode(code);
         } else if (pyErr) {
             const msg = pyErr.message || String(pyErr);
             if (msg.includes('SystemExit')) {
                 const exitMatch = msg.match(/SystemExit:\s*(-?\d+)/);
                 const code = exitMatch ? parseInt(exitMatch[1]) : 1;
-                status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
+                status = statusFromExitCode(code);
             } else {
                 status = 'error';
             }
@@ -445,7 +479,11 @@ sys.stderr = sys.__stderr__
         }
 
         if (status !== 'pass') {
-            const stdoutTrim = (stdout || '').trim();
+            // Drop the trailing machine-readable JSON line that test_runtime's
+            // failed()/errored() print after the human-readable message, so the
+            // student sees only the message — mirrors the native runner's footer
+            // stripping in RunnerDaemon+JobProcessing.swift.
+            const stdoutTrim = (parsedPayload ? stripJsonFooterLine(stdout || '') : (stdout || '')).trim();
             const stderrTrim = (stderr || '').trim();
             longResult = detailedOutputFromParts({
                 parsedPayload,
@@ -466,6 +504,15 @@ sys.stderr = sys.__stderr__
     // -------------------------------------------------------------------------
     // Outcome / collection builders
     // -------------------------------------------------------------------------
+
+    // Map a process exit code to a test status — kept identical to the native
+    // runner (RunnerDaemon+JobProcessing.swift): 0=pass, 1=fail, 3=fail
+    // (Marmoset chickadee.py convention), everything else=error.
+    function statusFromExitCode(code) {
+        if (code === 0) return 'pass';
+        if (code === 1 || code === 3) return 'fail';
+        return 'error';
+    }
 
     function makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs) {
         // Strip extension to get test name (matches native runner).
@@ -594,6 +641,20 @@ sys.stderr = sys.__stderr__
 
     function trimmedString(value) {
         return typeof value === 'string' ? value.trim() : '';
+    }
+
+    // Removes the trailing machine-readable JSON result line emitted by
+    // test_runtime's passed()/failed()/errored() so students see only the
+    // human-readable output above it.
+    function stripJsonFooterLine(text) {
+        const lines = String(text || '').split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+            if (lines[i].trim()) {
+                lines.splice(i, 1);
+                break;
+            }
+        }
+        return lines.join('\n');
     }
 
     // -------------------------------------------------------------------------
@@ -923,10 +984,8 @@ def require_function(name: str, num_args: Optional[int] = None):
         errors = student_module_errors()
         if errors:
             first_name = next(iter(errors.keys()))
-            errored(
-                "Could not load any student Python module from submission. "
-                f"First load failure came from '{first_name}'."
-            )
+            print(errors[first_name], end="")
+            errored("SyntaxError in submission")
         errored("Could not load a student Python module from submission.")
 
     errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
@@ -995,6 +1054,10 @@ for _module_name in _tr.student_module_names_in_load_order():
     const testHooks = globalThis.__CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__;
     if (testHooks) {
         testHooks.exports = {
+            // Embedded runtime sources, exposed so the drift test can assert
+            // they stay in sync with Tools/runner-support/*.py.
+            TEST_RUNTIME_PY,
+            SITECUSTOMIZE_PY,
             runAndSubmit,
             runScripts,
             extractNotebook,
