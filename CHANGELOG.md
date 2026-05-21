@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.209] - 2026-05-20
+
+### Changed
+
+- **Submission intake no longer blocks the cooperative thread pool on disk
+  I/O or notebook merging.** `POST /api/v1/submissions` and
+  `POST /api/v1/submissions/file` wrote the decoded upload to disk with a
+  synchronous `Data.write(to:)` directly in the async request handler, and the
+  `.ipynb` path additionally read the instructor notebook and merged its
+  authoritative test cells inline (synchronous `Data(contentsOf:)` plus a
+  JSON parse/merge/serialize). Under a deadline-spike of concurrent
+  submissions, that synchronous work serialized request handling on the
+  cooperative executor. Both file writes now go through `req.fileio.writeFile`
+  (the NIO thread pool, matching `ResultRoutes`), and the instructor-notebook
+  read + merge run on `req.application.threadPool`. A new `Sendable`
+  `NotebookSourceRef` snapshot lets a new `notebookData(from:)` overload
+  resolve the notebook off the cooperative executor without capturing the
+  non-`Sendable` `APITestSetup` Fluent model; `notebookData(for:)` now
+  delegates to it. No change to what is stored or graded.
+
 ## [0.4.208] - 2026-05-20
 
 ### Fixed
