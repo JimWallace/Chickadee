@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import chickadee_runner
@@ -434,7 +435,8 @@ import Testing
         try proc.run()
         proc.waitUntilExit()
 
-        let out = String(decoding: outPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let out = (String(bytes: outData, encoding: .utf8) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let defined = try #require(try? JSONDecoder().decode([String: Bool].self, from: Data(out.utf8)))
 
