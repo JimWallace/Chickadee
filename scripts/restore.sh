@@ -254,14 +254,27 @@ echo "==> Stopping server and runner ..."
 $COMPOSE stop server runner
 
 # ----------------------------------------------------------------
-# 2. pg_restore --clean
+# 2. Reset schema, then restore
 # ----------------------------------------------------------------
 echo "==> Restoring Postgres from $DUMP ..."
-# Use --no-owner so role differences between hosts don't trip the restore.
-# --clean --if-exists drops every object before reloading.
-# pg_restore can emit non-fatal warnings while doing this; tolerate exit 1
-# only when stderr is warnings (we don't enforce that here — just log).
-$COMPOSE exec -T db pg_restore --clean --if-exists --no-owner \
+# Reset the schema with DROP SCHEMA ... CASCADE *before* reloading, rather than
+# letting `pg_restore --clean` drop objects individually. --clean drops one
+# object at a time without CASCADE, so it cannot drop users_pkey / the users
+# table while the AddUserFKConstraints foreign keys (fk_class_achievements_user_id,
+# fk_submissions_retested_by_user_id) still reference users.id — pg_restore then
+# fails with "cannot drop ... because other objects depend on it", the reload
+# collides with the surviving schema (duplicate keys, "already exists", FK
+# violations), and the DB is left corrupt. DROP SCHEMA ... CASCADE clears the
+# whole dependency graph in one shot so the reload lands on an empty schema.
+echo "    Dropping and recreating schema 'public' ..."
+$COMPOSE exec -T db psql -U "$DATABASE_USER" -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+# --no-owner so role differences between hosts don't trip the restore. No
+# --clean: we just emptied the schema above. pg_restore can still emit non-fatal
+# warnings (e.g. COMMENT ON SCHEMA public when not the schema owner); tolerate
+# exit 1, fail on anything worse.
+$COMPOSE exec -T db pg_restore --no-owner \
   -U "$DATABASE_USER" -d "$DATABASE_NAME" < "$DUMP" || {
     rc=$?
     if [[ $rc -gt 1 ]]; then
