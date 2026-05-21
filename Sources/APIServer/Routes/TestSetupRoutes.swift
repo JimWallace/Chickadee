@@ -164,35 +164,53 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
 /// - Throws: `NotebookLookupError.notFound` when neither a flat file nor a zip
 ///   entry is available. Callers can catch this specific type; Vapor's error
 ///   middleware maps it to HTTP 404 automatically.
+/// A `Sendable` snapshot of the test-setup fields needed to resolve a notebook.
+/// Lets the (blocking) read run on the NIO thread pool without capturing the
+/// non-`Sendable` `APITestSetup` Fluent model in a `@Sendable` closure.
+struct NotebookSourceRef: Sendable {
+    let notebookPath: String?
+    let zipPath: String
+    let starterNotebook: String?
+    let setupID: String?
+
+    init(_ setup: APITestSetup) {
+        self.notebookPath = setup.notebookPath
+        self.zipPath = setup.zipPath
+        self.starterNotebook = setup.decodedManifest()?.starterNotebook
+        self.setupID = setup.id
+    }
+}
+
 func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
-    if let path = setup.notebookPath,
+    try notebookData(from: NotebookSourceRef(setup))
+}
+
+/// Primitive-driven variant of `notebookData(for:)`, safe to call from a
+/// `@Sendable` thread-pool closure. Behaviour is identical to the model-based
+/// overload.
+func notebookData(from source: NotebookSourceRef) throws(NotebookLookupError) -> Data {
+    if let path = source.notebookPath,
         let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !data.isEmpty
     {
         return normalizeNotebookForJupyterLite(data)
     }
 
-    let entries = listZipEntries(zipPath: setup.zipPath)
-    let preferredEntryNames = notebookCandidateEntryNames(for: setup, entries: entries)
+    let entries = listZipEntries(zipPath: source.zipPath)
+    let preferredEntryNames = notebookCandidateEntryNames(
+        starterNotebook: source.starterNotebook, entries: entries)
     for entryName in preferredEntryNames {
-        guard let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
+        guard let data = extractZipEntry(zipPath: source.zipPath, entryName: entryName),
             !data.isEmpty
         else { continue }
         return normalizeNotebookForJupyterLite(data)
     }
 
-    throw NotebookLookupError.notFound(setupID: setup.id ?? "unknown")
+    throw NotebookLookupError.notFound(setupID: source.setupID ?? "unknown")
 }
 
-private func notebookCandidateEntryNames(for setup: APITestSetup, entries: [String]) -> [String] {
-    let manifestStarterName: String? = {
-        guard let props = setup.decodedManifest()
-
-        else {
-            return nil
-        }
-        return props.starterNotebook?.trimmingCharacters(in: .whitespacesAndNewlines)
-    }()
+private func notebookCandidateEntryNames(starterNotebook: String?, entries: [String]) -> [String] {
+    let manifestStarterName = starterNotebook?.trimmingCharacters(in: .whitespacesAndNewlines)
 
     var candidates: [String] = []
     var seen: Set<String> = []
