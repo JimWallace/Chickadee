@@ -317,6 +317,28 @@ import XCTVapor
         }
     }
 
+    // MARK: - Post-logout login page: SSO entry is a navigation link
+
+    @Test func loginPageAfterLogout_rendersSSOLinkNotForm() async throws {
+        // v0.4.211 stopped SSO-only mode from auto-redirecting /login into the
+        // SSO flow, which surfaced the "Login with UWaterloo" button for the
+        // first time. It must be a navigation link, NOT a form submit — the
+        // browser enforces the CSP form-action directive across the whole
+        // redirect chain, and the IdP authorization endpoint isn't (and can't
+        // reliably be) in that allow-list, so a form submit gets blocked.
+        // Regression guard for v0.4.212.
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login?loggedout=1",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("href=\"/auth/sso/start\""))
+                    #expect(!body.contains("action=\"/auth/sso/start\""))
+                })
+        }
+    }
+
     // MARK: - ssoCallback: error paths
 
     @Test func sSOCallback_missingStateFails() async throws {

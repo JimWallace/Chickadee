@@ -30,9 +30,9 @@ Log in
     </div>
     #endif
     #if(showSSOLogin):
-    <form class="form" method="get" action="/auth/sso/start">
-        <button class="btn btn-primary" type="submit">Login with UWaterloo</button>
-    </form>
+    <div class="form">
+        <a class="btn btn-primary" href="/auth/sso/start" style="text-align:center">Login with UWaterloo</a>
+    </div>
     #endif
     #if(showLocalLogin):
     <form class="form" method="post" action="/login">
