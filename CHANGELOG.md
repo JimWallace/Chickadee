@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.212] - 2026-05-20
+
+### Fixed
+
+- **The "Login with UWaterloo" button now works on the post-logout login
+  page.** v0.4.211 stopped SSO-only mode from auto-redirecting `/login` into
+  the SSO flow (so logout actually lands on the login form), which surfaced
+  the SSO sign-in button for the first time. That button was a GET `<form>`
+  submitting to `/auth/sso/start`, which 303-redirects to the IdP's
+  authorization endpoint — but browsers enforce the `form-action` CSP
+  directive across the whole redirect chain, and only the `end_session`
+  origin was allow-listed, so the redirect to the authorization endpoint (and
+  any 2FA/consent hops) was silently blocked. The button is now a plain
+  navigation link (`<a href="/auth/sso/start">`), which `form-action` does not
+  govern — matching how the old auto-redirect reached the IdP.
+
 ## [0.4.211] - 2026-05-20
 
 ### Added
