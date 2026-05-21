@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.211] - 2026-05-20
+
+### Added
+
+- **Client-side 30-minute inactivity auto-logout.** `SessionIdleTimeoutMiddleware`
+  already dropped idle sessions, but only on the *next* request — a user sitting
+  idle on a page was never actually signed out or redirected. New
+  `Public/idle-logout.js` watches for user input and, once the configured idle
+  ceiling is reached, saves any open notebook (best-effort, via the new
+  `window.chickadeeSaveNotebook` hook in `notebook.js`) then submits logout so
+  the full server-side sign-out runs and the browser lands on the login page
+  with an inactivity message. The ceiling is shared with the server through the
+  new `#sessionIdleTimeoutSeconds()` Leaf tag
+  (`<meta name="session-idle-timeout-seconds">`), so client and server enforce
+  the same `SESSION_IDLE_TIMEOUT_MINUTES` (default 30). The script stays dormant
+  when the gate is disabled (value 0) and only loads for authenticated pages.
+
+### Fixed
+
+- **The logout button now reliably lands on the login page with a clear
+  confirmation.** Logout already redirected to `/login`, but in SSO mode
+  `/login` immediately restarted the SSO flow (`/auth/sso/start`), silently
+  re-authenticating the user — so the button felt broken. `/login` now stays on
+  the form (showing "You have been signed out.") when the request arrives from a
+  logout (`?loggedout=1`) or an inactivity timeout (`?error=timeout`), and the
+  logout handler's post-logout redirect — including the SSO
+  `post_logout_redirect_uri` — carries the marker so the user reliably ends up
+  on the Chickadee login page.
+
 ## [0.4.210] - 2026-05-20
 
 ### Changed

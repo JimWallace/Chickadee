@@ -397,6 +397,24 @@
         return looksLikeNotebook(notebook) ? notebook : null;
     }
 
+    // Exposed for idle-logout.js: flush the open notebook to JupyterLite's
+    // storage before the inactivity watchdog signs the user out, so unsaved
+    // cells survive. Best-effort and read-only-aware; never throws.
+    window.chickadeeSaveNotebook = async function () {
+        if (readOnly) return;
+        try {
+            const childWindow = frame.contentWindow;
+            const app = childWindow && childWindow.jupyterapp;
+            if (app && app.commands && typeof app.commands.execute === 'function') {
+                try { await app.commands.execute('docmanager:save'); } catch (_) {}
+                try { await app.commands.execute('docmanager:save-all'); } catch (_) {}
+                await delay(150);
+            }
+        } catch (_) {
+            // Saving is best-effort; swallow everything.
+        }
+    };
+
     async function readNotebookFromJupyterFrame() {
         try {
             const childWindow = frame.contentWindow;

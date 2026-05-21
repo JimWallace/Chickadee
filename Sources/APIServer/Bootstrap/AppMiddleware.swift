@@ -117,6 +117,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
     app.leaf.tags["appVersion"] = AppVersionTag()
+    app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
     app.leaf.tags["rawJSON"] = RawJSONTag()
     // FileMiddleware is registered first so static files are served directly.
     // It short-circuits the responder chain (returns without calling next), so

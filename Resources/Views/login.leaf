@@ -5,6 +5,11 @@ Log in
 #export("content"):
 <div class="auth-box">
     <h1>Log in to Chickadee</h1>
+    #if(loggedOut && !error):
+    <div class="notice-box" style="margin-bottom:1rem">
+        <p>You have been signed out.</p>
+    </div>
+    #endif
     #if(error):
     <div class="error-box" style="margin-bottom:1rem">
         #if(error == "invalid"):

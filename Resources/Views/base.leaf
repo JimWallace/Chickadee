@@ -6,6 +6,9 @@
     <meta name="color-scheme" content="light dark">
     <meta name="csrf-token" content="#csrfToken()">
     <meta name="app-version" content="#appVersion()">
+    #if(currentUser):
+    <meta name="session-idle-timeout-seconds" content="#sessionIdleTimeoutSeconds()">
+    #endif
     <title>#import("title") — Chickadee</title>
     <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="32x32" type="image/png">
     <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="16x16" type="image/png">
@@ -64,6 +67,9 @@
     #import("content")
 </main>
 <script src="/app.js?v=#appVersion()"></script>
+#if(currentUser):
+<script src="/idle-logout.js?v=#appVersion()"></script>
+#endif
 <script>
 // All multipart/form-data uploads bypass the hidden _csrf body field because
 // the body stream is not collected before CSRF middleware runs.  Intercept

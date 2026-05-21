@@ -39,12 +39,16 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/")
         }
         let error = req.query[String.self, at: "error"]
+        let loggedOut = req.query[String.self, at: "loggedout"] != nil
         let authMode = req.application.authMode
 
         // In SSO-only mode, start the SSO flow immediately so users do not
         // need to click a button. Keep error states on /login so the message
-        // can be shown instead of creating a redirect loop.
-        if authMode == .sso, error == nil {
+        // can be shown instead of creating a redirect loop. A just-logged-out
+        // user is held on the form too — otherwise logout would bounce them
+        // straight back into SSO and silently re-authenticate, defeating the
+        // whole point of the button.
+        if authMode == .sso, error == nil, !loggedOut {
             return req.redirect(to: "/auth/sso/start")
         }
 
@@ -52,6 +56,7 @@ struct AuthRoutes: RouteCollection {
             "login",
             LoginContext(
                 error: error,
+                loggedOut: loggedOut,
                 showLocalLogin: authMode != .sso,
                 showRegisterLink: authMode != .sso,
                 showSSOLogin: authMode != .local
@@ -203,6 +208,14 @@ struct AuthRoutes: RouteCollection {
 
     @Sendable
     func logout(req: Request) async throws -> Response {
+        // The inactivity watchdog (idle-logout.js) posts `?reason=timeout` so the
+        // login page can explain why the user was signed out. A manual click on
+        // the nav button carries no reason and gets the neutral "signed out"
+        // confirmation. Either way the user lands back on /login (never silently
+        // re-authenticated) so it's obvious the session ended.
+        let isTimeout = req.query[String.self, at: "reason"] == "timeout"
+        let returnPath = isTimeout ? "/login?error=timeout" : "/login?loggedout=1"
+
         // Extract any SSO tokens stored at login time before clearing the session.
         let accessToken = req.session.data["oidc_access_token"]
         let refreshToken = req.session.data["oidc_refresh_token"]
@@ -256,7 +269,7 @@ struct AuthRoutes: RouteCollection {
             if let base = req.application.securityConfiguration.publicBaseURL?.absoluteString
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             {
-                items.append(URLQueryItem(name: "post_logout_redirect_uri", value: base + "/login"))
+                items.append(URLQueryItem(name: "post_logout_redirect_uri", value: base + returnPath))
             }
             if !items.isEmpty {
                 components?.queryItems = items
@@ -266,7 +279,7 @@ struct AuthRoutes: RouteCollection {
             }
         }
 
-        return req.redirect(to: "/login")
+        return req.redirect(to: returnPath)
     }
 }
 
@@ -400,17 +413,20 @@ private struct RegisterBody: Content {
 
 private struct LoginContext: Encodable {
     var error: String?
+    var loggedOut: Bool
     var showLocalLogin: Bool
     var showRegisterLink: Bool
     var showSSOLogin: Bool
 
     init(
         error: String? = nil,
+        loggedOut: Bool = false,
         showLocalLogin: Bool,
         showRegisterLink: Bool,
         showSSOLogin: Bool
     ) {
         self.error = error
+        self.loggedOut = loggedOut
         self.showLocalLogin = showLocalLogin
         self.showRegisterLink = showRegisterLink
         self.showSSOLogin = showSSOLogin
