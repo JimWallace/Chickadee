@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.217] - 2026-05-21
+
+### Changed
+
+- **Admin dashboard split into navigable tabs.** A shared tab bar
+  (`_admin-tabs.leaf`) now sits atop every admin page, replacing the ad-hoc
+  buttons. The dashboard is divided into: **Overview** (`/admin` — diagnostics
+  cards, Runners, Courses), **Users** (`/admin/users`), **Storage**
+  (`/admin/storage`), **Audit Log** (`/admin/audit`), and **Health Alerts**
+  (`/admin/alerts`). The Users table and the v0.4.216 Storage panel moved off
+  the single monolithic dashboard into their own routes/views
+  (`admin-users.leaf`, `admin-storage.leaf`), each with a self-contained
+  script. Side benefit: the Storage directory walk + DB-size query now run
+  only when the Storage tab is opened rather than on every dashboard load.
+
 ## [0.4.216] - 2026-05-21
 
 ### Added

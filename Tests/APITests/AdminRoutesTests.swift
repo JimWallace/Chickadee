@@ -229,12 +229,12 @@ import XCTVapor
         }
     }
 
-    @Test func adminDashboardShowsStoragePanel() async throws {
+    @Test func storageTabShowsBreakdown() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
 
             try await app.asyncTest(
-                .GET, "/admin",
+                .GET, "/admin/storage",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -245,12 +245,48 @@ import XCTVapor
                     #expect(body.contains(">Submissions<"))
                     #expect(body.contains(">Test Setups<"))
                     #expect(body.contains(">Database<"))
+                    #expect(body.contains("aria-current=\"page\""))
                 })
 
+            // The Storage panel must no longer appear on the Overview tab.
+            try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains(">Submissions<") == false)
+                })
         }
     }
 
-    @Test func adminDashboardDefaultsUsersToMostRecentLastSeenFirst() async throws {
+    @Test func adminTabBarPresentWithOverviewActive() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains("class=\"admin-tabs\""))
+                    #expect(body.contains("href=\"/admin/users\""))
+                    #expect(body.contains("href=\"/admin/storage\""))
+                    #expect(body.contains("href=\"/admin/audit\""))
+                    #expect(body.contains("href=\"/admin/alerts\""))
+                    // Overview is the active tab.
+                    #expect(body.contains("href=\"/admin\" aria-current=\"page\""))
+                    // The inline audit/alerts buttons were removed from Overview.
+                    #expect(body.contains(">Server health alerts</a>") == false)
+                })
+        }
+    }
+
+    @Test func usersTabDefaultsToMostRecentLastSeenFirst() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             let now = Date()
@@ -263,7 +299,7 @@ import XCTVapor
             try await recent.save(on: app.db)
 
             try await app.asyncTest(
-                .GET, "/admin",
+                .GET, "/admin/users",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -383,7 +419,7 @@ import XCTVapor
             let userID = try managedUser.requireID()
 
             try await app.asyncTest(
-                .GET, "/admin",
+                .GET, "/admin/users",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },

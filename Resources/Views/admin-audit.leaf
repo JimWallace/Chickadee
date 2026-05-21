@@ -3,10 +3,10 @@
 Audit Log
 #endexport
 #export("content"):
+#extend("_admin-tabs")
 <section class="admin-section">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
         <h2 style="margin:0">Audit Log</h2>
-        <a href="/admin" class="btn">← Back to admin</a>
     </div>
 
     <p style="color:var(--muted);margin-top:0">

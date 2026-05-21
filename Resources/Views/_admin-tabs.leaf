@@ -1,0 +1,38 @@
+<!--
+    Shared admin navigation tab bar.  Rendered at the top of every admin
+    page's content via #extend("_admin-tabs").  The caller's context must
+    provide `activeAdminTab` (one of: overview, users, storage, audit,
+    alerts) so the current tab is highlighted.
+-->
+<nav class="admin-tabs" aria-label="Admin sections">
+    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+</nav>
+<style>
+.admin-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+}
+.admin-tab {
+    padding: .55rem .9rem;
+    text-decoration: none;
+    color: var(--gray-600);
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+.admin-tab:hover {
+    color: var(--gray-900);
+}
+.admin-tab[aria-current="page"] {
+    color: var(--gray-900);
+    font-weight: 600;
+    border-bottom-color: var(--gray-900);
+}
+</style>
