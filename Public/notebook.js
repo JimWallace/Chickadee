@@ -97,16 +97,68 @@
             setStatus('error', 'Notebook source unavailable');
         });
 
+        // --- Idle-watchdog activity bridge -------------------------------
+        //
+        // Keystrokes/clicks INSIDE the JupyterLite iframe never reach the
+        // parent window, so idle-logout.js can't see a student who's actively
+        // editing.  On each iframe load we attach passive listeners to its
+        // document and (a) dispatch `chickadee:activity` on the parent window
+        // to reset the client idle deadline, and (b) send a throttled
+        // `/session/keepalive` so the server's last_seen_at tracks in-editor
+        // work and the next-request gate doesn't expire an active student.
+        // Same-origin contentDocument access is reliable in Chromium and
+        // best-effort in Safari (hence the try/catch).  Skipped entirely when
+        // the idle gate is disabled (timeout meta is 0/absent).
+        let lastNotebookKeepalive = 0;
+
+        function idleTimeoutConfigured() {
+            const meta = document.querySelector('meta[name="session-idle-timeout-seconds"]');
+            return meta ? (parseInt(meta.getAttribute('content'), 10) || 0) > 0 : false;
+        }
+
+        function notebookActivity() {
+            try {
+                window.dispatchEvent(new CustomEvent('chickadee:activity'));
+            } catch (_) { /* ignore */ }
+
+            const now = Date.now();
+            // Leading-edge, then at most once per 5 minutes.
+            if (now - lastNotebookKeepalive < 5 * 60 * 1000) return;
+            lastNotebookKeepalive = now;
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            const token = meta ? meta.getAttribute('content') : '';
+            fetch('/session/keepalive', {
+                method: 'POST',
+                headers: { 'x-csrf-token': token, 'accept': 'application/json' },
+                redirect: 'manual'
+            }).catch(() => { /* best-effort */ });
+        }
+
+        function attachNotebookActivityBridge() {
+            if (!idleTimeoutConfigured()) return;
+            let doc;
+            try { doc = frame.contentDocument; } catch (_) { doc = null; }
+            if (!doc || doc._chickadeeActivityBound) return;
+            doc._chickadeeActivityBound = true;
+            ['keydown', 'pointerdown', 'wheel'].forEach((name) => {
+                try {
+                    doc.addEventListener(name, notebookActivity, { passive: true, capture: true });
+                } catch (_) { /* ignore */ }
+            });
+        }
+
         frame.addEventListener('load', () => {
             if (!serverSyncComplete && !serverSyncInFlight) {
                 void syncNotebookFromServerSnapshot();
             }
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
+            attachNotebookActivityBridge();
         });
         setInterval(() => {
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
+            attachNotebookActivityBridge();
         }, 1500);
 
         armEditorWatchdog();

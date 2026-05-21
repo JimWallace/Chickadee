@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.215] - 2026-05-21
+
+### Added
+
+- **Visible inactivity logout with a warning countdown.** When an
+  authenticated user goes idle, a warning modal now appears
+  `SESSION_IDLE_WARNING_SECONDS` (default 120) before the ceiling, showing a
+  live countdown and a **Stay signed in** button. Clicking it calls a new
+  `POST /session/keepalive` endpoint that refreshes `last_seen_at` and resets
+  the clock; ignoring it logs the user out with a visible "Signing you out…"
+  transition rather than the previous silent redirect-on-next-click. The
+  warning window is clamped to stay strictly below the timeout.
+
+### Changed
+
+- **Closing the browser now ends the session.** The session cookie is
+  session-scoped (no `Expires`/`Max-Age`) instead of persisting for a week, so
+  the browser drops it on close. The idle timeout remains the backstop for
+  session-restore browsers that resurrect the cookie.
+- **Idle watchdog rewritten to actually fire at the ceiling.** `idle-logout.js`
+  now tracks an absolute deadline and re-evaluates on
+  `visibilitychange`/`focus`/`pageshow`, not just a polling interval. A tab
+  that was backgrounded (where browsers freeze timers) past the idle ceiling is
+  now signed out the instant it is refocused, with no click required —
+  previously the client watchdog could miss the mark entirely and only the
+  server-side gate caught it on the next request.
+- **In-notebook work counts as activity.** Keystrokes inside the JupyterLite
+  editor iframe (which never reach the parent window) are bridged to the
+  watchdog and send a throttled keep-alive, so a student actively editing is no
+  longer treated as idle.
+- **Cross-tab session sync.** Activity, extend, and logout are mirrored across
+  open tabs via `BroadcastChannel`, so an idle background tab can't expire a
+  session the user is actively using elsewhere.
+
 ## [0.4.214] - 2026-05-20
 
 ### Changed

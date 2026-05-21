@@ -67,6 +67,67 @@ struct APIServerAppTests {
         }
     }
 
+    // MARK: - Idle-warning window config
+
+    @Test func idleWarningDefaultsTo120Seconds() async throws {
+        try await withTestEnvironment([
+            "SESSION_IDLE_TIMEOUT_MINUTES": nil,
+            "SESSION_IDLE_WARNING_SECONDS": nil,
+        ]) {
+            let config = AppSecurityConfiguration.fromEnvironment(authMode: .local)
+            #expect(config.sessionIdleTimeoutSeconds == 30 * 60)
+            #expect(config.sessionIdleWarningSeconds == 120)
+        }
+    }
+
+    @Test func idleWarningHonoursCustomValue() async throws {
+        try await withTestEnvironment([
+            "SESSION_IDLE_TIMEOUT_MINUTES": "30",
+            "SESSION_IDLE_WARNING_SECONDS": "300",
+        ]) {
+            let config = AppSecurityConfiguration.fromEnvironment(authMode: .local)
+            #expect(config.sessionIdleWarningSeconds == 300)
+        }
+    }
+
+    @Test func idleWarningClampsBelowTimeout() async throws {
+        // 1-minute ceiling (60 s) with a 120 s warning must clamp so the
+        // warning can't swallow the whole window — at least a 5 s logout gap.
+        try await withTestEnvironment([
+            "SESSION_IDLE_TIMEOUT_MINUTES": "1",
+            "SESSION_IDLE_WARNING_SECONDS": "120",
+        ]) {
+            let config = AppSecurityConfiguration.fromEnvironment(authMode: .local)
+            #expect(config.sessionIdleTimeoutSeconds == 60)
+            #expect(config.sessionIdleWarningSeconds == 55)
+        }
+    }
+
+    @Test func idleWarningDisabledWhenTimeoutDisabled() async throws {
+        try await withTestEnvironment([
+            "SESSION_IDLE_TIMEOUT_MINUTES": "0",
+            "SESSION_IDLE_WARNING_SECONDS": "120",
+        ]) {
+            let config = AppSecurityConfiguration.fromEnvironment(authMode: .local)
+            #expect(config.sessionIdleTimeoutSeconds == 0)
+            #expect(config.sessionIdleWarningSeconds == 0)
+        }
+    }
+
+    // MARK: - Session cookie
+
+    @Test func sessionCookieIsBrowserScoped() {
+        // No expires/maxAge → the browser drops the cookie on close, so closing
+        // the browser logs the user out.
+        let cookie = chickadeeSessionCookie(sessionID: SessionID(string: "abc123"), isSecure: true)
+        #expect(cookie.expires == nil)
+        #expect(cookie.maxAge == nil)
+        #expect(cookie.isHTTPOnly)
+        #expect(cookie.isSecure)
+        #expect(cookie.sameSite == .lax)
+        #expect(cookie.string == "abc123")
+    }
+
     @Test func parseSSOIdentityAllowlistNormalizesAndDeduplicates() {
         let values = parseSSOIdentityAllowlist(" Alice ;bob@example.com,\nALICE,  carol ")
         #expect(values == ["alice", "bob@example.com", "carol"])

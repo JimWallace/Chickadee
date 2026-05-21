@@ -8,6 +8,7 @@
     <meta name="app-version" content="#appVersion()">
     #if(currentUser):
     <meta name="session-idle-timeout-seconds" content="#sessionIdleTimeoutSeconds()">
+    <meta name="session-idle-warning-seconds" content="#sessionIdleWarningSeconds()">
     #endif
     <title>#import("title") — Chickadee</title>
     <link rel="icon" href="/favicon.png?v=#appVersion()" sizes="32x32" type="image/png">

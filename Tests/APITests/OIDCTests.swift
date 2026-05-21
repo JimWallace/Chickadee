@@ -73,7 +73,8 @@ import XCTVapor
             enforceHTTPS: false,
             trustForwardedProto: true,
             sessionCookieSecure: false,
-            sessionIdleTimeoutSeconds: 0
+            sessionIdleTimeoutSeconds: 0,
+            sessionIdleWarningSeconds: 0
         )
         return app
     }
