@@ -25,6 +25,8 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     }
 
+    sweepLegacyResultDumps(resultsDir: resultsDir, logger: app.logger)
+
     app.storage[ResultsDirectoryKey.self] = resultsDir
     app.storage[TestSetupsDirectoryKey.self] = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
@@ -48,4 +50,30 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     )
     app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
     app.authProvider = LocalAuthProvider()
+}
+
+/// One-time reclamation of the legacy per-result JSON dumps that earlier
+/// versions wrote alongside the authoritative `results.collection_json` DB
+/// column.  Those files were never read back, so they are pure footprint;
+/// runner/server logs (`*.log`) in the same directory are left untouched.
+func sweepLegacyResultDumps(resultsDir: String, logger: Logger) {
+    let fm = FileManager.default
+    guard let entries = try? fm.contentsOfDirectory(atPath: resultsDir) else { return }
+
+    var removedCount = 0
+    var freedBytes = 0
+    for name in entries where name.hasSuffix(".json") {
+        let path = resultsDir + name
+        let size = ((try? fm.attributesOfItem(atPath: path))?[.size] as? Int) ?? 0
+        if (try? fm.removeItem(atPath: path)) != nil {
+            removedCount += 1
+            freedBytes += size
+        }
+    }
+
+    if removedCount > 0 {
+        logger.info(
+            "Reclaimed \(removedCount) legacy result dump(s) (\(freedBytes) bytes) from \(resultsDir)"
+        )
+    }
 }

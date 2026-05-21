@@ -115,7 +115,7 @@ import XCTVapor
         }
     }
 
-    @Test func reportResultsWritesFileToDisk() async throws {
+    @Test func reportResultsPersistsToDBNotDisk() async throws {
         try await withApp(app) { _ in
             let collection = makeCollection(submissionID: "sub_disktest")
             try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
@@ -133,10 +133,16 @@ import XCTVapor
                     #expect(res.status == .ok)
                 })
 
-            let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
-            let resultFile = files.first { $0.hasPrefix("sub_disktest") }
-            #expect(resultFile != nil, "Expected a result file for sub_disktest to be written")
+            let stored = try await APIResult.query(on: app.db)
+                .filter(\.$submissionID == collection.submissionID)
+                .first()
+            #expect(stored != nil, "Expected the result to be persisted to the DB")
 
+            // The redundant on-disk JSON dump was removed; nothing should land in results/.
+            let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
+            #expect(
+                !files.contains { $0.hasPrefix("sub_disktest") },
+                "Result JSON should no longer be written to disk")
         }
     }
 
@@ -182,10 +188,10 @@ import XCTVapor
                     #expect(res.status == .ok)
                 })
 
-            let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
-            let resultFile = files.first { $0.hasPrefix(collection.submissionID) }
-            #expect(resultFile != nil, "Expected a result file for wrapped reports to be written")
-
+            let stored = try await APIResult.query(on: app.db)
+                .filter(\.$submissionID == collection.submissionID)
+                .first()
+            #expect(stored != nil, "Expected wrapped-report result to be persisted to the DB")
         }
     }
 

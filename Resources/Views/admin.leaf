@@ -29,6 +29,21 @@ Admin
     </div>
 </section>
 
+<section class="admin-section admin-diagnostics">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">Storage</h2>
+        <span style="color:var(--gray-600);font-size:.85rem">Total: #(storage.totalFormatted) · DB: #(storage.dbBackend)</span>
+    </div>
+    <div class="diagnostics-cards">
+        #for(row in storage.rows):
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">#(row.label)</div>
+            <div class="diagnostic-value">#(row.formatted)</div>
+        </article>
+        #endfor
+    </div>
+</section>
+
 <section class="admin-section">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
         <div style="display:flex;align-items:center;gap:.75rem">

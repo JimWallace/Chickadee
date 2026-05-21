@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.216] - 2026-05-21
+
+### Added
+
+- **Admin storage breakdown panel.** The admin dashboard now shows a
+  **Storage** section with the on-disk footprint of each persistent-volume
+  sink (Submissions, Test Setups, Results & Logs, Static Assets) plus the
+  database size, a running total, and the active DB backend. Directory walks
+  run on the thread pool so the page stays responsive; sizes are computed by a
+  new `Sources/APIServer/Utilities/DiskUsage.swift` helper
+  (`directorySizeBytes`, `databaseSizeBytes`, `humanReadableBytes`). This is
+  the first step toward a submission-retention policy — it surfaces where the
+  volume is actually being consumed so retention can be tuned from real data.
+
+### Changed
+
+- **Result JSON is no longer duplicated to disk.** Previously every
+  `TestOutcomeCollection` was written both to the authoritative
+  `results.collection_json` DB column *and* to a never-read
+  `{submissionID}_{timestamp}.json` file under `results/` (a debug aid that
+  grew unbounded — one file per submission per retest). The disk write is
+  removed, and a one-time startup sweep (`sweepLegacyResultDumps`) reclaims the
+  accumulated `*.json` dumps on first boot, logging bytes freed. Runner/server
+  `*.log` files in the same directory are left untouched.
+
 ## [0.4.215] - 2026-05-21
 
 ### Added

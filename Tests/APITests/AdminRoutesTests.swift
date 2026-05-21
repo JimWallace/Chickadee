@@ -229,6 +229,27 @@ import XCTVapor
         }
     }
 
+    @Test func adminDashboardShowsStoragePanel() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+
+            try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains(">Storage<"))
+                    #expect(body.contains(">Submissions<"))
+                    #expect(body.contains(">Test Setups<"))
+                    #expect(body.contains(">Database<"))
+                })
+
+        }
+    }
+
     @Test func adminDashboardDefaultsUsersToMostRecentLastSeenFirst() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
