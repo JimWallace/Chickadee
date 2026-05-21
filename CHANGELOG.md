@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.213] - 2026-05-20
+
+### Changed
+
+- **Indexes for hot-path filters that scan unbounded-growth tables.** Several
+  recurring queries did full-table scans: the BrightSpace grade-sync sweep
+  (every 60s) filtering `results` on `brightspace_sync_pending`, the
+  stuck-submission reaper filtering `submissions` on `status` + `assigned_at`,
+  and the admin runner dashboard / rolling-average queries filtering
+  `runner_snapshots` and `job_execution_metrics` by runner. A new
+  `CreateHotPathIndexes` migration adds covering indexes:
+  `results(brightspace_sync_pending, brightspace_pending_since)`,
+  `submissions(status, assigned_at)`,
+  `runner_snapshots(runner_id, recorded_at)`, and
+  `job_execution_metrics(runner_id, completed_at)`. Idempotent
+  (`CREATE INDEX IF NOT EXISTS`), registered last so its target tables already
+  exist; no schema or behaviour change.
+
 ## [0.4.212] - 2026-05-20
 
 ### Fixed
