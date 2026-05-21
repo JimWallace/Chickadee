@@ -69,7 +69,11 @@ struct AppConfig: Sendable {
         }
         let idleTimeout = security.sessionIdleTimeoutSeconds
         if idleTimeout > 0 {
-            logger.info("security: sessionIdleTimeoutMinutes=\(Int(idleTimeout / 60))")
+            let warning = Int(security.sessionIdleWarningSeconds)
+            let warningDesc = warning > 0 ? "\(warning)s" : "disabled"
+            logger.info(
+                "security: sessionIdleTimeoutMinutes=\(Int(idleTimeout / 60)), idleWarning=\(warningDesc)"
+            )
         } else {
             logger.info("security: sessionIdleTimeout=disabled")
         }

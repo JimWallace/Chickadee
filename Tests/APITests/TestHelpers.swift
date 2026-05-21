@@ -384,6 +384,7 @@ func configureLeaf(_ app: Application) {
     // Safe in the minimal test app: reads only securityConfiguration, which
     // falls back to `.default` (30 min) when unset.
     app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
+    app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
 }
 
 // MARK: - CSRF token extraction

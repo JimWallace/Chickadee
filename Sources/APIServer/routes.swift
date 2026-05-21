@@ -30,6 +30,7 @@ func routes(_ app: Application) throws {
     // MARK: - Any authenticated user
 
     let auth = app.grouped(sessionAuth, RoleMiddleware(required: .authenticated), csrf)
+    try auth.register(collection: SessionRoutes())
     try auth.register(collection: WebRoutes())
     try auth.register(collection: EnrollmentRoutes())
     try auth.register(collection: AccountRoutes())

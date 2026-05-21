@@ -52,15 +52,9 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.sessions.use(.fluent)
     var sessionConfig = app.sessions.configuration
     sessionConfig.cookieFactory = { sessionID in
-        HTTPCookies.Value(
-            string: sessionID.string,
-            expires: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7),  // one week
-            maxAge: nil,
-            domain: nil,
-            path: "/",
-            isSecure: securityConfiguration.sessionCookieSecure,
-            isHTTPOnly: true,
-            sameSite: .lax
+        chickadeeSessionCookie(
+            sessionID: sessionID,
+            isSecure: securityConfiguration.sessionCookieSecure
         )
     }
     app.sessions.configuration = sessionConfig
@@ -118,6 +112,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
     app.leaf.tags["appVersion"] = AppVersionTag()
     app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
+    app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
     app.leaf.tags["rawJSON"] = RawJSONTag()
     // FileMiddleware is registered first so static files are served directly.
     // It short-circuits the responder chain (returns without calling next), so

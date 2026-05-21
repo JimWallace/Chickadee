@@ -21,3 +21,19 @@ struct SessionIdleTimeoutTag: UnsafeUnescapedLeafTag {
         return .string(String(max(0, seconds)))
     }
 }
+
+/// Outputs the idle-warning lead time in seconds, used as:
+/// <meta name="session-idle-warning-seconds" content="#sessionIdleWarningSeconds()">
+///
+/// idle-logout.js reads this to know how long before the ceiling to raise the
+/// warning modal. "0" means no warning — log out straight at the ceiling.
+struct SessionIdleWarningTag: UnsafeUnescapedLeafTag {
+    func render(_ ctx: LeafContext) throws -> LeafData {
+        try ctx.requireParameterCount(0)
+        guard let req = ctx.request else {
+            return .string("0")
+        }
+        let seconds = Int(req.application.securityConfiguration.sessionIdleWarningSeconds)
+        return .string(String(max(0, seconds)))
+    }
+}
