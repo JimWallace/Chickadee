@@ -201,18 +201,35 @@ struct NotebookExtractor {
             """
     }
 
-    // Encodes a Swift string as a Python string literal.  A JSON string literal
-    // is a valid Python string literal for every escape JSONSerialization emits
-    // (`\"`, `\\`, `\n`, `\r`, `\t`, `\uXXXX`, raw UTF-8), so we reuse it.
+    // Encodes a Swift string as a Python string literal.  We escape exactly the
+    // characters Python needs — backslash, double-quote, and the standard
+    // control escapes — and pass everything else through unchanged.
+    //
+    // We deliberately do NOT use JSONSerialization here.  It escapes `/` as
+    // `\/` (valid JSON, but `\/` is not a valid Python escape).  Because this
+    // literal is fed to `compile()` inside the generated module, a `\/` makes
+    // that inner compile raise SyntaxError ("unexpected character after line
+    // continuation character"), which drops every cell containing a `/` —
+    // e.g. `daily_l = daily_ml / 1000`.  (Regression fixed in v0.4.220.)
     func pythonStringLiteral(_ s: String) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: [s]),
-            let json = String(data: data, encoding: .utf8),
-            json.count >= 2
-        else {
-            return "\"\""
+        var out = "\""
+        for scalar in s.unicodeScalars {
+            switch scalar {
+            case "\\": out += "\\\\"
+            case "\"": out += "\\\""
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            default:
+                if scalar.value < 0x20 {
+                    out += String(format: "\\x%02x", scalar.value)
+                } else {
+                    out.unicodeScalars.append(scalar)
+                }
+            }
         }
-        // JSONSerialization emits a compact `["...."]`; drop the brackets.
-        return String(json.dropFirst().dropLast())
+        out += "\""
+        return out
     }
 }
 

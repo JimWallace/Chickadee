@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.220] - 2026-05-21
+
+### Fixed
+
+- **Hotfix: notebook cells containing `/` were silently dropped during native
+  grading (v0.4.219 regression).** v0.4.219's per-cell `exec(compile(<source>))`
+  encoded the cell source via `NotebookExtractor.pythonStringLiteral`, which
+  used `JSONSerialization`. Foundation's JSON encoder escapes `/` as `\/` —
+  valid JSON, but `\/` is **not** a valid Python escape. Because the literal is
+  fed to `compile()` inside the generated module, any cell containing a `/`
+  (e.g. `daily_l = daily_ml / 1000`) made that inner `compile()` raise
+  `SyntaxError: unexpected character after line continuation character`, so the
+  whole cell was caught-and-skipped and its variables went undefined. Students
+  who had previously scored 100% dropped (e.g. to 67%) on retest once v0.4.219
+  was deployed, failing exactly the checks for variables defined in a cell that
+  used division. `pythonStringLiteral` now hand-escapes only the characters
+  Python needs (`\`, `"`, `\n`, `\r`, `\t`, control chars) and passes `/` (and
+  everything else) through unchanged. Native-only — the browser runner uses JS
+  `JSON.stringify`, which does not escape `/`. Verified end-to-end against the
+  affected student submission with the real Swift extractor.
+
 ## [0.4.219] - 2026-05-21
 
 ### Fixed
