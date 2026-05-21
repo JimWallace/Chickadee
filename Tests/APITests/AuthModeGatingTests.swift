@@ -113,6 +113,32 @@ import XCTVapor
         }
     }
 
+    @Test func ssoMode_loginAfterLogoutRendersFormNotSSORestart() async throws {
+        // A just-logged-out SSO user lands on /login?loggedout=1.  Without the
+        // guard this would immediately redirect to /auth/sso/start and silently
+        // re-authenticate, making the logout button feel broken.
+        try await withApp(try await makeApp(authMode: .sso)) { app in
+            try await app.asyncTest(
+                .GET, "/login?loggedout=1",
+                afterResponse: { res in
+                    // Must NOT bounce back into SSO; renders the login form
+                    // instead (status 200, or 500 if this bare harness has no
+                    // Leaf views — either way, no /auth/sso/start redirect).
+                    #expect(res.headers.first(name: .location) != "/auth/sso/start")
+                })
+        }
+    }
+
+    @Test func ssoMode_loginWithTimeoutErrorRendersFormNotSSORestart() async throws {
+        try await withApp(try await makeApp(authMode: .sso)) { app in
+            try await app.asyncTest(
+                .GET, "/login?error=timeout",
+                afterResponse: { res in
+                    #expect(res.headers.first(name: .location) != "/auth/sso/start")
+                })
+        }
+    }
+
     @Test func ssoMode_customCallbackRouteRegisteredFromEnv() async throws {
         // Cross-suite env serialization via `withAsyncEnvLock` — OIDCTests
         // also mutates OIDC_* env vars, and without serialization the two

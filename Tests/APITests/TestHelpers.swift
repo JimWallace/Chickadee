@@ -381,6 +381,9 @@ func configureLeaf(_ app: Application) {
     // `#csrfToken()` or `#appVersion()` will render those tokens verbatim;
     // no existing test asserts on that markup.
     app.leaf.tags["rawJSON"] = RawJSONTag()
+    // Safe in the minimal test app: reads only securityConfiguration, which
+    // falls back to `.default` (30 min) when unset.
+    app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
 }
 
 // MARK: - CSRF token extraction

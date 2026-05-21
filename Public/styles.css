@@ -382,6 +382,13 @@ textarea.form-input {
 
 .error-box h2 { color: var(--red); }
 
+.notice-box {
+    background: var(--success-bg);
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    padding: 1rem 1.25rem;
+}
+
 .compiler-output {
     margin-top: .75rem;
     font-size: .78rem;
