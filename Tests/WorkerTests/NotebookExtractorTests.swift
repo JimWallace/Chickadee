@@ -379,4 +379,70 @@ import Testing
         #expect(result.source.contains("compile(\"# Your code here\""))
         #expect(result.source.contains("age = 20"))
     }
+
+    // MARK: - End-to-end: run the generated module through a real python3
+
+    @Test func generatedModuleLoadsUnderRealPython3() throws {
+        // The shape-level tests above can't catch an emitted-Python bug that
+        // still *looks* plausible — the v0.4.220 `\/` regression compiled fine
+        // as a Swift string but made the inner compile() throw. Only a real
+        // interpreter catches that whole class, so here we extract a notebook
+        // (division cell, syntax-error cell, comment-only cell, and a trailing
+        // cell) and ask python3 which names actually resolve after import.
+        let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+        guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            return  // python3 unavailable on this platform — skip
+        }
+
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["good = 1\n"]],
+            ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]],  // division
+            ["cell_type": "code", "source": ["broken = (\n"]],  // syntax error → isolated
+            ["cell_type": "code", "source": ["# Your code here\n"]],  // comment-only → harmless
+            ["cell_type": "code", "source": ["after = 7\n"]],
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let source = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb").source
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nbx-e2e-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let modulePath = dir.appendingPathComponent("submission.py")
+        try source.write(to: modulePath, atomically: true, encoding: .utf8)
+
+        // Load the module the way the worker does (importlib + exec_module) and
+        // report which names resolved.
+        let probe = """
+            import importlib.util, json
+            spec = importlib.util.spec_from_file_location("submission", r"\(modulePath.path)")
+            m = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(m)
+            except Exception:
+                pass
+            names = ["good", "daily_ml", "daily_l", "broken", "after"]
+            print(json.dumps({n: hasattr(m, n) for n in names}))
+            """
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        proc.arguments = ["python3", "-c", probe]
+        let outPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = Pipe()
+        try proc.run()
+        proc.waitUntilExit()
+
+        let out = String(decoding: outPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let defined = try #require(try? JSONDecoder().decode([String: Bool].self, from: Data(out.utf8)))
+
+        #expect(defined["good"] == true)
+        // daily_ml/daily_l guard the v0.4.220 `\/`-escaping regression.
+        #expect(defined["daily_ml"] == true, "division cell must define daily_ml")
+        #expect(defined["daily_l"] == true, "division cell must define daily_l")
+        #expect(defined["after"] == true, "a later cell must still load after a broken cell")
+        #expect(defined["broken"] == false, "syntax-error cell must be isolated, not defined")
+    }
 }
