@@ -12,6 +12,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 struct AdminRoutes: RouteCollection {
@@ -445,11 +446,29 @@ private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
 }
 
 func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    let assignments = try await APIAssignment.query(on: db).all()
-    var counts: [UUID: Int] = [:]
-    for a in assignments {
-        let cid = a.courseID
-        counts[cid, default: 0] += 1
+    // DB-side grouped COUNT rather than loading every assignment row into
+    // memory and tallying in Swift. Falls back to the in-memory tally on the
+    // (currently nonexistent) non-SQL driver.
+    guard let sql = db as? SQLDatabase else {
+        let assignments = try await APIAssignment.query(on: db).all()
+        return assignments.reduce(into: [:]) { $0[$1.courseID, default: 0] += 1 }
     }
-    return counts
+
+    let rows = try await sql.select()
+        .column("course_id")
+        .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+        .from("assignments")
+        .groupBy("course_id")
+        .all(decoding: CourseAssignmentCountRow.self)
+    return rows.reduce(into: [:]) { $0[$1.courseID] = $1.total }
+}
+
+private struct CourseAssignmentCountRow: Decodable {
+    let courseID: UUID
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case courseID = "course_id"
+        case total
+    }
 }
