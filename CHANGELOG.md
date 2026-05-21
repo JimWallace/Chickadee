@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.214] - 2026-05-20
+
+### Changed
+
+- **Less redundant work per worker job claim and per notebook normalization**
+  (no behaviour change). (1) When the worker collects claim candidates, it
+  resolves each test-setup row and decodes its manifest once per
+  `testSetupID` and reuses the result, instead of re-querying the row and
+  re-decoding the identical manifest JSON for every pending submission
+  targeting the same assignment — the common shape when a class submits before
+  a deadline. (2) `SubmissionNormalizer` now reads and parses an uploaded
+  notebook once: the parsed JSON is carried from classification into extraction
+  via `DetectedSubmissionKind.jupyterNotebook([String: Any])`, eliminating a
+  duplicate `Data(contentsOf:)` read + JSON parse of the same file.
+
 ## [0.4.213] - 2026-05-20
 
 ### Changed

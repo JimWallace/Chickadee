@@ -287,13 +287,21 @@ private func collectClaimCandidates(
             return (lhs.submittedAt ?? .distantPast) < (rhs.submittedAt ?? .distantPast)
         }
 
+    // Many pending submissions often target the same test setup (e.g. a class
+    // submitting to one assignment before a deadline). Resolve each setup +
+    // decoded manifest once and reuse it, rather than re-querying the row and
+    // re-decoding the identical manifest JSON for every candidate.
+    var resolvedBySetupID: [String: (APITestSetup, TestProperties)] = [:]
     var candidates: [(APISubmission, APITestSetup, TestProperties)] = []
+
     for candidate in studentSubmissions {
-        guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
-        let data = Data(setup.manifest.utf8)
-        guard let manifest = decodeManifest(from: data) else {
+        if let cached = resolvedBySetupID[candidate.testSetupID] {
+            candidates.append((candidate, cached.0, cached.1))
             continue
         }
+        guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+        resolvedBySetupID[candidate.testSetupID] = (setup, manifest)
         // Accept both worker-mode and browser-mode pending submissions.
         // Browser-mode submissions only become pending when the client-side
         // runner fails or times out; the worker serves as a backstop that
@@ -308,11 +316,16 @@ private func collectClaimCandidates(
         .all()
 
     for validation in pendingValidation {
+        if let cached = resolvedBySetupID[validation.testSetupID] {
+            candidates.append((validation, cached.0, cached.1))
+            continue
+        }
         guard let valSetup = try await APITestSetup.find(validation.testSetupID, on: db) else {
             throw WorkerJobError.testSetupNotFound(id: validation.testSetupID)
         }
-        let valManifestData = Data(valSetup.manifest.utf8)
-        let valManifest = try ManifestCodec.decoder.decode(TestProperties.self, from: valManifestData)
+        let valManifest = try ManifestCodec.decoder.decode(
+            TestProperties.self, from: Data(valSetup.manifest.utf8))
+        resolvedBySetupID[validation.testSetupID] = (valSetup, valManifest)
         candidates.append((validation, valSetup, valManifest))
     }
 

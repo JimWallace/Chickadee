@@ -3,7 +3,9 @@ import Foundation
 
 enum DetectedSubmissionKind {
     case pythonScript
-    case jupyterNotebook
+    // Carries the raw bytes + already-parsed notebook JSON so the handler
+    // doesn't re-read or re-parse the same file.
+    case jupyterNotebook(data: Data, notebook: [String: Any])
     case unsupported(String)
 }
 
@@ -130,11 +132,13 @@ struct SubmissionNormalizer {
                 workspaceDirectory: workspaceDirectory,
                 progress: &progress
             )
-        case .jupyterNotebook:
+        case .jupyterNotebook(let data, let notebook):
             try handleJupyterNotebook(
                 fileURL: fileURL,
                 fileRelativePath: fileRelativePath,
                 workspaceDirectory: workspaceDirectory,
+                data: data,
+                notebook: notebook,
                 progress: &progress
             )
         case .unsupported(let reason):
@@ -176,10 +180,10 @@ struct SubmissionNormalizer {
         fileURL: URL,
         fileRelativePath: String,
         workspaceDirectory: URL,
+        data: Data,
+        notebook: [String: Any],
         progress: inout NormalizationProgress
     ) throws {
-        let data = try Data(contentsOf: fileURL)
-        let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
         let extracted = try notebookExtractor.extractPythonSource(
             from: notebook,
             filename: fileURL.lastPathComponent
@@ -316,14 +320,15 @@ struct SubmissionNormalizer {
             guard notebookExtractor.isNotebookJSONObject(notebook) else {
                 throw SubmissionNormalizationError.invalidPythonSubmission(fileURL.lastPathComponent)
             }
-            return .jupyterNotebook
+            return .jupyterNotebook(data: data, notebook: notebook)
         }
 
         if mimeType == "application/json" {
             let data = try Data(contentsOf: fileURL)
             let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
             return notebookExtractor.isNotebookJSONObject(notebook)
-                ? .jupyterNotebook : .unsupported("content is JSON but not a Jupyter notebook")
+                ? .jupyterNotebook(data: data, notebook: notebook)
+                : .unsupported("content is JSON but not a Jupyter notebook")
         }
 
         if mimeType.hasPrefix("text/") || mimeType == "application/x-empty" {
