@@ -77,6 +77,7 @@ opt_in_rules:
 
 excluded:
   - .build
+  - .claude         # agent worktrees + local state (nested .build vendored deps)
   - .swiftpm
   - Packages
   - Public          # generated JupyterLite assets
