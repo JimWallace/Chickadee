@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.236] - 2026-05-22
+
+### Changed
+
+- **Unified "+ Add Test" modal — shell + first body renderer (check).** The
+  instructor "+ Add Test" flow is now one modal (`Public/test-editor-modal.js`)
+  that owns the chrome (overlay / open / close / Escape / overlay-click), the
+  instructor-facing type `<select>` catalog, a color-coded status line, a single
+  deduped `extractErrorMessage`, and the generic Save flow. Picking a type
+  morphs the body in place — no two-step hop. Editors become **body renderers**
+  registered on `window.ChickadeeTestRenderers[mechanism]` implementing
+  `mount / reset / populate / readSpec / persistAndSync / cleanup / title`. This
+  is the first slice of the renderer rewrite: the **notebook-check** form is now
+  a renderer (`Public/test-renderer-check.js`, fed by the `#check-schema` seed,
+  persisting via the single `PUT /suite` path); the **family** and **script**
+  types delegate to their existing overlays for now (the shell shows a
+  "Continue →" button for them) and become renderers in follow-up slices.
+  Replaces the standalone notebook-check editor + the `add-test-dispatcher`
+  picker. No backend changes.
+
 ## [0.4.235] - 2026-05-22
 
 ### Fixed
