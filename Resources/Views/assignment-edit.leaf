@@ -250,16 +250,10 @@
                     </form>
                 </div>
             </details>
-            <!-- v0.4.104: top-level New Script / New Family hidden — every
-                 section (named + Ungrouped) has its own inline buttons now.
-                 Kept in the DOM (with `hidden`) so the per-section delegate
-                 click() in the IIFE below still routes to their handlers.
-                 v0.4.112: same treatment for the global Upload button —
-                 instructors author tests in-house via the family/script
-                 editor, or import from Marmoset on the create page.  No
-                 zip upload anymore. -->
-            <button class="btn action-btn" type="button" id="new-script-btn" hidden>New Script</button>
-            <button class="btn action-btn" type="button" id="add-family-btn" hidden>New Family</button>
+            <!-- Test authoring is per-section now (each section's inline
+                 "+ Add Test" opens the unified Test Editor modal).  The hidden
+                 Upload button is kept as the file-input trigger wired by
+                 suite-table.js (`#add-test-btn`). -->
             <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
     </div>
@@ -600,18 +594,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             },
             uploadScript: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
-            },
-            putChecks: function () {
-                return '/instructor/' + encodeURIComponent(assignmentID) + '/checks';
             }
         }
     });
-    // Keep the window globals wired so the pattern-family-editor and
-    // script-editor modules (which still invoke these as part of their
-    // save flows) keep working without API changes.
+    // Window globals the Test Editor renderers (family / check / script) call
+    // to persist through the single PUT /suite write path.
     window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
-    window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
-    window.chickadeeSyncChecks             = suiteTable.syncChecks;
     window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
     window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
     window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
@@ -633,10 +621,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     //    (loaded above).
     //
     // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are wired
-    // by the unified Add Test dispatcher (add-test-dispatcher.js, loaded
-    // below): a click stashes `window.__chickadeeTargetSection` and opens
-    // the type picker, which then routes to the script / family / check
-    // editor.  The legacy per-kind delegation lived here until v0.4.218.
+    // by the unified Test Editor modal (test-editor-modal.js): a click
+    // stashes `window.__chickadeeTargetSection` and opens the modal, whose
+    // type picker morphs the body to the chosen renderer.
 })();
 </script>
 
@@ -729,13 +716,7 @@ function checkUWDates(dateTimeValue, warningEl) {
             solutionNotebook: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/files/solution';
             },
-            scanNotebook: function () { return '/instructor/scan-notebook'; },
-            putFamilies: function () {
-                return '/instructor/' + encodeURIComponent(assignmentID) + '/families';
-            }
-        },
-        onFamiliesChange: function (applied) {
-            if (window.chickadeeSyncFamilies) window.chickadeeSyncFamilies(applied);
+            scanNotebook: function () { return '/instructor/scan-notebook'; }
         }
     });
 })();
@@ -774,9 +755,6 @@ function checkUWDates(dateTimeValue, warningEl) {
     window.initTestEditorModal({ csrfToken: csrfToken });
 
     var modal = window.__chickadeeTestEditorModal;
-
-    // Back-compat: callers that opened the old script creator now open the shell.
-    window.chickadeeOpenScriptCreator = function () { modal.open({ kind: 'script' }); };
 
     function checkSpec(id) {
         if (typeof window.chickadeeGetSuiteItems !== 'function') return null;

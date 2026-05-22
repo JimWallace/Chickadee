@@ -28,15 +28,15 @@
 //       initialFamilies: [...],                 // parsed pattern-families-seed JSON
 //       urls: {
 //           solutionNotebook: function () {...}, // GET returns .ipynb JSON bytes
-//           scanNotebook:     function () {...}, // POST /scan-notebook endpoint
-//           putFamilies:      function () {...}  // PUT endpoint for full family list
-//       },
-//       onFamiliesChange: function (applied) {} // suite-table sync hook
+//           scanNotebook:     function () {...}  // POST /scan-notebook endpoint
+//       }
 //   })
 //
-// Returns `{ open(indexOrNegOne), close(), getFamilies() }`.  Host calls
-// `open(-1)` from its "New Family" button and `open(idx)` when the suite
-// table's "Edit Family" button fires.
+// The module registers a body renderer on `window.ChickadeeTestRenderers
+// .family` for the unified Test Editor modal (test-editor-modal.js); saves
+// flow through `window.chickadeeSaveFamiliesViaSuite` (the single PUT /suite
+// write path).  It also returns `{ open(indexOrNegOne), close(), getFamilies() }`
+// for back-compat, but the shell is the live entry point.
 
 (function (global) {
     'use strict';
@@ -45,14 +45,10 @@
         config = config || {};
         var csrfToken       = config.csrfToken || '';
         var urls            = config.urls || {};
-        var onFamiliesChange = typeof config.onFamiliesChange === 'function'
-            ? config.onFamiliesChange
-            : function () {};
 
         if (typeof urls.solutionNotebook !== 'function'
-         || typeof urls.scanNotebook     !== 'function'
-         || typeof urls.putFamilies      !== 'function') {
-            throw new Error('initPatternFamilyEditor: urls must supply solutionNotebook, scanNotebook, putFamilies functions');
+         || typeof urls.scanNotebook     !== 'function') {
+            throw new Error('initPatternFamilyEditor: urls must supply solutionNotebook + scanNotebook functions');
         }
 
         // ── State ──────────────────────────────────────────────────────────
@@ -228,7 +224,6 @@
             label.textContent = sectionName ? '— section: ' + sectionName : '';
         }
 
-        var addFamilyBtn     = document.getElementById('add-family-btn');
         // v0.4.238: the family form is now a body renderer of the unified Test
         // Editor modal — its markup lives in `#family-editor-body` and the shell
         // owns the chrome (title / save / close), so `overlay` / `titleEl` /
@@ -1387,32 +1382,18 @@
             };
         }
 
-        /// Persists the full family list. Phase 2a (v0.4.223) routes this
-        /// through the single `PUT /suite` write path — the suite-table
-        /// reconciles itself and re-seeds from the response, so no separate
-        /// onFamiliesChange sync is needed (and the pre-2a `PUT /families`
-        /// + follow-up `PUT /suite` double-write is gone). Falls back to the
-        /// legacy `PUT /families` + onFamiliesChange when the suite-table save
-        /// hook isn't present (e.g. preview contexts with no table).
+        /// Persists the full family list through the single `PUT /suite` write
+        /// path (`window.chickadeeSaveFamiliesViaSuite`): the suite-table
+        /// reconciles itself and re-seeds from the response.  Rejects if the
+        /// save hook isn't present (a page without the suite table).
         function persistFamilies(next) {
             statusEl.textContent = 'Saving…';
             if (saveBtn) saveBtn.disabled = true;
-            var via;
-            if (typeof window.chickadeeSaveFamiliesViaSuite === 'function') {
-                via = window.chickadeeSaveFamiliesViaSuite(next);
-            } else {
-                via = fetch(urls.putFamilies(), {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                    body: JSON.stringify(next)
-                })
-                .then(function (r) {
-                    if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
-                    return r.json();
-                })
-                .then(function (applied) { onFamiliesChange(applied); return applied; });
+            if (typeof window.chickadeeSaveFamiliesViaSuite !== 'function') {
+                if (saveBtn) saveBtn.disabled = false;
+                return Promise.reject(new Error('suite table not ready'));
             }
-            return via
+            return window.chickadeeSaveFamiliesViaSuite(next)
                 .then(function (applied) {
                     familiesState = applied;
                     if (saveBtn) saveBtn.disabled = false;
@@ -1426,22 +1407,8 @@
                 });
         }
 
-        /// Server error pages are HTML; pull the `error-message` paragraph
-        /// out of them so the status line shows a clean one-liner.
-        function extractErrorMessage(body) {
-            if (!body) return '';
-            var m = body.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
-            if (m) {
-                var text = m[1].replace(/<[^>]+>/g, '').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
-                               .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-                return text.trim();
-            }
-            return body.length > 200 ? body.substring(0, 200) + '…' : body;
-        }
-
         // ── Event wiring ───────────────────────────────────────────────────
 
-        if (addFamilyBtn) addFamilyBtn.addEventListener('click', function () { openEditor(-1); });
         if (closeBtn)     closeBtn.addEventListener('click', closeEditor);
         if (cancelBtn)    cancelBtn.addEventListener('click', closeEditor);
         if (overlay) {

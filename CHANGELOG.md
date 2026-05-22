@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.239] - 2026-05-22
+
+### Removed
+
+- **Dead-code cleanup after the unified Test Editor modal (PR4g).** Now that
+  all three editors are shell renderers and every write flows through
+  `PUT /suite`, removed the scaffolding that's no longer reachable
+  (net ≈ −945 lines):
+  - Deleted the orphaned `Public/add-test-dispatcher.js` (the two-step picker)
+    and `Public/notebook-check-editor.js` (replaced by `test-renderer-check.js`).
+  - `test-editor-modal.js`: dropped the staged-rollout `delegateOpen` /
+    `delegateMode` / "Continue →" hop — every mechanism has a renderer.
+  - `pattern-family-editor.js`: removed the legacy `PUT /families` fallback in
+    `persistFamilies`, the now-unused `extractErrorMessage` + `onFamiliesChange`
+    + `urls.putFamilies` (init now requires only `solutionNotebook` +
+    `scanNotebook`), and the dead `add-family-btn` handler.
+  - `suite-table.js`: removed the unused `syncFamilies` / `syncChecks` hooks and
+    the legacy `PUT /checks` delete fallback; check-row Edit/Delete now open the
+    shell / re-save via `saveChecksViaSuite`.
+  - Both leaves: dropped `urls.putFamilies` / `urls.putChecks`,
+    `onFamiliesChange` / `onChecksChange`, the `chickadeeSync*` /
+    `chickadeeOpenScriptCreator` globals, and the dead hidden `new-script-btn` /
+    `add-family-btn` buttons.
+
+  No backend or model changes — purely front-end dead-code removal; the full
+  Swift suite (1351 tests) and both leaf-render paths stay green. Backwards
+  compatible: existing manifests are read through the unchanged `GET /suite`.
+
 ## [0.4.238] - 2026-05-22
 
 ### Changed

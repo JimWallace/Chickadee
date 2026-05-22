@@ -230,12 +230,10 @@ Create Assignment
                     </form>
                 </div>
             </details>
-            <!-- Hidden global toolbar buttons — every section has its own
-                 inline buttons that delegate to these.  Kept in the DOM
-                 so the per-section delegate click() in the IIFE below
-                 still routes to their handlers. -->
-            <button class="btn action-btn" type="button" id="new-script-btn" hidden>New Script</button>
-            <button class="btn action-btn" type="button" id="add-family-btn" hidden>New Family</button>
+            <!-- Test authoring is per-section now (each section's inline
+                 "+ Add Test" opens the unified Test Editor modal).  The hidden
+                 Upload button is kept as the file-input trigger wired by
+                 suite-table.js (`#add-test-btn`). -->
             <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
     </div>
@@ -513,16 +511,7 @@ Create Assignment
             solutionNotebook: function () {
                 return '/instructor/new/draft/solution-notebook?draftID=' + encodeURIComponent(draftID);
             },
-            scanNotebook: function () { return '/instructor/scan-notebook'; },
-            putFamilies: function () {
-                return '/instructor/new/draft/families?draftID=' + encodeURIComponent(draftID);
-            }
-        },
-        onFamiliesChange: function () {
-            // Reload so the server-rendered suite table reflects the newly
-            // generated scripts.  When the suite-table migration lands
-            // later we can switch this to an in-place sync.
-            window.location.reload();
+            scanNotebook: function () { return '/instructor/scan-notebook'; }
         }
     });
 })();
@@ -569,17 +558,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             },
             uploadScript: function () {
                 return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
-            },
-            putChecks: function () {
-                return '/instructor/new/draft/checks?draftID=' + encodeURIComponent(draftID);
             }
         }
     });
-    // Same window globals the edit page exposes — pattern-family-editor.js
-    // and the script-editor module below call these directly.
+    // Window globals the Test Editor renderers call to persist through the
+    // single PUT /suite write path.
     window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
-    window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
-    window.chickadeeSyncChecks             = suiteTable.syncChecks;
     window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
     window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
     window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
@@ -770,9 +754,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         });
     });
 
-    // Per-section "+ Add Test" buttons are wired by the unified Add Test
-    // dispatcher (add-test-dispatcher.js, loaded below); the legacy
-    // per-kind delegation lived here until v0.4.218.
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are wired by
+    // the unified Test Editor modal (test-editor-modal.js, loaded below).
 
     // ── Section header view/edit toggle ────────────────────────────────
     document.addEventListener('click', function (e) {
@@ -1191,7 +1174,6 @@ window.ChickadeeScriptRendererConfig = {
     var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     window.initTestEditorModal({ csrfToken: csrfToken });
     var modal = window.__chickadeeTestEditorModal;
-    window.chickadeeOpenScriptCreator = function () { modal.open({ kind: 'script' }); };
 
     // Edit an existing notebook check → shell, pre-populated from the suite row.
     document.body.addEventListener('click', function (ev) {

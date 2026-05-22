@@ -19,9 +19,8 @@
 //   cleanup()                       teardown (kill Pyodide worker, destroy CM)
 //   title(isEditing)                → modal title string
 //
-// During the staged rollout a mechanism with no registered renderer falls
-// back to its legacy standalone overlay via `delegateOpen` (so the shell can
-// ship one renderer at a time without regressing the others).
+// All three mechanisms (family / check / script) register a renderer, so every
+// test type morphs in this one overlay — there is no hop to a separate editor.
 //
 // Host page: `window.initTestEditorModal({ csrfToken, getSectionID })`.
 // Returns `{ open(opts), close() }` where opts =
@@ -242,70 +241,35 @@
             });
         }
 
-        var delegateMode = false;   // true when the active mechanism has no
-                                    // renderer yet (footer becomes "Continue →"
-                                    // and hops to the legacy overlay on click).
-
-        // Enter the mode for `mechanism`/`kind`: morph the body in place when a
-        // renderer is registered, otherwise show "delegate mode" (no body; the
-        // footer offers Continue → which hops to the legacy overlay). Tears
-        // down any previously-active renderer first.
+        // Enter the mode for `mechanism`/`kind`: tear down any previously-active
+        // renderer, then morph the body in place with the selected renderer.
         function enterMode(mechanism, kind) {
             if (activeRenderer && typeof activeRenderer.cleanup === 'function') {
                 try { activeRenderer.cleanup(); } catch (e) { /* ignore */ }
             }
             activeMechanism = mechanism;
             var r = rendererFor(mechanism);
-            if (r) {
-                delegateMode = false;
-                activeRenderer = r;
-                var panel = panelFor(mechanism);
-                if (!panel.mounted) { r.mount(panel.el, ctx); panel.mounted = true; }
-                showPanel(mechanism);
-                bodyEl.style.display = '';
-                titleEl.textContent = r.title ? r.title(!!editingItem) : 'Add Test';
-                if (editingItem && editingItem.mechanism === mechanism) {
-                    r.populate(editingItem.item, ctx);
-                } else {
-                    r.reset(kind, ctx);
-                }
-                saveBtn.textContent = 'Save';
-            } else {
-                delegateMode = true;
-                activeRenderer = null;
+            activeRenderer = r || null;
+            if (!r) {
+                // No renderer registered (a renderer module failed to load) —
+                // show a clear message instead of a blank body.
                 Object.keys(panels).forEach(function (m) { panels[m].el.style.display = 'none'; });
-                titleEl.textContent = 'Add Test';
-                saveBtn.textContent = 'Continue →';
+                setStatus('This test type is unavailable — reload the page.', 'error');
+                return;
+            }
+            var panel = panelFor(mechanism);
+            if (!panel.mounted) { r.mount(panel.el, ctx); panel.mounted = true; }
+            showPanel(mechanism);
+            titleEl.textContent = r.title ? r.title(!!editingItem) : 'Add Test';
+            if (editingItem && editingItem.mechanism === mechanism) {
+                r.populate(editingItem.item, ctx);
+            } else {
+                r.reset(kind, ctx);
             }
         }
 
         function refreshDescription() {
             descEl.textContent = DESCRIPTIONS[typeSelect.value] || '';
-        }
-
-        // Delegate to a legacy standalone editor overlay for a mechanism that
-        // has no registered renderer yet (staged rollout). Returns true if a
-        // delegate handled the open.
-        function delegateOpen(mechanism, kind, editing) {
-            var sid = getSectionID();
-            if (mechanism === 'family' &&
-                global.chickadeePatternFamilyEditor &&
-                typeof global.chickadeePatternFamilyEditor.open === 'function') {
-                global.chickadeePatternFamilyEditor.open(editing ? editing.id : -1, kind);
-                return true;
-            }
-            if (mechanism === 'check' &&
-                global.chickadeeNotebookCheckEditor &&
-                typeof global.chickadeeNotebookCheckEditor.open === 'function') {
-                global.chickadeeNotebookCheckEditor.open(editing ? editing.id : null, sid, kind);
-                return true;
-            }
-            if (mechanism === 'script' &&
-                typeof global.chickadeeOpenScriptCreator === 'function') {
-                global.chickadeeOpenScriptCreator();
-                return true;
-            }
-            return false;
         }
 
         // ── Open / close ─────────────────────────────────────────────────────
@@ -314,13 +278,6 @@
             editingItem = opts.editing || null;
             var kind = opts.kind || (editingItem && editingItem.kind) || typeSelect.value;
             var mechanism = opts.mechanism || mechanismForKind(kind) || 'script';
-
-            // Editing an item whose mechanism has no renderer yet → hand
-            // straight to its legacy overlay (its own edit flow), no shell.
-            if (editingItem && !rendererFor(mechanism)) {
-                delegateOpen(mechanism, kind, editingItem);
-                return;
-            }
 
             // Editing fixes the type; creating lets the instructor switch it.
             typeRow.style.display = editingItem ? 'none' : 'flex';
@@ -348,16 +305,8 @@
             enterMode(mechanismForKind(kind) || 'script', kind);
         });
 
-        // ── Save / Continue ────────────────────────────────────────────────
+        // ── Save ─────────────────────────────────────────────────────────────
         saveBtn.addEventListener('click', function () {
-            if (delegateMode) {
-                // Hop to the legacy overlay for this not-yet-migrated type.
-                var kind = typeSelect.value;
-                var mechanism = mechanismForKind(kind) || 'script';
-                close();
-                delegateOpen(mechanism, kind, null);
-                return;
-            }
             if (!activeRenderer) return;
             var spec;
             try {
