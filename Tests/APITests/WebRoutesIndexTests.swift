@@ -71,6 +71,44 @@ import XCTVapor
         }
     }
 
+    @Test func indexShowsAutoClosedAssignmentToStudentWithActiveExtension() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_ext_vis", on: app)
+            // Auto-closed at its deadline: isOpen=false, due date in the past.
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_ext_vis",
+                title: "Extended Lab",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(-3_600),
+                on: app
+            )
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try user.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("Extended Lab"),
+                        "Auto-closed assignment must stay visible to a student with an active extension")
+                    #expect(
+                        html.contains("(extension)"),
+                        "Due column should annotate the personal extension")
+                })
+        }
+    }
+
     @Test func indexShowsBrowserEditActionBeforeStudentHasAnyNotebookWork() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)

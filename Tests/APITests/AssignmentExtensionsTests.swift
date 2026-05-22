@@ -189,6 +189,88 @@ import XCTVapor
         }
     }
 
+    /// The real-world failure: the deadline sweep flips `isOpen` to false at
+    /// the deadline, so the per-user gate must still report open for a student
+    /// holding an active extension on an auto-closed assignment.
+    @Test func effectiveOpenHonorsExtensionAfterAutoClose() async throws {
+        try await withAssignmentRoutesApp { app in
+            try await arInsertSetup(id: "autoclosed_setup", on: app)
+            // Auto-closed at its deadline: isOpen=false, due date in the past.
+            let assignment = try await arInsertAssignment(
+                testSetupID: "autoclosed_setup",
+                title: "Auto-closed",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(-3_600), on: app
+            )
+            let student = try await arInsertStudent(username: "autoclosed_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+
+            // No extension yet — auto-closed assignment is closed for everyone.
+            let beforeExt = try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)
+            #expect(beforeExt == false, "Auto-closed assignment with no extension stays closed")
+
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            let afterExt = try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)
+            #expect(afterExt, "An active extension reopens an auto-closed assignment for that student")
+
+            let peer = try await arInsertStudent(username: "autoclosed_peer", on: app)
+            try await arEnrollStudentInTestCourse(peer, on: app)
+            let peerOpen = try await isAssignmentEffectivelyOpen(assignment, for: peer, on: app.db)
+            #expect(peerOpen == false, "A peer without an extension stays closed")
+        }
+    }
+
+    // MARK: - Per-user open decision (pure logic)
+
+    @Test func openForUserCoversDeadlineAndExtensionCases() {
+        let now = Date()
+        let past = now.addingTimeInterval(-3_600)
+        let future = now.addingTimeInterval(3_600)
+
+        // Open, deadline still ahead → open for everyone.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: false,
+                baselineDueAt: future, effectiveDueAt: future, now: now))
+        // Open, past deadline, no extension → closed.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: false,
+                baselineDueAt: past, effectiveDueAt: past, now: now) == false)
+        // Open, past deadline, class-wide override → open.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: true,
+                baselineDueAt: past, effectiveDueAt: past, now: now))
+        // Auto-closed at deadline, extension into the future → open for this user.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: false, overrideActive: false,
+                baselineDueAt: past, effectiveDueAt: future, now: now))
+        // Auto-closed at deadline, no live extension → closed.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: false, overrideActive: false,
+                baselineDueAt: past, effectiveDueAt: past, now: now) == false)
+        // Manual close *before* the deadline is deliberate — an extension does
+        // not reopen it.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: false, overrideActive: false,
+                baselineDueAt: future, effectiveDueAt: future.addingTimeInterval(86_400),
+                now: now) == false)
+        // No deadline at all, open → open.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: false,
+                baselineDueAt: nil, effectiveDueAt: nil, now: now))
+    }
+
     // MARK: - Scoped retest
 
     @Test func scopedRetestFlipsOnlyThisStudentsSubmissions() async throws {

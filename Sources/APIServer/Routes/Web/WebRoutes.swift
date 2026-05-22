@@ -78,49 +78,16 @@ struct WebRoutes: RouteCollection {
         } else {
             allAssignments = try await APIAssignment.query(on: req.db).all()
         }
-        let openAssignments = allAssignments.filter(\.isOpen)
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
             uniquingKeysWith: { first, _ in first }
         )
 
-        let setups: [APITestSetup]
-        if user.isInstructor {
-            // Instructors and admins see test setups for the active course.
-            if let activeCourseUUID = courseState.activeCourseUUID {
-                setups = try await APITestSetup.query(on: req.db)
-                    .filter(\.$courseID == activeCourseUUID)
-                    .sort(\.$createdAt, .descending)
-                    .all()
-            } else {
-                setups = try await APITestSetup.query(on: req.db)
-                    .sort(\.$createdAt, .descending)
-                    .all()
-            }
-        } else {
-            // Students see only test setups that have an open published assignment.
-            let publishedIDs = Set(openAssignments.map(\.testSetupID))
-            guard !publishedIDs.isEmpty else {
-                return try await req.view.render(
-                    "index",
-                    IndexContext(
-                        sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false,
-                        currentUser: userContext)
-                ).encodeResponse(for: req)
-            }
-            setups = try await APITestSetup.query(on: req.db)
-                .filter(\.$id ~~ publishedIDs)
-                .sort(\.$createdAt, .descending)
-                .all()
-        }
-
-        var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
-        var submissionCountBySetupID: [String: Int] = [:]
-        var bestGradePercentBySetupID: [String: Int] = [:]
-        var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
         // Per-user active extensions for the current user, keyed by
-        // testSetupID (since the dashboard works in setup space; we look
-        // up the assignment for each row separately).
+        // testSetupID (the dashboard works in setup space; the assignment for
+        // each row is looked up separately).  Loaded before the student
+        // visibility filter so an auto-closed-at-deadline assignment the
+        // student was granted more time on still appears in their list.
         var extensionDueAtBySetupID: [String: Date] = [:]
         if let userID = user.id, !allAssignments.isEmpty {
             let assignmentIDs = allAssignments.compactMap(\.id)
@@ -139,6 +106,50 @@ struct WebRoutes: RouteCollection {
                 extensionDueAtBySetupID[setupID] = row.extendedDueAt
             }
         }
+
+        let setups: [APITestSetup]
+        if user.isInstructor {
+            // Instructors and admins see test setups for the active course.
+            if let activeCourseUUID = courseState.activeCourseUUID {
+                setups = try await APITestSetup.query(on: req.db)
+                    .filter(\.$courseID == activeCourseUUID)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+            } else {
+                setups = try await APITestSetup.query(on: req.db)
+                    .sort(\.$createdAt, .descending)
+                    .all()
+            }
+        } else {
+            // Students see test setups whose assignment is open, plus any setup
+            // where they hold an active extension — so an assignment that the
+            // automatic sweep closed at its deadline stays visible to a student
+            // who was granted more time.
+            var visibleSetupIDs = Set(allAssignments.filter(\.isOpen).map(\.testSetupID))
+            let now = Date()
+            for (setupID, extendedDueAt) in extensionDueAtBySetupID where extendedDueAt > now {
+                let baseline = assignmentBySetup[setupID]?.dueAt
+                if let baseline, extendedDueAt <= baseline { continue }
+                visibleSetupIDs.insert(setupID)
+            }
+            guard !visibleSetupIDs.isEmpty else {
+                return try await req.view.render(
+                    "index",
+                    IndexContext(
+                        sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false,
+                        currentUser: userContext)
+                ).encodeResponse(for: req)
+            }
+            setups = try await APITestSetup.query(on: req.db)
+                .filter(\.$id ~~ visibleSetupIDs)
+                .sort(\.$createdAt, .descending)
+                .all()
+        }
+
+        var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
+        var submissionCountBySetupID: [String: Int] = [:]
+        var bestGradePercentBySetupID: [String: Int] = [:]
+        var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
         if let userID = user.id {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
@@ -306,19 +317,19 @@ struct WebRoutes: RouteCollection {
                 if let baseline = baselineDueAt, extDate <= baseline { return false }
                 return Date() < extDate
             }()
-            let isOpenForThisUser: Bool = {
-                guard let assignment else { return false }
-                if !assignment.isOpen { return false }
-                if let dueAt = assignment.dueAt, dueAt <= Date() {
-                    if assignment.deadlineOverrideActive == true { return true }
-                    return hasActiveExtension
-                }
-                return true
-            }()
             let effectiveDueAt: Date? = {
                 guard let extDate = extensionDueAt else { return baselineDueAt }
                 guard let baseline = baselineDueAt else { return extDate }
                 return max(extDate, baseline)
+            }()
+            let isOpenForThisUser: Bool = {
+                guard let assignment else { return false }
+                return isAssignmentOpenForUser(
+                    isOpen: assignment.isOpen,
+                    overrideActive: assignment.deadlineOverrideActive ?? false,
+                    baselineDueAt: baselineDueAt,
+                    effectiveDueAt: effectiveDueAt
+                )
             }()
             return TestSetupRow(
                 id: setupID,

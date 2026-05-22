@@ -61,6 +61,42 @@ import XCTVapor
         }
     }
 
+    @Test func closeExpiredAssignmentsKeepsAssignmentsWithActiveExtensionsOpen() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await arInsertSetup(id: "setup_ext_keepopen", on: app)
+            let extended = try await arInsertAssignment(
+                testSetupID: "setup_ext_keepopen",
+                title: "Extended overdue",
+                isOpen: true,
+                dueAt: Date().addingTimeInterval(-60), on: app
+            )
+            let student = try await arInsertStudent(username: "keepopen_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            try await APIAssignmentExtension(
+                assignmentID: try extended.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            // A second overdue assignment with no extension must still close.
+            _ = try await arInsertSetup(id: "setup_noext_close", on: app)
+            let plain = try await arInsertAssignment(
+                testSetupID: "setup_noext_close",
+                title: "Plain overdue",
+                isOpen: true,
+                dueAt: Date().addingTimeInterval(-60), on: app
+            )
+
+            let closedCount = try await closeExpiredAssignments(on: app.db, logger: app.logger)
+            #expect(closedCount == 1, "Only the assignment without an active extension should close")
+
+            let extendedReloaded = try #require(try await APIAssignment.find(extended.id, on: app.db))
+            #expect(extendedReloaded.isOpen, "Assignment with an active extension must stay open")
+            let plainReloaded = try #require(try await APIAssignment.find(plain.id, on: app.db))
+            #expect(plainReloaded.isOpen == false, "Assignment with no extension must auto-close")
+        }
+    }
+
     @Test func instructorCanReopenPastDueAssignmentWithOverride() async throws {
         try await withAssignmentRoutesApp { app in
             _ = try await arInsertSetup(id: "setup_reopen_deadline", on: app)
