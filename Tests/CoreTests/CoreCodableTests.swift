@@ -288,8 +288,8 @@ struct CoreCodableTests {
     // MARK: - TestItem / unified manifest list
 
     @Test func testItemFamilyRoundTripsThroughJSON() throws {
-        let item = TestItem(
-            family: PatternFamily(
+        let item = TestItem.family(
+            PatternFamily(
                 id: "bmi", name: "BMI boundaries", kind: .boundaryEquality,
                 functionName: "classify_bmi"))
         let decoded = try decoder.decode(TestItem.self, from: try encoder.encode(item))
@@ -301,8 +301,8 @@ struct CoreCodableTests {
     }
 
     @Test func testItemCheckRoundTripsThroughJSON() throws {
-        let item = TestItem(
-            check: NotebookCheck(
+        let item = TestItem.check(
+            NotebookCheck(
                 id: "df_shape", kind: .dataFrameShape, tier: .pub, points: 1,
                 variable: "df", expectedRows: 250, expectedCols: 13))
         let decoded = try decoder.decode(TestItem.self, from: try encoder.encode(item))
