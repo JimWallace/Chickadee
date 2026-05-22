@@ -379,6 +379,7 @@
 <script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
 <script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
+<script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
 
 <!-- ── Notebook Check Editor Modal ──────────────────────────────────────
      Sibling to the pattern-family modal below.  Kind picker reveals
@@ -424,203 +425,15 @@
                 Tier (visibility) and points are edited inline on the test suite row — same as scripts and pattern families.  New checks default to <code>public</code> and 1 point; tweak after saving.
             </p>
 
-            <!-- Kind-specific field cards.  Each is hidden by default; the
-                 kind dropdown's change handler shows exactly one. -->
-
-            <div class="check-fields" data-kind="data_frame_shape" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    DataFrame variable name on student_module
-                    <input type="text" class="form-input" id="check-shape-variable" placeholder="df"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                        Expected rows
-                        <input type="number" class="form-input" id="check-shape-rows" min="0" step="1"
-                               style="padding:.3rem .5rem;font-size:.85rem">
-                    </label>
-                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                        Expected columns
-                        <input type="number" class="form-input" id="check-shape-cols" min="0" step="1"
-                               style="padding:.3rem .5rem;font-size:.85rem">
-                    </label>
-                </div>
-            </div>
-
-            <div class="check-fields" data-kind="data_frame_columns" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    DataFrame variable name on student_module
-                    <input type="text" class="form-input" id="check-columns-variable" placeholder="df"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected columns (one per line, in order)
-                    <textarea class="form-input" id="check-columns-list" rows="6"
-                              placeholder="caseid&#10;age&#10;sex&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <fieldset style="border:1px solid var(--border,#ddd);padding:.4rem .6rem;border-radius:.3rem">
-                    <legend style="font-size:.78rem;color:var(--gray-600);padding:0 .3rem">Match mode</legend>
-                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem;margin-right:1rem">
-                        <input type="radio" name="check-columns-match" value="exact" checked> Exact (order matters)
-                    </label>
-                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem">
-                        <input type="radio" name="check-columns-match" value="superset"> Superset (extras allowed)
-                    </label>
-                </fieldset>
-            </div>
-
-            <div class="check-fields" data-kind="data_frame_equality" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    DataFrame variable name on student_module
-                    <input type="text" class="form-input" id="check-eq-variable" placeholder="df_grouped"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected DataFrame (CSV — header row first)
-                    <textarea class="form-input" id="check-eq-csv" rows="8"
-                              placeholder="age,sex&#10;58.0,M&#10;70.0,M&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <details>
-                    <summary style="font-size:.82rem;cursor:pointer;color:var(--gray-700)">Comparison toggles (advanced)</summary>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:.4rem;margin-top:.4rem">
-                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                            <input type="checkbox" id="check-eq-check-dtype" checked> Strict dtype
-                        </label>
-                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                            <input type="checkbox" id="check-eq-check-like"> Ignore column/row order
-                        </label>
-                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                            <input type="checkbox" id="check-eq-ignore-index" checked> Ignore index
-                        </label>
-                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                            rtol
-                            <input type="number" class="form-input" id="check-eq-rtol" step="any" placeholder="1e-5"
-                                   style="padding:.2rem .4rem;font-size:.78rem">
-                        </label>
-                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                            atol
-                            <input type="number" class="form-input" id="check-eq-atol" step="any" placeholder="1e-8"
-                                   style="padding:.2rem .4rem;font-size:.78rem">
-                        </label>
-                    </div>
-                </details>
-            </div>
-
-            <div class="check-fields" data-kind="series_equality" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Series variable name on student_module
-                    <input type="text" class="form-input" id="check-series-variable" placeholder="scores"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected Series (single-column CSV — header row first)
-                    <textarea class="form-input" id="check-series-csv" rows="8"
-                              placeholder="score&#10;0.95&#10;0.88&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-            </div>
-
-            <div class="check-fields" data-kind="numeric_array_close" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Array variable name on student_module
-                    <input type="text" class="form-input" id="check-array-variable" placeholder="y_pred"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected values (one number per line, or JSON list)
-                    <textarea class="form-input" id="check-array-values" rows="6"
-                              placeholder="1.0&#10;2.5&#10;3.7&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                        rtol
-                        <input type="number" class="form-input" id="check-array-rtol" step="any" placeholder="1e-7"
-                               style="padding:.2rem .4rem;font-size:.78rem">
-                    </label>
-                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                        atol
-                        <input type="number" class="form-input" id="check-array-atol" step="any" placeholder="0"
-                               style="padding:.2rem .4rem;font-size:.78rem">
-                    </label>
-                </div>
-            </div>
-
-            <div class="check-fields" data-kind="figure_count" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Minimum number of matplotlib figures the student must produce
-                    <input type="number" class="form-input" id="check-fig-min" min="0" step="1" value="1"
-                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Counted via <code>plt.get_fignums()</code> after the student's notebook is loaded.  Every <code>plt.figure</code>, <code>plt.subplots</code>, and <code>df.plot</code> contributes.
-                </p>
-            </div>
-
-            <div class="check-fields" data-kind="cell_contains" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Pattern the student's submission must contain in at least one code cell
-                    <input type="text" class="form-input" id="check-cc-text" placeholder=".groupby("
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                    <input type="checkbox" id="check-cc-regex"> Interpret as Python regex
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Must differ from this reference (optional — for "not the same as the example" exercises)
-                    <textarea class="form-input" id="check-cc-must-differ" rows="3"
-                              placeholder='df.groupby("sex")["age"].mean()'
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-            </div>
-
-            <div class="check-fields" data-kind="function_exists" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Function name (must be defined in the student notebook and callable)
-                    <input type="text" class="form-input" id="check-fexists-name" placeholder="classify_bmi"
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Required arity (number of positional parameters — leave blank to skip)
-                    <input type="number" class="form-input" id="check-fexists-arity" min="0" step="1"
-                           placeholder="(any)"
-                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Useful as a precondition before correctness tests so a missing function fails clearly instead of erroring every dependent test.
-                </p>
-            </div>
-
-            <div class="check-fields" data-kind="variable_exists" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Variable name (must be defined at module level in the student notebook)
-                    <input type="text" class="form-input" id="check-vexists-name" placeholder="df"
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Required type (optional — leave blank for any)
-                    <input type="text" class="form-input" id="check-vexists-type"
-                           placeholder="e.g. int, list, DataFrame, ndarray"
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Useful as a precondition before shape / value checks so a missing variable fails clearly instead of erroring every dependent test.  Recognised types include Python builtins (<code>int</code>, <code>float</code>, <code>bool</code>, <code>str</code>, <code>list</code>, <code>tuple</code>, <code>dict</code>, <code>set</code>, <code>NoneType</code>) and library types matched by MRO name (<code>DataFrame</code>, <code>Series</code>, <code>ndarray</code>); unknown names fall back to a class-name MRO walk.
-                </p>
-            </div>
-
-            <div class="check-fields" data-kind="ast_structure" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Required structural predicates (one per line)
-                    <textarea class="form-input" id="check-ast-constructs" rows="5"
-                              placeholder="for_loop&#10;list_comprehension&#10;import:pandas"
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Supported: <code>for_loop</code>, <code>while_loop</code>, <code>list_comprehension</code>, <code>lambda</code>, <code>recursion</code>, and <code>import:&lt;module&gt;</code> (e.g. <code>import:pandas</code>).  Prefix with <code>!</code> to forbid (e.g. <code>!for_loop</code> = "must NOT use a for-loop").
-                </p>
-            </div>
+            <!-- Per-kind fields + the common hint field are rendered into
+                 these containers by the schema-driven engine in
+                 notebook-check-editor.js (seeded from #check-schema).  The
+                 engine builds one hidden card per kind under
+                 #check-fields-body and shows exactly one for the selected
+                 kind; #check-common-fields holds fields shown for every
+                 kind (the instructor hint). -->
+            <div id="check-fields-body" style="display:flex;flex-direction:column;gap:.5rem"></div>
+            <div id="check-common-fields" style="display:flex;flex-direction:column;gap:.5rem"></div>
         </div>
 
         <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">

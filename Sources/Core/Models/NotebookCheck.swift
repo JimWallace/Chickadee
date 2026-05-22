@@ -21,7 +21,7 @@ import Foundation
 /// `.cellContains`) slot in alongside.  Each kind is rendered by a
 /// dedicated renderer; the validator enforces that the kind-specific
 /// fields below are present and well-formed.
-public enum NotebookCheckKind: String, Codable, Sendable, Equatable {
+public enum NotebookCheckKind: String, Codable, Sendable, Equatable, CaseIterable {
     /// Asserts that a named module-level DataFrame in the student notebook
     /// has exactly `expectedRows × expectedCols` shape.  Required fields:
     /// `variable`, `expectedRows`, `expectedCols`.

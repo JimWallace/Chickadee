@@ -54,6 +54,12 @@ struct NewAssignmentContext: Encodable {
     /// editor module parses this once at page load to seed its in-memory
     /// state; every subsequent save replaces it via `PUT /draft/checks`.
     let notebookChecksJSON: String
+    /// The notebook-check form schema (`notebookCheckFormSchemaJSON()`),
+    /// embedded as the `check-schema` seed.  Drives the generic
+    /// schema-driven check editor — the per-kind field cards are rendered
+    /// from this rather than hand-coded in the template.  Static across
+    /// assignments.
+    let checkSchemaJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  Same shape
     /// the edit page emits — `suite-table.js` parses it once at page load
     /// as the initial state of the unified items list, and every subsequent
@@ -116,6 +122,10 @@ struct EditAssignmentContext: Encodable {
     /// Empty `[]` for assignments with no checks (the common case until
     /// instructors start using the new editor).
     let notebookChecksJSON: String
+    /// The notebook-check form schema (`notebookCheckFormSchemaJSON()`),
+    /// embedded as the `check-schema` seed.  Drives the generic
+    /// schema-driven check editor.  Static across assignments.
+    let checkSchemaJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  The editor JS
     /// parses it once at page load as the initial state of the unified
     /// items list; every subsequent mutation is a PUT whose response

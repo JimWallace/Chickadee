@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.230] - 2026-05-22
+
+### Changed
+
+- **Notebook-check editor forms are now schema-driven from a single backend
+  source.** Each `NotebookCheckKind`'s form fields (variable name, expected
+  shape, tolerances, match mode, …) are declared once in
+  `Sources/APIServer/Utilities/NotebookCheckFormSchema.swift`, beside the
+  validators in `NotebookCheckKindHandler.swift`, via an exhaustive `switch`
+  over `NotebookCheckKind` (a new kind won't compile until it declares its
+  fields). The schema is emitted to the assignment editor pages as a
+  `<script id="check-schema">` seed and rendered generically by
+  `Public/notebook-check-editor.js` — its `reset` / `populate` / `build`
+  logic is now one engine driven by each field's `valueType`. This retires
+  the ~10 hand-coded `.check-fields[data-kind=…]` cards that were duplicated
+  across `assignment-edit.leaf` and `assignment-new.leaf`, plus the parallel
+  per-kind JS switches. Checks become **hint-authorable immediately**: `hint`
+  is a common schema field (PR2 surfaces it as the "💡 Hint" callout).
+  Side effect: the new-assignment page's check-kind picker, which had drifted
+  to omit `variable_exists`, now matches the edit page (both render every
+  kind from the schema). New `NotebookCheckFormSchemaTests` pins each kind's
+  `required` flags to its validator so the two can't drift. No manifest,
+  runner, or generated-script changes — the schema is pure authoring-UI
+  metadata.
+
 ## [0.4.229] - 2026-05-22
 
 ### Added
