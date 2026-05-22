@@ -75,8 +75,6 @@ import Vapor
             "DraftAssignmentRoutes+SaveValidation.swift",
             "DraftAssignmentRoutes+SuiteEditing.swift",
             "DraftAssignmentRoutes+Sections.swift",
-            "PublishedAssignmentRoutes+Checks.swift",
-            "PublishedAssignmentRoutes+Families.swift",
             "PublishedAssignmentRoutes+FileDownloads.swift",
             "PublishedAssignmentRoutes+GlobalVariables.swift",
             "PublishedAssignmentRoutes+NotebookTools.swift",

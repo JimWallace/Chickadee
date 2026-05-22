@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.227] - 2026-05-22
+
+### Removed
+
+- **Retired the dedicated `PUT /families` and `PUT /checks` write endpoints
+  (declarative suite, phase 3).** Since v0.4.226 the family and notebook-check
+  modals save through the unified `PUT /suite`, so the standalone
+  full-replace endpoints were dead weight. Removed (published + draft):
+  `GET`/`PUT /instructor/:id/families`, `GET`/`PUT /instructor/:id/checks`,
+  `PUT /instructor/new/draft/families`, `PUT /instructor/new/draft/checks`,
+  along with the `applyPatternFamiliesEdit` / `applyNotebookChecksEdit`
+  helpers and the `PublishedAssignmentRoutes+Families.swift` /
+  `+Checks.swift` files. `PUT /suite` (`applySuiteEdit` → `applyPatternFamilies`)
+  is now the single write surface for both. The `*/scripts` endpoints stay —
+  raw-script *content* still travels through them until the suite-editor UI
+  rework moves it onto `PUT /suite`. Family/check apply behaviour remains
+  covered by `PatternFamilyApplyTests` (kernel) and `SuiteRouteTests`
+  (`PUT /suite`); the obsolete `PatternFamilyRouteTests` and
+  `DraftNotebookChecksRoutesTests` were removed, and the generated-file
+  edit/delete guard was ported into `SuiteRouteTests`.
+
 ## [0.4.226] - 2026-05-22
 
 ### Changed
