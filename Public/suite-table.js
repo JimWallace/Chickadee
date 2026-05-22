@@ -1007,9 +1007,11 @@
             schedulePush();
         }
 
-        /// Reconciles the local state with the full family list returned
-        /// from `PUT /families`.
-        function syncFamilies(nextFamilies) {
+        /// Reconciles `items` with a full family list: replace each family's
+        /// spec, drop families no longer present, place newcomers in the
+        /// clicked section, and prune dangling `family:` deps. Pure state
+        /// mutation — no render/push, so callers pick how to persist.
+        function reconcileFamilies(nextFamilies) {
             var byID = {};
             (nextFamilies || []).forEach(function (f) { byID[f.id] = f; });
 
@@ -1030,7 +1032,7 @@
             }).filter(Boolean);
 
             // v0.4.102: newcomer families land in the section the
-            // instructor clicked "+ New Family" from (if any); existing
+            // instructor clicked "+ Add Test" from (if any); existing
             // families keep their current section via the map above.
             var target = window.__chickadeeTargetSection;
             var targetSid = (typeof target === 'string' && target) ? target : null;
@@ -1054,15 +1056,19 @@
                     return aliveFamilyIDs.indexOf(fid) >= 0;
                 });
             });
+        }
+
+        /// Legacy hot-sync: reconcile + debounced PUT /suite. Retained for the
+        /// pre-2a `PUT /families` → onFamiliesChange callers (and as a fallback
+        /// when the awaited save path isn't wired).
+        function syncFamilies(nextFamilies) {
+            reconcileFamilies(nextFamilies);
             renderTree();
             schedulePush();
         }
 
-        /// Reconciles the local state with the full check list returned
-        /// from `PUT /checks` — the notebook-check mirror of syncFamilies.
-        /// Lets a check save update the table inline (a new row appears in
-        /// the clicked section) instead of forcing a full page reload.
-        function syncChecks(nextChecks) {
+        /// Notebook-check mirror of reconcileFamilies.
+        function reconcileChecks(nextChecks) {
             var byID = {};
             (nextChecks || []).forEach(function (c) { byID[c.id] = c; });
 
@@ -1097,8 +1103,69 @@
                     sectionID: targetSid
                 });
             });
+        }
+
+        function syncChecks(nextChecks) {
+            reconcileChecks(nextChecks);
             renderTree();
             schedulePush();
+        }
+
+        /// Immediate (non-debounced) PUT /suite that re-seeds `items` from the
+        /// reconciled response. Resolves with the response payload; rejects on
+        /// HTTP error so the caller can restore optimistic state and surface
+        /// the message.
+        function pushSuiteNow() {
+            return fetch(urls.putSuite(), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                body: JSON.stringify(buildPayload())
+            })
+            .then(function (r) {
+                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+                return r.json();
+            })
+            .then(function (payload) {
+                items = normaliseItems(payload.items || []);
+                renderTree();
+                return payload;
+            });
+        }
+
+        function familiesFromPayload(payload) {
+            return (payload.items || [])
+                .filter(function (i) { return i.kind === 'family' && i.family; })
+                .map(function (i) { return i.family; });
+        }
+        function checksFromPayload(payload) {
+            return (payload.items || [])
+                .filter(function (i) { return i.kind === 'check' && i.check; })
+                .map(function (i) { return i.check; });
+        }
+
+        /// Phase 2a: persist a full family list through the single PUT /suite
+        /// write path, replacing the pre-2a `PUT /families` + follow-up
+        /// `PUT /suite` double-write. Optimistically reconciles, awaits the
+        /// PUT (so the modal gets synchronous validation feedback), and on
+        /// failure restores the prior state. Resolves with the applied family
+        /// list; rejects with the server error.
+        function saveFamiliesViaSuite(nextFamilies) {
+            var snapshot = items.slice();
+            reconcileFamilies(nextFamilies);
+            renderTree();
+            return pushSuiteNow()
+                .then(function (payload) { return familiesFromPayload(payload); })
+                .catch(function (err) { items = snapshot; renderTree(); throw err; });
+        }
+
+        /// Notebook-check mirror of saveFamiliesViaSuite.
+        function saveChecksViaSuite(nextChecks) {
+            var snapshot = items.slice();
+            reconcileChecks(nextChecks);
+            renderTree();
+            return pushSuiteNow()
+                .then(function (payload) { return checksFromPayload(payload); })
+                .catch(function (err) { items = snapshot; renderTree(); throw err; });
         }
 
         // Reload on bfcache restore so the page always reflects server state.
@@ -1111,6 +1178,8 @@
         return {
             syncFamilies: syncFamilies,
             syncChecks: syncChecks,
+            saveFamiliesViaSuite: saveFamiliesViaSuite,
+            saveChecksViaSuite: saveChecksViaSuite,
             addExistingScript: addExistingScript,
             getItems: function () { return items.slice(); }
         };

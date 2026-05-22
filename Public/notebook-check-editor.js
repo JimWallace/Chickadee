@@ -340,6 +340,35 @@
         }
 
         // ── Save ───────────────────────────────────────────────────────────
+        /// Persists the full check list. Phase 2a (v0.4.223) routes this
+        /// through the single `PUT /suite` write path when the suite-table
+        /// exposes the save hook (the table re-seeds itself, so no
+        /// onChecksChange sync is needed and the pre-2a `PUT /checks` +
+        /// follow-up `PUT /suite` double-write / page reload is gone). Falls
+        /// back to the legacy `PUT /checks` + onChecksChange otherwise.
+        async function persistChecks(nextChecks) {
+            if (typeof window.chickadeeSaveChecksViaSuite === 'function') {
+                checksState = await window.chickadeeSaveChecksViaSuite(nextChecks);
+                return checksState;
+            }
+            var resp = await fetch(urls.putChecks(), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-csrf-token': csrfToken
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(nextChecks)
+            });
+            if (!resp.ok) {
+                var bodyText = await resp.text();
+                throw new Error(resp.status + ' ' + resp.statusText + ': ' + bodyText);
+            }
+            checksState = await resp.json();
+            onChecksChange(checksState);
+            return checksState;
+        }
+
         async function save() {
             statusEl.textContent = 'Saving…';
             statusEl.style.color = 'var(--gray-500)';
@@ -370,22 +399,7 @@
             }
 
             try {
-                var resp = await fetch(urls.putChecks(), {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-csrf-token': csrfToken
-                    },
-                    credentials: 'same-origin',
-                    body: JSON.stringify(nextChecks)
-                });
-                if (!resp.ok) {
-                    var bodyText = await resp.text();
-                    throw new Error(resp.status + ' ' + resp.statusText + ': ' + bodyText);
-                }
-                var applied = await resp.json();
-                checksState = applied;
-                onChecksChange(applied);
+                await persistChecks(nextChecks);
                 statusEl.textContent = 'Saved.';
                 statusEl.style.color = 'var(--green,#2e7d32)';
                 setTimeout(close, 400);
@@ -404,21 +418,7 @@
             statusEl.textContent = 'Deleting…';
             var nextChecks = checksState.filter(function (c) { return c.id !== editingID; });
             try {
-                var resp = await fetch(urls.putChecks(), {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-csrf-token': csrfToken
-                    },
-                    credentials: 'same-origin',
-                    body: JSON.stringify(nextChecks)
-                });
-                if (!resp.ok) {
-                    var bodyText = await resp.text();
-                    throw new Error(resp.status + ' ' + resp.statusText + ': ' + bodyText);
-                }
-                checksState = await resp.json();
-                onChecksChange(checksState);
+                await persistChecks(nextChecks);
                 close();
             } catch (e) {
                 statusEl.textContent = 'Delete failed — ' + e.message;

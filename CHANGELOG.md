@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.226] - 2026-05-22
+
+### Changed
+
+- **Pattern-family and notebook-check saves now go through the single
+  `PUT /suite` write path (declarative suite, phase 2a).** Previously the
+  family modal `PUT`ed `/families` and the check modal `PUT`ed `/checks`, each
+  followed by a second `PUT /suite` (via `onFamiliesChange`/`onChecksChange`)
+  to re-assert ordering and section placement — a double-write. Both modals now
+  build the full item list and issue **one** awaited `PUT /suite`
+  (`suite-table.js` `saveFamiliesViaSuite` / `saveChecksViaSuite`), then re-seed
+  the table from the reconciled response. The modal still gets synchronous
+  validation feedback (the save awaits the server result and surfaces errors
+  inline), and on failure the optimistic row is rolled back. Family delete and
+  check delete route through the same path. The check create/draft page no
+  longer full-reloads on a check save. Raw scripts are unchanged — still
+  `POST/PUT/DELETE /scripts`, and `PUT /suite` continues to send `content: nil`
+  for them (Phase 1 leaves their files untouched), so there is no
+  script-clobbering risk. The dedicated `PUT /families` / `PUT /checks`
+  endpoints remain as a fallback and are retired in phase 3. No backend changes.
+
 ## [0.4.225] - 2026-05-22
 
 ### Added
