@@ -295,15 +295,9 @@
                     <button type="button" class="btn action-btn section-var-add"
                             data-section-id="#(sec.sectionID)"
                             style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
-                    <button type="button" class="btn action-btn section-new-script-btn"
+                    <button type="button" class="btn action-btn section-add-test-btn"
                             data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
-                    <button type="button" class="btn action-btn section-add-family-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
-                    <button type="button" class="btn action-btn section-add-check-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
@@ -365,15 +359,9 @@
             <div class="section-create-toolbar"
                  data-section-id="#(sec.sectionID)"
                  style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
-                <button type="button" class="btn action-btn section-new-script-btn"
+                <button type="button" class="btn action-btn section-add-test-btn"
                         data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
-                <button type="button" class="btn action-btn section-add-family-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
-                <button type="button" class="btn action-btn section-add-check-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
             </div>
         #endif
             <table class="results-table" style="width:100%">
@@ -943,6 +931,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     // save flows) keep working without API changes.
     window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
     window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
+    window.chickadeeSyncChecks             = suiteTable.syncChecks;
 })();
 </script>
 
@@ -957,55 +946,13 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     'use strict';
 
     // ── Section inputs JS extracted to Public/section-inputs-editor.js
-    //    (loaded above).  Per-section toolbar delegation stays here.
-
-
-    // Per-section create toolbar (v0.4.102).  Each section block has
-    // its own "+ Add Script" / "+ Add Family" / "Upload" buttons that
-    // delegate to the existing global buttons but stash the target
-    // section id on `window.__chickadeeTargetSection` first.  The
-    // suite-table's `addExistingScript` + `syncFamilies` read that
-    // flag and stamp `sectionID` on the newly-created item.
+    //    (loaded above).
     //
-    // Persistence: the flag lives until the next button click resets
-    // it — global toolbar clicks below explicitly clear it so their
-    // creates still land ungrouped.  This means a single per-section
-    // Upload click followed by multi-file selection correctly places
-    // every uploaded script in the same section.
-    function delegateWithSection(sid, globalID) {
-        window.__chickadeeTargetSection = sid;
-        var btn = document.getElementById(globalID);
-        if (btn) btn.click();
-    }
-    document.querySelectorAll('button.section-new-script-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'new-script-btn');
-        });
-    });
-    document.querySelectorAll('button.section-add-family-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-family-btn');
-        });
-    });
-    // (v0.4.103: per-section Upload button removed; the global Upload
-    // button at the page top still handles zip uploads.)
-
-    // Global-toolbar clicks clear the target section so their creates
-    // always land ungrouped — in case a user clicks a per-section
-    // button, cancels the modal, then clicks a global toolbar button.
-    // Uses `capture: true` so this listener fires BEFORE the original
-    // per-button handler reads the flag.
-    ['new-script-btn', 'add-family-btn', 'add-test-btn'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener('click', function (e) {
-            // Only clear if this click originated as a direct user
-            // interaction on the global button — not a synthetic click
-            // we dispatched from a per-section delegator.
-            if (!e.isTrusted) return;
-            window.__chickadeeTargetSection = null;
-        }, true);
-    });
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are wired
+    // by the unified Add Test dispatcher (add-test-dispatcher.js, loaded
+    // below): a click stashes `window.__chickadeeTargetSection` and opens
+    // the type picker, which then routes to the script / family / check
+    // editor.  The legacy per-kind delegation lived here until v0.4.218.
 })();
 </script>
 
@@ -1200,6 +1147,11 @@ document.addEventListener('click', function(e) {
 
 if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
 
+// Expose the creator so the unified "+ Add Test" dispatcher can open the
+// custom-script flow directly (the global #new-script-btn stays for
+// back-compat but is no longer surfaced in the UI).
+window.chickadeeOpenScriptCreator = openCreator;
+
 // ── Template apply ─────────────────────────────────────────────────────────
 
 // Pre-loaded templates fetched from the server (populated on first template apply).
@@ -1377,7 +1329,7 @@ function checkUWDates(dateTimeValue, warningEl) {
         try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
         catch (e) { initialFamilies = []; }
     }
-    window.initPatternFamilyEditor({
+    window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
         assignmentID: assignmentID,
         csrfToken: csrfToken,
         initialFamilies: initialFamilies,
@@ -1423,26 +1375,17 @@ function checkUWDates(dateTimeValue, warningEl) {
             }
         },
         onChecksChange: function (applied) {
-            // Reload the page on save: the suite editor's authoritative
-            // state lives server-side, and a check save rewrites the
-            // manifest + zip, so refreshing is the simplest way to pick
-            // up the new generated rows.  When the suite-table grows
-            // native check-row support, this can be a hot-update like
-            // chickadeeSyncFamilies does for families.
-            window.location.reload();
+            // Hot-sync the suite table (mirrors chickadeeSyncFamilies) so a
+            // check save drops the new row in inline — no full page reload.
+            // Falls back to a reload only if the hook is somehow absent.
+            if (window.chickadeeSyncChecks) window.chickadeeSyncChecks(applied);
+            else window.location.reload();
         }
     });
 
-    // Wire the per-section "+ Add Check" buttons.  Body-level event
-    // delegation matches how the section-add-family-btn buttons are
-    // hooked up elsewhere in this page.
-    document.body.addEventListener('click', function (ev) {
-        var btn = ev.target.closest('.section-add-check-btn');
-        if (!btn) return;
-        ev.preventDefault();
-        var sectionID = btn.getAttribute('data-section-id') || '';
-        checkEditor.open(null, sectionID || null);
-    });
+    // Per-section adds now flow through the unified "+ Add Test"
+    // dispatcher (add-test-dispatcher.js), which calls
+    // checkEditor.open(null, sectionID, presetKind) for check-kind types.
 
     // Edit existing check: any element with data-check-id triggers an
     // edit-modal open.  The suite table doesn't currently emit these
@@ -1459,6 +1402,16 @@ function checkUWDates(dateTimeValue, warningEl) {
 
     window.chickadeeNotebookCheckEditor = checkEditor;
 })();
+</script>
+
+<!-- ── Unified "+ Add Test" dispatcher ──────────────────────────────────────
+     Builds its own picker modal and routes the chosen test type to the
+     script / family / check editor wired above.  Must load after those
+     editors expose their window hooks (chickadeePatternFamilyEditor,
+     chickadeeNotebookCheckEditor, chickadeeOpenScriptCreator). -->
+<script src="/add-test-dispatcher.js?v=#appVersion()"></script>
+<script>
+(function () { if (window.initAddTestDispatcher) window.initAddTestDispatcher(); })();
 </script>
 
 <!-- ── Support file upload + delete ────────────────────────────────────────

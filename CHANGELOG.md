@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.221] - 2026-05-21
+
+### Changed
+
+- **Unified "+ Add Test" entry point for the suite editor.** Each suite
+  section's toolbar previously carried three separate buttons — "+ Add
+  Script", "+ Add Family", "+ Add Check". These collapse into a single
+  **"+ Add Test"** button that opens a picker listing the available test
+  *types* grouped by intent (test a function / test a value or data
+  structure / test notebook structure & output / custom), in the
+  instructor's mental model rather than the script-vs-family-vs-check
+  implementation taxonomy. Choosing a type routes to the matching editor
+  pre-seeded with that kind. New `Public/add-test-dispatcher.js` owns the
+  picker modal; the notebook-check and pattern-family editors gained an
+  optional `presetKind` argument to `open()`. First pass of the suite-editor
+  unification — the picker hands off to the existing per-kind editors; a
+  later pass folds the bodies into one morphing modal.
+- **Notebook-check saves hot-sync the suite table.** Saving a notebook check
+  no longer triggers a full page reload on the assignment edit page — the new
+  row appears inline via `suite-table.js`'s `syncChecks()`, matching how
+  pattern-family saves already behaved. (The create/draft page keeps its
+  reload-based flow, consistent with how its family saves work there.)
+
 ## [0.4.220] - 2026-05-21
 
 ### Fixed

@@ -297,15 +297,9 @@ Create Assignment
                     <button type="button" class="btn action-btn section-var-add"
                             data-section-id="#(sec.sectionID)"
                             style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
-                    <button type="button" class="btn action-btn section-new-script-btn"
+                    <button type="button" class="btn action-btn section-add-test-btn"
                             data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
-                    <button type="button" class="btn action-btn section-add-family-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
-                    <button type="button" class="btn action-btn section-add-check-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
@@ -359,15 +353,9 @@ Create Assignment
             <div class="section-create-toolbar"
                  data-section-id="#(sec.sectionID)"
                  style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
-                <button type="button" class="btn action-btn section-new-script-btn"
+                <button type="button" class="btn action-btn section-add-test-btn"
                         data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
-                <button type="button" class="btn action-btn section-add-family-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
-                <button type="button" class="btn action-btn section-add-check-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
             </div>
         #endif
             <table class="results-table" style="width:100%">
@@ -665,14 +653,9 @@ Create Assignment
         }
     });
 
-    // Per-section "+ Add Check" delegate — same pattern as the edit page.
-    document.body.addEventListener('click', function (ev) {
-        var btn = ev.target.closest && ev.target.closest('.section-add-check-btn');
-        if (!btn) return;
-        ev.preventDefault();
-        var sectionID = btn.getAttribute('data-section-id') || '';
-        checkEditor.open(null, sectionID || null);
-    });
+    // Per-section adds now flow through the unified "+ Add Test"
+    // dispatcher (add-test-dispatcher.js), which calls
+    // checkEditor.open(null, sectionID, presetKind) for check-kind types.
 
     // Edit existing check (data-edit-check-id attribute on suite-table rows).
     document.body.addEventListener('click', function (ev) {
@@ -809,7 +792,7 @@ Create Assignment
         try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
         catch (e) { initialFamilies = []; }
     }
-    window.initPatternFamilyEditor({
+    window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
         draftID: draftID,
         csrfToken: csrfToken,
         initialFamilies: initialFamilies,
@@ -1139,29 +1122,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         });
     });
 
-    function delegateWithSection(sid, globalID) {
-        window.__chickadeeTargetSection = sid;
-        var btn = document.getElementById(globalID);
-        if (btn) btn.click();
-    }
-    document.querySelectorAll('button.section-new-script-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'new-script-btn');
-        });
-    });
-    document.querySelectorAll('button.section-add-family-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-family-btn');
-        });
-    });
-    ['new-script-btn', 'add-family-btn', 'add-test-btn'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener('click', function (e) {
-            if (!e.isTrusted) return;
-            window.__chickadeeTargetSection = null;
-        }, true);
-    });
+    // Per-section "+ Add Test" buttons are wired by the unified Add Test
+    // dispatcher (add-test-dispatcher.js, loaded below); the legacy
+    // per-kind delegation lived here until v0.4.218.
 
     // ── Section header view/edit toggle ────────────────────────────────
     document.addEventListener('click', function (e) {
@@ -1614,6 +1577,10 @@ if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
 if (closeBtn)     closeBtn.addEventListener('click',   closeEditor);
 if (cancelBtn)    cancelBtn.addEventListener('click',  closeEditor);
 
+// Expose the creator so the unified "+ Add Test" dispatcher can open the
+// custom-script flow directly.
+window.chickadeeOpenScriptCreator = openCreator;
+
 if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
 
 // Save: POST to /instructor/new/draft/scripts and call suite-table's
@@ -1717,6 +1684,14 @@ function checkUWDates(dateTimeValue, warningEl) {
         }
     }).catch(function () {});
 }
+</script>
+
+<!-- ── Unified "+ Add Test" dispatcher ──────────────────────────────────────
+     Builds its own picker modal and routes the chosen test type to the
+     script / family / check editor wired above. -->
+<script src="/add-test-dispatcher.js?v=#appVersion()"></script>
+<script>
+(function () { if (window.initAddTestDispatcher) window.initAddTestDispatcher(); })();
 </script>
 #endexport
 #endextend
