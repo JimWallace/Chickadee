@@ -29,10 +29,35 @@ func assignmentDeadlineOverrideIsActive(_ assignment: APIAssignment) -> Bool {
     assignment.deadlineOverrideActive ?? false
 }
 
-func isAssignmentEffectivelyOpen(_ assignment: APIAssignment, now: Date = Date()) -> Bool {
-    guard assignment.isOpen else { return false }
-    guard assignmentDeadlineHasPassed(assignment, now: now) else { return true }
-    return assignmentDeadlineOverrideIsActive(assignment)
+/// Decides per-student submission eligibility from already-resolved inputs.
+/// `effectiveDueAt` is the later of the assignment-wide deadline and any
+/// per-student extension (nil only when the assignment has no deadline at all).
+///
+/// The assignment-wide `isOpen` flag is flipped to false two different ways: an
+/// instructor closing it manually, or the automatic deadline sweep
+/// (`closeExpiredAssignments`).  We can only tell them apart by timing — a close
+/// while the deadline is still in the future is a deliberate manual close, and
+/// an extension does not reopen it; a close at/after the deadline is the
+/// automatic sweep, so an active per-student extension (a later `effectiveDueAt`)
+/// keeps submission open for that one student.
+func isAssignmentOpenForUser(
+    isOpen: Bool,
+    overrideActive: Bool,
+    baselineDueAt: Date?,
+    effectiveDueAt: Date?,
+    now: Date = Date()
+) -> Bool {
+    let deadlinePassed = baselineDueAt.map { $0 <= now } ?? false
+    if isOpen {
+        if !deadlinePassed { return true }
+        if overrideActive { return true }
+    } else if !deadlinePassed {
+        // Closed before the deadline — a deliberate manual close that an
+        // extension must not reopen.
+        return false
+    }
+    guard let effectiveDueAt else { return false }
+    return now < effectiveDueAt
 }
 
 /// Returns the deadline that actually applies to `user` for `assignment`,
@@ -62,24 +87,25 @@ func effectiveDueAt(
     return extensionRow.extendedDueAt
 }
 
-/// Per-user variant of `isAssignmentEffectivelyOpen`.  An active extension
-/// keeps submission open for one student even after the assignment-wide
-/// deadline has passed.  The assignment's `isOpen` flag is still respected
-/// — if an instructor manually closed an assignment, an extension does not
-/// reopen it.
+/// Whether `user` may currently submit to `assignment`, consulting per-student
+/// extension rows.  An active extension keeps submission open for one student
+/// even after the assignment-wide deadline has passed and the automatic sweep
+/// has flipped `isOpen` to false.  A deliberate manual close (before the
+/// deadline) is still respected — see `isAssignmentOpenForUser`.
 func isAssignmentEffectivelyOpen(
     _ assignment: APIAssignment,
     for user: APIUser,
     on db: Database,
     now: Date = Date()
 ) async throws -> Bool {
-    guard assignment.isOpen else { return false }
-    if !assignmentDeadlineHasPassed(assignment, now: now) { return true }
-    if assignmentDeadlineOverrideIsActive(assignment) { return true }
-    guard let effective = try await effectiveDueAt(for: assignment, user: user, on: db) else {
-        return false
-    }
-    return now < effective
+    let effective = try await effectiveDueAt(for: assignment, user: user, on: db)
+    return isAssignmentOpenForUser(
+        isOpen: assignment.isOpen,
+        overrideActive: assignmentDeadlineOverrideIsActive(assignment),
+        baselineDueAt: assignment.dueAt,
+        effectiveDueAt: effective,
+        now: now
+    )
 }
 
 @discardableResult
@@ -92,6 +118,18 @@ func closeAssignmentIfExpired(
     guard assignment.isOpen else { return false }
     guard assignmentDeadlineHasPassed(assignment, now: now) else { return false }
     guard !assignmentDeadlineOverrideIsActive(assignment) else { return false }
+
+    // A still-active per-student extension keeps the assignment-wide window
+    // open so the extended student can still see and submit to it; per-user
+    // gating (`isAssignmentOpenForUser`) keeps everyone else out.  Once the
+    // last extension lapses, a later sweep closes the assignment normally.
+    if let assignmentID = assignment.id {
+        let activeExtensions = try await APIAssignmentExtension.query(on: db)
+            .filter(\.$assignmentID == assignmentID)
+            .filter(\.$extendedDueAt > now)
+            .count()
+        if activeExtensions > 0 { return false }
+    }
 
     assignment.isOpen = false
     try await assignment.save(on: db)

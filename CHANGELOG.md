@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.235] - 2026-05-22
+
+### Fixed
+
+- **Per-student deadline extensions now actually let the student view and
+  submit after the assignment-wide deadline.** The automatic deadline sweep
+  (`closeExpiredAssignments`) flips an assignment's single `isOpen` flag to
+  false the moment the base deadline passes, and every student-facing path
+  checked `isOpen` first — so a granted extension was silently ignored exactly
+  when it mattered: the assignment disappeared from the student dashboard and
+  the notebook page hid the Submit button. The per-user open check
+  (`isAssignmentOpenForUser`, used by the submit gate, the dashboard, and the
+  notebook page) now treats an active extension as reopening submission for that
+  one student when the assignment was *auto-closed at its deadline*, while a
+  deliberate manual close *before* the deadline still stays closed. The sweep
+  also no longer closes an assignment that still has a live extension, so
+  `isOpen` stays true through the extension window. The notebook page switched
+  from the assignment-wide `isAssignmentEffectivelyOpen` to the per-user
+  variant, and the dashboard now lists setups where the student holds an active
+  extension. The now-unused single-argument `isAssignmentEffectivelyOpen` was
+  removed.
+
 ## [0.4.234] - 2026-05-22
 
 ### Changed

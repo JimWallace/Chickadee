@@ -41,13 +41,18 @@ extension WebRoutes {
             .filter(\.$testSetupID == setupID)
             .first()
         // Treat an assignment as closed for read-only display whenever it is
-        // not effectively open.  A bare test setup with no APIAssignment row
-        // (instructor preview / unpublished) is treated as not closed so
-        // authoring flows are unaffected.
-        let isClosed: Bool = {
-            guard let assignment else { return false }
-            return !isAssignmentEffectivelyOpen(assignment)
-        }()
+        // not effectively open *for this user* — the per-user check honors a
+        // deadline extension granted to the current student, so an extended
+        // student still sees the Submit button after the assignment-wide
+        // deadline.  A bare test setup with no APIAssignment row (instructor
+        // preview / unpublished) is treated as not closed so authoring flows
+        // are unaffected.
+        let isClosed: Bool
+        if let assignment {
+            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+        } else {
+            isClosed = false
+        }
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignmentTitle = {
             if !queryTitle.isEmpty { return queryTitle }
