@@ -39,11 +39,15 @@ struct AuthoredRawScript: Equatable {
     /// the file — the channel `PUT /suite` uses to create or update a
     /// hand-written script without a separate `POST /scripts`.
     let content: String?
+    /// Optional instructor hint, persisted onto the generated
+    /// `TestSuiteEntry.hint` so it surfaces as a "💡 Hint" callout on failure
+    /// (PR2's display-time join). nil = no hint.
+    let hint: String?
 
     init(
         script: String, tier: TestTier, points: Int,
         displayName: String?, dependsOn: [String], sectionID: String? = nil,
-        content: String? = nil
+        content: String? = nil, hint: String? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -52,6 +56,7 @@ struct AuthoredRawScript: Equatable {
         self.dependsOn = dependsOn
         self.sectionID = sectionID
         self.content = content
+        self.hint = hint
     }
 }
 
@@ -207,7 +212,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     displayName: s.displayName,
                     dependsOn: s.dependsOn,
                     sectionID: normaliseSectionID(s.sectionID),
-                    content: s.content
+                    content: s.content,
+                    hint: s.hint
                 )
             }
             return nil
@@ -223,7 +229,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                         displayName: s.displayName,
                         dependsOn: s.dependsOn,
                         sectionID: normaliseSectionID(s.sectionID),
-                        content: s.content
+                        content: s.content,
+                        hint: s.hint
                     ))
             case .family(let id, let sid):
                 return .family(id: id, sectionID: normaliseSectionID(sid))
@@ -241,7 +248,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     points: e.points,
                     displayName: e.name,
                     dependsOn: e.dependsOn,
-                    sectionID: normaliseSectionID(e.sectionID)
+                    sectionID: normaliseSectionID(e.sectionID),
+                    hint: e.hint
                 )
             }
         // Reconstruct authored ordering from the existing manifest: walk
@@ -289,7 +297,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                             points: entry.points,
                             displayName: entry.name,
                             dependsOn: entry.dependsOn,
-                            sectionID: normaliseSectionID(entry.sectionID)
+                            sectionID: normaliseSectionID(entry.sectionID),
+                            hint: entry.hint
                         )))
             }
         }
@@ -598,7 +607,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     points: s.points,
                     displayName: s.displayName,
                     generatedBy: nil,
-                    sectionID: s.sectionID
+                    sectionID: s.sectionID,
+                    hint: s.hint
                 ))
 
         case .family(let fid, let familySection):

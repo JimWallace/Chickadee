@@ -247,6 +247,53 @@ final class AssignmentHelpersManifestTests {
         #expect(suites[1]["name"] as? String == "Release tests")
     }
 
+    // PR4: a raw script's instructor hint persists onto its `TestSuiteEntry`
+    // (emitted only when non-empty) and round-trips through the manifest, so
+    // the PR2 display-time join surfaces it on failure.
+    @Test func makeWorkerManifestJSONEmitsRawScriptHintAndRoundTrips() throws {
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "publictest_a.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, hint: "read the docstring"),
+                ConfiguredSuiteEntry(
+                    script: "publictest_b.py", tier: "public", order: 2,
+                    dependsOn: [], points: 1, displayName: nil, hint: nil),
+            ],
+            includeMakefile: false
+        )
+
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(manifest.utf8)) as? [String: Any])
+        let suites = try #require(object["testSuites"] as? [[String: Any]])
+        let byScript = Dictionary(uniqueKeysWithValues: suites.map { ($0["script"] as? String ?? "", $0) })
+        #expect(byScript["publictest_a.py"]?["hint"] as? String == "read the docstring")
+        #expect(byScript["publictest_b.py"]?["hint"] == nil, "Absent hint must be omitted from the entry")
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8))
+        let entryByScript = Dictionary(uniqueKeysWithValues: props.testSuites.map { ($0.script, $0) })
+        #expect(entryByScript["publictest_a.py"]?.hint == "read the docstring")
+        #expect(entryByScript["publictest_b.py"]?.hint == nil)
+    }
+
+    // PR4: `GET /suite` (buildSuitePayload) reads a raw script's hint back off
+    // the manifest so the editor round-trips it.
+    @Test func buildSuitePayloadPopulatesScriptHintFromManifest() throws {
+        let manifest = """
+            {
+              "schemaVersion": 1,
+              "testSuites": [
+                { "tier": "public", "script": "publictest_a.py", "hint": "mind the boundary" },
+                { "tier": "public", "script": "publictest_b.py" }
+              ]
+            }
+            """
+        let payload = buildSuitePayload(fromManifest: manifest)
+        #expect(payload.items.count == 2)
+        #expect(payload.items[0].script?.hint == "mind the boundary")
+        #expect(payload.items[1].script?.hint == nil)
+    }
+
     @Test func buildSuiteEntriesUsesExplicitSuiteConfigOrderingAndMetadata() throws {
         let suiteFiles = [
             ahMakeFile(named: "01_public.py", contents: "print('public')"),

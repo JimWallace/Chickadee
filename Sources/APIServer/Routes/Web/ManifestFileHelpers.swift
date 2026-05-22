@@ -224,6 +224,9 @@ private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any
     if let sid = entry.sectionID, !sid.isEmpty {
         dict["sectionID"] = sid
     }
+    if let hint = entry.hint, !hint.isEmpty {
+        dict["hint"] = hint
+    }
     return dict
 }
 

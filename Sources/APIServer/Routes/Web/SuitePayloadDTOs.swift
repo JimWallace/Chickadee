@@ -45,6 +45,12 @@ struct ScriptDTO: Content {
     /// not re-send it). Optional so older clients that only sent
     /// filename+metadata keep decoding.
     var content: String?
+    /// Optional instructor hint, shown to the student as a "💡 Hint" callout
+    /// when this script's test fails (surfaced at results-display time via the
+    /// `buildHintByFilename` join — see PR2). On `GET /suite` it's read from
+    /// the manifest entry; on `PUT /suite` it's persisted onto the entry.
+    /// Omitted by older clients, which keeps decoding.
+    var hint: String?
 }
 
 /// Name + opaque id of a single section.  Order of `SuitePayload.sections`
