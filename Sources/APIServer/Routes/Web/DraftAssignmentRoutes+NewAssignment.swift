@@ -72,6 +72,7 @@ extension DraftAssignmentRoutes {
             supportFileRows: supportFileRows,
             patternFamiliesJSON: newAssignmentPatternFamiliesJSON(setup: setup),
             notebookChecksJSON: newAssignmentNotebookChecksJSON(setup: setup),
+            checkSchemaJSON: notebookCheckFormSchemaJSON(),
             suiteStateJSON: newAssignmentSuiteStateSeedJSON(setup: setup),
             suiteSectionRows: newAssignmentSuiteSectionShellRows(setup: setup),
             requiredPlatform: storedState.requiredPlatform,
