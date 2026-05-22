@@ -381,69 +381,11 @@
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
 <script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
 
-<!-- ── Notebook Check Editor Modal ──────────────────────────────────────
-     Sibling to the pattern-family modal below.  Kind picker reveals
-     kind-specific field cards.  Saves via PUT /instructor/:id/checks
-     (full-replace, same atomic semantics as PUT /families).  -->
-<div id="check-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(720px,96vw);max-height:92vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
-            <div id="check-editor-title" style="font-weight:600;flex:1">New Notebook Check</div>
-            <button class="btn-link" id="check-editor-close" type="button" aria-label="Close" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
-
-        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
-            <input type="hidden" id="check-id">
-            <input type="hidden" id="check-section-id">
-
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Kind
-                    <select class="form-input" id="check-kind" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="data_frame_shape">DataFrame shape (rows × cols)</option>
-                        <option value="data_frame_columns">DataFrame columns (exact / superset)</option>
-                        <option value="data_frame_equality">DataFrame equality (CSV expected)</option>
-                        <option value="series_equality">Series equality (CSV expected)</option>
-                        <option value="numeric_array_close">Numeric array close (numpy.assert_allclose)</option>
-                        <option value="figure_count">Figure count (matplotlib)</option>
-                        <option value="cell_contains">Cell contains (substring / regex)</option>
-                        <option value="function_exists">Function exists (callable, optional arity)</option>
-                        <option value="variable_exists">Variable exists (defined, optional type)</option>
-                        <option value="ast_structure">AST structure (uses for-loop, lambda, etc.)</option>
-                    </select>
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Display name (shown to students)
-                    <input type="text" class="form-input" id="check-name" placeholder="(auto-generated when blank)"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
-            <p class="card-meta" style="font-size:.72rem;margin:.1rem 0 0">
-                Tier (visibility) and points are edited inline on the test suite row — same as scripts and pattern families.  New checks default to <code>public</code> and 1 point; tweak after saving.
-            </p>
-
-            <!-- Per-kind fields + the common hint field are rendered into
-                 these containers by the schema-driven engine in
-                 notebook-check-editor.js (seeded from #check-schema).  The
-                 engine builds one hidden card per kind under
-                 #check-fields-body and shows exactly one for the selected
-                 kind; #check-common-fields holds fields shown for every
-                 kind (the instructor hint). -->
-            <div id="check-fields-body" style="display:flex;flex-direction:column;gap:.5rem"></div>
-            <div id="check-common-fields" style="display:flex;flex-direction:column;gap:.5rem"></div>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
-            <button class="btn btn-primary" id="check-save-btn" type="button">Save</button>
-            <button class="btn" id="check-cancel-btn" type="button">Cancel</button>
-            <button class="btn action-btn action-danger" id="check-delete-btn" type="button" style="margin-left:auto;display:none">Delete</button>
-            <span id="check-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
-</div>
+<!-- ── Notebook Check editor ────────────────────────────────────────────
+     The notebook-check form is now a body renderer of the unified Test
+     Editor modal (test-editor-modal.js + test-renderer-check.js): the
+     shell owns the chrome + type picker, and the renderer builds its
+     per-kind fields from the #check-schema seed.  No standalone overlay. -->
 
 <!-- ── Pattern Family Editor Modal ──────────────────────────────────────── -->
 <div id="family-editor-overlay"
@@ -1202,69 +1144,42 @@ function checkUWDates(dateTimeValue, warningEl) {
 })();
 </script>
 
-<!-- ── Notebook Check Editor JS ────────────────────────────────────────────
-     Wires Public/notebook-check-editor.js to the page.  The module owns
-     the modal's state; this block just initialises it with the seed
-     check list and hooks the per-section "+ Add Check" buttons.  -->
-<script src="/notebook-check-editor.js?v=#appVersion()"></script>
 <script src="/global-inputs-editor.js?v=#appVersion()"></script>
+
+<!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
+     The "+ Add Test" button opens one modal; picking a type morphs the body
+     in place.  The notebook-check form is a body renderer
+     (test-renderer-check.js, fed by the #check-schema seed); the family and
+     script types delegate to their existing overlays during the staged
+     rollout (the shell shows a "Continue →" button for those).  Replaces the
+     standalone notebook-check editor + the add-test dispatcher.  Renderer
+     scripts load before the shell so they self-register first. -->
+<script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script>
 (function () {
-    var assignmentID = '#(assignmentID)';
     var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var seed = document.getElementById('notebook-checks-seed');
-    var initialChecks = [];
-    if (seed) {
-        try { initialChecks = JSON.parse(seed.textContent || '[]') || []; }
-        catch (e) { initialChecks = []; }
-    }
-    var checkEditor = window.initNotebookCheckEditor({
-        assignmentID: assignmentID,
-        csrfToken: csrfToken,
-        initialChecks: initialChecks,
-        urls: {
-            putChecks: function () {
-                return '/instructor/' + encodeURIComponent(assignmentID) + '/checks';
-            }
-        },
-        onChecksChange: function (applied) {
-            // Hot-sync the suite table (mirrors chickadeeSyncFamilies) so a
-            // check save drops the new row in inline — no full page reload.
-            // Falls back to a reload only if the hook is somehow absent.
-            if (window.chickadeeSyncChecks) window.chickadeeSyncChecks(applied);
-            else window.location.reload();
-        }
-    });
+    window.initTestEditorModal({ csrfToken: csrfToken });
 
-    // Per-section adds now flow through the unified "+ Add Test"
-    // dispatcher (add-test-dispatcher.js), which calls
-    // checkEditor.open(null, sectionID, presetKind) for check-kind types.
-
-    // Edit existing check: any element with data-check-id triggers an
-    // edit-modal open.  The suite table doesn't currently emit these
-    // (v1 just shows generated rows verbatim), but instructors can
-    // also use the global "manage checks" hook below; future suite-
-    // table updates can plug in here without changing this module.
+    // Edit an existing notebook check: open the shell pre-populated from the
+    // suite-table's current spec for that check id.
     document.body.addEventListener('click', function (ev) {
-        var el = ev.target.closest('[data-edit-check-id]');
+        var el = ev.target.closest && ev.target.closest('[data-edit-check-id]');
         if (!el) return;
         ev.preventDefault();
         var id = el.getAttribute('data-edit-check-id');
-        checkEditor.open(id || null);
+        var item = null;
+        if (typeof window.chickadeeGetSuiteItems === 'function') {
+            var match = window.chickadeeGetSuiteItems().find(function (i) {
+                return i.kind === 'check' && i.check && i.check.id === id;
+            });
+            item = match ? match.check : null;
+        }
+        if (item && window.__chickadeeTestEditorModal) {
+            window.__chickadeeTestEditorModal.open({ editing: { mechanism: 'check', id: id, item: item } });
+        }
     });
-
-    window.chickadeeNotebookCheckEditor = checkEditor;
 })();
-</script>
-
-<!-- ── Unified "+ Add Test" dispatcher ──────────────────────────────────────
-     Builds its own picker modal and routes the chosen test type to the
-     script / family / check editor wired above.  Must load after those
-     editors expose their window hooks (chickadeePatternFamilyEditor,
-     chickadeeNotebookCheckEditor, chickadeeOpenScriptCreator). -->
-<script src="/add-test-dispatcher.js?v=#appVersion()"></script>
-<script>
-(function () { if (window.initAddTestDispatcher) window.initAddTestDispatcher(); })();
 </script>
 
 <!-- ── Support file upload + delete ────────────────────────────────────────
