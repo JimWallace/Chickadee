@@ -33,10 +33,17 @@ struct AuthoredRawScript: Equatable {
     let displayName: String?
     let dependsOn: [String]
     let sectionID: String?
+    /// Authoritative raw body to write into the zip for this script. When
+    /// nil, the existing file content is preserved (variables are still
+    /// re-inlined for `.py` scripts). When non-nil, this content replaces
+    /// the file — the channel `PUT /suite` uses to create or update a
+    /// hand-written script without a separate `POST /scripts`.
+    let content: String?
 
     init(
         script: String, tier: TestTier, points: Int,
-        displayName: String?, dependsOn: [String], sectionID: String? = nil
+        displayName: String?, dependsOn: [String], sectionID: String? = nil,
+        content: String? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -44,6 +51,7 @@ struct AuthoredRawScript: Equatable {
         self.displayName = displayName
         self.dependsOn = dependsOn
         self.sectionID = sectionID
+        self.content = content
     }
 }
 
@@ -198,7 +206,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     points: s.points,
                     displayName: s.displayName,
                     dependsOn: s.dependsOn,
-                    sectionID: normaliseSectionID(s.sectionID)
+                    sectionID: normaliseSectionID(s.sectionID),
+                    content: s.content
                 )
             }
             return nil
@@ -213,7 +222,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                         points: s.points,
                         displayName: s.displayName,
                         dependsOn: s.dependsOn,
-                        sectionID: normaliseSectionID(s.sectionID)
+                        sectionID: normaliseSectionID(s.sectionID),
+                        content: s.content
                     ))
             case .family(let id, let sid):
                 return .family(id: id, sectionID: normaliseSectionID(sid))
@@ -483,27 +493,43 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     for item in itemsForOrdering {
         guard case .script(let s) = item else { continue }
         let filename = s.script
-        guard filename.lowercased().hasSuffix(".py") else { continue }
         // If this filename was just generated (e.g. instructor renamed a
         // raw script to clash with a family-generated name), the family
         // version wins — skip the raw-script overlay.
         guard renderedByFilename[filename] == nil else { continue }
-        guard
-            let existing = readScriptFromZip(
-                zipPath: setup.zipPath,
-                filename: filename)
-        else { continue }
+        let isPython = filename.lowercased().hasSuffix(".py")
         let sectionVars: [FamilyVariable] = {
             guard let sid = s.sectionID else { return [] }
             return sectionVarsByID[sid] ?? []
         }()
-        let updated = TestScriptVariablePrepender.prependToRawScript(
-            existing,
-            variables: resolvedGlobalVariables + sectionVars
-        )
-        if updated != existing {
-            toWrite[filename] = updated
+        if let provided = s.content {
+            // Declarative content from the payload (the PUT /suite channel
+            // for creating/updating a hand-written script). Write it
+            // verbatim, re-inlining global + section variables for Python
+            // scripts only. Idempotent at the zip layer — identical bytes
+            // are a no-op there.
+            toWrite[filename] =
+                isPython
+                ? TestScriptVariablePrepender.prependToRawScript(
+                    provided, variables: resolvedGlobalVariables + sectionVars)
+                : provided
+        } else if isPython {
+            // No content provided — preserve the existing file, re-inlining
+            // the current global + section variables (idempotent prepend).
+            guard
+                let existing = readScriptFromZip(
+                    zipPath: setup.zipPath,
+                    filename: filename)
+            else { continue }
+            let updated = TestScriptVariablePrepender.prependToRawScript(
+                existing,
+                variables: resolvedGlobalVariables + sectionVars
+            )
+            if updated != existing {
+                toWrite[filename] = updated
+            }
         }
+        // (.sh/.r with no provided content: existing file left untouched.)
     }
 
     try applyScriptChangesToZip(

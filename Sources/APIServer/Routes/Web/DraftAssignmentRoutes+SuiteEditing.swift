@@ -34,7 +34,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func getDraftSuite(req: Request) async throws -> Response {
         let setup = try await loadDraftSetup(req)
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -57,7 +57,7 @@ extension DraftAssignmentRoutes {
 
         try await applySuiteEdit(setup: setup, body: body, on: req.db)
 
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 

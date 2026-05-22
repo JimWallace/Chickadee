@@ -29,7 +29,7 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func getSuite(req: Request) async throws -> Response {
         let (_, setup) = try await loadAssignmentAndSetup(req)
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -56,7 +56,7 @@ extension PublishedAssignmentRoutes {
         // Debounced: a no-op when a pending validation already exists.
         await scheduleValidationAfterSuiteEdit(req: req, assignment: assignment)
 
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -67,7 +67,7 @@ extension PublishedAssignmentRoutes {
 /// Reads a persisted manifest and builds the author-facing view of the
 /// suite list, collapsing fully-expanded family filename sets back into
 /// `family:<id>` tokens so the editor sees intent, not plumbing.
-func buildSuitePayload(fromManifest manifest: String) -> SuitePayload {
+func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) -> SuitePayload {
     guard let props = decodeManifest(fromJSON: manifest)
 
     else {
@@ -158,6 +158,21 @@ func buildSuitePayload(fromManifest manifest: String) -> SuitePayload {
         }
     }
 
+    // When a zip path is supplied, fill in each raw script's body so the
+    // payload carries the complete declarative state (the editor seed and
+    // `GET /suite` both want this; pure-manifest callers pass nil and get
+    // metadata-only script rows). Generated family/check files are derived
+    // from their specs, so only `kind == "script"` rows need a body.
+    if let zipPath {
+        for i in items.indices where items[i].kind == "script" {
+            if let name = items[i].script?.script,
+                let body = readScriptFromZip(zipPath: zipPath, filename: name)
+            {
+                items[i].script?.content = body
+            }
+        }
+    }
+
     let sections = props.sections.map {
         TestSuiteSectionDTO(id: $0.id, name: $0.name)
     }
@@ -165,8 +180,10 @@ func buildSuitePayload(fromManifest manifest: String) -> SuitePayload {
 }
 
 /// Convenience: full `GET /suite` payload as sorted-keys JSON string.
-func suiteStateJSON(fromManifest manifest: String) -> String {
-    let payload = buildSuitePayload(fromManifest: manifest)
+/// Pass `zipPath` to embed raw-script bodies in the seed (the editor reads
+/// them directly instead of a per-file fetch).
+func suiteStateJSON(fromManifest manifest: String, zipPath: String? = nil) -> String {
+    let payload = buildSuitePayload(fromManifest: manifest, zipPath: zipPath)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     guard let data = try? encoder.encode(payload),

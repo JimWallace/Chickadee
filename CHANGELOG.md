@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.222] - 2026-05-21
+
+### Added
+
+- **`PUT /suite` can now carry raw-script content (declarative suite, phase 1).**
+  Groundwork for routing every suite write through the single
+  `GET`/`PUT /instructor/:id/suite` pair. `ScriptDTO` (and the internal
+  `AuthoredRawScript`) gained an optional `content` field: on `PUT /suite` a
+  script item that carries `content` has that body written into the test-setup
+  zip (variables re-inlined for `.py`), so a hand-written script can be created
+  or updated without a separate `POST /scripts`. On `GET /suite` — and in the
+  assignment edit/create page seed — each raw script's body is now emitted
+  (via an optional `zipPath` on `buildSuitePayload` / `suiteStateJSON`), so the
+  editor has the complete declarative state without a per-file fetch. Purely
+  additive: a script item with no `content` leaves the existing file untouched
+  (variables still re-inlined), so the unchanged editor and the existing
+  `POST/PUT/DELETE /scripts` + `PUT /families` + `PUT /checks` endpoints keep
+  working exactly as before. Deletion reconciliation and endpoint retirement
+  come in later phases.
+
 ## [0.4.221] - 2026-05-21
 
 ### Changed
