@@ -86,6 +86,11 @@
         // approach works for brand-new sections that don't yet have
         // any tests — the v0.4.108–110 token filter couldn't.
         var currentSectionName = null;
+        // Tracks the kind currently shown in the editor so the kind-change
+        // handler (and the "+ Add Test" preset path) can diff against the
+        // previously-displayed kind when deciding whether to relay out the
+        // cases columns.  Resynced on every open.
+        var lastSelectedKind = 'boundary_equality';
 
         /// Reads section variables for the given family id out of the
         /// server-rendered `.section-vars-body` tbody in the family row's
@@ -1211,7 +1216,10 @@
             updateCasesEmptyMessage();
         }
 
-        function openEditor(familyIdx) {
+        // `presetKind` (optional) seeds the kind dropdown for a brand-new
+        // family — used by the unified "+ Add Test" dispatcher.  Ignored
+        // when editing an existing family.
+        function openEditor(familyIdx, presetKind) {
             editingIndex = (typeof familyIdx === 'number') ? familyIdx : -1;
             statusEl.textContent = '';
             casesBody.innerHTML = '';
@@ -1251,7 +1259,7 @@
                 titleEl.textContent = 'New Pattern Family';
                 idInput.value = '';
                 nameInput.value = '';
-                kindInput.value = 'boundary_equality';
+                kindInput.value = presetKind || 'boundary_equality';
                 fnInput.value = '';
                 paramsInput.value = '';
                 editingTier = 'public';
@@ -1280,6 +1288,17 @@
             }
             renderVariablesTable();
             updateKindVisibility();
+
+            // A new family seeded with a non-default kind (via "+ Add Test")
+            // may need its cases columns laid out differently — only
+            // variable-equality changes the layout, and applyKindDefaults
+            // is a no-op for the kinds that share boundary's columns.
+            if (editingIndex < 0) {
+                applyKindDefaults(kindInput.value, 'boundary_equality');
+            }
+            // Resync the kind-change tracker to what's actually shown so the
+            // next user-driven change diffs against the right baseline.
+            lastSelectedKind = kindInput.value;
 
             overlay.style.display = 'flex';
             updateCasesEmptyMessage();
@@ -1405,11 +1424,10 @@
         });
 
         if (kindInput) {
-            var _previousKind = kindInput.value;
             kindInput.addEventListener('change', function () {
                 var newKind = kindInput.value;
-                applyKindDefaults(newKind, _previousKind);
-                _previousKind = newKind;
+                applyKindDefaults(newKind, lastSelectedKind);
+                lastSelectedKind = newKind;
                 updateKindVisibility();
             });
         }

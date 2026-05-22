@@ -88,7 +88,11 @@
         });
 
         // ── Open / close ───────────────────────────────────────────────────
-        function open(checkID, sectionID) {
+        // `presetKind` (optional) seeds the kind dropdown for a brand-new
+        // check — used by the unified "+ Add Test" dispatcher so the
+        // instructor lands directly on the right per-kind fields.  Ignored
+        // when editing an existing check (its own kind wins).
+        function open(checkID, sectionID, presetKind) {
             editingID = checkID || null;
             editingSectionID = sectionID || null;
             statusEl.textContent = '';
@@ -111,6 +115,11 @@
                 resetForm();
                 titleEl.textContent = 'New Notebook Check';
                 deleteBtn.style.display = 'none';
+            }
+
+            if (!editingID && presetKind) {
+                kindSelect.value = presetKind;
+                showFieldsForKind(kindSelect.value);
             }
 
             overlay.style.display = 'flex';

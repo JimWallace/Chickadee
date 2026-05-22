@@ -1058,6 +1058,49 @@
             schedulePush();
         }
 
+        /// Reconciles the local state with the full check list returned
+        /// from `PUT /checks` — the notebook-check mirror of syncFamilies.
+        /// Lets a check save update the table inline (a new row appears in
+        /// the clicked section) instead of forcing a full page reload.
+        function syncChecks(nextChecks) {
+            var byID = {};
+            (nextChecks || []).forEach(function (c) { byID[c.id] = c; });
+
+            var seen = {};
+            items = items.map(function (item) {
+                if (item.kind !== 'check') return item;
+                var c = byID[item.checkID];
+                if (!c) return null;
+                seen[item.checkID] = true;
+                return {
+                    kind: 'check',
+                    id: 'check:' + c.id,
+                    checkID: c.id,
+                    check: c,
+                    dependsOn: (c.dependsOn || []).slice(),
+                    sectionID: item.sectionID || null
+                };
+            }).filter(Boolean);
+
+            // Newcomer checks land in the section the instructor clicked
+            // "+ Add Test" from (if any); existing checks keep their section.
+            var target = window.__chickadeeTargetSection;
+            var targetSid = (typeof target === 'string' && target) ? target : null;
+            (nextChecks || []).forEach(function (c) {
+                if (seen[c.id]) return;
+                items.push({
+                    kind: 'check',
+                    id: 'check:' + c.id,
+                    checkID: c.id,
+                    check: c,
+                    dependsOn: (c.dependsOn || []).slice(),
+                    sectionID: targetSid
+                });
+            });
+            renderTree();
+            schedulePush();
+        }
+
         // Reload on bfcache restore so the page always reflects server state.
         window.addEventListener('pageshow', function (e) {
             if (e.persisted) window.location.reload();
@@ -1067,6 +1110,7 @@
 
         return {
             syncFamilies: syncFamilies,
+            syncChecks: syncChecks,
             addExistingScript: addExistingScript,
             getItems: function () { return items.slice(); }
         };
@@ -1075,6 +1119,7 @@
     function noopAPI() {
         return {
             syncFamilies: function () {},
+            syncChecks: function () {},
             addExistingScript: function () {},
             getItems: function () { return []; }
         };
