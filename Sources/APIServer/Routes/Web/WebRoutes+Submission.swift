@@ -435,6 +435,7 @@ extension WebRoutes {
         testSetupID: String, on db: Database
     ) async throws -> ManifestDisplayData {
         var displayNameMap: [String: String] = [:]
+        var hintByFilename: [String: String] = [:]
         var sections: [TestSuiteSection] = []
         var entries: [TestSuiteEntry] = []
         if let setup = try? await APITestSetup.find(testSetupID, on: db),
@@ -453,8 +454,11 @@ extension WebRoutes {
                     displayNameMap[stemKey] = displayName
                 }
             }
+            hintByFilename = buildHintByFilename(props)
         }
-        return ManifestDisplayData(displayNameMap: displayNameMap, sections: sections, entries: entries)
+        return ManifestDisplayData(
+            displayNameMap: displayNameMap, hintByFilename: hintByFilename,
+            sections: sections, entries: entries)
     }
 
     /// Decodes the chosen result's `TestOutcomeCollection`, filters by tier,
@@ -517,7 +521,8 @@ extension WebRoutes {
                 outcome: outcome,
                 weighted: weighted,
                 priorOutcomeMap: priorAttempt.outcomeMap,
-                displayNameMap: manifestDisplay.displayNameMap
+                displayNameMap: manifestDisplay.displayNameMap,
+                hintByFilename: manifestDisplay.hintByFilename
             )
         }
         return processed
@@ -530,7 +535,8 @@ extension WebRoutes {
         outcome: TestOutcome,
         weighted: Bool,
         priorOutcomeMap: [String: TestStatus],
-        displayNameMap: [String: String]
+        displayNameMap: [String: String],
+        hintByFilename: [String: String]
     ) -> OutcomeRow {
         let skip = parseSkip(shortResult: outcome.shortResult)
         let shortOutput = formattedShortResult(from: outcome.shortResult, status: outcome.status)
@@ -558,6 +564,11 @@ extension WebRoutes {
             return (!wasPass && isPass, wasPass && !isPass)
         }()
         let pointsLabel: String? = weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
+        // Surface the instructor hint only on a genuine failure (not pass, not
+        // a skipped/blocked test — there the blocker message is the guidance).
+        let hint: String? =
+            (!skip.isSkipped && outcome.status != .pass)
+            ? hintByFilename[outcome.testName] : nil
         return OutcomeRow(
             testName: displayNameMap[outcome.testName] ?? outcome.testName,
             tier: outcome.tier.rawValue,
@@ -570,7 +581,8 @@ extension WebRoutes {
             blockerName: skip.blockerName,
             deltaImproved: deltaImproved,
             deltaRegressed: deltaRegressed,
-            pointsLabel: pointsLabel
+            pointsLabel: pointsLabel,
+            hint: hint
         )
     }
 
@@ -721,8 +733,46 @@ private struct PriorAttemptDelta {
 }
 
 /// Manifest-derived data used for friendly test names and section bucketing.
+/// Maps each generated/raw test filename — and its extensionless stem, so it
+/// matches both the worker (`testName == stem`) and browser (`testName ==
+/// filename`) outcome shapes — to its instructor hint: per-case `resolvedHint`
+/// for pattern families, `hint` for notebook checks, and the suite-entry `hint`
+/// for hand-written raw scripts.  The results view surfaces this as a "💡 Hint"
+/// callout on failing tests (v0.4.229), replacing the hint text that
+/// pattern-family scripts used to bake into their own output.
+func buildHintByFilename(_ props: TestProperties) -> [String: String] {
+    var map: [String: String] = [:]
+    func record(_ filename: String, _ hint: String?) {
+        guard let h = hint,
+            !h.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return }
+        let stem = (filename as NSString).deletingPathExtension
+        map[filename] = h
+        map[stem.isEmpty ? filename : stem] = h
+    }
+    // Raw scripts carry their hint on the suite entry; generated entries take
+    // it from the family-case / check spec instead.
+    for entry in props.testSuites where !entry.isGenerated {
+        record(entry.script, entry.hint)
+    }
+    for f in props.patternFamilies {
+        for c in f.cases where c.enabled {
+            record(
+                generatedScriptFilename(
+                    familyID: f.id, caseKey: c.key,
+                    tier: c.resolvedTier(defaults: f.defaults)),
+                c.resolvedHint(defaults: f.defaults))
+        }
+    }
+    for chk in props.notebookChecks {
+        record(generatedCheckFilename(checkID: chk.id, tier: chk.tier), chk.hint)
+    }
+    return map
+}
+
 private struct ManifestDisplayData {
     let displayNameMap: [String: String]
+    let hintByFilename: [String: String]
     let sections: [TestSuiteSection]
     let entries: [TestSuiteEntry]
 }
