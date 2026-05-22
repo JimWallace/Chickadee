@@ -254,6 +254,68 @@ import XCTVapor
         }
     }
 
+    // PR4c: a raw script's instructor hint rides in the script DTO, persists
+    // onto the manifest entry, and round-trips via GET /suite.  A later push
+    // that re-sends the script row WITH its hint preserves it (the editor's
+    // suite-table always re-emits hint, so reorders don't wipe it).
+    @Test func put_persistsAndRoundTripsRawScriptHint() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_a.py", "passed('body a')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let withHint = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_a.py","tier":"public","points":1,"displayName":null,"dependsOn":[],"hint":"read the docstring"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: withHint)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("read the docstring"), "hint should round-trip via GET /suite")
+                })
+
+            // A second push that re-sends the row with its hint (the editor's
+            // table always does) must preserve it — no wipe on reorder/retier.
+            let stillHinted = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_a.py","tier":"release","points":2,"displayName":null,"dependsOn":[],"hint":"read the docstring"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: stillHinted)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("read the docstring"), "hint should survive a retier push")
+                })
+        }
+    }
+
     @Test func put_adoptScriptOnFamilyCollapsesBackIntoFamilyToken() async throws {
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [

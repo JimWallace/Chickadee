@@ -131,7 +131,11 @@
                     points: Math.max(0, parseInt(s.points) || 0),
                     displayName: s.displayName == null ? '' : String(s.displayName),
                     dependsOn: (s.dependsOn || []).slice(),
-                    sectionID: sid
+                    sectionID: sid,
+                    // Instructor hint (PR4a/PR4c). Carried on every item and
+                    // re-emitted in buildPayload so a reorder/family-save push
+                    // never wipes it (the server takes hint from the DTO).
+                    hint: s.hint == null ? '' : String(s.hint)
                 };
             });
         }
@@ -412,15 +416,23 @@
                     }
                     var display = item.displayName && item.displayName.trim();
                     if (display === '' || display === stemOf(item.script)) display = null;
+                    var scriptDTO = {
+                        script:      item.script,
+                        tier:        item.tier,
+                        points:      Math.max(0, parseInt(item.points) || 0),
+                        displayName: display,
+                        dependsOn:   (item.dependsOn || []).slice(),
+                        // Always send the current hint so reorders preserve it
+                        // (the server takes hint from the DTO unconditionally).
+                        hint:        (item.hint && item.hint.trim()) ? item.hint.trim() : null
+                    };
+                    // Only send the body when a fresh edit staged it; omitting
+                    // it leaves the existing file untouched (a reorder/retier
+                    // need not resend the body). Cleared on re-seed after push.
+                    if (item._content != null) scriptDTO.content = item._content;
                     return {
                         kind: 'script',
-                        script: {
-                            script:      item.script,
-                            tier:        item.tier,
-                            points:      Math.max(0, parseInt(item.points) || 0),
-                            displayName: display,
-                            dependsOn:   (item.dependsOn || []).slice()
-                        },
+                        script: scriptDTO,
                         sectionID: item.sectionID || null
                     };
                 })
@@ -1168,6 +1180,54 @@
                 .catch(function (err) { items = snapshot; renderTree(); throw err; });
         }
 
+        /// PR4c: persist a hand-written script (create or content/hint edit)
+        /// through the single `PUT /suite` write path, replacing the legacy
+        /// `POST /scripts` / `PUT /scripts/:name` endpoints in the script
+        /// editor. `spec` = { filename, content, hint, tier?, points?, isTest? }.
+        /// The body rides on a transient `_content` that buildPayload emits and
+        /// the post-push re-seed drops; `hint` persists via the DTO. New scripts
+        /// land in the clicked section; an existing script keeps its tier /
+        /// points / displayName / deps / section unless `spec` overrides them.
+        /// Resolves with the applied script DTO; rejects with the server error.
+        function saveScriptViaSuite(spec) {
+            spec = spec || {};
+            if (!spec.filename) return Promise.reject(new Error('Script filename is required.'));
+            var snapshot = items.slice();
+            var existing = items.find(function (it) {
+                return it.kind === 'script' && it.script === spec.filename;
+            });
+            if (existing) {
+                if (spec.content != null) existing._content = spec.content;
+                existing.hint = spec.hint || '';
+                if (spec.tier) existing.tier = spec.tier;
+                if (spec.points != null) existing.points = Math.max(0, parseInt(spec.points) || 0);
+            } else {
+                var target = window.__chickadeeTargetSection;
+                var targetSid = (typeof target === 'string' && target) ? target : null;
+                items.push({
+                    kind: 'script',
+                    id: spec.filename,
+                    script: spec.filename,
+                    tier: spec.tier || (spec.isTest === false ? 'support' : 'public'),
+                    points: Math.max(0, parseInt(spec.points) || 1),
+                    displayName: '',
+                    dependsOn: [],
+                    sectionID: targetSid,
+                    hint: spec.hint || '',
+                    _content: spec.content != null ? spec.content : ''
+                });
+            }
+            renderTree();
+            return pushSuiteNow()
+                .then(function (payload) {
+                    var rows = (payload.items || [])
+                        .filter(function (i) { return i.kind === 'script' && i.script; })
+                        .map(function (i) { return i.script; });
+                    return rows.find(function (s) { return s.script === spec.filename; }) || null;
+                })
+                .catch(function (err) { items = snapshot; renderTree(); throw err; });
+        }
+
         // Reload on bfcache restore so the page always reflects server state.
         window.addEventListener('pageshow', function (e) {
             if (e.persisted) window.location.reload();
@@ -1180,6 +1240,7 @@
             syncChecks: syncChecks,
             saveFamiliesViaSuite: saveFamiliesViaSuite,
             saveChecksViaSuite: saveChecksViaSuite,
+            saveScriptViaSuite: saveScriptViaSuite,
             addExistingScript: addExistingScript,
             getItems: function () { return items.slice(); }
         };
@@ -1189,6 +1250,7 @@
         return {
             syncFamilies: function () {},
             syncChecks: function () {},
+            saveScriptViaSuite: function () { return Promise.reject(new Error('suite table not ready')); },
             addExistingScript: function () {},
             getItems: function () { return []; }
         };
