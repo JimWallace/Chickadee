@@ -91,14 +91,22 @@ jobs:
         id: toolchain
         run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
+      # `CACHE_SALT` is a manual bust knob.  Bump it whenever an incremental
+      # build on a restored `.build/` would be unsound — most notably when a
+      # cross-module type changes *kind* (struct↔enum): files that reference it
+      # only transitively (e.g. via a function whose mangled signature embeds
+      # the type) keep their old source mtime, so `git restore-mtime` marks
+      # them "fresh" and llbuild reuses stale object files compiled against the
+      # old symbol → "undefined reference" link errors. Bumping the salt forces
+      # one clean rebuild for everyone.  (v2: TestItem struct→enum, v0.4.228.)
       - name: Cache build artifacts
         id: build-cache
         uses: actions/cache@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ steps.toolchain.outputs.key }}-
+            ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-
 
       # Exact cache hit: artifacts already match this tree, skip even the
       # near-no-op build.  Restore-keys partial hit (cache-hit is false): the

@@ -254,8 +254,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // first, then checks) so every existing call site keeps working.
         self.testItems =
             testItems
-            ?? (patternFamilies.map(TestItem.init(family:))
-                + notebookChecks.map(TestItem.init(check:)))
+            ?? (patternFamilies.map(TestItem.family)
+                + notebookChecks.map(TestItem.check))
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
@@ -279,7 +279,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         if decodedItems.isEmpty {
             let fams = try c.decodeIfPresent([PatternFamily].self, forKey: .patternFamilies) ?? []
             let checks = try c.decodeIfPresent([NotebookCheck].self, forKey: .notebookChecks) ?? []
-            testItems = fams.map(TestItem.init(family:)) + checks.map(TestItem.init(check:))
+            testItems = fams.map(TestItem.family) + checks.map(TestItem.check)
         } else {
             testItems = decodedItems
         }

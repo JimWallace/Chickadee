@@ -10,8 +10,8 @@
 //
 // The two payload structs stay intact rather than being flattened into one
 // field-soup type: each keeps the shape it actually uses (a family's table of
-// cases vs a check's per-kind config).  `TestItem` is the tagged union over
-// them plus a thin set of envelope accessors.
+// cases vs a check's per-kind config).  `TestItem` is a tagged `enum` over them
+// plus a thin set of envelope accessors.
 //
 // Wire format is a discriminated union: `{ "type": "family", "spec": {…} }`
 // or `{ "type": "check", "spec": {…} }`.  Stored in
@@ -27,31 +27,14 @@ public enum TestItemType: String, Codable, Sendable, Equatable {
     case check
 }
 
-public struct TestItem: Codable, Equatable, Sendable {
-    /// The wrapped spec.  Exactly one flavour per item.
-    public enum Payload: Equatable, Sendable {
-        case family(PatternFamily)
-        case check(NotebookCheck)
-    }
-
-    public let payload: Payload
-
-    public init(_ payload: Payload) {
-        self.payload = payload
-    }
-
-    public init(family: PatternFamily) {
-        self.payload = .family(family)
-    }
-
-    public init(check: NotebookCheck) {
-        self.payload = .check(check)
-    }
+public enum TestItem: Codable, Equatable, Sendable {
+    case family(PatternFamily)
+    case check(NotebookCheck)
 
     // MARK: - Flavour accessors
 
     public var type: TestItemType {
-        switch payload {
+        switch self {
         case .family: return .family
         case .check: return .check
         }
@@ -59,13 +42,13 @@ public struct TestItem: Codable, Equatable, Sendable {
 
     /// The wrapped pattern family, or nil when this item is a check.
     public var family: PatternFamily? {
-        if case .family(let f) = payload { return f }
+        if case .family(let f) = self { return f }
         return nil
     }
 
     /// The wrapped notebook check, or nil when this item is a family.
     public var check: NotebookCheck? {
-        if case .check(let c) = payload { return c }
+        if case .check(let c) = self { return c }
         return nil
     }
 
@@ -79,7 +62,7 @@ public struct TestItem: Codable, Equatable, Sendable {
 
     /// Stable id, unique within the assignment.
     public var id: String {
-        switch payload {
+        switch self {
         case .family(let f): return f.id
         case .check(let c): return c.id
         }
@@ -88,7 +71,7 @@ public struct TestItem: Codable, Equatable, Sendable {
     /// Instructor-facing display name.  A family always has one; a check's
     /// is optional (the renderer falls back to a kind-derived label).
     public var displayName: String? {
-        switch payload {
+        switch self {
         case .family(let f): return f.name
         case .check(let c): return c.name
         }
@@ -98,7 +81,7 @@ public struct TestItem: Codable, Equatable, Sendable {
     /// `family:<id>` tokens, expanded server-side before the manifest is
     /// persisted for the runner.
     public var dependsOn: [String] {
-        switch payload {
+        switch self {
         case .family(let f): return f.dependsOn
         case .check(let c): return c.dependsOn
         }
@@ -116,15 +99,15 @@ public struct TestItem: Codable, Equatable, Sendable {
         let type = try c.decode(TestItemType.self, forKey: .type)
         switch type {
         case .family:
-            payload = .family(try c.decode(PatternFamily.self, forKey: .spec))
+            self = .family(try c.decode(PatternFamily.self, forKey: .spec))
         case .check:
-            payload = .check(try c.decode(NotebookCheck.self, forKey: .spec))
+            self = .check(try c.decode(NotebookCheck.self, forKey: .spec))
         }
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
-        switch payload {
+        switch self {
         case .family(let f):
             try c.encode(TestItemType.family, forKey: .type)
             try c.encode(f, forKey: .spec)

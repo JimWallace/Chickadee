@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.228] - 2026-05-22
+
+### Changed
+
+- **`TestItem` is now a proper Swift `enum`** (`Sources/Core/Models/TestItem.swift`).
+  It was a `struct` wrapping a private `Payload` enum + a `type` discriminator;
+  it's now `enum TestItem { case family(PatternFamily); case check(NotebookCheck) }`
+  directly. The custom `Codable` is unchanged (`{ "type": …, "spec": … }`), so
+  manifests round-trip identically — no migration. The `type` / `family` /
+  `check` / `id` / `displayName` / `dependsOn` accessors are preserved (the
+  `compactMap(\.family)` keypaths in `TestProperties` keep working); the
+  `init(family:)` / `init(check:)` factory call sites become the `TestItem.family`
+  / `TestItem.check` case constructors. Pure internal elegance — exhaustive
+  `switch`es instead of optional wrangling, no behaviour change.
+
 ## [0.4.227] - 2026-05-22
 
 ### Removed

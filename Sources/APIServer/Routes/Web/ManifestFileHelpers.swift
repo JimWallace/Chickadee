@@ -190,16 +190,16 @@ private func orderedTestItems(
     var seen = Set<String>()
     for entry in testSuites {
         if let fid = entry.generatedBy, let fam = familyByID[fid], seen.insert(fid).inserted {
-            items.append(TestItem(family: fam))
+            items.append(.family(fam))
         } else if let cid = entry.generatedByCheck, let chk = checkByID[cid], seen.insert(cid).inserted {
-            items.append(TestItem(check: chk))
+            items.append(.check(chk))
         }
     }
     for fam in patternFamilies where seen.insert(fam.id).inserted {
-        items.append(TestItem(family: fam))
+        items.append(.family(fam))
     }
     for chk in notebookChecks where seen.insert(chk.id).inserted {
-        items.append(TestItem(check: chk))
+        items.append(.check(chk))
     }
     return items
 }
