@@ -461,7 +461,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             familyRows: familySuiteRowsForSetup(setup),
             patternFamiliesJSON: patternFamiliesJSON,
             notebookChecksJSON: notebookChecksJSON,
-            suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest),
+            suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil,

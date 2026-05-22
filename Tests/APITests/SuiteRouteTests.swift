@@ -169,6 +169,91 @@ import XCTVapor
         }
     }
 
+    // MARK: - PUT /suite raw-script content channel (v0.4.222)
+
+    @Test func put_createsRawScriptFromContent() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_existing.py", "passed('existing body')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            // Keep the existing script (no content → preserved) and add a
+            // brand-new one whose body rides in `content` — the channel that
+            // lets PUT /suite create a script without POST /scripts.
+            let body = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_existing.py","tier":"public","points":1,"displayName":null,"dependsOn":[]}},
+                    {"kind":"script","script":{"script":"publictest_new.py","tier":"public","points":2,"displayName":null,"dependsOn":[],"content":"passed('brand new body')\n"}}
+                ]}
+                """#
+
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "\(res.body.string)")
+                })
+
+            // GET round-trips the new script's body from the zip, and the
+            // untouched existing script's body is emitted too.
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let s = res.body.string
+                    #expect(s.contains("publictest_new.py"))
+                    #expect(s.contains("brand new body"), "new script body should round-trip via GET /suite")
+                    #expect(s.contains("existing body"), "untouched existing script body should still be emitted")
+                })
+        }
+    }
+
+    @Test func put_updatesExistingScriptContent() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_a.py", "passed('original body')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let body = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_a.py","tier":"public","points":1,"displayName":null,"dependsOn":[],"content":"passed('rewritten body')\n"}}
+                ]}
+                """#
+
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "\(res.body.string)")
+                })
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let s = res.body.string
+                    #expect(s.contains("rewritten body"), "updated body should round-trip")
+                    #expect(!s.contains("original body"), "old body should be replaced in the zip")
+                })
+        }
+    }
+
     @Test func put_adoptScriptOnFamilyCollapsesBackIntoFamilyToken() async throws {
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [

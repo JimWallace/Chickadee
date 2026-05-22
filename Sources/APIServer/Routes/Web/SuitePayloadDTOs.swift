@@ -35,6 +35,16 @@ struct ScriptDTO: Content {
     var points: Int
     var displayName: String?
     var dependsOn: [String]  // may contain "family:<id>" tokens
+    /// Raw script body (the hand-written `.py`/`.sh`/`.r` source).
+    ///
+    /// On `GET /suite` this is populated from the test-setup zip so the
+    /// editor has the complete declarative state without a separate
+    /// per-file fetch. On `PUT /suite` it is the authoritative content the
+    /// server writes into the zip; when omitted (`nil`) the existing file is
+    /// left untouched (a reorder/retier that doesn't change the body need
+    /// not re-send it). Optional so older clients that only sent
+    /// filename+metadata keep decoding.
+    var content: String?
 }
 
 /// Name + opaque id of a single section.  Order of `SuitePayload.sections`
