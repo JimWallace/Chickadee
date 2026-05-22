@@ -90,7 +90,13 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
             )
         )
     }
-    app.middleware.use(UserActivityMiddleware(debounceWindow: 60))
+    app.middleware.use(
+        UserActivityMiddleware(
+            debounceWindow: UserActivityMiddleware.debounceWindow(
+                forIdleTimeoutSeconds: securityConfiguration.sessionIdleTimeoutSeconds
+            )
+        )
+    )
     app.middleware.use(UserFileNamespaceMiddleware())
     // Scan-mode seatbelt: when SCAN_MODE=true is set in the environment, the
     // middleware 503s POSTs against destructive routes (submissions, test-setup
