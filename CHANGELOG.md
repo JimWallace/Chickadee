@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.231] - 2026-05-22
+
+### Added
+
+- **Raw-script instructor hints now persist through `PUT`/`GET /suite`.** PR2
+  added `TestSuiteEntry.hint` and the display-time "💡 Hint" callout but left
+  hand-written scripts with no write-path to author one. The hint now threads
+  end to end: `ScriptDTO.hint` → `AuthoredRawScript.hint` → `applySuiteEdit` /
+  `applyPatternFamilies` (both the authored-items and manifest-reconstruct
+  paths, so a reorder preserves it) → `ConfiguredSuiteEntry.hint` →
+  `testSuiteEntryToDict` (emitted only when non-empty) → the manifest's
+  `TestSuiteEntry.hint`. `GET /suite` reads it back so the editor round-trips
+  it. Backend foundation for the script hint field in the upcoming unified
+  "Add Test" modal (families and checks already carry hints via their specs).
+  No runner or generated-script changes.
+
 ## [0.4.230] - 2026-05-22
 
 ### Changed

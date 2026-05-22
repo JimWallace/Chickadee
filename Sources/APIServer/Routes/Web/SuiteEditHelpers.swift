@@ -97,7 +97,8 @@ func applySuiteEdit(
                         displayName: s.displayName,
                         dependsOn: s.dependsOn,
                         sectionID: item.sectionID,
-                        content: s.content
+                        content: s.content,
+                        hint: s.hint
                     )))
         case "family":
             guard var f = item.family else {

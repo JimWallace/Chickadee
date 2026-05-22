@@ -65,12 +65,13 @@ struct ConfiguredSuiteEntry {
     let generatedBy: String?  // pattern family id; nil for hand-written scripts
     let generatedByCheck: String?  // notebook check id; nil otherwise
     let sectionID: String?  // id into TestProperties.sections; nil = ungrouped
+    let hint: String?  // instructor hint for raw scripts; nil for generated/no-hint
 
     init(
         script: String, tier: String, order: Int,
         dependsOn: [String], points: Int, displayName: String?,
         generatedBy: String? = nil, generatedByCheck: String? = nil,
-        sectionID: String? = nil
+        sectionID: String? = nil, hint: String? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -81,6 +82,7 @@ struct ConfiguredSuiteEntry {
         self.generatedBy = generatedBy
         self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
+        self.hint = hint
     }
 }
 
