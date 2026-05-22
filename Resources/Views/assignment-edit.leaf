@@ -620,6 +620,16 @@
         <!-- CodeMirror editor mount -->
         <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
 
+        <!-- Hint (shown to students on failure) — visible in both create + edit modes -->
+        <div style="padding:.5rem 1rem;border-top:1px solid var(--border,#ddd);flex-shrink:0">
+            <label style="font-size:.8rem;display:flex;flex-direction:column;gap:.2rem">
+                Hint <span style="color:var(--gray-500);font-weight:400">(optional — shown to students when this test fails)</span>
+                <input type="text" id="script-hint-input" class="form-input"
+                       placeholder="e.g. Re-read the function's docstring for the expected return type."
+                       style="padding:.25rem .5rem;font-size:.85rem">
+            </label>
+        </div>
+
         <!-- Footer -->
         <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
                     border-top:1px solid var(--border,#ddd);flex-shrink:0">
@@ -748,6 +758,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     window.chickadeeSyncChecks             = suiteTable.syncChecks;
     window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
     window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
+    window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
+    window.chickadeeGetSuiteItems          = suiteTable.getItems;
 })();
 </script>
 
@@ -864,6 +876,7 @@ const pointsInput = document.getElementById('new-file-points');
 const templateSel = document.getElementById('template-select');
 const applyTplBtn = document.getElementById('apply-template-btn');
 const newScriptBtn = document.getElementById('new-script-btn');
+const hintInput   = document.getElementById('script-hint-input');
 const assignmentID = '#(assignmentID)';
 const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
@@ -882,12 +895,24 @@ function initView(content, filename) {
     }
 }
 
+// Look up an existing script row's hint from the suite-table state, so the
+// editor pre-fills it when editing (the GET /scripts/:name body fetch carries
+// content only). Empty when the table isn't wired or the script is new.
+function scriptHintFor(filename) {
+    if (typeof window.chickadeeGetSuiteItems !== 'function') return '';
+    var it = window.chickadeeGetSuiteItems().find(function (i) {
+        return i.kind === 'script' && i.script === filename;
+    });
+    return (it && it.hint) || '';
+}
+
 function openEditor(filename, content) {
     currentFilename = filename;
     isCreating = false;
     titleEl.textContent = 'Edit: ' + filename;
     newControls.style.display = 'none';
     statusEl.textContent = '';
+    if (hintInput) hintInput.value = scriptHintFor(filename);
     overlay.style.display = 'flex';
     initView(content, filename);
     if (view) view.focus();
@@ -900,6 +925,7 @@ function openCreator() {
     newControls.style.display = '';
     newNameInput.value = '';
     statusEl.textContent = '';
+    if (hintInput) hintInput.value = '';
     overlay.style.display = 'flex';
     initView('', '');
     newNameInput.focus();
@@ -923,6 +949,7 @@ function openEditorForUpload(name, content) {
     newNameInput.value = name;
     newNameInput.disabled = true;
     statusEl.textContent = '';
+    if (hintInput) hintInput.value = '';
     overlay.style.display = 'flex';
     initView(content, name);
     if (view) view.focus();
@@ -1045,52 +1072,62 @@ saveBtn.addEventListener('click', function() {
         return;
     }
 
+    const hint = hintInput ? hintInput.value.trim() : '';
+
     if (isCreating) {
         const filename = (newNameInput.value || '').trim();
         if (!filename) { statusEl.textContent = 'Enter a filename first.'; return; }
         const tier   = tierSelect ? tierSelect.value : 'public';
         const points = Math.max(1, parseInt(pointsInput ? pointsInput.value : '1') || 1);
         const isTest = tier !== 'support';
-        statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
+        persistScript({ filename, content, hint, tier, points, isTest });
+    } else {
+        if (!currentFilename) return;
+        persistScript({ filename: currentFilename, content, hint });
+    }
+});
+
+// PR4c: create + content/hint edits flow through the single PUT /suite write
+// path (suite-table's saveScriptViaSuite), which writes the body into the zip
+// and persists the hint onto the manifest entry. Falls back to the legacy
+// POST /scripts (create) / PUT /scripts/:name (edit) endpoints if the suite
+// table isn't wired (e.g. a context without the table).
+function persistScript(spec) {
+    statusEl.textContent = 'Saving…';
+    saveBtn.disabled = true;
+    if (typeof window.chickadeeSaveScriptViaSuite === 'function') {
+        window.chickadeeSaveScriptViaSuite(spec)
+            .then(() => { statusEl.textContent = 'Saved.'; closeEditor(); })
+            .catch(err => { statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err); })
+            .finally(() => { saveBtn.disabled = false; });
+        return;
+    }
+    // Legacy fallback (no suite table on this page).
+    if (spec.filename && !currentFilename) {
         fetch('/instructor/' + assignmentID + '/scripts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ filename, content, tier, points, isTest })
+            body: JSON.stringify({ filename: spec.filename, content: spec.content, tier: spec.tier, points: spec.points, isTest: spec.isTest })
         })
         .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
         .then(data => {
             statusEl.textContent = 'Saved.';
-            saveBtn.disabled = false;
-            if (window.chickadeeAddExistingSuiteScript) {
-                window.chickadeeAddExistingSuiteScript(data);
-            }
+            if (window.chickadeeAddExistingSuiteScript) window.chickadeeAddExistingSuiteScript(data);
             closeEditor();
-        })
-        .catch(err => {
-            statusEl.textContent = 'Error: ' + err;
-            saveBtn.disabled = false;
-        });
-    } else {
-        if (!currentFilename) return;
-        statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
-        fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(currentFilename), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ content })
-        })
-        .then(r => {
-            if (r.ok || r.status === 204) {
-                closeEditor();
-            } else {
-                return r.text().then(t => Promise.reject(t));
-            }
         })
         .catch(err => { statusEl.textContent = 'Error: ' + err; })
         .finally(() => { saveBtn.disabled = false; });
+    } else {
+        fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(spec.filename), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+            body: JSON.stringify({ content: spec.content })
+        })
+        .then(r => (r.ok || r.status === 204) ? closeEditor() : r.text().then(t => Promise.reject(t)))
+        .catch(err => { statusEl.textContent = 'Error: ' + err; })
+        .finally(() => { saveBtn.disabled = false; });
     }
-});
+}
 
 // ── Close ──────────────────────────────────────────────────────────────────
 

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.234] - 2026-05-22
+
+### Changed
+
+- **The script editor now saves through the declarative `PUT /suite` path and
+  supports a per-script hint.** Previously the hand-written-script editor used
+  the legacy `POST /scripts` (create) and `PUT /scripts/:name` (edit-content)
+  endpoints, which carried no hint. It now routes through
+  `suite-table.js`'s new `saveScriptViaSuite` hook (a sibling of the family /
+  check save hooks), which writes the body into the zip via PR4a's
+  `ScriptDTO.content` channel and persists a hint via `ScriptDTO.hint` onto the
+  manifest entry — surfaced to students as the "💡 Hint" callout on failure
+  (PR2). A hint input was added to the script-editor modal on both the edit and
+  new-assignment pages (visible in create + edit modes; pre-filled from the
+  suite row when editing). The suite table now carries each script row's hint
+  and re-emits it on every push, so a reorder/retier never wipes it; the body
+  rides on a transient that the post-push re-seed clears. Legacy `POST`/`PUT
+  /scripts` fallbacks remain for any context without the suite table. Works
+  identically for published assignments and the new-assignment draft (both
+  `PUT /suite` variants go through `applySuiteEdit`).
+
 ## [0.4.233] - 2026-05-22
 
 ### Added
