@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.225] - 2026-05-22
+
+### Added
+
+- **Admin Storage tab now breaks footprint down per assignment.** Alongside
+  the aggregate cards, a "By Assignment" table lists each assignment's
+  test-suite bytes (the test setup archive, extracted support files, and any
+  draft notebooks) and submission bytes (every submission graded against that
+  setup), with a count and total, sorted largest-first — so an operator can
+  see where disk is going, not just the volume totals. New per-id disk
+  helpers (`topLevelFileSizesByID`, `testSetupSizesByID`) bucket the flat
+  `<id>.<ext>` archives and the `shared/<id>/` + `notebooks/<id>/` subtrees.
+- **Admin Users tab auto-refreshes.** The user table now polls
+  `GET /admin/users-data` every few seconds and repaints in place so
+  last-seen times and new/removed users stay current without a manual reload.
+  Repaints pause while an admin is mid-interaction (focused on the table or
+  filter) and on hidden tabs.
+
+### Changed
+
+- **System-generated dashboard polls no longer keep a session alive.**
+  Auto-refresh requests (the new Users poll plus the existing Overview
+  runner/metrics polls) send an `X-Background-Refresh` header;
+  `UserActivityMiddleware` skips the `last_seen_at` update for those, so a
+  dashboard left open in a tab can no longer keep an admin logged in past the
+  idle timeout. Genuine navigation and clicks still refresh activity.
+- **Every admin tab carries the Chickadee version stamp.** The version banner
+  (previously only on Overview) now appears on Users, Storage, Audit Log, and
+  Health Alerts for consistency.
+
 ## [0.4.224] - 2026-05-22
 
 ### Fixed

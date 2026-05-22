@@ -6,6 +6,13 @@ import XCTVapor
 
 @testable import APIServer
 
+/// Trivial tail of a middleware chain for unit-testing a single middleware.
+private struct PassthroughResponder: AsyncResponder {
+    func respond(to request: Request) async throws -> Response {
+        Response(status: .ok)
+    }
+}
+
 @Suite(.serialized) final class AdminRoutesTests {
 
     let app: Application
@@ -837,6 +844,117 @@ import XCTVapor
                     #expect(rowA["jobsProcessed"] as? Int == 3)
                     #expect(rowB["assignedJobs"] as? Int == 0)
                     #expect(rowB["jobsProcessed"] as? Int == 1)
+                })
+        }
+    }
+
+    // MARK: - Users tab auto-refresh (#users-data feed)
+
+    @Test func usersDataReturnsJSONRows() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            _ = try await makeUser(username: "json_feed_user", role: "instructor")
+
+            try await app.asyncTest(
+                .GET, "/admin/users-data",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.contentType == .json)
+                    let rows = try res.content.decode([AdminUserRow].self)
+                    #expect(rows.contains { $0.username == "json_feed_user" && $0.role == "instructor" })
+                    #expect(rows.contains { $0.username == "admin_routes" })
+                })
+        }
+    }
+
+    /// A system-generated poll (carrying `X-Background-Refresh`) must not count
+    /// as activity, so a dashboard left open in a tab can't keep a user logged
+    /// in past the idle timeout.  A normal request still refreshes activity.
+    /// Driven through `UserActivityMiddleware.respond` directly because the
+    /// minimal test app doesn't wire the global activity-tracking middleware.
+    @Test func backgroundRefreshHeaderSkipsActivityRefresh() async throws {
+        try await withApp(app) { _ in
+            let user = try await makeUser(username: "activity_probe", role: "student")
+            let userID = try user.requireID()
+            let stale = Date().addingTimeInterval(-3600)
+            user.lastSeenAt = stale
+            try await user.save(on: app.db)
+
+            let middleware = UserActivityMiddleware(debounceWindow: 60)
+            let passthrough = PassthroughResponder()
+
+            // A poll carrying the header must leave last_seen_at untouched.
+            let pollReq = Request(
+                application: app, method: .GET, url: URI(path: "/admin/users-data"),
+                on: app.eventLoopGroup.next())
+            pollReq.headers.add(name: UserActivityMiddleware.backgroundRefreshHeader, value: "1")
+            pollReq.auth.login(try #require(try await APIUser.find(userID, on: app.db)))
+            _ = try await middleware.respond(to: pollReq, chainingTo: passthrough)
+            let afterPoll = try #require(try await APIUser.find(userID, on: app.db))
+            #expect(
+                abs(try #require(afterPoll.lastSeenAt).timeIntervalSince(stale)) < 1,
+                "background-refresh poll must not refresh last_seen_at")
+
+            // A normal request (no header) past the debounce must refresh it.
+            let normalReq = Request(
+                application: app, method: .GET, url: URI(path: "/admin/users"),
+                on: app.eventLoopGroup.next())
+            normalReq.auth.login(try #require(try await APIUser.find(userID, on: app.db)))
+            _ = try await middleware.respond(to: normalReq, chainingTo: passthrough)
+            let afterNormal = try #require(try await APIUser.find(userID, on: app.db))
+            #expect(
+                try #require(afterNormal.lastSeenAt).timeIntervalSince(stale) > 60,
+                "a normal (non-poll) request must refresh last_seen_at")
+        }
+    }
+
+    @Test func allAdminTabsShowVersionBanner() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            for path in ["/admin", "/admin/users", "/admin/storage", "/admin/audit", "/admin/alerts"] {
+                try await app.asyncTest(
+                    .GET, path,
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: cookie)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .ok, "\(path) should render")
+                        #expect(
+                            String(buffer: res.body).contains("admin-version-banner"),
+                            "\(path) should carry the version banner")
+                    })
+            }
+        }
+    }
+
+    // MARK: - Storage tab per-assignment breakdown
+
+    @Test func storageTabListsPerAssignmentFootprint() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "STG101", name: "Storage Course")
+            let courseID = try course.requireID()
+            _ = try await makeSetup(id: "setup_storage_bd", courseID: courseID)
+            _ = try await makeAssignment(
+                testSetupID: "setup_storage_bd", courseID: courseID, title: "Storage Breakdown Lab")
+            let student = try await makeUser(username: "storage_bd_student", role: "student")
+            _ = try await makeSubmission(
+                id: "sub_storage_bd", setupID: "setup_storage_bd", userID: try student.requireID())
+
+            try await app.asyncTest(
+                .GET, "/admin/storage",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains("By Assignment"))
+                    #expect(body.contains("Storage Breakdown Lab"))
+                    #expect(body.contains(">STG101<"))
                 })
         }
     }
