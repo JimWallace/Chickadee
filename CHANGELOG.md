@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.237] - 2026-05-22
+
+### Changed
+
+- **Custom-script editor folded into the unified Test Editor modal (PR4e).**
+  The hand-written-script editor is now a body renderer
+  (`Public/test-renderer-script.js`, an ES module carrying the CodeMirror 6
+  editor, filename + template controls, and the per-script hint) hosted by the
+  shell — picking "Write a custom script" morphs the body in place, no hop. The
+  inline `#script-editor-overlay` + its `<script type="module">` editor are
+  removed from both leaves; editing a saved script and editing a queued-but-
+  unsaved upload are rewired to open the shell (the renderer fetches the body
+  for saved scripts via the page-supplied `scriptContentURL`, and writes back
+  to the file `<input>` for uploads). Create + content/hint edits persist
+  through the single `PUT /suite` path (`saveScriptViaSuite`); the shared
+  `#cm-editor-mount` CSS is retained and the dark-mode input rules retargeted to
+  the shell. **Family** is now the only type still delegating to its legacy
+  overlay (the shell shows "Continue →"); it becomes a renderer in PR4f. No
+  backend changes.
+
 ## [0.4.236] - 2026-05-22
 
 ### Changed
