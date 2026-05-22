@@ -416,6 +416,65 @@ import XCTVapor
         }
     }
 
+    // Generated family-case files can't be edited or deleted through the
+    // raw-script endpoints — the instructor edits the family instead. (Ported
+    // from PatternFamilyRouteTests when PUT /families was retired in v0.4.227;
+    // the family is now installed via PUT /suite.)
+    @Test func putScript_rejectsEditOfGeneratedFamilyFile() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let body = #"""
+                {"items":[
+                    {"kind":"family","family":{
+                        "id":"bmi","name":"BMI","kind":"boundary_equality",
+                        "functionName":"bmi_category","paramNames":["bmi"],
+                        "defaults":{"tier":"public","points":1},
+                        "cases":[
+                            {"key":"01","label":"a","args":[18.49],"expected":"underweight","enabled":true}
+                        ]
+                    }}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // Editing the generated file via the raw-script endpoint must 409.
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/scripts/publictest_bmi_01.py",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    try req.content.encode(["content": "# tampered\npassed('x')\n"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .conflict)
+                    #expect(
+                        res.body.string.contains("Edit the family"),
+                        "Expected hint to edit the family, got: \(res.body.string)")
+                })
+
+            // Deleting via the raw endpoint must also 409.
+            try await app.asyncTest(
+                .DELETE, "/instructor/\(id)/scripts/publictest_bmi_01.py",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                },
+                afterResponse: { res in #expect(res.status == .conflict) })
+        }
+    }
+
     // v0.4.80: .approximateEquality kind round-trips cleanly through PUT
     // and generates Python that uses `abs(result - expected) > tolerance`.
     @Test func put_approximateEqualityKindRoundTrip() async throws {
@@ -510,18 +569,21 @@ import XCTVapor
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
-            // Step 1: install a notebook check via PUT /checks.
-            let checksBody = #"""
-                [{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
-                  "tier":"public","points":1,"variable":"x"}]
+            // Step 1: install a notebook check through PUT /suite (the
+            // dedicated PUT /checks endpoint was retired in v0.4.227).
+            let installBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+                      "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+                ]}
                 """#
             try await app.asyncTest(
-                .PUT, "/instructor/\(id)/checks",
+                .PUT, "/instructor/\(id)/suite",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     req.headers.contentType = .json
-                    req.body = ByteBuffer(string: checksBody)
+                    req.body = ByteBuffer(string: installBody)
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok, "\(res.body.string)")
@@ -592,18 +654,20 @@ import XCTVapor
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
-            // Install a check via PUT /checks.
-            let checksBody = #"""
-                [{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
-                  "tier":"public","points":1,"variable":"x"}]
+            // Install a check through PUT /suite (PUT /checks retired v0.4.227).
+            let installBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+                      "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+                ]}
                 """#
             try await app.asyncTest(
-                .PUT, "/instructor/\(id)/checks",
+                .PUT, "/instructor/\(id)/suite",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     req.headers.contentType = .json
-                    req.body = ByteBuffer(string: checksBody)
+                    req.body = ByteBuffer(string: installBody)
                 },
                 afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
 
@@ -646,16 +710,19 @@ import XCTVapor
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
-            let checksBody = #"""
-                [{"id":"var_exists_x","kind":"variable_exists","tier":"public","points":1,"variable":"x"}]
+            let installBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","kind":"variable_exists",
+                      "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+                ]}
                 """#
             try await app.asyncTest(
-                .PUT, "/instructor/\(id)/checks",
+                .PUT, "/instructor/\(id)/suite",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     req.headers.contentType = .json
-                    req.body = ByteBuffer(string: checksBody)
+                    req.body = ByteBuffer(string: installBody)
                 },
                 afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
 

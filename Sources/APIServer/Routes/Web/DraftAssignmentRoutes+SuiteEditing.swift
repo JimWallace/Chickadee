@@ -61,51 +61,10 @@ extension DraftAssignmentRoutes {
         return try await payload.encodeResponse(for: req)
     }
 
-    // MARK: - PUT /instructor/new/draft/families
-
-    @Sendable
-    func putDraftPatternFamilies(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
-
-        let families: [PatternFamily]
-        do {
-            families = try req.content.decode([PatternFamily].self)
-        } catch {
-            throw WebAssignmentError.invalidParameter(
-                name: "request body",
-                reason: "Invalid pattern family list: \(error.localizedDescription)")
-        }
-
-        try await applyPatternFamiliesEdit(setup: setup, families: families, on: req.db)
-
-        return try jsonResponse(families)
-    }
-
-    // MARK: - PUT /instructor/new/draft/checks
-    //
-    // Draft-scoped sibling of `putNotebookChecks` (parity PR 2 of #433).
-    // Same body / response shape; the only differences are the resolver
-    // (`loadDraftSetup` reading `?draftID=…`) and the absence of the
-    // `scheduleValidationAfterSuiteEdit` call — drafts don't enter the
-    // validation pipeline until publish.
-
-    @Sendable
-    func putDraftNotebookChecks(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
-
-        let checks: [NotebookCheck]
-        do {
-            checks = try req.content.decode([NotebookCheck].self)
-        } catch {
-            throw WebAssignmentError.invalidParameter(
-                name: "request body",
-                reason: "Invalid notebook check list: \(error.localizedDescription)")
-        }
-
-        try await applyNotebookChecksEdit(setup: setup, checks: checks, on: req.db)
-
-        return try jsonResponse(checks)
-    }
+    // Pattern families + notebook checks are written through PUT /suite
+    // (`putDraftSuite` above).  The dedicated PUT /draft/families and
+    // PUT /draft/checks handlers were retired in v0.4.227 — see the
+    // matching note on the published side.
 
     // MARK: - POST /instructor/new/draft/scripts
 

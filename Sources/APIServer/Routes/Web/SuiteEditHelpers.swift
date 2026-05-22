@@ -160,47 +160,11 @@ func applySuiteEdit(
     )
 }
 
-// MARK: - Pattern families editor core
-
-/// Replaces the test setup's pattern family list and re-applies.
-/// Used by both `PUT /instructor/:id/families` and
-/// `PUT /instructor/new/draft/families`.
-func applyPatternFamiliesEdit(
-    setup: APITestSetup,
-    families: [PatternFamily],
-    on db: Database
-) async throws {
-    _ = try await applyPatternFamilies(
-        to: setup,
-        nextFamilies: families,
-        on: db
-    )
-}
-
-// MARK: - Notebook checks editor core
-
-/// Replaces the test setup's notebook check list, carrying forward the
-/// existing pattern families (so the shared apply path rewrites both
-/// generated-script sets in a single zip mutation).
-func applyNotebookChecksEdit(
-    setup: APITestSetup,
-    checks: [NotebookCheck],
-    on db: Database
-) async throws {
-    let currentFamilies: [PatternFamily] = {
-        guard let props = setup.decodedManifest()
-
-        else { return [] }
-        return props.patternFamilies
-    }()
-
-    _ = try await applyPatternFamilies(
-        to: setup,
-        nextFamilies: currentFamilies,
-        nextChecks: checks,
-        on: db
-    )
-}
+// Pattern families and notebook checks no longer have dedicated full-replace
+// editor helpers: their writes flow through `applySuiteEdit` above (the single
+// PUT /suite path).  The standalone `applyPatternFamiliesEdit` /
+// `applyNotebookChecksEdit` helpers — and the PUT /families / PUT /checks
+// endpoints they backed — were retired in v0.4.227.
 
 // MARK: - JSON response helper
 

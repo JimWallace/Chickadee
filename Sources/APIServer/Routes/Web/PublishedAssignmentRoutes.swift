@@ -45,22 +45,15 @@ struct PublishedAssignmentRoutes: RouteCollection {
         r.post(":assignmentID", "scripts", use: createScript)
         r.delete(":assignmentID", "scripts", ":filename", use: deleteScript)
 
-        // Pattern family editor — canonical spec lives inside the test setup
-        // manifest.  PUT replaces the full list atomically (renders scripts,
-        // mutates the zip, rewrites the manifest); GET reads the current list.
-        r.get(":assignmentID", "families", use: getPatternFamilies)
-        r.put(":assignmentID", "families", use: putPatternFamilies)
-
-        // Notebook check editor — sibling concept to pattern families.
-        // Same atomic-replace semantics as /families above.  Each check
-        // expands to exactly one generated test script at save time.
-        r.get(":assignmentID", "checks", use: getNotebookChecks)
-        r.put(":assignmentID", "checks", use: putNotebookChecks)
-
-        // Unified suite editor — GET returns the full reconciled list
-        // (scripts + families, in manifest order).  PUT replaces the whole
-        // list atomically; each mutation in the suite-edit UI sends a fresh
-        // snapshot here and replaces its local state from the response.
+        // Unified suite editor — GET returns the full reconciled test-item
+        // list (scripts + families + checks, in manifest order, raw-script
+        // bodies inlined).  PUT replaces the whole list atomically; every
+        // mutation in the suite-edit UI (reorder, tier/points, family + check
+        // create/edit/delete) sends a fresh snapshot here and replaces its
+        // local state from the response.  This is the single write surface
+        // for pattern families and notebook checks: the dedicated
+        // PUT /families and PUT /checks endpoints were retired in v0.4.227
+        // (their saves were folded into PUT /suite in v0.4.226).
         r.get(":assignmentID", "suite", use: getSuite)
         r.put(":assignmentID", "suite", use: putSuite)
 
