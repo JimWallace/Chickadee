@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.224] - 2026-05-22
+
+### Fixed
+
+- **Active users no longer signed out mid-session under short idle timeouts.**
+  `UserActivityMiddleware` refreshed `last_seen_at` on a fixed 60 s debounce.
+  That's negligible under the 30-minute production ceiling, but when
+  `SESSION_IDLE_TIMEOUT_MINUTES` is set low (e.g. 1, for testing the
+  inactivity logout) the debounce was **≥ the ceiling**, so an actively
+  browsing user's row never refreshed in time and `SessionIdleTimeoutMiddleware`
+  logged them out mid-activity — with no warning, since a server-side logout
+  can't show the client countdown. The debounce is now bounded to
+  `min(60 s, timeout / 3)`, keeping it safely below the idle ceiling at any
+  configured timeout while leaving production behaviour unchanged.
+
 ## [0.4.222] - 2026-05-21
 
 ### Added

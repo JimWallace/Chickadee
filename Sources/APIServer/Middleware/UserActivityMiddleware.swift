@@ -13,6 +13,21 @@ import Vapor
 struct UserActivityMiddleware: AsyncMiddleware {
     let debounceWindow: TimeInterval
 
+    /// The activity-refresh debounce must stay safely below the idle timeout.
+    /// `SessionIdleTimeoutMiddleware` logs a user out once `last_seen_at` is
+    /// older than the ceiling, and this debounce caps how fresh `last_seen_at`
+    /// can be — so if the debounce is >= the ceiling, an *actively browsing*
+    /// user's row never refreshes in time and they get logged out mid-activity
+    /// (with no warning, since server-side logouts can't show one). With the
+    /// standard 30-minute ceiling the 60 s cap dominates and behaviour is
+    /// unchanged; with a short ceiling (e.g. a 1-minute test config) the window
+    /// shrinks to a third of it so navigation keeps the session alive. A
+    /// disabled gate (timeout <= 0) keeps the plain 60 s DB-write optimization.
+    static func debounceWindow(forIdleTimeoutSeconds timeout: TimeInterval) -> TimeInterval {
+        guard timeout > 0 else { return 60 }
+        return min(60, timeout / 3)
+    }
+
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         if let user = request.auth.get(APIUser.self), let userID = user.id {
             let now = Date()
