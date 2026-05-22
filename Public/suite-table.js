@@ -370,7 +370,7 @@
         /// Linearize items[] into one contiguous run per sectionID, in the
         /// DOM section-block order.  The server enforces that items with
         /// the same sectionID form a contiguous block; mutation paths
-        /// (root-drop, addExistingScript, syncFamilies) can otherwise
+        /// (root-drop, addExistingScript, reconcileFamilies) can otherwise
         /// leave items[] non-contiguous while the rendered tables still
         /// look correct (each <tbody> filters items[] by sectionID).
         function itemsGroupedBySection() {
@@ -750,8 +750,9 @@
         });
 
         // Notebook-check row Edit/Delete (family edit/delete is handled by
-        // pattern-family-editor.js).  Edit opens the existing modal; Delete
-        // PUTs the filtered check list and lets `onChecksChange` reload.
+        // pattern-family-editor.js).  Edit opens the unified Test Editor modal
+        // pre-populated; Delete drops the check and re-saves the list via the
+        // single PUT /suite write path.
         container.addEventListener('click', function (e) {
             var editBtn = e.target.closest && e.target.closest('.check-edit-btn');
             if (editBtn) {
@@ -759,11 +760,9 @@
                 if (!row) return;
                 var cid = row.getAttribute('data-check-id');
                 var item = findByID('check:' + cid);
-                if (!item) return;
-                var modal = window.chickadeeNotebookCheckEditor;
-                if (modal && typeof modal.open === 'function') {
-                    modal.open(cid, item.sectionID || null);
-                }
+                if (!item || !window.__chickadeeTestEditorModal) return;
+                window.__chickadeeTestEditorModal.open(
+                    { editing: { mechanism: 'check', id: cid, item: item.check } });
                 return;
             }
             var delBtn = e.target.closest && e.target.closest('.check-delete-btn');
@@ -777,31 +776,11 @@
                 if (!confirm('Delete notebook check "' + label + '"? This removes the generated test script.')) {
                     return;
                 }
-                if (typeof urls.putChecks !== 'function') {
-                    // Fallback: open the modal so the user can use its Delete button.
-                    var modal2 = window.chickadeeNotebookCheckEditor;
-                    if (modal2 && typeof modal2.open === 'function') modal2.open(cid2);
-                    return;
-                }
-                // Gather remaining checks from items[] (modulo our deletion).
                 var remaining = items
                     .filter(function (it) { return it.kind === 'check' && it.checkID !== cid2; })
                     .map(function (it) { return it.check; });
-                fetch(urls.putChecks(), {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                    body: JSON.stringify(remaining)
-                })
-                .then(function (r) {
-                    if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
-                    // The notebook-check modal's onChecksChange reloads
-                    // the page on save; reuse the same UX so suite-table
-                    // and the manifest stay in lockstep.
-                    window.location.reload();
-                })
-                .catch(function (err) {
-                    alert('Could not delete check: ' + (err.message || err));
-                });
+                saveChecksViaSuite(remaining)
+                    .catch(function (err) { alert('Could not delete check: ' + (err.message || err)); });
                 return;
             }
 
@@ -1070,15 +1049,6 @@
             });
         }
 
-        /// Legacy hot-sync: reconcile + debounced PUT /suite. Retained for the
-        /// pre-2a `PUT /families` → onFamiliesChange callers (and as a fallback
-        /// when the awaited save path isn't wired).
-        function syncFamilies(nextFamilies) {
-            reconcileFamilies(nextFamilies);
-            renderTree();
-            schedulePush();
-        }
-
         /// Notebook-check mirror of reconcileFamilies.
         function reconcileChecks(nextChecks) {
             var byID = {};
@@ -1115,12 +1085,6 @@
                     sectionID: targetSid
                 });
             });
-        }
-
-        function syncChecks(nextChecks) {
-            reconcileChecks(nextChecks);
-            renderTree();
-            schedulePush();
         }
 
         /// Immediate (non-debounced) PUT /suite that re-seeds `items` from the
@@ -1236,8 +1200,6 @@
         renderTree();
 
         return {
-            syncFamilies: syncFamilies,
-            syncChecks: syncChecks,
             saveFamiliesViaSuite: saveFamiliesViaSuite,
             saveChecksViaSuite: saveChecksViaSuite,
             saveScriptViaSuite: saveScriptViaSuite,
@@ -1248,8 +1210,8 @@
 
     function noopAPI() {
         return {
-            syncFamilies: function () {},
-            syncChecks: function () {},
+            saveFamiliesViaSuite: function () { return Promise.reject(new Error('suite table not ready')); },
+            saveChecksViaSuite: function () { return Promise.reject(new Error('suite table not ready')); },
             saveScriptViaSuite: function () { return Promise.reject(new Error('suite table not ready')); },
             addExistingScript: function () {},
             getItems: function () { return []; }
