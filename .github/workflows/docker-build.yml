@@ -116,6 +116,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The Chickadee image is large (~1.4 GB vendored Pyodide + full distro +
+      # static binaries).  The build `load:true`s it into the local Docker
+      # daemon and Trivy then re-exports it to a tarball under /tmp to scan —
+      # two copies on the runner's root FS, on top of the BuildKit gha cache.
+      # On a default ubuntu-latest (~14 GB free) that intermittently blows the
+      # disk ("no space left on device") and fails the scan *before* the push
+      # step runs, so the versioned image never publishes (v0.4.231).  Reclaim
+      # the preinstalled toolchains we don't use (~25 GB) so the scan has room.
+      - name: Free up runner disk space
+        run: |
+          echo "Before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          sudo docker image prune -af || true
+          echo "After cleanup:"; df -h /
+
       # Prebuilt release binaries from the build-release job land in ./artifacts;
       # the Dockerfile's `prebuilt` stage COPYs them in (BINARIES=prebuilt).
       - name: Download release binaries
