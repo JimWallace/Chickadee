@@ -508,79 +508,6 @@
     </div>
 </div>
 
-<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
-<div id="script-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-
-        <!-- Header -->
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
-                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div id="editor-title" style="font-weight:600;flex:1"></div>
-            <button class="btn-link" id="editor-close-btn" type="button"
-                    aria-label="Close editor" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
-
-        <!-- New-file controls (hidden when editing existing) -->
-        <div id="new-file-controls" style="display:none;padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
-                    Filename
-                    <input type="text" id="new-filename-input" class="form-input"
-                           placeholder="e.g. test_correctness.py"
-                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-            </div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
-                <select id="template-select" class="form-input"
-                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
-                    <optgroup label="Python">
-                        <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness">Correctness (input/output pairs)</option>
-                        <option value="py:corner_cases">Corner Cases</option>
-                        <option value="py:exception">Exception Handling</option>
-                        <option value="py:type_check">Return Type Check</option>
-                        <option value="py:performance">Performance / Runtime</option>
-                        <option value="py:differential">Differential (reference solution)</option>
-                        <option value="py:variable_equality">Variable Equality</option>
-                        <option value="py:structural_check">Structural Check (AST properties)</option>
-                    </optgroup>
-                    <optgroup label="Shell">
-                        <option value="sh:always_pass">Always Pass (placeholder)</option>
-                        <option value="sh:file_exists">File Exists Check</option>
-                        <option value="sh:command_output">Command Output Check</option>
-                    </optgroup>
-                    <option value="blank">Blank</option>
-                </select>
-                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
-            </div>
-        </div>
-
-        <!-- CodeMirror editor mount -->
-        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
-
-        <!-- Hint (shown to students on failure) — visible in both create + edit modes -->
-        <div style="padding:.5rem 1rem;border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <label style="font-size:.8rem;display:flex;flex-direction:column;gap:.2rem">
-                Hint <span style="color:var(--gray-500);font-weight:400">(optional — shown to students when this test fails)</span>
-                <input type="text" id="script-hint-input" class="form-input"
-                       placeholder="e.g. Re-read the function's docstring for the expected return type."
-                       style="padding:.25rem .5rem;font-size:.85rem">
-            </label>
-        </div>
-
-        <!-- Footer -->
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
-                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <button class="btn btn-primary" id="editor-save-btn" type="button">Save</button>
-            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
-</div>
 <style>
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
@@ -755,332 +682,15 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         border-left-color: var(--gray-900);
     }
     /* Modal inputs & selects */
-    #script-editor-overlay input,
-    #script-editor-overlay select {
+    #test-editor-overlay input,
+    #test-editor-overlay select,
+    #test-editor-overlay textarea {
         background: var(--gray-100);
         color: var(--gray-900);
         border-color: var(--gray-200);
     }
 }
 </style>
-<script type="module">
-// ── CodeMirror 6 script editor ─────────────────────────────────────────────
-// Bundled by scripts/setup-vendor.sh; source-of-truth in
-// Tools/vendor/codemirror-entry.js.  Single import keeps the wire
-// origin same-origin so the CSP doesn't need esm.sh in script-src.
-import {
-    EditorView, keymap, lineNumbers, highlightActiveLine,
-    drawSelection, dropCursor,
-    EditorState, Compartment,
-    defaultKeymap, history, historyKeymap, indentWithTab,
-    syntaxHighlighting, defaultHighlightStyle, StreamLanguage,
-    python, shell, r
-} from '/vendor/codemirror.js';
-
-const langComp = new Compartment();
-
-function langExtensionFor(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    if (ext === 'py') return python();
-    if (ext === 'r')  return StreamLanguage.define(r);
-    return StreamLanguage.define(shell);
-}
-
-function makeEditorState(content, filename) {
-    return EditorState.create({
-        doc: content,
-        extensions: [
-            lineNumbers(),
-            highlightActiveLine(),
-            drawSelection(),
-            dropCursor(),
-            history(),
-            syntaxHighlighting(defaultHighlightStyle),
-            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-            langComp.of(langExtensionFor(filename)),
-            EditorView.lineWrapping,
-            EditorView.theme({ '&': { height: '100%' } })
-        ]
-    });
-}
-
-const overlay    = document.getElementById('script-editor-overlay');
-const mount      = document.getElementById('cm-editor-mount');
-const titleEl    = document.getElementById('editor-title');
-const statusEl   = document.getElementById('editor-status');
-const saveBtn    = document.getElementById('editor-save-btn');
-const cancelBtn  = document.getElementById('editor-cancel-btn');
-const closeBtn   = document.getElementById('editor-close-btn');
-const newControls = document.getElementById('new-file-controls');
-const newNameInput = document.getElementById('new-filename-input');
-const tierSelect  = document.getElementById('new-file-tier');
-const pointsInput = document.getElementById('new-file-points');
-const templateSel = document.getElementById('template-select');
-const applyTplBtn = document.getElementById('apply-template-btn');
-const newScriptBtn = document.getElementById('new-script-btn');
-const hintInput   = document.getElementById('script-hint-input');
-const assignmentID = '#(assignmentID)';
-const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-
-let view = null;
-let currentFilename = null;  // null when creating a new file
-let isCreating = false;
-let isEditingUpload = false;  // true when editing a not-yet-saved upload item
-
-function initView(content, filename) {
-    if (view) { view.destroy(); view = null; }
-    try {
-        view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
-    } catch (e) {
-        statusEl.textContent = 'Editor failed to load: ' + e.message;
-        console.error('EditorView init error:', e);
-    }
-}
-
-// Look up an existing script row's hint from the suite-table state, so the
-// editor pre-fills it when editing (the GET /scripts/:name body fetch carries
-// content only). Empty when the table isn't wired or the script is new.
-function scriptHintFor(filename) {
-    if (typeof window.chickadeeGetSuiteItems !== 'function') return '';
-    var it = window.chickadeeGetSuiteItems().find(function (i) {
-        return i.kind === 'script' && i.script === filename;
-    });
-    return (it && it.hint) || '';
-}
-
-function openEditor(filename, content) {
-    currentFilename = filename;
-    isCreating = false;
-    titleEl.textContent = 'Edit: ' + filename;
-    newControls.style.display = 'none';
-    statusEl.textContent = '';
-    if (hintInput) hintInput.value = scriptHintFor(filename);
-    overlay.style.display = 'flex';
-    initView(content, filename);
-    if (view) view.focus();
-}
-
-function openCreator() {
-    currentFilename = null;
-    isCreating = true;
-    titleEl.textContent = 'New Test Script';
-    newControls.style.display = '';
-    newNameInput.value = '';
-    statusEl.textContent = '';
-    if (hintInput) hintInput.value = '';
-    overlay.style.display = 'flex';
-    initView('', '');
-    newNameInput.focus();
-}
-
-function closeEditor() {
-    overlay.style.display = 'none';
-    if (view) { view.destroy(); view = null; }
-    isEditingUpload = false;
-    if (newNameInput) newNameInput.disabled = false;
-}
-
-// Open editor pre-loaded with the content of an upload-sourced (not yet saved) file.
-const editPageFilesInput = document.getElementById('suite-files-input');
-function openEditorForUpload(name, content) {
-    currentFilename = name;
-    isCreating = false;
-    isEditingUpload = true;
-    titleEl.textContent = 'Edit: ' + name;
-    newControls.style.display = '';
-    newNameInput.value = name;
-    newNameInput.disabled = true;
-    statusEl.textContent = '';
-    if (hintInput) hintInput.value = '';
-    overlay.style.display = 'flex';
-    initView(content, name);
-    if (view) view.focus();
-}
-
-// ── Edit buttons on existing rows ─────────────────────────────────────────
-
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest && e.target.closest('.suite-edit-btn');
-    if (!btn) return;
-    const filename = btn.getAttribute('data-filename');
-    if (!filename) return;
-    statusEl.textContent = 'Loading…';
-    overlay.style.display = 'flex';
-    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename), {
-        headers: { 'x-csrf-token': csrfToken }
-    })
-        .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(r.status + ' ' + t)))
-        .then(content => openEditor(filename, content))
-        .catch(err => { statusEl.textContent = 'Error: ' + err; console.error('getScript error:', err); });
-});
-
-// ── Edit buttons on upload-sourced (not-yet-saved) rows ───────────────────
-
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest && e.target.closest('.suite-edit-upload-btn');
-    if (!btn) return;
-    const name = btn.getAttribute('data-name');
-    if (!name) return;
-    const files = Array.from(editPageFilesInput ? editPageFilesInput.files : []);
-    const file  = files.find(f => f.name === name);
-    if (!file) { statusEl.textContent = 'File not found in upload queue.'; return; }
-    file.text().then(content => openEditorForUpload(name, content))
-              .catch(err    => { statusEl.textContent = 'Could not read file: ' + err; });
-});
-
-// ── New Script button ──────────────────────────────────────────────────────
-
-if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
-
-// Expose the creator so the unified "+ Add Test" dispatcher can open the
-// custom-script flow directly (the global #new-script-btn stays for
-// back-compat but is no longer surfaced in the UI).
-window.chickadeeOpenScriptCreator = openCreator;
-
-// ── Template apply ─────────────────────────────────────────────────────────
-
-// Pre-loaded templates fetched from the server (populated on first template apply).
-let templateCache = null;
-
-function fetchTemplates() {
-    if (templateCache) return Promise.resolve(templateCache);
-    return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': csrfToken } })
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-        .then(data => { templateCache = data; return data; });
-}
-
-// Small inline cache of the smallest templates so "blank" doesn't round-trip.
-// Richer templates (correctness / corner_cases / exception / type_check / …)
-// are fetched from /instructor/script-templates and cached per-session — this
-// keeps the server's rendering the single source of truth and avoids drift.
-const INLINE_TEMPLATES = {
-    'blank': ''
-};
-
-// Auto-update filename extension when template language changes.
-templateSel.addEventListener('change', function() {
-    const [lang] = (templateSel.value || '').split(':');
-    const name = (newNameInput.value || '').trim();
-    if (!name) return;
-    const baseStem = name.replace(/\.[^.]*$/, '');
-    if (lang === 'py') newNameInput.value = baseStem + '.py';
-    if (lang === 'sh') newNameInput.value = baseStem + '.sh';
-});
-
-applyTplBtn.addEventListener('click', function() {
-    const tplKey = templateSel ? templateSel.value : 'blank';
-    // Auto-fill filename if empty.
-    function doApply(content) {
-        if (!newNameInput.value.trim()) {
-            const [lang] = (tplKey || '').split(':');
-            const ext = lang === 'py' ? 'py' : lang === 'sh' ? 'sh' : 'py';
-            newNameInput.value = 'test_new.' + ext;
-        }
-        if (view) {
-            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-            view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput.value)) });
-            view.focus();
-        }
-    }
-    if (tplKey === 'blank') { doApply(''); return; }
-    // Try inline cache first, then fetch from server.
-    const inline = INLINE_TEMPLATES[tplKey];
-    if (inline !== undefined) { doApply(inline); return; }
-    fetchTemplates()
-        .then(templates => { doApply(templates[tplKey] || ''); })
-        .catch(err => { if (statusEl) statusEl.textContent = 'Could not load template: ' + err; });
-});
-
-// ── Save ───────────────────────────────────────────────────────────────────
-
-saveBtn.addEventListener('click', function() {
-    if (!view) { statusEl.textContent = 'Editor not ready — try closing and reopening.'; return; }
-    const content = view.state.doc.toString();
-
-    // Editing an upload-sourced file (not yet saved to the server): update filesInput.
-    if (isEditingUpload) {
-        const name = currentFilename;
-        if (!name) return;
-        const updated = new File([content], name, { type: 'text/plain' });
-        const dt = new DataTransfer();
-        Array.from(editPageFilesInput ? editPageFilesInput.files : []).forEach(f => {
-            dt.items.add(f.name === name ? updated : f);
-        });
-        if (editPageFilesInput) {
-            editPageFilesInput.files = dt.files;
-            editPageFilesInput.dispatchEvent(new Event('change'));
-        }
-        closeEditor();
-        return;
-    }
-
-    const hint = hintInput ? hintInput.value.trim() : '';
-
-    if (isCreating) {
-        const filename = (newNameInput.value || '').trim();
-        if (!filename) { statusEl.textContent = 'Enter a filename first.'; return; }
-        const tier   = tierSelect ? tierSelect.value : 'public';
-        const points = Math.max(1, parseInt(pointsInput ? pointsInput.value : '1') || 1);
-        const isTest = tier !== 'support';
-        persistScript({ filename, content, hint, tier, points, isTest });
-    } else {
-        if (!currentFilename) return;
-        persistScript({ filename: currentFilename, content, hint });
-    }
-});
-
-// PR4c: create + content/hint edits flow through the single PUT /suite write
-// path (suite-table's saveScriptViaSuite), which writes the body into the zip
-// and persists the hint onto the manifest entry. Falls back to the legacy
-// POST /scripts (create) / PUT /scripts/:name (edit) endpoints if the suite
-// table isn't wired (e.g. a context without the table).
-function persistScript(spec) {
-    statusEl.textContent = 'Saving…';
-    saveBtn.disabled = true;
-    if (typeof window.chickadeeSaveScriptViaSuite === 'function') {
-        window.chickadeeSaveScriptViaSuite(spec)
-            .then(() => { statusEl.textContent = 'Saved.'; closeEditor(); })
-            .catch(err => { statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err); })
-            .finally(() => { saveBtn.disabled = false; });
-        return;
-    }
-    // Legacy fallback (no suite table on this page).
-    if (spec.filename && !currentFilename) {
-        fetch('/instructor/' + assignmentID + '/scripts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ filename: spec.filename, content: spec.content, tier: spec.tier, points: spec.points, isTest: spec.isTest })
-        })
-        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-        .then(data => {
-            statusEl.textContent = 'Saved.';
-            if (window.chickadeeAddExistingSuiteScript) window.chickadeeAddExistingSuiteScript(data);
-            closeEditor();
-        })
-        .catch(err => { statusEl.textContent = 'Error: ' + err; })
-        .finally(() => { saveBtn.disabled = false; });
-    } else {
-        fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(spec.filename), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ content: spec.content })
-        })
-        .then(r => (r.ok || r.status === 204) ? closeEditor() : r.text().then(t => Promise.reject(t)))
-        .catch(err => { statusEl.textContent = 'Error: ' + err; })
-        .finally(() => { saveBtn.disabled = false; });
-    }
-}
-
-// ── Close ──────────────────────────────────────────────────────────────────
-
-[cancelBtn, closeBtn].forEach(btn => btn && btn.addEventListener('click', closeEditor));
-overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) closeEditor();
-});
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
-});
-</script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
     if (!dateTimeValue) { if (warningEl) warningEl.style.display = 'none'; return; }
@@ -1154,29 +764,76 @@ function checkUWDates(dateTimeValue, warningEl) {
      rollout (the shell shows a "Continue →" button for those).  Replaces the
      standalone notebook-check editor + the add-test dispatcher.  Renderer
      scripts load before the shell so they self-register first. -->
+<script>
+// Per-page config for the script renderer (test-renderer-script.js), read
+// lazily by the renderer.  Edit page: published-assignment script endpoints.
+(function () {
+    var assignmentID = '#(assignmentID)';
+    window.ChickadeeScriptRendererConfig = {
+        csrfToken: (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+        scriptContentURL: function (name) {
+            return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
+        },
+        uploadFilesInputID: 'suite-files-input'
+    };
+})();
+</script>
 <script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script>
 (function () {
     var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     window.initTestEditorModal({ csrfToken: csrfToken });
 
-    // Edit an existing notebook check: open the shell pre-populated from the
-    // suite-table's current spec for that check id.
+    var modal = window.__chickadeeTestEditorModal;
+
+    // Back-compat: callers that opened the old script creator now open the shell.
+    window.chickadeeOpenScriptCreator = function () { modal.open({ kind: 'script' }); };
+
+    function checkSpec(id) {
+        if (typeof window.chickadeeGetSuiteItems !== 'function') return null;
+        var m = window.chickadeeGetSuiteItems().find(function (i) {
+            return i.kind === 'check' && i.check && i.check.id === id;
+        });
+        return m ? m.check : null;
+    }
+    function scriptHint(name) {
+        if (typeof window.chickadeeGetSuiteItems !== 'function') return '';
+        var m = window.chickadeeGetSuiteItems().find(function (i) {
+            return i.kind === 'script' && i.script === name;
+        });
+        return (m && m.hint) || '';
+    }
+
     document.body.addEventListener('click', function (ev) {
-        var el = ev.target.closest && ev.target.closest('[data-edit-check-id]');
-        if (!el) return;
-        ev.preventDefault();
-        var id = el.getAttribute('data-edit-check-id');
-        var item = null;
-        if (typeof window.chickadeeGetSuiteItems === 'function') {
-            var match = window.chickadeeGetSuiteItems().find(function (i) {
-                return i.kind === 'check' && i.check && i.check.id === id;
-            });
-            item = match ? match.check : null;
+        var t = ev.target;
+        // Edit an existing notebook check → shell, pre-populated.
+        var chk = t.closest && t.closest('[data-edit-check-id]');
+        if (chk) {
+            ev.preventDefault();
+            var item = checkSpec(chk.getAttribute('data-edit-check-id'));
+            if (item) modal.open({ editing: { mechanism: 'check', id: item.id, item: item } });
+            return;
         }
-        if (item && window.__chickadeeTestEditorModal) {
-            window.__chickadeeTestEditorModal.open({ editing: { mechanism: 'check', id: id, item: item } });
+        // Edit an existing saved script → shell (renderer fetches the body).
+        var se = t.closest && t.closest('.suite-edit-btn');
+        if (se) {
+            var name = se.getAttribute('data-filename');
+            if (name) modal.open({ editing: { mechanism: 'script', id: name, item: { script: name, hint: scriptHint(name) } } });
+            return;
+        }
+        // Edit a queued-but-unsaved upload → shell (client-side body edit).
+        var ue = t.closest && t.closest('.suite-edit-upload-btn');
+        if (ue) {
+            var uname = ue.getAttribute('data-name');
+            var input = document.getElementById('suite-files-input');
+            var file = uname && input ? Array.from(input.files || []).find(function (f) { return f.name === uname; }) : null;
+            if (file) {
+                file.text().then(function (content) {
+                    modal.open({ editing: { mechanism: 'script', item: { uploadEdit: true, name: uname, content: content } } });
+                });
+            }
         }
     });
 })();

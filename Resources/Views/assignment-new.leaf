@@ -544,84 +544,6 @@ Create Assignment
 })();
 </script>
 
-<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
-<div id="script-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
-                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div id="editor-title" style="font-weight:600;flex:1">New Test Script</div>
-            <button class="btn-link" id="editor-close-btn" type="button"
-                    aria-label="Close editor" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
-        <!-- New-file controls -->
-        <div id="new-file-controls" style="padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
-                    Filename
-                    <input type="text" id="new-filename-input" class="form-input"
-                           placeholder="e.g. test_correctness.py"
-                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Tier
-                    <select id="new-file-tier" class="form-input" style="padding:.25rem .5rem;font-size:.875rem">
-                        <option value="public">public</option>
-                        <option value="secret">secret</option>
-                        <option value="release">release</option>
-                        <option value="support">support (not graded)</option>
-                    </select>
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Points
-                    <input type="number" id="new-file-points" class="form-input" min="1" max="100" value="1"
-                           style="width:4rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-            </div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
-                <select id="template-select" class="form-input"
-                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
-                    <optgroup label="Python">
-                        <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness">Correctness (input/output pairs)</option>
-                        <option value="py:corner_cases">Corner Cases</option>
-                        <option value="py:exception">Exception Handling</option>
-                        <option value="py:type_check">Return Type Check</option>
-                        <option value="py:performance">Performance / Runtime</option>
-                        <option value="py:differential">Differential (reference solution)</option>
-                        <option value="py:variable_equality">Variable Equality</option>
-                        <option value="py:structural_check">Structural Check (AST properties)</option>
-                    </optgroup>
-                    <optgroup label="Shell">
-                        <option value="sh:always_pass">Always Pass (placeholder)</option>
-                        <option value="sh:file_exists">File Exists Check</option>
-                        <option value="sh:command_output">Command Output Check</option>
-                    </optgroup>
-                    <option value="blank">Blank</option>
-                </select>
-                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
-            </div>
-        </div>
-        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
-        <div style="padding:.5rem 1rem;border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <label style="font-size:.8rem;display:flex;flex-direction:column;gap:.2rem">
-                Hint <span style="color:var(--gray-500);font-weight:400">(optional — shown to students when this test fails)</span>
-                <input type="text" id="script-hint-input" class="form-input"
-                       placeholder="e.g. Re-read the function's docstring for the expected return type."
-                       style="padding:.25rem .5rem;font-size:.85rem">
-            </label>
-        </div>
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
-                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <button class="btn btn-primary" id="editor-save-btn" type="button">Add to Suite</button>
-            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
-</div>
 
 <style>
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
@@ -1230,191 +1152,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     #cm-editor-mount .cm-activeLine { background: var(--gray-200); }
     #cm-editor-mount .cm-selectionBackground, #cm-editor-mount ::selection { background: var(--hover-bg) !important; }
     #cm-editor-mount .cm-cursor    { border-left-color: var(--gray-900); }
-    #script-editor-overlay input, #script-editor-overlay select { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-200); }
+    #test-editor-overlay input, #test-editor-overlay select, #test-editor-overlay textarea { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-200); }
 }
 </style>
-<script type="module">
-// ── CodeMirror 6 script creator ────────────────────────────────────────
-// v0.4.132: scripts are persisted immediately to the draft setup zip
-// via POST /instructor/new/draft/scripts and then handed to
-// `suite-table.js` for in-place add (mirrors the edit-page flow at
-// assignment-edit.leaf:1361-1409).  No more multipart upload queue.
-// Bundled by scripts/setup-vendor.sh; source-of-truth in
-// Tools/vendor/codemirror-entry.js.  Single import keeps the wire
-// origin same-origin so the CSP doesn't need esm.sh in script-src.
-import {
-    EditorView, keymap, lineNumbers, highlightActiveLine,
-    drawSelection, dropCursor,
-    EditorState, Compartment,
-    defaultKeymap, history, historyKeymap, indentWithTab,
-    syntaxHighlighting, defaultHighlightStyle, StreamLanguage,
-    python, shell, r
-} from '/vendor/codemirror.js';
-
-const langComp = new Compartment();
-
-function langExtensionFor(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    if (ext === 'py') return python();
-    if (ext === 'r')  return StreamLanguage.define(r);
-    return StreamLanguage.define(shell);
-}
-
-function makeEditorState(content, filename) {
-    return EditorState.create({
-        doc: content,
-        extensions: [
-            lineNumbers(), highlightActiveLine(), drawSelection(), dropCursor(),
-            history(), syntaxHighlighting(defaultHighlightStyle),
-            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-            langComp.of(langExtensionFor(filename)),
-            EditorView.lineWrapping,
-            EditorView.theme({ '&': { height: '100%' } })
-        ]
-    });
-}
-
-const overlay      = document.getElementById('script-editor-overlay');
-const mount        = document.getElementById('cm-editor-mount');
-const titleEl      = document.getElementById('editor-title');
-const statusEl     = document.getElementById('editor-status');
-const saveBtn      = document.getElementById('editor-save-btn');
-const cancelBtn    = document.getElementById('editor-cancel-btn');
-const closeBtn     = document.getElementById('editor-close-btn');
-const newControls  = document.getElementById('new-file-controls');
-const newNameInput = document.getElementById('new-filename-input');
-const tierSelect   = document.getElementById('new-file-tier');
-const pointsInput  = document.getElementById('new-file-points');
-const templateSel  = document.getElementById('template-select');
-const applyTplBtn  = document.getElementById('apply-template-btn');
-const newScriptBtn = document.getElementById('new-script-btn');
-const hintInput    = document.getElementById('script-hint-input');
-const csrfToken    = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-const draftIDForCM = #rawJSON(draftIDJSON);
-
-let view = null;
-
-function initView(content, filename) {
-    if (view) { view.destroy(); view = null; }
-    try { view = new EditorView({ state: makeEditorState(content, filename), parent: mount }); }
-    catch (e) { if (statusEl) statusEl.textContent = 'Editor failed to load: ' + e.message; }
-}
-
-function openCreator() {
-    if (titleEl)  titleEl.textContent  = 'New Test Script';
-    if (statusEl) statusEl.textContent = '';
-    if (newControls) newControls.style.display = '';
-    if (newNameInput) { newNameInput.value = ''; newNameInput.disabled = false; }
-    if (hintInput) hintInput.value = '';
-    if (overlay) overlay.style.display = 'flex';
-    initView('', '');
-    if (newNameInput) newNameInput.focus();
-}
-
-function closeEditor() {
-    if (overlay) overlay.style.display = 'none';
-    if (view) { view.destroy(); view = null; }
-    if (newNameInput) newNameInput.disabled = false;
-}
-
-if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
-if (closeBtn)     closeBtn.addEventListener('click',   closeEditor);
-if (cancelBtn)    cancelBtn.addEventListener('click',  closeEditor);
-
-// Expose the creator so the unified "+ Add Test" dispatcher can open the
-// custom-script flow directly.
-window.chickadeeOpenScriptCreator = openCreator;
-
-if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
-
-// Save: POST to /instructor/new/draft/scripts and call suite-table's
-// addExistingScript so the new row appears under the section the user
-// clicked "+ Add Script" on.  Falls back to ungrouped if no draft exists.
-if (saveBtn) {
-    saveBtn.addEventListener('click', function () {
-        if (!draftIDForCM) {
-            if (statusEl) statusEl.textContent = 'Upload an assignment notebook first to start a draft.';
-            return;
-        }
-        const filename = newNameInput ? newNameInput.value.trim() : '';
-        if (!filename) { if (statusEl) statusEl.textContent = 'Enter a filename.'; if (newNameInput) newNameInput.focus(); return; }
-        const content  = view ? view.state.doc.toString() : '';
-        const tier     = tierSelect ? tierSelect.value : 'public';
-        const points   = Math.max(0, parseInt(pointsInput ? pointsInput.value : '1') || 1);
-        const isTest   = tier !== 'support';
-        const hint     = hintInput ? hintInput.value.trim() : '';
-        if (statusEl) statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
-
-        // PR4c: route through the single PUT /suite write path (writes the body
-        // into the draft zip + persists the hint onto the manifest entry).
-        // Falls back to the legacy POST /draft/scripts if the table isn't wired.
-        if (typeof window.chickadeeSaveScriptViaSuite === 'function') {
-            window.chickadeeSaveScriptViaSuite({ filename, content, hint, tier, points, isTest })
-                .then(() => { if (statusEl) statusEl.textContent = 'Saved.'; closeEditor(); })
-                .catch(err => { if (statusEl) statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err); })
-                .finally(() => { saveBtn.disabled = false; });
-            return;
-        }
-        fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftIDForCM), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ filename, content, tier, points, isTest })
-        })
-        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t || ('HTTP ' + r.status))))
-        .then(data => {
-            if (statusEl) statusEl.textContent = 'Saved.';
-            saveBtn.disabled = false;
-            if (window.chickadeeAddExistingSuiteScript) {
-                window.chickadeeAddExistingSuiteScript(data);
-            }
-            closeEditor();
-        })
-        .catch(err => {
-            if (statusEl) statusEl.textContent = 'Error: ' + err;
-            saveBtn.disabled = false;
-        });
-    });
-}
-
-// Template apply
-let templateCache = null;
-
-function fetchTemplates() {
-    if (templateCache) return Promise.resolve(templateCache);
-    return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': csrfToken } })
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-        .then(data => { templateCache = data; return data; });
-}
-
-if (applyTplBtn) {
-    applyTplBtn.addEventListener('click', function () {
-        const tpl = templateSel ? templateSel.value : 'blank';
-        if (tpl === 'blank') {
-            if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
-            if (newNameInput && !newNameInput.value) newNameInput.focus();
-            return;
-        }
-        fetchTemplates()
-            .then(templates => {
-                const content = templates[tpl] || '';
-                if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-                const ext = tpl.startsWith('sh:') ? '.sh' : tpl.startsWith('r:') ? '.R' : '.py';
-                if (newNameInput && !newNameInput.value) newNameInput.value = 'test_' + tpl.split(':').pop() + ext;
-                // Update language
-                if (view) view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput ? newNameInput.value : '')) });
-            })
-            .catch(err => { if (statusEl) statusEl.textContent = 'Could not load template: ' + err; });
-    });
-}
-
-// Update language highlighting as filename is typed
-if (newNameInput) {
-    newNameInput.addEventListener('input', function () {
-        if (view) view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput.value)) });
-    });
-}
-</script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
     if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
@@ -1449,13 +1189,27 @@ function checkUWDates(dateTimeValue, warningEl) {
      existing overlays during the staged rollout (the shell shows a
      "Continue →" button for those).  Renderer scripts load before the shell
      so they self-register first. -->
+<script>
+// Per-page config for the script renderer.  New-assignment draft: creating
+// scripts only (editing a saved script isn't a draft-page flow → no content
+// URL); the body persists via PUT /suite (suite-table's saveScriptViaSuite).
+window.ChickadeeScriptRendererConfig = {
+    csrfToken: (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+    scriptContentURL: null,
+    uploadFilesInputID: null
+};
+</script>
 <script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script>
 (function () {
     var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     window.initTestEditorModal({ csrfToken: csrfToken });
+    var modal = window.__chickadeeTestEditorModal;
+    window.chickadeeOpenScriptCreator = function () { modal.open({ kind: 'script' }); };
 
+    // Edit an existing notebook check → shell, pre-populated from the suite row.
     document.body.addEventListener('click', function (ev) {
         var el = ev.target.closest && ev.target.closest('[data-edit-check-id]');
         if (!el) return;
@@ -1468,8 +1222,8 @@ function checkUWDates(dateTimeValue, warningEl) {
             });
             item = match ? match.check : null;
         }
-        if (item && window.__chickadeeTestEditorModal) {
-            window.__chickadeeTestEditorModal.open({ editing: { mechanism: 'check', id: id, item: item } });
+        if (item && modal) {
+            modal.open({ editing: { mechanism: 'check', id: id, item: item } });
         }
     });
 })();
