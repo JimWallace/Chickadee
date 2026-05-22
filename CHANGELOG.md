@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.238] - 2026-05-22
+
+### Changed
+
+- **Pattern-family editor folded into the unified Test Editor modal (PR4f) —
+  all three test types now morph in one overlay, no hop.** The 2085-line family
+  editor (`Public/pattern-family-editor.js`) now registers a body renderer on
+  `window.ChickadeeTestRenderers.family`; its heavy logic (solution-notebook
+  scan, cases table, Variables table, Pyodide auto-compute of Expected, the
+  per-kind layout) is unchanged. The family form markup was carved out of its
+  standalone `#family-editor-overlay` into a hidden `#family-editor-body` that
+  the renderer's `mount()` relocates into the shell panel; the shell owns the
+  chrome (title / Save / close), so `overlay` / `titleEl` / `saveBtn` uses are
+  null-guarded and the validation + upsert logic is factored into
+  `readFamilySpec` / `persistFamilySpec` shared by the renderer's
+  `readSpec` / `persistAndSync`. Editing a family from a suite row now opens the
+  shell pre-populated. With this, the legacy `add-test-dispatcher` two-step hop
+  is fully retired in practice — the `Continue →` delegate path in the shell is
+  dead and removed in the PR4g cleanup. No backend changes.
+
 ## [0.4.237] - 2026-05-22
 
 ### Changed

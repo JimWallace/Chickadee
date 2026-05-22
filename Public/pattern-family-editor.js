@@ -229,6 +229,11 @@
         }
 
         var addFamilyBtn     = document.getElementById('add-family-btn');
+        // v0.4.238: the family form is now a body renderer of the unified Test
+        // Editor modal — its markup lives in `#family-editor-body` and the shell
+        // owns the chrome (title / save / close), so `overlay` / `titleEl` /
+        // `saveBtn` are absent and every use of them is null-guarded below.
+        var bodyEl           = document.getElementById('family-editor-body');
         var overlay          = document.getElementById('family-editor-overlay');
         var titleEl          = document.getElementById('family-editor-title');
         var idInput          = document.getElementById('family-id');
@@ -251,9 +256,10 @@
         var closeBtn         = document.getElementById('family-editor-close');
         var statusEl         = document.getElementById('family-editor-status');
 
-        if (!overlay) {
-            // No modal rendered on this page — still return the API so the
-            // host doesn't crash at init time, but all methods no-op.
+        if (!overlay && !bodyEl) {
+            // No family form rendered on this page (neither the legacy overlay
+            // nor the renderer body) — still return the API so the host doesn't
+            // crash at init time, but all methods no-op.
             return noopAPI();
         }
 
@@ -1247,7 +1253,7 @@
                 currentSectionID = ctx.sectionID;
                 currentSectionName = ctx.sectionName;
                 renderReadOnlySectionVars(ctx);
-                titleEl.textContent = 'Edit Pattern Family';
+                if (titleEl) titleEl.textContent = 'Edit Pattern Family';
                 idInput.value = family.id || '';
                 nameInput.value = family.name || '';
                 kindInput.value = family.kind || 'boundary_equality';
@@ -1266,7 +1272,7 @@
                 (family.cases || []).forEach(function (c) { addCaseRow(c, family.paramNames || []); });
                 if (!(family.cases || []).length) addCaseRow(null, family.paramNames || []);
             } else {
-                titleEl.textContent = 'New Pattern Family';
+                if (titleEl) titleEl.textContent = 'New Pattern Family';
                 idInput.value = '';
                 nameInput.value = '';
                 kindInput.value = presetKind || 'boundary_equality';
@@ -1310,7 +1316,7 @@
             // next user-driven change diffs against the right baseline.
             lastSelectedKind = kindInput.value;
 
-            overlay.style.display = 'flex';
+            if (overlay) overlay.style.display = 'flex';
             updateCasesEmptyMessage();
 
             // Kick off (or reuse) the scan and populate the function dropdown.
@@ -1324,7 +1330,7 @@
             setTimeout(function () { nameInput.focus(); }, 0);
         }
 
-        function closeEditor() { overlay.style.display = 'none'; }
+        function closeEditor() { if (overlay) overlay.style.display = 'none'; }
 
         function readFamilyFromEditor() {
             // Pull Variables-table edits first; readCasesFromTable checks
@@ -1390,7 +1396,7 @@
         /// hook isn't present (e.g. preview contexts with no table).
         function persistFamilies(next) {
             statusEl.textContent = 'Saving…';
-            saveBtn.disabled = true;
+            if (saveBtn) saveBtn.disabled = true;
             var via;
             if (typeof window.chickadeeSaveFamiliesViaSuite === 'function') {
                 via = window.chickadeeSaveFamiliesViaSuite(next);
@@ -1409,12 +1415,12 @@
             return via
                 .then(function (applied) {
                     familiesState = applied;
-                    saveBtn.disabled = false;
+                    if (saveBtn) saveBtn.disabled = false;
                     statusEl.textContent = '';
                     return applied;
                 })
                 .catch(function (err) {
-                    saveBtn.disabled = false;
+                    if (saveBtn) saveBtn.disabled = false;
                     statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
                     throw err;
                 });
@@ -1438,10 +1444,12 @@
         if (addFamilyBtn) addFamilyBtn.addEventListener('click', function () { openEditor(-1); });
         if (closeBtn)     closeBtn.addEventListener('click', closeEditor);
         if (cancelBtn)    cancelBtn.addEventListener('click', closeEditor);
-        overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
-        });
+        if (overlay) {
+            overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
+            });
+        }
 
         if (fnSelect) fnSelect.addEventListener('change', function () {
             applyFunctionSelection(fnSelect.value, /*preserveCases=*/true);
@@ -2033,7 +2041,16 @@
                 if (editBtn) {
                     var fid = editBtn.getAttribute('data-family-id');
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });
-                    if (idx >= 0) openEditor(idx);
+                    if (idx >= 0) {
+                        // Open the unified shell pre-populated; fall back to the
+                        // legacy overlay only if the shell isn't on the page.
+                        if (window.__chickadeeTestEditorModal) {
+                            window.__chickadeeTestEditorModal.open(
+                                { editing: { mechanism: 'family', id: fid, item: familiesState[idx] } });
+                        } else {
+                            openEditor(idx);
+                        }
+                    }
                 } else if (delBtn) {
                     var fid2 = delBtn.getAttribute('data-family-id');
                     var idx2 = familiesState.findIndex(function (f) { return f.id === fid2; });
@@ -2051,30 +2068,72 @@
             });
         }
 
-        saveBtn.addEventListener('click', function () {
-            var family;
-            try { family = readFamilyFromEditor(); }
-            catch (e) { statusEl.textContent = e.message || String(e); return; }
+        // Read the family spec from the form, throwing a clean message on any
+        // validation failure.  Shared by the legacy Save button and the Test
+        // Editor shell's `readSpec` hook.
+        function readFamilySpec() {
+            var family = readFamilyFromEditor();   // may throw (cases / vars)
+            if (!family.functionName) throw new Error('Pick a function from the dropdown first.');
+            if (!family.id) throw new Error('Family id could not be derived from the function name.');
+            if (!family.name) throw new Error('Family name is required.');
+            if (!family.cases.length) throw new Error('Add at least one case.');
+            return family;
+        }
 
-            if (!family.functionName) { statusEl.textContent = 'Pick a function from the dropdown first.'; return; }
-            if (!family.id) { statusEl.textContent = 'Family id could not be derived from the function name.'; return; }
-            if (!family.name) { statusEl.textContent = 'Family name is required.'; return; }
-            if (!family.cases.length) { statusEl.textContent = 'Add at least one case.'; return; }
-
+        // Upsert `family` into the list and persist via PUT /suite.  Returns the
+        // persist promise; rejects with a clean Error on a duplicate-id create.
+        function persistFamilySpec(family) {
             var next = familiesState.slice();
             if (editingIndex >= 0) {
                 next[editingIndex] = family;
+            } else if (next.some(function (f) { return f.id === family.id; })) {
+                return Promise.reject(new Error('A family for "' + family.functionName + '" already exists.'));
             } else {
-                if (next.some(function (f) { return f.id === family.id; })) {
-                    statusEl.textContent = 'A family for "' + family.functionName + '" already exists.';
-                    return;
-                }
                 next.push(family);
             }
-            persistFamilies(next)
-                .then(function () { closeEditor(); })
-                .catch(function () {});
-        });
+            return persistFamilies(next);
+        }
+
+        // Legacy standalone Save button (only present if the old overlay
+        // markup is on the page; the shell drives Save otherwise).
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function () {
+                var family;
+                try { family = readFamilySpec(); }
+                catch (e) { statusEl.textContent = e.message || String(e); return; }
+                persistFamilySpec(family)
+                    .then(function () { closeEditor(); })
+                    .catch(function (err) { statusEl.textContent = err.message || String(err); });
+            });
+        }
+
+        // Body renderer for the unified Test Editor modal.  The shell owns the
+        // chrome + the type `<select>` (which supplies `kind`); this renderer
+        // owns the family form (function/cases/variables/Pyodide compute),
+        // relocated into the shell panel by mount().
+        var familyRenderer = {
+            mechanism: 'family',
+            title: function (isEditing) { return isEditing ? 'Edit Pattern Family' : 'Add Test'; },
+            mount: function (shellBody) {
+                if (bodyEl && bodyEl.parentNode !== shellBody) {
+                    bodyEl.hidden = false;
+                    bodyEl.style.display = 'flex';
+                    shellBody.appendChild(bodyEl);
+                }
+            },
+            reset: function (kind) { openEditor(-1, kind); },
+            populate: function (item) {
+                var idx = familiesState.findIndex(function (f) { return f.id === (item && item.id); });
+                openEditor(idx >= 0 ? idx : -1, item && item.kind);
+            },
+            readSpec: readFamilySpec,
+            persistAndSync: persistFamilySpec,
+            cleanup: function () { killWorker(); }
+        };
+        if (bodyEl) {
+            window.ChickadeeTestRenderers = window.ChickadeeTestRenderers || {};
+            window.ChickadeeTestRenderers.family = familyRenderer;
+        }
 
         return {
             open: openEditor,

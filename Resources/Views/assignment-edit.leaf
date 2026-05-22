@@ -387,18 +387,12 @@
      shell owns the chrome + type picker, and the renderer builds its
      per-kind fields from the #check-schema seed.  No standalone overlay. -->
 
-<!-- ── Pattern Family Editor Modal ──────────────────────────────────────── -->
-<div id="family-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(960px,96vw);max-height:92vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
-            <div id="family-editor-title" style="font-weight:600;flex:1">New Pattern Family</div>
-            <button class="btn-link" id="family-editor-close" type="button" aria-label="Close" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
-
-        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
+<!-- ── Pattern Family editor body ───────────────────────────────────────────
+     v0.4.238: the family form is a body renderer of the unified Test Editor
+     modal (pattern-family-editor.js registers window.ChickadeeTestRenderers
+     .family).  The shell owns the chrome (title / Save / close); this hidden
+     body is relocated into the shell panel by the renderer's mount(). -->
+<div id="family-editor-body" hidden style="display:none;flex-direction:column;gap:.75rem">
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
                 <label id="family-function-label" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
                     Function
@@ -498,14 +492,7 @@
                     No cases yet.  Add at least one to save this family.
                 </p>
             </div>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
-            <button class="btn btn-primary" id="family-save-btn" type="button">Save</button>
-            <button class="btn" id="family-cancel-btn" type="button">Cancel</button>
-            <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
+    <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500)"></span>
 </div>
 
 <style>
