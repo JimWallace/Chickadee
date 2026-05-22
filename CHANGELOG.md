@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.229] - 2026-05-22
+
+### Added
+
+- **Instructor hints are now first-class across all test items, shown as a
+  "💡 Hint" callout on failing tests.** Previously a hint existed only on
+  pattern-family cases and was *baked into the generated Python's failure
+  string*, so it landed as buried prose in the output panel. Hints now live on
+  the spec for every flavour — `PatternCase`/`PatternDefaults` (families, as
+  before), the new `NotebookCheck.hint`, and the new `TestSuiteEntry.hint`
+  (hand-written raw scripts) — and are surfaced at **results-display time** via
+  a filename-keyed join (`buildHintByFilename` in `WebRoutes+Submission.swift`),
+  rendered as a distinct callout in `submission.leaf` only on failing tests.
+
+### Changed
+
+- **Pattern-family scripts no longer bake hints into their output**
+  (`PatternFamilyRenderer`); `generatedCaseHintLineExpr` and its ~20 injection
+  sites are gone. The hint is decoupled from the test script — it's always
+  current, styled distinctly, and works identically for native- and
+  browser-graded results (both render through `submission.leaf`). This changes
+  generated-script bytes (so `spec_hash` shifts on the next save), with no
+  behaviour change to grading itself.
+
+### Notes
+
+- The authoring UI (a hint field in the notebook-check form, the restored
+  per-case hint column for families, and a script hint field) lands with the
+  suite-editor modal work; checks already round-trip a hint through `PUT /suite`
+  since it carries the full check spec.
+
 ## [0.4.228] - 2026-05-22
 
 ### Changed

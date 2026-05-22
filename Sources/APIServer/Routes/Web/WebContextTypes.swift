@@ -134,6 +134,7 @@ struct OutcomeRow: Encodable {
     let deltaImproved: Bool  // was non-pass last attempt, is pass now
     let deltaRegressed: Bool  // was pass last attempt, is non-pass now
     let pointsLabel: String?  // e.g. "2 pts" when assignment is weighted; nil otherwise
+    let hint: String?  // instructor "💡 Hint" callout, present only on failing tests
 }
 
 /// One section block on the student submission page.  `sectionName == nil`

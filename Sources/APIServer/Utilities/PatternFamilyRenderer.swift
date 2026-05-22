@@ -252,14 +252,12 @@ private func generatedCaseHeader(family: PatternFamily, case c: PatternCase, spe
     """
 }
 
-/// The Python expression every kind interpolates into its failure-message
-/// `hint=...` slot: either `"Hint: <escaped text>"` (when the case or
-/// family default provides hint text) or `""` (no hint).  Consolidated in
-/// v0.4.185 (Phase 5.A); previously open-coded in all 7 kinds.
-private func generatedCaseHintLineExpr(_ c: PatternCase, family: PatternFamily) -> String {
-    let resolvedHint = c.resolvedHint(defaults: family.defaults)
-    return resolvedHint.map { "\"Hint: \(escapeForPythonStringLiteral($0))\"" } ?? "\"\""
-}
+// Hints are no longer baked into the generated Python (v0.4.229).  An
+// instructor hint — per-case `resolvedHint(defaults:)` for families,
+// `NotebookCheck.hint` for checks, `TestSuiteEntry.hint` for raw scripts —
+// is surfaced uniformly as a "💡 Hint" callout on failing tests at
+// results-display time (see the `hintByFilename` join in
+// `WebRoutes+Submission.swift`), decoupled from the test script.
 
 func renderBoundaryEquality(
     family: PatternFamily,
@@ -268,8 +266,6 @@ func renderBoundaryEquality(
     specHash: String
 ) -> String {
     let ctx = callContext(for: family, case: c)
-
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
@@ -303,18 +299,14 @@ func renderBoundaryEquality(
                 "unexpected exception\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected!r}\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-                \(hintLine)
-            )
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if result != expected:
             failed(
                 "wrong value\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected!r}\\n"
-                f"  got:      {result!r}\\n"
-                \(hintLine)
-            )
+                f"  got:      {result!r}\\n"            )
 
         # v0.4.105: pass message no longer echoes the full input dict / list
         # (which can be hundreds of characters for HL7-shaped records).  The
@@ -347,8 +339,6 @@ func renderApproximateEquality(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
-
     let tolerance = family.defaults.tolerance ?? defaultApproxTolerance
     // Use JSONValue's Python rendering so whole-number tolerances come out
     // as floats (e.g. 1.0, not 1) — keeps the comparison well-typed.
@@ -378,18 +368,14 @@ func renderApproximateEquality(
                 "unexpected exception\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected!r} (±{tolerance})\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-                \(hintLine)
-            )
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if not isinstance(result, (int, float)) or isinstance(result, bool):
             failed(
                 "wrong return type\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: a number close to {expected!r}\\n"
-                f"  got:      {result!r} (type {type(result).__name__})\\n"
-                \(hintLine)
-            )
+                f"  got:      {result!r} (type {type(result).__name__})\\n"            )
 
         delta = abs(result - expected)
         if delta > tolerance:
@@ -398,9 +384,7 @@ func renderApproximateEquality(
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected!r} (±{tolerance})\\n"
                 f"  got:      {result!r}\\n"
-                f"  delta:    {delta}\\n"
-                \(hintLine)
-            )
+                f"  delta:    {delta}\\n"            )
 
         # v0.4.105: see renderBoundaryEquality — drop the input echo.
         passed(f"Returned {result!r} (within ±{tolerance})")
@@ -438,7 +422,6 @@ func renderVariableEquality(
         return name
     }()
     let nameLiteral = "\"" + escapeForPythonStringLiteral(variableName) + "\""
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     return """
         \(generatedCaseHeader(family: family, case: c, specHash: specHash))
@@ -451,17 +434,13 @@ func renderVariableEquality(
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined\\n"
-                f"  expected: {expected!r}\\n"
-                \(hintLine)
-            )
+                f"  expected: {expected!r}\\n"            )
 
         if actual != expected:
             failed(
                 f"Variable `{variable_name}` has the wrong value\\n"
                 f"  expected: {expected!r}\\n"
-                f"  got:      {actual!r}\\n"
-                \(hintLine)
-            )
+                f"  got:      {actual!r}\\n"            )
 
         passed(f"{variable_name} == {actual!r}")
         """
@@ -511,8 +490,6 @@ func renderReturnTypeCheck(
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
-
     // expected is a JSON string naming the type (e.g. "DataFrame").
     let typeName: String = {
         if case .string(let s) = c.expected { return s }
@@ -542,18 +519,14 @@ func renderReturnTypeCheck(
                 "unexpected exception\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: a {expected_type_name} return value\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-                \(hintLine)
-            )
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         if not (\(typeCheckExpr)):
             failed(
                 "wrong return type\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected_type_name}\\n"
-                f"  got:      {type(result).__name__} (value: {result!r})\\n"
-                \(hintLine)
-            )
+                f"  got:      {type(result).__name__} (value: {result!r})\\n"            )
 
         passed(f"Returned a {type(result).__name__}")
         """
@@ -568,8 +541,6 @@ func renderExceptionExpected(
     specHash: String
 ) -> String {
     let ctx = callContext(for: family, case: c)
-
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let exceptionName: String = {
         if case .string(let s) = c.expected { return s }
@@ -598,9 +569,7 @@ func renderExceptionExpected(
                 "expected exception was not raised\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected_exception_name}\\n"
-                f"  got:      no exception (returned {result!r})\\n"
-                \(hintLine)
-            )
+                f"  got:      no exception (returned {result!r})\\n"            )
 
         # Match by class-name MRO walk so the test doesn't need to import
         # the user's exception class in this scope.  Any class in the
@@ -613,9 +582,7 @@ func renderExceptionExpected(
                 "wrong exception type\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected_exception_name}\\n"
-                f"  got:      {type(raised).__name__}: {raised}\\n"
-                \(hintLine)
-            )
+                f"  got:      {type(raised).__name__}: {raised}\\n"            )
 
         passed(f"Raised {type(raised).__name__} as expected")
         """
@@ -630,8 +597,6 @@ func renderPerformanceThreshold(
     specHash: String
 ) -> String {
     let ctx = callContext(for: family, case: c)
-
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let thresholdMs: Double = {
         switch c.expected {
@@ -666,9 +631,7 @@ func renderPerformanceThreshold(
                 "unexpected exception\\n"
                 \(ctx.inputLineLiteral)
                 f"  threshold: {threshold_ms} ms\\n"
-                f"  error:     {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-                \(hintLine)
-            )
+                f"  error:     {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
         _elapsed_ms = (_time.perf_counter() - _start) * 1000.0
 
         if _elapsed_ms > threshold_ms:
@@ -676,9 +639,7 @@ func renderPerformanceThreshold(
                 "ran too slowly\\n"
                 \(ctx.inputLineLiteral)
                 f"  threshold: {threshold_ms} ms\\n"
-                f"  elapsed:   {_elapsed_ms:.2f} ms\\n"
-                \(hintLine)
-            )
+                f"  elapsed:   {_elapsed_ms:.2f} ms\\n"            )
 
         passed(f"Completed in {_elapsed_ms:.2f} ms (threshold {threshold_ms} ms)")
         """
@@ -702,8 +663,6 @@ func renderStdoutEquality(
     specHash: String
 ) -> String {
     let ctx = callContext(for: family, case: c)
-
-    let hintLine = generatedCaseHintLineExpr(c, family: family)
 
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
@@ -734,9 +693,7 @@ func renderStdoutEquality(
                 "unexpected exception\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected stdout: {expected!r}\\n"
-                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"
-                \(hintLine)
-            )
+                f"  error:    {type(ex).__name__}: {ex}" + _tb_src + "\\n"            )
 
         # Trim a single trailing newline on both sides so `print("hi")`
         # (which emits "hi\\n") matches an instructor-typed Expected of "hi".
@@ -753,9 +710,7 @@ func renderStdoutEquality(
                 "wrong stdout\\n"
                 \(ctx.inputLineLiteral)
                 f"  expected: {expected_norm!r}\\n"
-                f"  got:      {actual!r}\\n"
-                \(hintLine)
-            )
+                f"  got:      {actual!r}\\n"            )
 
         passed(f"Printed {actual!r}")
         """

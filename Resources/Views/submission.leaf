@@ -91,6 +91,9 @@ Submission #(submissionID)
                         #if(outcome.status == "pass" && outcome.longResult):
                         <details class="test-output-details"><summary>Show output ▸</summary><pre class="test-output-pre">#(outcome.longResult)</pre></details>
                         #endif
+                        #if(outcome.hint):
+                        <div class="test-hint">💡 <strong>Hint:</strong> #(outcome.hint)</div>
+                        #endif
                     </div>
                     #if(outcome.blockerName):
                     <div class="skip-blocker">↳ blocked by <code>#(outcome.blockerName)</code></div>
@@ -188,6 +191,16 @@ Submission #(submissionID)
     color: var(--gray-600, #4b5563);
     font-size: .88rem;
     line-height: 1.4;
+}
+.test-hint {
+    margin-top: .4rem;
+    padding: .35rem .55rem;
+    border-left: 3px solid var(--amber, #d97706);
+    background: var(--amber-bg, #fffbeb);
+    border-radius: .25rem;
+    font-size: .85rem;
+    line-height: 1.4;
+    color: var(--gray-800, #1f2937);
 }
 .test-output-details {
     margin-top: .4rem;

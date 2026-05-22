@@ -45,13 +45,19 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let generatedBy: String?  // pattern family id, nil for hand-written scripts
     public let generatedByCheck: String?  // notebook check id, nil otherwise
     public let sectionID: String?  // id into TestProperties.sections, or nil = ungrouped
+    // Optional instructor hint shown as a "💡 Hint" callout when this test
+    // fails (surfaced at results-display time). For generated entries the
+    // hint comes from the family case / notebook check spec instead; this
+    // field carries the hint for hand-written raw scripts. nil = none.
+    public let hint: String?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
         dependsOn: [String] = [], points: Int = 1,
         generatedBy: String? = nil,
         generatedByCheck: String? = nil,
-        sectionID: String? = nil
+        sectionID: String? = nil,
+        hint: String? = nil
     ) {
         self.tier = tier
         self.script = script
@@ -61,6 +67,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.generatedBy = generatedBy
         self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
+        self.hint = hint
     }
 
     public init(from decoder: Decoder) throws {
@@ -73,6 +80,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedBy = try c.decodeIfPresent(String.self, forKey: .generatedBy)
         generatedByCheck = try c.decodeIfPresent(String.self, forKey: .generatedByCheck)
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
+        hint = try c.decodeIfPresent(String.self, forKey: .hint)
     }
 
     /// True if this entry was produced by a pattern family or a notebook

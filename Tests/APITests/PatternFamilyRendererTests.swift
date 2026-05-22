@@ -118,12 +118,19 @@ import Vapor
         #expect(src.contains("expected = \"underweight\""))
         #expect(src.contains("student_module.bmi_category(bmi)"))
         #expect(src.contains("input:    bmi={bmi!r}"))
-        #expect(src.contains("Hint: values below 18.5"))
+        // Hints are no longer baked into the generated script (v0.4.229) —
+        // they're surfaced as a "💡 Hint" display callout instead.
+        #expect(!src.contains("Hint:"))
         #expect(src.contains("unexpected exception"))
         #expect(src.contains("wrong value"))
     }
 
-    @Test func rendererUsesDefaultHintWhenCaseHintIsMissing() throws {
+    // v0.4.229: hints (case override + family default) are no longer baked
+    // into the generated Python.  They're carried on the spec and surfaced as
+    // a "💡 Hint" display callout (the case/default resolution is exercised by
+    // `HintSurfacingTests.buildHintByFilename`).  The generated source must
+    // contain no hint text regardless of where the hint was authored.
+    @Test func rendererDoesNotBakeHintsIntoSource() throws {
         let family = PatternFamily(
             id: "h", name: "h", kind: .boundaryEquality,
             functionName: "f", paramNames: ["x"],
@@ -136,8 +143,10 @@ import Vapor
             ]
         )
         let rendered = renderPatternFamily(family)
-        #expect(rendered[0].source.contains("Hint: default hint"))
-        #expect(rendered[1].source.contains("Hint: override hint"))
+        #expect(!rendered[0].source.contains("Hint:"))
+        #expect(!rendered[0].source.contains("default hint"))
+        #expect(!rendered[1].source.contains("Hint:"))
+        #expect(!rendered[1].source.contains("override hint"))
     }
 
     @Test func rendererDisplayNameMatchesCaseLabel() throws {

@@ -182,7 +182,7 @@ import Testing
             markLabel: "Pass", markClass: "pass",
             isSkipped: false, blockerName: nil,
             deltaImproved: false, deltaRegressed: false,
-            pointsLabel: nil
+            pointsLabel: nil, hint: nil
         )
     }
 

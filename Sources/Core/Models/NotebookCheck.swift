@@ -142,6 +142,11 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// references are silently rewritten to nil at save time, mirroring
     /// the family path.
     public let sectionID: String?
+    /// Optional instructor hint, shown to the student as a "💡 Hint" callout
+    /// when this check fails (surfaced at results-display time, not baked into
+    /// the generated script — see the `hintByFilename` join in
+    /// `WebRoutes+Submission.swift`).  nil = no hint.
+    public let hint: String?
 
     // MARK: Per-kind config (presence enforced by validator)
 
@@ -236,6 +241,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         id: String, name: String? = nil, kind: NotebookCheckKind,
         tier: TestTier = .pub, points: Int = 1,
         dependsOn: [String] = [], sectionID: String? = nil,
+        hint: String? = nil,
         variable: String? = nil,
         expectedRows: Int? = nil, expectedCols: Int? = nil,
         expectedColumns: [String]? = nil,
@@ -260,6 +266,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.points = points
         self.dependsOn = dependsOn
         self.sectionID = sectionID
+        self.hint = hint
         self.variable = variable
         self.expectedRows = expectedRows
         self.expectedCols = expectedCols
@@ -290,6 +297,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
         dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
+        hint = try c.decodeIfPresent(String.self, forKey: .hint)
         variable = try c.decodeIfPresent(String.self, forKey: .variable)
         expectedRows = try c.decodeIfPresent(Int.self, forKey: .expectedRows)
         expectedCols = try c.decodeIfPresent(Int.self, forKey: .expectedCols)
