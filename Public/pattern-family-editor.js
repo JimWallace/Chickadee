@@ -1371,29 +1371,43 @@
             };
         }
 
-        function putFamilies(next) {
+        /// Persists the full family list. Phase 2a (v0.4.223) routes this
+        /// through the single `PUT /suite` write path — the suite-table
+        /// reconciles itself and re-seeds from the response, so no separate
+        /// onFamiliesChange sync is needed (and the pre-2a `PUT /families`
+        /// + follow-up `PUT /suite` double-write is gone). Falls back to the
+        /// legacy `PUT /families` + onFamiliesChange when the suite-table save
+        /// hook isn't present (e.g. preview contexts with no table).
+        function persistFamilies(next) {
             statusEl.textContent = 'Saving…';
             saveBtn.disabled = true;
-            return fetch(urls.putFamilies(), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                body: JSON.stringify(next)
-            })
-            .then(function (r) {
-                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
-                return r.json();
-            })
-            .then(function (applied) {
-                familiesState = applied;
-                saveBtn.disabled = false;
-                statusEl.textContent = '';
-                return applied;
-            })
-            .catch(function (err) {
-                saveBtn.disabled = false;
-                statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
-                throw err;
-            });
+            var via;
+            if (typeof window.chickadeeSaveFamiliesViaSuite === 'function') {
+                via = window.chickadeeSaveFamiliesViaSuite(next);
+            } else {
+                via = fetch(urls.putFamilies(), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                    body: JSON.stringify(next)
+                })
+                .then(function (r) {
+                    if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+                    return r.json();
+                })
+                .then(function (applied) { onFamiliesChange(applied); return applied; });
+            }
+            return via
+                .then(function (applied) {
+                    familiesState = applied;
+                    saveBtn.disabled = false;
+                    statusEl.textContent = '';
+                    return applied;
+                })
+                .catch(function (err) {
+                    saveBtn.disabled = false;
+                    statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
+                    throw err;
+                });
         }
 
         /// Server error pages are HTML; pull the `error-message` paragraph
@@ -2022,9 +2036,7 @@
                     }
                     var next = familiesState.slice();
                     next.splice(idx2, 1);
-                    putFamilies(next)
-                        .then(function (applied) { onFamiliesChange(applied); })
-                        .catch(function () {});
+                    persistFamilies(next).catch(function () {});
                 }
             });
         }
@@ -2049,11 +2061,8 @@
                 }
                 next.push(family);
             }
-            putFamilies(next)
-                .then(function (applied) {
-                    onFamiliesChange(applied);
-                    closeEditor();
-                })
+            persistFamilies(next)
+                .then(function () { closeEditor(); })
                 .catch(function () {});
         });
 
