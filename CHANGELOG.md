@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.232] - 2026-05-22
+
+### Fixed
+
+- **Docker tag builds no longer fail the Trivy scan on `no space left on
+  device`.** The `build-and-push` job `load`s the large (~1.4 GB Pyodide +
+  distro + static binaries) image into the local Docker daemon, then Trivy
+  re-exports it to a `/tmp` tarball to scan — two copies on the runner's root
+  FS plus the BuildKit gha cache, which intermittently exhausted the default
+  ubuntu-latest ~14 GB. Because the scan gates (runs before) the push step, a
+  scan failure meant the versioned image was never published — the v0.4.231
+  tag build failed here, so `ghcr.io/jimwallace/chickadee:0.4.231` is missing
+  (`:latest` / `:sha-d7d7971`, pushed by the same commit's main build, carry
+  the identical bits). Added a disk-reclaim step that removes unused
+  preinstalled toolchains (~25 GB) before the build. No change to the
+  scan-gates-push ordering.
+
 ## [0.4.231] - 2026-05-22
 
 ### Added
