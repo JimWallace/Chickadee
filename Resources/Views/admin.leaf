@@ -540,7 +540,7 @@ tr.runner-row-offline {
     async function refreshWorkers() {
         try {
             var res = await fetch('/admin/runners', {
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
                 cache: 'no-store'
             });
             if (!res.ok) return;
@@ -554,7 +554,7 @@ tr.runner-row-offline {
     async function refreshDiagnostics() {
         try {
             var response = await fetch('/admin/metrics', {
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
                 cache: 'no-store'
             });
             if (!response.ok) return;

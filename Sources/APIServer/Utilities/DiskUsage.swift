@@ -40,6 +40,46 @@ func fileSizeBytes(at path: String) -> Int {
     ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int) ?? 0
 }
 
+/// Bytes of the top-level regular files in `path`, bucketed by the filename
+/// component before the first ".".  Submissions and test-setup archives are
+/// stored flat as `<id>.<ext>` (e.g. `sub_ab12cd34.zip`, `setup_ab12cd34.ipynb`),
+/// so this attributes each file's bytes to its owning submission/setup id.
+func topLevelFileSizesByID(inDirectory path: String) -> [String: Int] {
+    let base = path.hasSuffix("/") ? path : path + "/"
+    let fm = FileManager.default
+    guard let entries = try? fm.contentsOfDirectory(atPath: path) else { return [:] }
+    var result: [String: Int] = [:]
+    for entry in entries {
+        let full = base + entry
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: full, isDirectory: &isDir), !isDir.boolValue else { continue }
+        let id = entry.split(separator: ".", maxSplits: 1).first.map(String.init) ?? entry
+        result[id, default: 0] += fileSizeBytes(at: full)
+    }
+    return result
+}
+
+/// Per-test-setup on-disk footprint keyed by setup id.  Sums the flat
+/// `<id>.<ext>` archives/notebooks at the top level plus the per-setup
+/// `shared/<id>/` (extracted support files) and `notebooks/<id>/` (draft
+/// notebooks) subtrees.
+func testSetupSizesByID(testSetupsDirectory dir: String) -> [String: Int] {
+    var result = topLevelFileSizesByID(inDirectory: dir)
+    let base = dir.hasSuffix("/") ? dir : dir + "/"
+    let fm = FileManager.default
+    for subtree in ["shared", "notebooks"] {
+        let subtreeDir = base + subtree
+        guard let setupDirs = try? fm.contentsOfDirectory(atPath: subtreeDir) else { continue }
+        for setupID in setupDirs {
+            let full = subtreeDir + "/" + setupID
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: full, isDirectory: &isDir), isDir.boolValue else { continue }
+            result[setupID, default: 0] += directorySizeBytes(at: full)
+        }
+    }
+    return result
+}
+
 /// Best-effort database footprint.
 /// - Postgres: `pg_database_size(current_database())` (logical size).
 /// - SQLite: the db file plus its `-wal` / `-shm` sidecars.

@@ -3,6 +3,7 @@
 Storage
 #endexport
 #export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
@@ -27,6 +28,45 @@ Storage
         On-disk footprint of the persistent data volume plus the database.
         Sizes are sampled when this page loads.
     </p>
+</section>
+<section class="admin-section">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">By Assignment</h2>
+        <span style="color:var(--gray-600);font-size:.85rem">Largest first</span>
+    </div>
+    #if(storage.assignments.isEmpty):
+    <p style="color:var(--muted)">No assignments yet.</p>
+    #else:
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Assignment</th>
+                <th>Course</th>
+                <th style="text-align:right">Test Suite</th>
+                <th style="text-align:right">Submissions</th>
+                <th style="text-align:right">Subs</th>
+                <th style="text-align:right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(row in storage.assignments):
+            <tr>
+                <td>#(row.assignmentTitle)</td>
+                <td><code>#(row.courseCode)</code></td>
+                <td style="text-align:right">#(row.testSuiteFormatted)</td>
+                <td style="text-align:right">#(row.submissionsFormatted)</td>
+                <td style="text-align:right">#(row.submissionCount)</td>
+                <td style="text-align:right;font-weight:600">#(row.totalFormatted)</td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    <p style="color:var(--muted);margin-top:1rem;font-size:.85rem">
+        Test-suite bytes cover the test setup archive, extracted support
+        files, and any draft notebooks.  Submission bytes cover every
+        submission graded against that setup.
+    </p>
+    #endif
 </section>
 <style>
 .diagnostics-cards {

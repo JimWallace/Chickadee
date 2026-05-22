@@ -3,6 +3,7 @@
 Users
 #endexport
 #export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
@@ -228,19 +229,112 @@ Users
     }
 
     var usersFilter = document.getElementById('users-filter');
-    if (usersFilter) {
-        usersFilter.addEventListener('input', function () {
-            var query = usersFilter.value.trim().toLowerCase();
-            Array.from(usersBody.querySelectorAll('tr')).forEach(function (row) {
-                if (!query) { row.hidden = false; return; }
-                var name     = ((row.children[0] && row.children[0].textContent) || '').toLowerCase();
-                var username = ((row.children[1] && row.children[1].textContent) || '').toLowerCase();
-                var roleEl   = row.children[2] && row.children[2].querySelector('select[name="role"]');
-                var role     = roleEl ? roleEl.value.toLowerCase() : '';
-                row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
-            });
+    function applyUserFilter() {
+        if (!usersFilter) return;
+        var query = usersFilter.value.trim().toLowerCase();
+        Array.from(usersBody.querySelectorAll('tr')).forEach(function (row) {
+            if (!query) { row.hidden = false; return; }
+            var name     = ((row.children[0] && row.children[0].textContent) || '').toLowerCase();
+            var username = ((row.children[1] && row.children[1].textContent) || '').toLowerCase();
+            var roleEl   = row.children[2] && row.children[2].querySelector('select[name="role"]');
+            var role     = roleEl ? roleEl.value.toLowerCase() : '';
+            row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
         });
     }
+    if (usersFilter) {
+        usersFilter.addEventListener('input', applyUserFilter);
+    }
+
+    // ── Auto-refresh ─────────────────────────────────────────────────
+    // Poll /admin/users-data every few seconds and repaint the table so
+    // last-seen times and new/removed users stay current without a manual
+    // reload.  The X-Background-Refresh header tells the server this is a
+    // system-generated poll, so it does NOT reset the session idle timer
+    // (a dashboard left open in a tab can't keep an admin logged in).
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    var deleteIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+    var editIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+
+    function buildUserRow(user, csrfToken) {
+        var id = escapeHtml(user.id);
+        var username = escapeHtml(user.username);
+        var displayName = user.displayName ? escapeHtml(user.displayName) : '—';
+        var lastSeen = user.lastSeenAt ? escapeHtml(user.lastSeenAt) : '';
+        var created = escapeHtml(user.createdAt);
+        var csrfField = '<input type="hidden" name="_csrf" value="' + escapeHtml(csrfToken) + '">';
+        function roleOption(value) {
+            return '<option value="' + value + '"' + (user.role === value ? ' selected' : '') + '>' + value + '</option>';
+        }
+        return '<tr>'
+            + '<td>' + displayName + '</td>'
+            + '<td><code>' + username + '</code></td>'
+            + '<td>'
+                + '<form method="post" action="/admin/users/' + id + '/role" style="display:flex;gap:.4rem;align-items:center">'
+                    + csrfField
+                    + '<label class="visually-hidden" for="role-' + id + '">Role for ' + username + '</label>'
+                    + '<select id="role-' + id + '" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">'
+                        + roleOption('student') + roleOption('instructor') + roleOption('admin')
+                    + '</select>'
+                    + '<button class="btn action-btn" type="submit">Save</button>'
+                + '</form>'
+            + '</td>'
+            + '<td class="time js-relative-time" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
+            + '<td class="time js-relative-time" data-iso="' + created + '">' + created + '</td>'
+            + '<td>'
+                + '<div style="display:flex;align-items:center;gap:.35rem">'
+                    + '<a href="/admin/users/' + id + '" class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">' + editIcon + '</a>'
+                    + '<form method="post" action="/admin/users/' + id + '/delete" style="display:inline">'
+                        + csrfField
+                        + '<button class="btn action-btn action-danger" type="submit" title="Delete user" aria-label="Delete user" style="padding:.3rem .45rem"'
+                            + ' onclick="return confirm(\'Delete this user? Their enrollments will be removed. They can log in again to restore their account.\')">' + deleteIcon + '</button>'
+                    + '</form>'
+                + '</div>'
+            + '</td>'
+        + '</tr>';
+    }
+
+    function repaintUsers(rows) {
+        if (!Array.isArray(rows)) return;
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var csrfToken = meta ? meta.getAttribute('content') : '';
+        usersBody.innerHTML = rows.map(function (u) { return buildUserRow(u, csrfToken); }).join('');
+        applyRelativeTimes(usersBody);
+        if (activeUserHeader) {
+            sortUsersByHeader(activeUserHeader, activeUserDirection);
+        }
+        applyUserFilter();
+    }
+
+    async function pollUsers() {
+        // Skip when the tab is hidden, or while an admin is mid-interaction
+        // with the table or filter (repaint would yank focus / a half-open
+        // role <select> out from under them).
+        if (document.hidden) return;
+        if (usersTable.contains(document.activeElement)) return;
+        if (usersFilter && document.activeElement === usersFilter) return;
+        try {
+            var res = await fetch('/admin/users-data', {
+                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
+                cache: 'no-store'
+            });
+            if (res.redirected || res.status === 401 || res.status === 403) {
+                // Session expired server-side — surface the login redirect.
+                window.location.reload();
+                return;
+            }
+            if (!res.ok) return;
+            repaintUsers(await res.json());
+        } catch (_) {
+            // Keep the current rows on transient polling errors.
+        }
+    }
+    setInterval(pollUsers, 5000);
 })();
 </script>
 #endexport

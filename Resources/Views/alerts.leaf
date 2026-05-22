@@ -3,6 +3,7 @@
 Server Health Alerts
 #endexport
 #export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
 <nav class="admin-tabs" aria-label="Admin sections">
     <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>

@@ -20,6 +20,7 @@ struct AdminRoutes: RouteCollection {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
         admin.get("users", use: usersPage)
+        admin.get("users-data", use: usersData)
         admin.get("storage", use: storagePage)
         admin.get("runners", use: runners)
         admin.get("runners", ":runnerID", use: runnerDetail)
@@ -95,7 +96,32 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func usersPage(req: Request) async throws -> View {
-        let users = try await APIUser.query(on: req.db)
+        let userRows = try await fetchUserRows(on: req.db)
+        let ctx = AdminUsersContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "users",
+            users: userRows
+        )
+        return try await req.view.render("admin-users", ctx)
+    }
+
+    // MARK: - GET /admin/users-data
+    //
+    // JSON feed backing the Users tab's auto-refresh poll.  Returns the same
+    // rows `usersPage` renders so the client can repaint the table in place.
+    // Polls send the `X-Background-Refresh` header so they don't count as
+    // session activity (see UserActivityMiddleware).
+
+    @Sendable
+    func usersData(req: Request) async throws -> [AdminUserRow] {
+        try await fetchUserRows(on: req.db)
+    }
+
+    /// Loads every user, ordered most-recently-seen first (NULL last_seen
+    /// rows sink to the bottom, then username, then join date), and maps
+    /// them to the wire/template row shape.
+    private func fetchUserRows(on db: Database) async throws -> [AdminUserRow] {
+        let users = try await APIUser.query(on: db)
             .all()
             .sorted { lhs, rhs in
                 switch (lhs.lastSeenAt, rhs.lastSeenAt) {
@@ -118,23 +144,17 @@ struct AdminRoutes: RouteCollection {
                 return lhsCreated < rhsCreated
             }
 
-        let userRows = users.map { u in
+        let iso = ISO8601DateFormatter()
+        return users.map { u in
             AdminUserRow(
                 id: u.id?.uuidString ?? "",
                 displayName: u.displayName,
                 username: u.username,
                 role: u.role,
-                createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                lastSeenAt: u.lastSeenAt.map { ISO8601DateFormatter().string(from: $0) }
+                createdAt: u.createdAt.map { iso.string(from: $0) } ?? "—",
+                lastSeenAt: u.lastSeenAt.map { iso.string(from: $0) }
             )
         }
-
-        let ctx = AdminUsersContext(
-            currentUser: req.currentUserContext,
-            activeAdminTab: "users",
-            users: userRows
-        )
-        return try await req.view.render("admin-users", ctx)
     }
 
     // MARK: - GET /admin/storage
@@ -168,18 +188,38 @@ struct AdminRoutes: RouteCollection {
             }.get()
         }
 
-        async let submissionsBytes = dirSize(submissionsDir)
+        // Per-id footprints feed both the aggregate cards and the per-assignment
+        // breakdown.  Submissions are stored flat (`<id>.<ext>`), so the
+        // top-level sum equals a full recursive walk — we reuse it for the
+        // "Submissions" card to avoid scanning that (potentially large) dir
+        // twice.  Test setups have `shared/`+`notebooks/` subtrees, so the
+        // card keeps an authoritative recursive walk.
+        async let submissionSizesFetch = req.application.threadPool.runIfActive(
+            eventLoop: req.eventLoop
+        ) { topLevelFileSizesByID(inDirectory: submissionsDir) }.get()
+        async let setupSizesFetch = req.application.threadPool.runIfActive(
+            eventLoop: req.eventLoop
+        ) { testSetupSizesByID(testSetupsDirectory: testSetupsDir) }.get()
+
         async let testSetupsBytes = dirSize(testSetupsDir)
         async let resultsBytes = dirSize(resultsDir)
         async let publicBytes = dirSize(publicDir)
         async let dbBytes = databaseSizeBytes(
             on: req.db, settings: req.application.appConfig.database)
 
-        let submissions = try await submissionsBytes
+        // Mapping rows for the per-assignment breakdown.
+        async let assignmentsFetch = APIAssignment.query(on: req.db).all()
+        async let coursesFetch = APICourse.query(on: req.db).all()
+        async let submissionLinksFetch = APISubmission.query(on: req.db)
+            .field(\.$id).field(\.$testSetupID).all()
+
+        let submissionSizesByID = try await submissionSizesFetch
+        let setupSizesByID = try await setupSizesFetch
         let testSetups = try await testSetupsBytes
         let results = try await resultsBytes
         let publicAssets = try await publicBytes
         let database = await dbBytes
+        let submissions = submissionSizesByID.values.reduce(0, +)
 
         var rows = [
             AdminStorageRow(label: "Submissions", formatted: humanReadableBytes(submissions)),
@@ -193,10 +233,49 @@ struct AdminRoutes: RouteCollection {
                 formatted: database.map(humanReadableBytes) ?? "—"))
 
         let total = submissions + testSetups + results + publicAssets + (database ?? 0)
+
+        let assignments = try await assignmentsFetch
+        let courses = try await coursesFetch
+        let submissionLinks = try await submissionLinksFetch
+
+        // Tally submission count + bytes per test setup.
+        var submissionCountBySetup: [String: Int] = [:]
+        var submissionBytesBySetup: [String: Int] = [:]
+        for link in submissionLinks {
+            submissionCountBySetup[link.testSetupID, default: 0] += 1
+            if let subID = link.id {
+                submissionBytesBySetup[link.testSetupID, default: 0] +=
+                    submissionSizesByID[subID] ?? 0
+            }
+        }
+        let codeByCourse = Dictionary(
+            courses.compactMap { course in course.id.map { ($0, course.code) } },
+            uniquingKeysWith: { first, _ in first })
+
+        let assignmentRows =
+            assignments
+            .map { assignment -> AdminAssignmentStorageRow in
+                let suiteBytes = setupSizesByID[assignment.testSetupID] ?? 0
+                let subBytes = submissionBytesBySetup[assignment.testSetupID] ?? 0
+                let count = submissionCountBySetup[assignment.testSetupID] ?? 0
+                let rowTotal = suiteBytes + subBytes
+                return AdminAssignmentStorageRow(
+                    assignmentTitle: assignment.title,
+                    courseCode: codeByCourse[assignment.courseID] ?? "—",
+                    testSuiteFormatted: humanReadableBytes(suiteBytes),
+                    submissionsFormatted: humanReadableBytes(subBytes),
+                    submissionCount: count,
+                    totalFormatted: humanReadableBytes(rowTotal),
+                    totalBytes: rowTotal
+                )
+            }
+            .sorted { $0.totalBytes > $1.totalBytes }
+
         return AdminStorageContext(
             rows: rows,
             totalFormatted: humanReadableBytes(total),
-            dbBackend: req.application.appConfig.database.backend.rawValue
+            dbBackend: req.application.appConfig.database.backend.rawValue,
+            assignments: assignmentRows
         )
     }
 

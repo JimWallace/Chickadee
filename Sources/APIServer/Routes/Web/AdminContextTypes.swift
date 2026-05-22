@@ -6,7 +6,7 @@
 import Core
 import Vapor
 
-struct AdminUserRow: Encodable {
+struct AdminUserRow: Content {
     let id: String
     let displayName: String?
     let username: String
@@ -99,10 +99,25 @@ struct AdminStorageRow: Encodable {
     let formatted: String
 }
 
+/// Per-assignment on-disk footprint: its test-suite (test setup) bytes plus
+/// the bytes of every submission graded against that setup.  Sorted largest-
+/// first so an admin can see where space is going.
+struct AdminAssignmentStorageRow: Encodable {
+    let assignmentTitle: String
+    let courseCode: String
+    let testSuiteFormatted: String
+    let submissionsFormatted: String
+    let submissionCount: Int
+    let totalFormatted: String
+    /// Raw total bytes — drives the server-side sort and any client sorting.
+    let totalBytes: Int
+}
+
 struct AdminStorageContext: Encodable {
     let rows: [AdminStorageRow]
     let totalFormatted: String
     let dbBackend: String
+    let assignments: [AdminAssignmentStorageRow]
 }
 
 struct AdminContext: Encodable {
