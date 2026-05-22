@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.233] - 2026-05-22
+
+### Added
+
+- **Restored hint authoring in the pattern-family editor.** v0.4.94 removed the
+  visible hint UI (keeping `PatternCase.hint` / `PatternDefaults.hint` in the
+  manifest shape); now that hints surface as a "💡 Hint" callout on failing
+  tests (PR2), the editor exposes them again: a per-case **Hint** column in the
+  cases table (read on save and preserved across function/kind switches and the
+  header rebuild) and a visible family-level **Default hint** field (shown when
+  a case with no hint of its own fails). Backend already supported both — this
+  is the UI + read-path wiring (`Public/pattern-family-editor.js`, the
+  family modal markup in `assignment-edit.leaf` / `assignment-new.leaf`). Hints
+  flow through the existing `PUT /suite` family save; blank hints are omitted to
+  keep manifests clean.
+
 ## [0.4.232] - 2026-05-22
 
 ### Fixed

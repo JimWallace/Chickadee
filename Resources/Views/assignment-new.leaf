@@ -545,10 +545,15 @@ Create Assignment
                            placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
                 </label>
             </div>
+            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                Default hint <span style="color:var(--gray-600);font-weight:400">(optional — shown to students when a case with no hint of its own fails)</span>
+                <input type="text" class="form-input" id="family-default-hint" value=""
+                       placeholder="e.g. Re-check the boundary values in the spec."
+                       style="padding:.3rem .5rem;font-size:.85rem">
+            </label>
             <input type="hidden" id="family-id">
             <input type="hidden" id="family-function">
             <input type="hidden" id="family-params">
-            <input type="hidden" id="family-default-hint" value="">
 
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">

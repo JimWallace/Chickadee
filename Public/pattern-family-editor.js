@@ -485,6 +485,7 @@
                 ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
                 : 'Expected';
             th.push('<th>' + expectedHeader + '</th>');
+            th.push('<th>Hint <span style="color:var(--meta);font-weight:normal">(optional)</span></th>');
             th.push('<th style="width:4rem"></th>');
             casesHeader.innerHTML = th.join('');
         }
@@ -531,6 +532,7 @@
                 });
             }
             tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(c.expected == null ? '' : renderTypedCellValue(c.expected)) + '" placeholder="e.g. underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+            tds.push('<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" placeholder="shown to students on failure" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
             tds.push('<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>');
 
             var tr = document.createElement('tr');
@@ -1102,7 +1104,9 @@
                     expected = coerceByType(rawExp, currentReturnType);
                 }
                 if (!label) throw new Error('Case ' + caseNum + ': label is required');
-                out.push({
+                var hintCell = row.querySelector('.pf-case-hint');
+                var hint = hintCell ? hintCell.value.trim() : '';
+                var caseObj = {
                     key: caseNum,
                     label: label,
                     args: args,
@@ -1110,7 +1114,9 @@
                     argVarRefs: argVarRefs,
                     expected: expected,
                     enabled: true
-                });
+                };
+                if (hint) caseObj.hint = hint;   // omit when blank to keep the manifest clean
+                out.push(caseObj);
             }
             return out;
         }
@@ -1164,13 +1170,17 @@
                 var expected = rawExp.trim() === ''
                     ? null
                     : coerceByType(rawExp, currentReturnType);
-                return {
+                var hintCell = row.querySelector('.pf-case-hint');
+                var hint = hintCell ? hintCell.value.trim() : '';
+                var obj = {
                     label: label,
                     args: args,
                     argsProvided: argsProvided,
                     argVarRefs: argVarRefs,
                     expected: expected
                 };
+                if (hint) obj.hint = hint;   // preserve across header rebuilds
+                return obj;
             });
         }
 

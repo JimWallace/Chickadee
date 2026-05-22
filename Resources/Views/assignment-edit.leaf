@@ -490,16 +490,17 @@
                            placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
                 </label>
             </div>
+            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                Default hint <span style="color:var(--gray-600);font-weight:400">(optional — shown to students when a case with no hint of its own fails)</span>
+                <input type="text" class="form-input" id="family-default-hint" value=""
+                       placeholder="e.g. Re-check the boundary values in the spec."
+                       style="padding:.3rem .5rem;font-size:.85rem">
+            </label>
             <!-- Hidden fields: the family id, function name, and param list
-                 are derived from the function dropdown selection.
-                 `family-default-hint` is kept as a hidden input so the editor
-                 JS's reads don't trip — v0.4.94 removed the visible UI for
-                 hints but keeps the hint field in the manifest shape for
-                 backward compatibility with already-deployed families. -->
+                 are derived from the function dropdown selection. -->
             <input type="hidden" id="family-id">
             <input type="hidden" id="family-function">
             <input type="hidden" id="family-params">
-            <input type="hidden" id="family-default-hint" value="">
 
             <!-- v0.4.108: section-shared inputs were a separate read-only
                  block above the Variables table.  Now merged INTO the
