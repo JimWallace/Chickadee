@@ -96,6 +96,9 @@ enum AuditAction: String, Sendable {
     case loginFailure = "auth.login_failure"
     case loginLocked = "auth.login_locked"
     case sessionIdleTimeout = "auth.session_idle_timeout"
+    case mcpAccountCreated = "mcp.account_created"
+    case mcpAccountDeleted = "mcp.account_deleted"
+    case mcpTokenMinted = "mcp.token_minted"
 }
 
 enum AuditTargetType: String, Sendable {
