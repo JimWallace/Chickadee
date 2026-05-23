@@ -24,10 +24,6 @@ Storage
         </article>
         #endfor
     </div>
-    <p style="color:var(--muted);margin-top:1rem;font-size:.85rem">
-        On-disk footprint of the persistent data volume plus the database.
-        Sizes are sampled when this page loads.
-    </p>
 </section>
 <section class="admin-section">
     <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
@@ -61,11 +57,6 @@ Storage
             #endfor
         </tbody>
     </table>
-    <p style="color:var(--muted);margin-top:1rem;font-size:.85rem">
-        Test-suite bytes cover the test setup archive, extracted support
-        files, and any draft notebooks.  Submission bytes cover every
-        submission graded against that setup.
-    </p>
     #endif
 </section>
 <style>
