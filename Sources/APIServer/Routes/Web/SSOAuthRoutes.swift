@@ -204,12 +204,17 @@ struct SSOAuthRoutes: RouteCollection {
 
         let studentID = claims.extraClaims["student_id"]?.nilIfBlank()
         let email = claims.value(for: claimConfig.emailClaim)?.nilIfBlank()
-        let mappedRole = mappedSSORole(
-            username: username,
-            userIdentifier: userIdentifier,
-            email: email,
-            adminAllowlist: req.application.ssoAdminUsers,
-            instructorAllowlist: req.application.ssoInstructorUsers
+        // Sanitise so first-login SSO mapping can never assign the `mcp` role
+        // (or any non-auto-assignable role) — MCP service accounts are
+        // admin-created only.
+        let mappedRole = APIUser.sanitizedAutoAssignedRole(
+            mappedSSORole(
+                username: username,
+                userIdentifier: userIdentifier,
+                email: email,
+                adminAllowlist: req.application.ssoAdminUsers,
+                instructorAllowlist: req.application.ssoInstructorUsers
+            )
         )
 
         if let existing = try await APIUser.query(on: req.db)
