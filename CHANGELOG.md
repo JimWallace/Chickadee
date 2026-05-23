@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.240] - 2026-05-23
+
+### Security
+
+- **Logout / idle-timeout now fully end the session, and authenticated pages
+  are no longer cacheable.** Surfaced by the IRA-PIA security review: after
+  clicking "Log out" a returning browser still showed a logged-in view, and
+  only closing the browser truly signed the user out.
+
+  - **Root cause was browser caching, not a live server session.** The server
+    already invalidated the session on logout, but HTML responses carried no
+    `Cache-Control` header, so the browser served the dashboard from its disk /
+    back-forward cache. `SecurityHeadersMiddleware` now adds
+    `Cache-Control: no-store` to every `text/html` response. Scoped to HTML so
+    the vendored static assets (Pyodide, JupyterLite, CodeMirror) keep their
+    long-lived caching.
+  - **Logout and idle timeout now call `req.session.destroy()`** instead of
+    `unauthenticate()`. `destroy()` deletes the persisted Fluent session row
+    and emits a `Set-Cookie` that expires the cookie immediately, so logout no
+    longer depends on the browser being closed (`AuthRoutes.logout`,
+    `SessionIdleTimeoutMiddleware`).
+  - New regression tests: `logoutInvalidatesServerSideSession`,
+    `htmlResponsesAreNotCacheable`, `nonHtmlResponsesStayCacheable`.
+
 ## [0.4.239] - 2026-05-22
 
 ### Removed

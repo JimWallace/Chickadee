@@ -216,17 +216,20 @@ struct AuthRoutes: RouteCollection {
         let isTimeout = req.query[String.self, at: "reason"] == "timeout"
         let returnPath = isTimeout ? "/login?error=timeout" : "/login?loggedout=1"
 
-        // Extract any SSO tokens stored at login time before clearing the session.
+        // Capture any SSO tokens stashed at login before tearing the session
+        // down — they're needed below to revoke at the IdP and to build the
+        // end-session redirect.
         let accessToken = req.session.data["oidc_access_token"]
         let refreshToken = req.session.data["oidc_refresh_token"]
         let idToken = req.session.data["oidc_id_token"]
 
-        req.session.data["oidc_access_token"] = nil
-        req.session.data["oidc_refresh_token"] = nil
-        req.session.data["oidc_id_token"] = nil
-
+        // Destroy the server-side session, not just the auth marker.
+        // `destroy()` deletes the persisted Fluent session row and expires the
+        // cookie (Set-Cookie with a past date); `unauthenticate()` alone left
+        // a (markerless) row in place and re-issued a live session cookie, so
+        // the cookie only really went away when the browser was closed.
         req.auth.logout(APIUser.self)
-        req.session.unauthenticate(APIUser.self)
+        req.session.destroy()
 
         let oidcConfig = req.application.oidcConfig
 

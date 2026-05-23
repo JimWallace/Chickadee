@@ -42,6 +42,11 @@ import XCTVapor
         app.get("headers") { _ in
             Response(status: .ok, body: .init(string: "ok"))
         }
+        app.get("htmlpage") { _ -> Response in
+            let res = Response(status: .ok, body: .init(string: "<html></html>"))
+            res.headers.contentType = .html
+            return res
+        }
         return app
     }
 
@@ -132,6 +137,31 @@ import XCTVapor
                 #expect(res.headers.first(name: "Referrer-Policy") == "strict-origin-when-cross-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Resource-Policy") == "same-origin")
+            }
+        }
+    }
+
+    @Test func htmlResponsesAreNotCacheable() async throws {
+        // After logout the browser must re-request from the server rather than
+        // show a cached, logged-in dashboard. Authenticated pages are HTML, so
+        // every text/html response carries Cache-Control: no-store.
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            try await app.asyncTest(.GET, "/htmlpage") { res in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: .cacheControl) == "no-store")
+            }
+        }
+    }
+
+    @Test func nonHtmlResponsesStayCacheable() async throws {
+        // Static assets (Pyodide ~1.4GB, JupyterLite, CodeMirror) must keep
+        // their long-lived caching — no-store is scoped to text/html only, so a
+        // non-HTML response gets no Cache-Control override from us.
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            try await app.asyncTest(.GET, "/headers") { res in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: .contentType)?.hasPrefix("text/html") != true)
+                #expect(res.headers.first(name: .cacheControl) == nil)
             }
         }
     }

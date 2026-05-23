@@ -3,15 +3,19 @@
 // Builds the session cookie issued by the Fluent session store.
 //
 // The cookie is *session-scoped* — no `expires`/`maxAge` — so the browser
-// drops it when the browsing session ends.  Closing the browser therefore
-// logs the user out (institutional requirement).  The two ways a session ends
-// are now (1) browser close and (2) the idle timeout
-// (SessionIdleTimeoutMiddleware + idle-logout.js); the orphaned Fluent session
-// row is reaped later by SessionReaperService.
+// also drops it when the browsing session ends.  A session ends when:
+//   (1) the user logs out (AuthRoutes.logout), or
+//   (2) the idle timeout fires (SessionIdleTimeoutMiddleware + idle-logout.js), or
+//   (3) the browser is closed.
+// In cases (1) and (2) the handler calls `req.session.destroy()`, which deletes
+// the persisted Fluent session row immediately and emits a Set-Cookie that
+// expires the client cookie — so logout no longer depends on the browser being
+// closed.  SessionReaperService is now only a backstop for rows orphaned by
+// abandoned (never-logged-out) sessions.
 //
-// Caveat: browsers with "continue where you left off" / session-restore
-// resurrect session cookies on relaunch — client behaviour we can't override,
-// which is why the idle timeout is the real backstop.
+// Note: browsers with "continue where you left off" / session-restore resurrect
+// session cookies on relaunch, but since logout deletes the server-side row a
+// resurrected cookie no longer maps to a valid session.
 
 import Vapor
 
