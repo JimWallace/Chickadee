@@ -24,10 +24,6 @@ Storage
         </article>
         #endfor
     </div>
-    <p style="color:var(--muted);margin-top:1rem;font-size:.85rem">
-        On-disk footprint of the persistent data volume plus the database.
-        Sizes are sampled when this page loads.
-    </p>
 </section>
 <section class="admin-section">
     <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
@@ -37,15 +33,15 @@ Storage
     #if(storage.assignments.isEmpty):
     <p style="color:var(--muted)">No assignments yet.</p>
     #else:
-    <table class="results-table">
+    <table class="results-table sortable-table">
         <thead>
             <tr>
-                <th>Assignment</th>
-                <th>Course</th>
-                <th style="text-align:right">Test Suite</th>
-                <th style="text-align:right">Submissions</th>
-                <th style="text-align:right">Subs</th>
-                <th style="text-align:right">Total</th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Assignment</button></th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Course</button></th>
+                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Test Suite</button></th>
+                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Submissions</button></th>
+                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Subs</button></th>
+                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Total</button></th>
             </tr>
         </thead>
         <tbody>
@@ -53,19 +49,14 @@ Storage
             <tr>
                 <td>#(row.assignmentTitle)</td>
                 <td><code>#(row.courseCode)</code></td>
-                <td style="text-align:right">#(row.testSuiteFormatted)</td>
-                <td style="text-align:right">#(row.submissionsFormatted)</td>
-                <td style="text-align:right">#(row.submissionCount)</td>
-                <td style="text-align:right;font-weight:600">#(row.totalFormatted)</td>
+                <td style="text-align:right" data-sort-value="#(row.testSuiteBytes)">#(row.testSuiteFormatted)</td>
+                <td style="text-align:right" data-sort-value="#(row.submissionsBytes)">#(row.submissionsFormatted)</td>
+                <td style="text-align:right" data-sort-value="#(row.submissionCount)">#(row.submissionCount)</td>
+                <td style="text-align:right;font-weight:600" data-sort-value="#(row.totalBytes)">#(row.totalFormatted)</td>
             </tr>
             #endfor
         </tbody>
     </table>
-    <p style="color:var(--muted);margin-top:1rem;font-size:.85rem">
-        Test-suite bytes cover the test setup archive, extracted support
-        files, and any draft notebooks.  Submission bytes cover every
-        submission graded against that setup.
-    </p>
     #endif
 </section>
 <style>
@@ -92,5 +83,6 @@ Storage
     color: var(--gray-900);
 }
 </style>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

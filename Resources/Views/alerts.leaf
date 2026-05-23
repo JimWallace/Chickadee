@@ -30,14 +30,6 @@ Server Health Alerts
     </div>
     #endif
 
-    <p style="color:var(--muted);margin-top:0">
-        Chickadee evaluates four rules every #(checkIntervalSeconds)s.  When a rule
-        fires it sends a JSON POST to the configured webhook (compatible with Slack,
-        Discord, ntfy.sh, Pushover, Twilio Studio Flow, etc.).  Each rule has a
-        #(cooldownSeconds)-second cooldown, and Chickadee sends a follow-up
-        <code>"resolved": true</code> message when a previously-firing rule clears.
-    </p>
-
     <h3>Webhook</h3>
     <form method="post" action="/admin/alerts/config" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
         #csrfFormField()

@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.241] - 2026-05-23
+
+### Added
+
+- **Admin Storage "By Assignment" table is now sortable by column**, matching
+  the runner dashboard. Size columns (Test Suite / Submissions / Total) sort by
+  raw bytes, not the formatted string, so "1.4 GB" sorts above "320 MB". The
+  generic sorter was extracted to a shared `Public/sortable-table.js`
+  (`<table class="sortable-table">` + `data-sort-type` headers +
+  `data-sort-value` cells) with its styling moved to `styles.css`, so other
+  tables can opt in the same way.
+
+### Changed
+
+- **Instructor student-submission view uses icon buttons.** The per-assignment
+  Retest button and the Grant/Edit-extension toggle on
+  `course-student-submissions.leaf` now render as inline-SVG icon buttons
+  (refresh arrows for retest; calendar / calendar-check for the extension
+  toggle), matching the icon-button language already used on the assignments
+  list and the assignment-submissions view. The extension form panel keeps its
+  text Save/Remove labels.
+
+### Removed
+
+- **Trimmed explanatory blurbs from admin pages.** Removed the "On-disk
+  footprint…" and "Test-suite bytes cover…" captions from the admin Storage
+  panel and the "Chickadee evaluates four rules every 60s…" paragraph from the
+  admin Health Alerts page.
+
 ## [0.4.240] - 2026-05-23
 
 ### Security

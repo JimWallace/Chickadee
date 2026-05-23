@@ -266,6 +266,8 @@ struct AdminRoutes: RouteCollection {
                     submissionsFormatted: humanReadableBytes(subBytes),
                     submissionCount: count,
                     totalFormatted: humanReadableBytes(rowTotal),
+                    testSuiteBytes: suiteBytes,
+                    submissionsBytes: subBytes,
                     totalBytes: rowTotal
                 )
             }
