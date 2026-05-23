@@ -109,7 +109,10 @@ struct AdminAssignmentStorageRow: Encodable {
     let submissionsFormatted: String
     let submissionCount: Int
     let totalFormatted: String
-    /// Raw total bytes — drives the server-side sort and any client sorting.
+    /// Raw bytes behind the formatted columns — drive the server-side sort and
+    /// the client-side column sorting (so "1.4 GB" sorts above "320 MB").
+    let testSuiteBytes: Int
+    let submissionsBytes: Int
     let totalBytes: Int
 }
 

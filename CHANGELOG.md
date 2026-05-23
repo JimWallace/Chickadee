@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.4.241] - 2026-05-23
 
+### Added
+
+- **Admin Storage "By Assignment" table is now sortable by column**, matching
+  the runner dashboard. Size columns (Test Suite / Submissions / Total) sort by
+  raw bytes, not the formatted string, so "1.4 GB" sorts above "320 MB". The
+  generic sorter was extracted to a shared `Public/sortable-table.js`
+  (`<table class="sortable-table">` + `data-sort-type` headers +
+  `data-sort-value` cells) with its styling moved to `styles.css`, so other
+  tables can opt in the same way.
+
 ### Changed
 
 - **Instructor student-submission view uses icon buttons.** The per-assignment

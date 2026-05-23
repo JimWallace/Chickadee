@@ -505,6 +505,27 @@ textarea.form-input {
 
 .results-table tr:last-child td { border-bottom: none; }
 
+/* Sortable tables (see Public/sortable-table.js). A header button toggles
+   asc/desc; the ↕/↑/↓ glyph reflects the current sort direction. */
+.sort-header {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.sort-header::after {
+    content: "↕";
+    font-size: .8em;
+    color: var(--gray-500);
+}
+th.sort-asc .sort-header::after { content: "↑"; }
+th.sort-desc .sort-header::after { content: "↓"; }
+
 .results-table .time {
     text-align: right;
     color: var(--gray-600);
