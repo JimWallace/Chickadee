@@ -169,7 +169,8 @@ extension AppConfig {
     /// `makeTestApp` and by the lazy fallback in `Application.appConfig`.
     static func testDefaults(
         authMode: AuthMode = .local,
-        database: DatabaseSettings = .sqliteInMemory()
+        database: DatabaseSettings = .sqliteInMemory(),
+        mcp: MCPConfig = .default
     ) -> AppConfig {
         let auth = AuthConfig(
             mode: authMode,
@@ -201,7 +202,7 @@ extension AppConfig {
             ),
             alerts: .default,
             outboundProxy: nil,
-            mcp: .default
+            mcp: mcp
         )
     }
 }

@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.246] - 2026-05-23
+
+### Added
+
+- **MCP content-authoring endpoint goes live behind OAuth 2.1 (#698).** The
+  dormant auth machinery from v0.4.245 is now wired into the running server.
+  Opt in with `MCP_ENABLED=true` (plus `PUBLIC_BASE_URL`, or explicit
+  `MCP_ISSUER`/`MCP_RESOURCE`); the endpoint stays absent otherwise.
+  - **`/mcp` is mounted behind `MCPBearerAuthMiddleware`** via
+    `registerMCPRoutes`, which resolves the issuer/resource identifiers from
+    config (falling back to `PUBLIC_BASE_URL`) and loads — or auto-generates —
+    the ES256 signing-key authority at startup. The transport now builds its
+    `ToolContext` from the authenticated `request.mcpPrincipal` (subject +
+    granted scopes) instead of the placeholder ungated context.
+  - **OAuth discovery endpoints (unauthenticated):**
+    `GET /.well-known/oauth-protected-resource` (RFC 9728 metadata —
+    authorization server + supported scopes) and `GET /.well-known/jwks.json`
+    (the ES256 public signing key as a JWK, RFC 7517), so a client can locate
+    the authorization server and verify tokens.
+  - **Per-tool scope enforcement.** The dispatcher requires the caller's
+    granted scopes to cover each tool's `requiredScopes`; a read-only token
+    calling a `content:write` tool is rejected before execution and surfaced as
+    HTTP 403 with a `WWW-Authenticate: …, error="insufficient_scope"` challenge.
+  - End-to-end tests drive the real `registerMCPRoutes` wiring (token → bearer
+    middleware → dispatcher → tool), plus scope-rejection, discovery-metadata,
+    and JWKS coverage.
+
 ## [0.4.245] - 2026-05-23
 
 ### Added

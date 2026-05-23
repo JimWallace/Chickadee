@@ -85,8 +85,14 @@ struct MCPDispatcher: Sendable {
         guard let tool = tools.tool(named: call.name) else {
             return .failure(id: id, error: .invalidParams("Unknown tool: \(call.name)"))
         }
-        // Per-tool scope enforcement is added at the dispatcher in step 8 (PR B);
-        // PR A is ungated.
+        // Per-tool scope enforcement, defence in depth on top of the bearer
+        // middleware's token-level scope gate: the caller's granted scopes must
+        // cover everything this tool declares.  The transport maps an
+        // insufficient-scope failure to HTTP 403.
+        guard context.grantedScopes.isSuperset(of: tool.requiredScopes) else {
+            let required = tool.requiredScopes.map(\.rawValue).sorted().joined(separator: " ")
+            return .failure(id: id, error: .insufficientScope(required))
+        }
         do {
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
             return .success(id: id, result: successToolResult(output))
