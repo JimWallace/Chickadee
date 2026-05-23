@@ -47,7 +47,12 @@ struct MCPBearerAuthMiddleware: AsyncMiddleware {
             )
         }
 
-        request.mcpPrincipal = MCPPrincipal(subject: claims.sub.value, grantedScopes: granted)
+        request.mcpPrincipal = MCPPrincipal(
+            subject: claims.sub.value,
+            grantedScopes: granted,
+            actingClientID: claims.clientID,
+            actingClientName: claims.agentName
+        )
         return try await next.respond(to: request)
     }
 

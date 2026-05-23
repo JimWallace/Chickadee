@@ -8,6 +8,23 @@ import Vapor
 struct MCPPrincipal: Sendable {
     let subject: String
     let grantedScopes: Set<ContentScope>
+    /// The OAuth client (agent) the request was authorized through, when the
+    /// token carries one (browser flow).  Nil for Phase-1 service tokens.
+    let actingClientID: String?
+    /// Human-readable name of that client, for audit attribution.
+    let actingClientName: String?
+
+    init(
+        subject: String,
+        grantedScopes: Set<ContentScope>,
+        actingClientID: String? = nil,
+        actingClientName: String? = nil
+    ) {
+        self.subject = subject
+        self.grantedScopes = grantedScopes
+        self.actingClientID = actingClientID
+        self.actingClientName = actingClientName
+    }
 }
 
 private struct MCPPrincipalKey: StorageKey {
