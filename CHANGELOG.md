@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.245] - 2026-05-23
+
+### Added
+
+- **MCP auth machinery — dormant, not yet mounted (#697).** Groundwork for
+  gating the content-authoring `/mcp` endpoint behind OAuth 2.1 bearer tokens,
+  with Chickadee acting as its own authorization server (Phase 1: admin-minted
+  tokens). None of this is wired into the live request path yet — the `/mcp`
+  route remains ungated until a follow-up PR mounts the middleware and adds the
+  metadata/JWKS endpoints.
+  - `MCPConfig` substruct on `AppConfig` (`enabled`, `allowedHosts`,
+    `allowedOrigins`, `tokenTTLSeconds`, `signingKeyPath`, `issuer`,
+    `resource`), resolved from the environment with safe defaults and a
+    redacted `logSummary` line.
+  - **`mcp`-role guardrail.** First-login flows (register + SSO) can never
+    auto-assign the `mcp` service-account role: `APIUser.autoAssignableRoles`
+    limits auto-assignment to `student`/`instructor`/`admin`, and SSO role
+    mapping is filtered through `APIUser.sanitizedAutoAssignedRole(_:)`. An
+    admin must set `mcp` deliberately.
+  - **`MCPTokenAuthority`** — an ES256 (P-256) token authority that mints and
+    verifies MCP access tokens (`MCPAccessTokenClaims`: subject, issuer,
+    audience, expiry, scopes), persisting an auto-generated signing key to disk
+    (mode 0600) and exporting EC public-key parameters for a future JWKS
+    endpoint.
+  - **`MCPBearerAuthMiddleware`** — validates the bearer token (signature +
+    expiry), binds the issuer and audience (RFC 8707), requires at least one
+    content scope (defence in depth), surfaces the caller on
+    `request.mcpPrincipal`, and returns 401/403 with a
+    `WWW-Authenticate: Bearer resource_metadata="…"` challenge on failure.
+
 ## [0.4.244] - 2026-05-23
 
 ### Changed
