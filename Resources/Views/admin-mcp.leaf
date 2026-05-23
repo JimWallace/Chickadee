@@ -1,0 +1,107 @@
+#extend("base"):
+#export("title"):
+MCP
+#endexport
+#export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
+<nav class="admin-tabs" aria-label="Admin sections">
+    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+    <a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>
+    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+</nav>
+<section class="admin-section">
+    <h2 style="margin-top:0">MCP service accounts</h2>
+    <p style="color:var(--gray-600);font-size:.85rem;max-width:60ch">
+        Service identities for AI agents that author course content over the Model Context
+        Protocol endpoint (<code>/mcp</code>). Each account is non-loginable and carries the
+        <code>mcp</code> role only — it grants no access to student data, grades, or enrolment.
+    </p>
+
+    #if(!enabled):
+    <div class="form-error" style="margin-bottom:1rem">
+        The MCP endpoint is not active, so tokens cannot be minted. Set <code>MCP_ENABLED=true</code>
+        and <code>PUBLIC_BASE_URL</code> (or <code>MCP_ISSUER</code>/<code>MCP_RESOURCE</code>),
+        then restart the server.
+    </div>
+    #endif
+    #if(error == "username_required"):
+    <div class="form-error" style="margin-bottom:1rem">A username is required.</div>
+    #endif
+    #if(error == "username_taken"):
+    <div class="form-error" style="margin-bottom:1rem">That username is already in use.</div>
+    #endif
+    #if(error == "mcp_disabled"):
+    <div class="form-error" style="margin-bottom:1rem">Cannot mint a token while the MCP endpoint is inactive.</div>
+    #endif
+
+    #if(mintedToken):
+    <div style="margin-bottom:1rem;padding:.75rem;border:1px solid var(--gray-500);border-radius:6px;background:rgba(34,197,94,.08)">
+        <p style="margin:.1rem 0 .5rem"><strong>Access token for #(mintedFor)</strong>
+            &middot; scopes: <code>#(mintedScopes)</code> &middot; expires after #(tokenTTLSeconds)s.
+            Copy it now — it is shown only once.</p>
+        <textarea readonly rows="4" class="form-input"
+                  style="width:100%;font-family:monospace;font-size:.78rem;box-sizing:border-box"
+                  onclick="this.select()">#(mintedToken)</textarea>
+    </div>
+    #endif
+
+    #if(enabled):
+    <p style="color:var(--gray-600);font-size:.8rem">
+        Issuer <code>#(issuer)</code> &middot; Resource <code>#(resource)</code>.
+        Tokens are stateless: deleting an account stops new tokens being minted, but a token
+        already issued stays valid until it expires.
+    </p>
+    #endif
+
+    <form method="post" action="/admin/mcp/accounts" style="display:flex;gap:.5rem;align-items:center;margin:1rem 0">
+        #csrfFormField()
+        <input class="form-input" type="text" name="username" required
+               placeholder="agent name, e.g. course-bot" style="width:260px"
+               aria-label="New MCP account username">
+        <button class="btn" type="submit">Create account</button>
+    </form>
+
+    <table class="results-table">
+        <thead>
+            <tr><th>Username</th><th class="time">Created</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+        #for(account in accounts):
+            <tr>
+                <td><code>#(account.username)</code></td>
+                <td class="time">#(account.createdAt)</td>
+                <td>
+                    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+                        #if(enabled):
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/token"
+                              style="display:flex;gap:.3rem;align-items:center">
+                            #csrfFormField()
+                            <label class="visually-hidden" for="scope-#(account.id)">Token scope for #(account.username)</label>
+                            <select id="scope-#(account.id)" name="scope" class="form-input"
+                                    style="padding:.25rem .5rem;font-size:.8rem">
+                                <option value="readwrite">read + write</option>
+                                <option value="read">read only</option>
+                            </select>
+                            <button class="btn action-btn" type="submit">Mint token</button>
+                        </form>
+                        #endif
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" style="display:inline">
+                            #csrfFormField()
+                            <button class="btn action-btn action-danger" type="submit"
+                                    onclick="return confirm('Delete this MCP account? Existing tokens stay valid until they expire.')">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        #endfor
+        #if(!accounts.count):
+            <tr><td colspan="3" style="color:var(--gray-600)">No MCP accounts yet.</td></tr>
+        #endif
+        </tbody>
+    </table>
+</section>
+#endexport
+#endextend

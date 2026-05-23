@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.247] - 2026-05-23
+
+### Added
+
+- **Admin "MCP" tab for provisioning agents + minting tokens (#699).** Completes
+  the content-authoring MCP server: an operator can now create accounts and mint
+  tokens entirely from the web UI, and the README documents the full enable →
+  provision → smoke-test flow.
+  - **`Admin → MCP`** lists `mcp` service accounts, creates new ones (a
+    non-loginable `mcp`-role `APIUser` with a random unusable password hash —
+    no first-login path can auto-assign this role), mints an access token
+    (read+write or read-only, shown exactly once and only while MCP is active),
+    and deletes accounts. Each action is audit-logged (`mcp.account_created` /
+    `mcp.token_minted` / `mcp.account_deleted`); the token itself is never
+    logged.
+  - **Stateless-token caveat surfaced in the UI + README:** deleting an account
+    stops new tokens being minted but cannot revoke one already issued — it
+    expires after `MCP_TOKEN_TTL_SECONDS`.
+  - **README** gains an "MCP content-authoring server" section: required env
+    vars, the discovery endpoints, the admin provisioning steps, and a `curl`
+    smoke test (`initialize` / `tools/list` / `tools/call`).
+
 ## [0.4.246] - 2026-05-23
 
 ### Added

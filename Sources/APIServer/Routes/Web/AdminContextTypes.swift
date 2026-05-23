@@ -139,6 +139,30 @@ struct AdminUsersContext: Encodable {
     let users: [AdminUserRow]
 }
 
+struct AdminMCPAccountRow: Encodable {
+    let id: String
+    let username: String
+    let createdAt: String
+}
+
+struct AdminMCPContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    /// True only when MCP is enabled, the signing authority is loaded, and the
+    /// issuer/resource resolve — i.e. tokens can actually be minted.
+    let enabled: Bool
+    let issuer: String?
+    let resource: String?
+    let tokenTTLSeconds: Int
+    let accounts: [AdminMCPAccountRow]
+    /// Set immediately after a mint so the page can show the token exactly once.
+    let mintedToken: String?
+    let mintedFor: String?
+    let mintedScopes: String?
+    /// A short error key surfaced as a banner (e.g. "username_taken").
+    let error: String?
+}
+
 struct AdminStoragePageContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String

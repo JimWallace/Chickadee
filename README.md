@@ -13,6 +13,7 @@ A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student co
 - **In-browser notebook grading.** A full JupyterLite instance is embedded for both student submission and instructor assignment creation — no separate tooling required.
 - **Local and SSO auth.** Local username/password for development and self-hosting; full OIDC/SSO (Authorization Code + PKCE) for institutional deployments (Duo, Okta, Entra, etc.). Dual mode runs both simultaneously. Controlled by the `AUTH_MODE` environment variable; roles are auto-assigned from `SSO_ADMIN_USERS` / `SSO_INSTRUCTOR_USERS` allowlists on every login.
 - **HMAC-signed runner protocol.** All runner↔server requests are signed with a shared secret. The server auto-generates a diceware passphrase if none is provided.
+- **Content-authoring MCP server.** An opt-in [Model Context Protocol](https://modelcontextprotocol.io) endpoint (`/mcp`) lets AI agents author course content (assignments, etc.) over OAuth 2.1 bearer tokens. Deliberately scoped to authoring — it exposes no student data, grades, enrolment, or submissions. See [MCP content-authoring server](#mcp-content-authoring-server).
 
 ---
 
@@ -109,6 +110,68 @@ guidance, see **[docs/runner-capability-profiles.md](docs/runner-capability-prof
 scripts/setup-jupyterlite.sh
 scripts/build-jupyterlite.sh
 ```
+
+---
+
+## MCP content-authoring server
+
+Chickadee ships an optional [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-11-25) server at `POST /mcp` (Streamable HTTP, JSON-RPC 2.0) so AI agents can author course content. It is **disabled by default** and **scoped to authoring only** — the tools touch no student data, grades, enrolment, submissions, or administration, and the bearer gate rejects any token lacking a `content:*` scope.
+
+For Phase 1, Chickadee acts as its own OAuth 2.1 authorization server: an admin provisions a service account and mints a short-lived bearer token. (Browser-based OAuth is a future phase.)
+
+### Enable it
+
+Set these and restart the server:
+
+```bash
+MCP_ENABLED=true
+PUBLIC_BASE_URL=https://your-host        # issuer + resource are derived from this
+# Optional overrides / hardening:
+# MCP_ISSUER=https://your-host           # defaults to PUBLIC_BASE_URL
+# MCP_RESOURCE=https://your-host/mcp     # defaults to PUBLIC_BASE_URL + /mcp
+# MCP_TOKEN_TTL_SECONDS=86400            # access-token lifetime (default 24h)
+# MCP_SIGNING_KEY_PATH=.mcp-signing-key  # ES256 key; auto-generated on first start
+# MCP_ALLOWED_HOSTS=your-host            # DNS-rebinding guard (empty = allow any)
+# MCP_ALLOWED_ORIGINS=https://your-host  # rejects mismatched browser Origins
+```
+
+Two unauthenticated discovery endpoints come online:
+
+- `GET /.well-known/oauth-protected-resource` — RFC 9728 metadata (authorization server + supported scopes).
+- `GET /.well-known/jwks.json` — the ES256 public signing key (RFC 7517), for token verification.
+
+### Provision an agent + mint a token
+
+In the web UI go to **Admin → MCP**:
+
+1. **Create account** — provisions a non-loginable `mcp`-role service account. First-login flows (local registration and SSO) can never auto-assign this role.
+2. **Mint token** — choose `read + write` or `read only` and copy the token (shown once).
+
+Tokens are stateless JWTs: deleting an account stops new tokens being minted, but a token already issued stays valid until it expires (keep `MCP_TOKEN_TTL_SECONDS` short).
+
+### Smoke test
+
+```bash
+TOKEN=...   # the minted token
+
+# Handshake
+curl -s https://your-host/mcp \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+
+# List tools
+curl -s https://your-host/mcp \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# Call a tool
+curl -s https://your-host/mcp \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
+       "params":{"name":"list_assignments","arguments":{"courseCode":"CS136"}}}'
+```
+
+A missing/invalid token returns `401` with a `WWW-Authenticate: Bearer resource_metadata="…"` challenge; calling a `content:write` tool with a read-only token returns `403` `insufficient_scope`. The endpoint also works with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (paste the token as the bearer credential).
 
 ---
 
