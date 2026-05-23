@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.244] - 2026-05-23
+
+### Changed
+
+- **Runner dashboard adopts the shared `sortable-table.js`.** `admin-runner.leaf`
+  carried its own inline copy of the generic column sorter and its
+  `.sort-header` / `th.sort-asc` / `th.sort-desc` CSS — both duplicates of the
+  shared assets introduced in v0.4.241. It now loads `Public/sortable-table.js`
+  (styling from `styles.css`) like `admin-storage.leaf`. The page-specific
+  inline script — relative-time formatting, the offline badge, and the 5s
+  `/admin/runners` poll — stays inline. Sorter behaviour is unchanged (the
+  extracted JS is byte-identical to the removed block).
+
 ## [0.4.243] - 2026-05-23
 
 ### Added
