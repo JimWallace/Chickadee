@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.248] - 2026-05-23
+
+### Added
+
+- **MCP OAuth authorization-server data layer + token attribution — dormant (#700).**
+  Groundwork for the Phase 2 browser OAuth flow (so an agent can self-serve a
+  token instead of an admin pasting one). None of this is wired into a live
+  endpoint yet — the `/authorize` + `/token` flow follows in the next PR.
+  - **Three Fluent tables + migrations:** `oauth_clients` (registered agents —
+    `MCPOAuthClient`), `oauth_authorization_codes` (short-lived PKCE codes —
+    `MCPAuthorizationCode`), and `oauth_grants` (durable, refresh-token-backed
+    authorizations — `MCPGrant`). Codes/refresh tokens are stored only as
+    SHA-256 hashes; user FKs cascade.
+  - **Token client-attribution.** Access tokens can now carry `client_id` +
+    `agent_name` claims so a browser-flow token records the human as the
+    subject *and* the agent it was issued through — surfaced on
+    `MCPPrincipal` / `ToolContext` for separate audit attribution. Phase-1
+    admin-minted service tokens carry no acting client (the subject is the
+    agent).
+  - **Config knobs:** `MCP_ACCESS_TOKEN_TTL_SECONDS` (browser-flow access-token
+    lifetime, default 10 min — kept short so revoking a grant takes effect
+    quickly) and `MCP_GRANT_TTL_DAYS` (authorize-once-per-term grant lifetime,
+    default 120 days).
+
 ## [0.4.247] - 2026-05-23
 
 ### Added

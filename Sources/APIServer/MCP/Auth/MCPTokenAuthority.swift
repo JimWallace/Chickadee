@@ -65,6 +65,8 @@ actor MCPTokenAuthority {
         issuer: String,
         audience: String,
         ttlSeconds: Int,
+        clientID: String? = nil,
+        agentName: String? = nil,
         now: Date = Date()
     ) async throws -> String {
         let claims = MCPAccessTokenClaims(
@@ -73,7 +75,9 @@ actor MCPTokenAuthority {
             aud: AudienceClaim(value: audience),
             exp: ExpirationClaim(value: now.addingTimeInterval(TimeInterval(ttlSeconds))),
             iat: IssuedAtClaim(value: now),
-            scope: scopes.map(\.rawValue).sorted().joined(separator: " ")
+            scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
+            clientID: clientID,
+            agentName: agentName
         )
         return try await keys.sign(claims, kid: keyID)
     }

@@ -72,7 +72,9 @@ struct MCPRoutes: RouteCollection {
         let context = ToolContext(
             request: req,
             subject: principal.subject,
-            grantedScopes: principal.grantedScopes
+            grantedScopes: principal.grantedScopes,
+            actingClientID: principal.actingClientID,
+            actingClientName: principal.actingClientName
         )
         guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context) else {
             // A notification was accepted; the spec mandates 202 with no body.

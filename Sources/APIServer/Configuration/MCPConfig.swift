@@ -13,7 +13,8 @@ struct MCPConfig: Sendable {
     var allowedHosts: Set<String>
     /// Permitted `Origin` header values for `/mcp`.  Empty means "allow any".
     var allowedOrigins: Set<String>
-    /// Lifetime of an admin-minted access token, in seconds.  Default 24h.
+    /// Lifetime of an admin-minted (Phase 1) access token, in seconds.
+    /// Default 24h.  Browser-flow access tokens use `accessTokenTTLSeconds`.
     var tokenTTLSeconds: Int
     /// Path of the persisted ES256 signing key; auto-generated on first start
     /// if absent (like the worker secret).
@@ -24,6 +25,35 @@ struct MCPConfig: Sendable {
     /// Explicit resource identifier / expected audience (`aud`, RFC 8707).
     /// When nil, derived at startup as `PUBLIC_BASE_URL` + "/mcp".
     var resource: String?
+    /// Lifetime of a browser-flow (Phase 2) access token, in seconds.  Kept
+    /// short — the agent silently refreshes — so revoking a grant takes effect
+    /// quickly.  Default 10 minutes.
+    var accessTokenTTLSeconds: Int
+    /// Lifetime of a browser-flow authorization grant (refresh-token validity),
+    /// in days — "authorize once, works for a term".  Default 120 days.
+    var grantTTLDays: Int
+
+    init(
+        enabled: Bool,
+        allowedHosts: Set<String>,
+        allowedOrigins: Set<String>,
+        tokenTTLSeconds: Int,
+        signingKeyPath: String,
+        issuer: String?,
+        resource: String?,
+        accessTokenTTLSeconds: Int = 600,
+        grantTTLDays: Int = 120
+    ) {
+        self.enabled = enabled
+        self.allowedHosts = allowedHosts
+        self.allowedOrigins = allowedOrigins
+        self.tokenTTLSeconds = tokenTTLSeconds
+        self.signingKeyPath = signingKeyPath
+        self.issuer = issuer
+        self.resource = resource
+        self.accessTokenTTLSeconds = accessTokenTTLSeconds
+        self.grantTTLDays = grantTTLDays
+    }
 
     static func fromEnvironment(workDir: String) -> MCPConfig {
         MCPConfig(
@@ -33,7 +63,9 @@ struct MCPConfig: Sendable {
             tokenTTLSeconds: environmentInt("MCP_TOKEN_TTL_SECONDS") ?? 86_400,
             signingKeyPath: trimmedEnv("MCP_SIGNING_KEY_PATH") ?? (workDir + ".mcp-signing-key"),
             issuer: trimmedEnv("MCP_ISSUER"),
-            resource: trimmedEnv("MCP_RESOURCE")
+            resource: trimmedEnv("MCP_RESOURCE"),
+            accessTokenTTLSeconds: environmentInt("MCP_ACCESS_TOKEN_TTL_SECONDS") ?? 600,
+            grantTTLDays: environmentInt("MCP_GRANT_TTL_DAYS") ?? 120
         )
     }
 

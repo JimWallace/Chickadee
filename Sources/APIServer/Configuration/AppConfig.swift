@@ -113,7 +113,7 @@ struct AppConfig: Sendable {
         }
         if mcp.enabled {
             logger.info(
-                "mcp: enabled, tokenTTL=\(mcp.tokenTTLSeconds)s, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
+                "mcp: enabled, tokenTTL=\(mcp.tokenTTLSeconds)s, accessTokenTTL=\(mcp.accessTokenTTLSeconds)s, grantTTL=\(mcp.grantTTLDays)d, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
             )
         }
     }
