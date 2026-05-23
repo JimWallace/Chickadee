@@ -2,6 +2,7 @@
 // paths, backed by a real test database.
 
 import Core
+import Fluent
 import Testing
 import Vapor
 
@@ -19,13 +20,13 @@ import Vapor
     @Test func listsAssignmentsForCourseSortedByTitle() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let course = APICourse(code: "CS136", name: "Systems Programming")
-            try await course.save(on: app.db)
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
-            for title in ["Bit Counting", "Apportionment"] {
-                try await APIAssignment(testSetupID: "setup_\(title.prefix(3))", title: title, courseID: courseID)
-                    .save(on: app.db)
-            }
+            try await makeTestSetup(on: app, id: "setup_bit", courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_app", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_bit", courseID: courseID, title: "Bit Counting")
+            try await makeTestAssignment(on: app, testSetupID: "setup_app", courseID: courseID, title: "Apportionment")
+
             let output = try await ListAssignmentsTool().execute(
                 ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
             #expect(output.courseCode == "CS136")
@@ -54,9 +55,10 @@ import Vapor
     @Test func dispatcherToolsCallReturnsContentAndStructured() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let course = APICourse(code: "CS246", name: "OOP")
-            try await course.save(on: app.db)
-            try await APIAssignment(testSetupID: "s1", title: "Tasks", courseID: course.requireID()).save(on: app.db)
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            try await makeTestSetup(on: app, id: "setup_tasks", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_tasks", courseID: courseID, title: "Tasks")
 
             let registry = ToolRegistry([ListAssignmentsTool().erased()])
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)

@@ -1,5 +1,6 @@
 // Tests for UpdateAssignmentTitleTool, backed by a real test database.
 
+import Fluent
 import Testing
 import Vapor
 
@@ -17,11 +18,11 @@ import Vapor
     @Test func updatesTitleTrimmedAndPersists() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let course = APICourse(code: "CS241", name: "Foundations")
-            try await course.save(on: app.db)
+            let course = try await makeTestCourse(on: app, code: "CS241", name: "Foundations")
             let courseID = try course.requireID()
-            let assignment = APIAssignment(testSetupID: "s1", title: "Old Title", courseID: courseID)
-            try await assignment.save(on: app.db)
+            try await makeTestSetup(on: app, id: "setup_old", courseID: courseID)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_old", courseID: courseID, title: "Old Title")
             let publicID = assignment.publicID
 
             let output = try await UpdateAssignmentTitleTool().execute(
@@ -37,11 +38,11 @@ import Vapor
     @Test func rejectsEmptyTitle() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let course = APICourse(code: "CS245", name: "Logic")
-            try await course.save(on: app.db)
+            let course = try await makeTestCourse(on: app, code: "CS245", name: "Logic")
             let courseID = try course.requireID()
-            let assignment = APIAssignment(testSetupID: "s1", title: "Keep", courseID: courseID)
-            try await assignment.save(on: app.db)
+            try await makeTestSetup(on: app, id: "setup_keep", courseID: courseID)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_keep", courseID: courseID, title: "Keep")
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await UpdateAssignmentTitleTool().execute(
