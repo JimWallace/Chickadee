@@ -5,8 +5,6 @@
 // unimplemented in v1.
 // https://modelcontextprotocol.io/specification/2025-11-25
 
-import Foundation
-
 /// The MCP protocol revision this server advertises in `initialize`.
 enum MCPProtocol {
     static let version = "2025-11-25"

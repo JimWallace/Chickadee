@@ -5,8 +5,6 @@
 // notifications, since there is no server-initiated streaming yet.
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle
 
-import Foundation
-
 /// The result returned from an `initialize` request.
 struct MCPInitializeResult: Encodable, Sendable {
     let protocolVersion: String

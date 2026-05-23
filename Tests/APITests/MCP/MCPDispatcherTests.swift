@@ -2,7 +2,6 @@
 // handling, and error mapping.  Pure logic — no Vapor app required.
 
 import Core
-import Foundation
 import Testing
 
 @testable import APIServer

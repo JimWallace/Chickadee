@@ -10,7 +10,6 @@
 // https://modelcontextprotocol.io/specification/2025-11-25
 
 import Core
-import Foundation
 
 /// Maps a JSON-RPC request to an MCP response.  Returns nil for notifications,
 /// which receive no response per the spec.
