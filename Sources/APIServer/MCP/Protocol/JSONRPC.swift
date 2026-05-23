@@ -176,6 +176,7 @@ extension JSONValue {
     /// A compact JSON string for this value — used for the human-readable
     /// `text` content block in a `tools/call` result.
     func encodedString() throws -> String {
-        String(decoding: try JSONEncoder().encode(self), as: UTF8.self)
+        let data = try JSONEncoder().encode(self)
+        return String(bytes: data, encoding: .utf8) ?? ""
     }
 }

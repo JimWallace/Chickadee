@@ -19,7 +19,8 @@ import Vapor
         try await withApp(app) { app in
             let course = APICourse(code: "CS241", name: "Foundations")
             try await course.save(on: app.db)
-            let assignment = APIAssignment(testSetupID: "s1", title: "Old Title", courseID: course.requireID())
+            let courseID = try course.requireID()
+            let assignment = APIAssignment(testSetupID: "s1", title: "Old Title", courseID: courseID)
             try await assignment.save(on: app.db)
             let publicID = assignment.publicID
 
@@ -38,7 +39,8 @@ import Vapor
         try await withApp(app) { app in
             let course = APICourse(code: "CS245", name: "Logic")
             try await course.save(on: app.db)
-            let assignment = APIAssignment(testSetupID: "s1", title: "Keep", courseID: course.requireID())
+            let courseID = try course.requireID()
+            let assignment = APIAssignment(testSetupID: "s1", title: "Keep", courseID: courseID)
             try await assignment.save(on: app.db)
 
             await #expect(throws: MCPToolError.self) {
