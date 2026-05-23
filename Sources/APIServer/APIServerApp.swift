@@ -100,7 +100,8 @@ private func resolveAppConfig(
                 brightspace: preloaded.brightspace,
                 diagnostics: preloaded.diagnostics,
                 alerts: preloaded.alerts,
-                outboundProxy: preloaded.outboundProxy
+                outboundProxy: preloaded.outboundProxy,
+                mcp: preloaded.mcp
             )
         } ?? preloaded
     }
