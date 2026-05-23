@@ -18,12 +18,12 @@
 //   - the user has no `lastSeenAt` yet (legacy row predating
 //     UserActivityMiddleware — the next request will populate it)
 //
-// On expiry: any OIDC bearer tokens stashed in `req.session.data` are
-// cleared (so a stale access/refresh token can't outlive the cookie),
-// `req.auth.logout` and `req.session.unauthenticate` drop the auth state,
-// an `auth.session_idle_timeout` audit row is written, and the response
-// is either a redirect to `/login?error=timeout` (browser) or HTTP 401
-// (API client).
+// On expiry: `req.auth.logout` drops the request auth state and
+// `req.session.destroy()` invalidates the session — deleting the persisted
+// Fluent row (along with any stashed OIDC bearer tokens) and expiring the
+// cookie. An `auth.session_idle_timeout` audit row is written, and the
+// response is either a redirect to `/login?error=timeout` (browser) or
+// HTTP 401 (API client).
 
 import Foundation
 import Vapor
@@ -58,15 +58,14 @@ struct SessionIdleTimeoutMiddleware: AsyncMiddleware {
             on: request
         )
 
-        // Mirror /logout's behaviour: nil out any OIDC bearer tokens before
-        // dropping the auth state so they don't sit in the session row
-        // after the user-facing session has expired.
-        request.session.data["oidc_access_token"] = nil
-        request.session.data["oidc_refresh_token"] = nil
-        request.session.data["oidc_id_token"] = nil
-
+        // Mirror /logout: destroy the server-side session so the persisted
+        // Fluent row (including any stashed OIDC tokens) is deleted and the
+        // cookie expired, rather than merely dropping the in-session auth
+        // marker. This holds whether the response below is a redirect or the
+        // thrown 401 — both bubble back through SessionsMiddleware, which
+        // honours the invalidated session.
         request.auth.logout(APIUser.self)
-        request.session.unauthenticate(APIUser.self)
+        request.session.destroy()
 
         if request.url.path.hasPrefix("/api/") {
             throw Abort(.unauthorized, reason: "Session timed out")

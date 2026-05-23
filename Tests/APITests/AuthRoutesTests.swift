@@ -251,6 +251,44 @@ import XCTVapor
         }
     }
 
+    @Test func logoutInvalidatesServerSideSession() async throws {
+        try await withApp(try await makeApp()) { app in
+            let authCookie = try await loginUser(
+                username: "instr", password: "pass1234", role: "instructor", on: app)
+
+            // Sanity: the session cookie authenticates the dashboard.
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: authCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            // CSRF token bound to the authenticated session.
+            let (token, csrfCookie) = try await csrfFields(for: "/", cookie: authCookie, on: app)
+            let logoutCookie = csrfCookie.isEmpty ? authCookie : csrfCookie
+
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: logoutCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // Re-using the same session cookie must NOT be authenticated.
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: logoutCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login")
+                })
+        }
+    }
+
     @Test func loginPageShowsSignedOutNotice() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.asyncTest(

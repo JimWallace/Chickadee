@@ -4,6 +4,14 @@
 //
 // Headers added:
 //
+//   Cache-Control: no-store (text/html responses only)
+//     Authenticated application pages must never be cached. Without this a
+//     browser will serve the dashboard from its disk cache / back-forward
+//     cache after the user logs out — so clicking a link or hitting Back
+//     shows a logged-in view even though the server-side session is gone.
+//     Scoped to text/html so versioned static assets (Pyodide, JupyterLite,
+//     CodeMirror, images) keep their long-lived caching.
+//
 //   X-Content-Type-Options: nosniff
 //     Prevents browsers from MIME-sniffing a response away from the declared
 //     Content-Type. Stops certain content-injection attacks.
@@ -179,6 +187,14 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
             base: cspBaseDirectives,
             formActionOrigins: formActionExtras(for: request)
         )
+        // Never cache authenticated HTML — a logged-out browser must re-ask
+        // the server rather than render a stale dashboard from its bf-cache or
+        // disk cache. Scoped to text/html so static assets stay cacheable.
+        if let contentType = response.headers.first(name: .contentType),
+            contentType.hasPrefix("text/html")
+        {
+            response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        }
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
         response.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
         response.headers.replaceOrAdd(name: "Referrer-Policy", value: "strict-origin-when-cross-origin")
