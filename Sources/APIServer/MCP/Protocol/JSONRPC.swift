@@ -164,4 +164,12 @@ extension JSONValue {
         let data = try JSONEncoder().encode(self)
         return try JSONDecoder().decode(T.self, from: data)
     }
+
+    /// Builds a JSON value from any `Encodable` by round-tripping through
+    /// `JSONEncoder` / `JSONDecoder`.  The dispatcher uses this to turn a typed
+    /// result struct into the `JSONValue` payload of a JSON-RPC response.
+    init(encoding value: some Encodable) throws {
+        let data = try JSONEncoder().encode(value)
+        self = try JSONDecoder().decode(JSONValue.self, from: data)
+    }
 }
