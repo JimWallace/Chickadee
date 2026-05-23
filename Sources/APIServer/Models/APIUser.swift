@@ -128,6 +128,23 @@ final class APIUser: Model, Content, @unchecked Sendable {
 extension APIUser {
     var isAdmin: Bool { role == "admin" }
     var isInstructor: Bool { role == "instructor" || role == "admin" }
+
+    /// True for MCP service accounts (admin-provisioned, non-loginable agents).
+    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    var isMCPAgent: Bool { role == "mcp" }
+
+    /// Roles that may be assigned automatically at first login (local
+    /// registration or SSO mapping).  `mcp` is intentionally excluded: MCP
+    /// service accounts are created only by an admin, so no auto-provisioning
+    /// path can mint an agent identity.
+    static let autoAssignableRoles: Set<String> = ["student", "instructor", "admin"]
+
+    /// Drops a proposed auto-assigned role that isn't in `autoAssignableRoles`
+    /// (notably `mcp`), returning nil so the caller falls back to `student`.
+    /// Defence in depth for the first-login paths.
+    static func sanitizedAutoAssignedRole(_ proposed: String?) -> String? {
+        proposed.flatMap { autoAssignableRoles.contains($0) ? $0 : nil }
+    }
 }
 
 // MARK: - URL token

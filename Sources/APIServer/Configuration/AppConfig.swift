@@ -22,6 +22,7 @@ struct AppConfig: Sendable {
     let diagnostics: DiagnosticsConfiguration
     let alerts: ServerHealthAlertConfiguration
     let outboundProxy: OutboundProxyConfig?
+    let mcp: MCPConfig
 
     /// Loads the entire config tree from `Environment.get(...)`.
     ///
@@ -52,7 +53,8 @@ struct AppConfig: Sendable {
             brightspace: BrightSpaceSyncConfig.fromEnvironment(),
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
             alerts: ServerHealthAlertConfiguration.fromEnvironment(),
-            outboundProxy: OutboundProxyConfig.fromEnvironment()
+            outboundProxy: OutboundProxyConfig.fromEnvironment(),
+            mcp: MCPConfig.fromEnvironment(workDir: workDir)
         )
     }
 
@@ -108,6 +110,11 @@ struct AppConfig: Sendable {
         }
         if let proxy = outboundProxy {
             logger.info("outboundProxy: \(proxy.host):\(proxy.port)")
+        }
+        if mcp.enabled {
+            logger.info(
+                "mcp: enabled, tokenTTL=\(mcp.tokenTTLSeconds)s, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
+            )
         }
     }
 }
@@ -193,7 +200,8 @@ extension AppConfig {
                 auditLogRetentionDays: 90
             ),
             alerts: .default,
-            outboundProxy: nil
+            outboundProxy: nil,
+            mcp: .default
         )
     }
 }

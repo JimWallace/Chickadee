@@ -133,7 +133,8 @@ import Vapor
             brightspace: seed.brightspace,
             diagnostics: seed.diagnostics,
             alerts: seed.alerts,
-            outboundProxy: seed.outboundProxy
+            outboundProxy: seed.outboundProxy,
+            mcp: seed.mcp
         )
         app.preloadedAppConfig = seed
         // Smoke: configure() picks up the preloaded config without env reads.
@@ -167,7 +168,8 @@ import Vapor
             brightspace: nil,
             diagnostics: AppConfig.testDefaults().diagnostics,
             alerts: .default,
-            outboundProxy: nil
+            outboundProxy: nil,
+            mcp: .default
         )
         let captured = CapturedLogger()
         cfg.logSummary(to: captured.logger)
