@@ -55,7 +55,15 @@ struct MCPRoutes: RouteCollection {
             return try jsonResponse(.failure(id: .null, error: .parseError()), status: .badRequest)
         }
 
-        guard let rpcResponse = await dispatcher.dispatch(rpcRequest) else {
+        // PR A is ungated: grant the full content scope set with a placeholder
+        // subject.  PR B's bearer middleware replaces this with the token's
+        // authenticated subject + granted scopes.
+        let context = ToolContext(
+            request: req,
+            subject: "ungated",
+            grantedScopes: Set(ContentScope.allCases)
+        )
+        guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context) else {
             // A notification was accepted; the spec mandates 202 with no body.
             return Response(status: .accepted)
         }

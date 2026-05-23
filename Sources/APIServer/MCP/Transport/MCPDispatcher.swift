@@ -1,12 +1,9 @@
 // APIServer/MCP/Transport/MCPDispatcher.swift
 //
 // Routes a decoded JSON-RPC message to its MCP handler and produces the
-// response (or nil, for notifications).  This layer is transport-agnostic and
-// Vapor-free: the HTTP route (MCPRoutes) owns framing, Host/Origin checks, and
-// status codes; the dispatcher owns method semantics.
-//
-// v1 implements the lifecycle methods directly.  `tools/*` and `resources/*`
-// return empty / placeholder results until the tool registry lands.
+// response (or nil, for notifications).  Transport-agnostic: the HTTP route
+// (MCPRoutes) owns framing, Host/Origin checks, status codes, and building the
+// ToolContext; the dispatcher owns method semantics and tool dispatch.
 // https://modelcontextprotocol.io/specification/2025-11-25
 
 import Core
@@ -15,8 +12,14 @@ import Core
 /// which receive no response per the spec.
 struct MCPDispatcher: Sendable {
     let serverInfo: MCPServerInfo
+    let tools: ToolRegistry
 
-    func dispatch(_ request: JSONRPCRequest) async -> JSONRPCResponse? {
+    init(serverInfo: MCPServerInfo, tools: ToolRegistry = ToolRegistry([])) {
+        self.serverInfo = serverInfo
+        self.tools = tools
+    }
+
+    func dispatch(_ request: JSONRPCRequest, context: ToolContext? = nil) async -> JSONRPCResponse? {
         // Notifications (no id) never receive a response, whatever they carry.
         guard let id = request.id else { return nil }
 
@@ -37,14 +40,86 @@ struct MCPDispatcher: Sendable {
             // with an id, ack with an empty result rather than erroring.
             return .success(id: id, result: .object([:]))
         case .toolsList:
-            return .success(id: id, result: .object(["tools": .array([])]))
+            return .success(id: id, result: toolsListResult())
+        case .toolsCall:
+            return await toolsCallResult(id: id, params: request.params, context: context)
         case .resourcesList:
             return .success(id: id, result: .object(["resources": .array([])]))
-        case .toolsCall, .resourcesRead:
-            // TODO(step 4): dispatch to the tool registry / resource provider.
-            // https://modelcontextprotocol.io/specification/2025-11-25/server/tools
-            return .failure(id: id, error: .invalidParams("No tools or resources are registered yet."))
+        case .resourcesRead:
+            // TODO(PR B): expose authoring content (e.g. suite manifests) as resources.
+            // https://modelcontextprotocol.io/specification/2025-11-25/server/resources
+            return .failure(id: id, error: .invalidParams("No resources are registered yet."))
         }
+    }
+
+    // MARK: - tools/list
+
+    private func toolsListResult() -> JSONValue {
+        let entries = tools.all.map { tool in
+            JSONValue.object([
+                "name": .string(tool.name),
+                "description": .string(tool.description),
+                "inputSchema": tool.inputSchema,
+            ])
+        }
+        return .object(["tools": .array(entries)])
+    }
+
+    // MARK: - tools/call
+
+    private struct ToolCallParams: Decodable {
+        let name: String
+        let arguments: JSONValue?
+    }
+
+    private func toolsCallResult(id: JSONRPCID, params: JSONValue?, context: ToolContext?) async -> JSONRPCResponse {
+        guard let context else {
+            return .failure(id: id, error: .internalError("Tool execution context is unavailable."))
+        }
+        let call: ToolCallParams
+        do {
+            call = try (params ?? .object([:])).decoded(as: ToolCallParams.self)
+        } catch {
+            return .failure(id: id, error: .invalidParams("tools/call requires a \"name\" and optional \"arguments\"."))
+        }
+        guard let tool = tools.tool(named: call.name) else {
+            return .failure(id: id, error: .invalidParams("Unknown tool: \(call.name)"))
+        }
+        // Per-tool scope enforcement is added at the dispatcher in step 8 (PR B);
+        // PR A is ungated.
+        do {
+            let output = try await tool.invoke(call.arguments ?? .object([:]), context)
+            return .success(id: id, result: successToolResult(output))
+        } catch let error as MCPToolError {
+            // Tool-originated failures are reported inside the result with
+            // isError:true so the model can see and correct them.
+            return .success(id: id, result: errorToolResult(error))
+        } catch {
+            return .failure(id: id, error: .internalError("Tool \(call.name) failed."))
+        }
+    }
+
+    private func successToolResult(_ structured: JSONValue) -> JSONValue {
+        let text = (try? structured.encodedString()) ?? ""
+        return .object([
+            "content": .array([.object(["type": .string("text"), "text": .string(text)])]),
+            "structuredContent": structured,
+            "isError": .bool(false),
+        ])
+    }
+
+    private func errorToolResult(_ error: MCPToolError) -> JSONValue {
+        let message: String
+        switch error {
+        case .unknownTool(let name):
+            message = "Unknown tool: \(name)"
+        case .invalidArguments(let tool, let detail):
+            message = "Invalid arguments for \(tool): \(detail)"
+        }
+        return .object([
+            "content": .array([.object(["type": .string("text"), "text": .string(message)])]),
+            "isError": .bool(true),
+        ])
     }
 
     private func initializeResponse(id: JSONRPCID) -> JSONRPCResponse {
