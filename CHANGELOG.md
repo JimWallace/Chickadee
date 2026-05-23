@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.243] - 2026-05-23
+
+### Added
+
+- **Content-authoring MCP server — Phase 1, ungated core (#695).** A native
+  Model Context Protocol server under `Sources/APIServer/MCP/`: JSON-RPC 2.0
+  over a Streamable-HTTP `/mcp` route (Host/Origin DNS-rebinding guard;
+  `initialize` / `ping` / `tools/*` / `resources/*`; notifications → 202;
+  GET/DELETE → 405), a `ContentTool` protocol + type-erased registry, and two
+  authoring tools wired to Fluent — `list_assignments` and
+  `update_assignment_title`. Spec revision 2025-11-25. The endpoint is **not
+  yet mounted on the live app** (dormant); OAuth 2.1 bearer auth, the `mcp`
+  role + admin token minting, and scope enforcement land in a follow-up PR
+  before it goes live.
+
 ## [0.4.242] - 2026-05-23
 
 ### Changed
