@@ -31,7 +31,8 @@ func evaluateHealthRules(
     results[.runnerOffline] = await evaluateRunnerOffline(
         on: application,
         pending: pendingState,
-        threshold: configuration.runnerOfflineSeconds,
+        offlineThreshold: configuration.runnerOfflineSeconds,
+        absentThreshold: configuration.runnerAbsentSeconds,
         now: now
     )
     results[.queueBackedUp] = evaluateQueueBackedUp(
@@ -70,26 +71,87 @@ private func loadPendingQueueState(on application: Application, now: Date) async
     return PendingQueueState(pendingCount: pendingCount, oldestPendingAge: oldestAge)
 }
 
+/// How long a silent-but-known runner stays "remembered" for the empty-queue
+/// proactive alert. Matches `WorkerActivityStore.snapshotsSortedByRecent`'s
+/// prune cutoff, so a runner is forgotten by the alert at the same moment the
+/// admin dashboard drops it.
+let runnerPresenceRememberSeconds: TimeInterval = 3600
+
+/// Runner presence as seen by the alert evaluator. Separated from the store so
+/// the firing decision is a pure, table-testable function.
+struct RunnerPresenceState: Sendable {
+    /// A runner checked in within the urgent (queue-backed) offline window.
+    let recentWithinOffline: Bool
+    /// A runner checked in within the longer proactive absence window.
+    let recentWithinAbsent: Bool
+    /// We've seen at least one runner this session (still within the remember
+    /// window). Guards the empty-queue branch so a server with no runners
+    /// configured never pages.
+    let anyKnownRunner: Bool
+}
+
+/// Decides the runner-offline rule from queue + presence state.
+///
+/// Two cases, by queue state:
+/// - **Jobs queued:** urgent — fire if no runner checked in within
+///   `offlineSeconds` (work is waiting and nothing is processing it).
+/// - **Empty queue:** proactive — fire only if we've seen a runner this session
+///   and none has checked in within the longer `absentSeconds`, so capacity
+///   loss is caught before a backlog forms (and a runner-less deployment stays
+///   quiet).
+func decideRunnerOffline(
+    pending: PendingQueueState,
+    presence: RunnerPresenceState,
+    offlineSeconds: TimeInterval,
+    absentSeconds: TimeInterval
+) -> RuleEvaluation {
+    if pending.pendingCount > 0 {
+        if presence.recentWithinOffline { return .ok }
+        return RuleEvaluation(
+            isFiring: true,
+            summary: "No runner heartbeat in \(Int(offlineSeconds))s; \(pending.pendingCount) submission(s) pending",
+            details: [
+                "pending_count": String(pending.pendingCount),
+                "runner_offline_threshold_seconds": String(Int(offlineSeconds)),
+                "oldest_pending_age_seconds": pending.oldestPendingAge.map { String(Int($0)) } ?? "n/a",
+            ]
+        )
+    }
+    guard presence.anyKnownRunner, !presence.recentWithinAbsent else { return .ok }
+    return RuleEvaluation(
+        isFiring: true,
+        summary: "No runner has checked in for \(Int(absentSeconds))s (queue empty — proactive capacity warning)",
+        details: [
+            "pending_count": "0",
+            "runner_absent_threshold_seconds": String(Int(absentSeconds)),
+        ]
+    )
+}
+
 private func evaluateRunnerOffline(
     on application: Application,
     pending: PendingQueueState,
-    threshold: TimeInterval,
+    offlineThreshold: TimeInterval,
+    absentThreshold: TimeInterval,
     now: Date
 ) async -> RuleEvaluation {
-    guard pending.pendingCount > 0 else { return .ok }
-    let hasRecentRunner = await application.workerActivityStore.hasRecentActivity(
-        within: threshold,
+    let store = application.workerActivityStore
+    let recentWithinOffline = await store.hasRecentActivity(within: offlineThreshold, now: now)
+    let presence = await store.runnerPresence(
+        graceSeconds: absentThreshold,
+        rememberSeconds: max(runnerPresenceRememberSeconds, absentThreshold),
         now: now
     )
-    if hasRecentRunner { return .ok }
-    return RuleEvaluation(
-        isFiring: true,
-        summary: "No runner heartbeat in \(Int(threshold))s; \(pending.pendingCount) submission(s) pending",
-        details: [
-            "pending_count": String(pending.pendingCount),
-            "runner_offline_threshold_seconds": String(Int(threshold)),
-            "oldest_pending_age_seconds": pending.oldestPendingAge.map { String(Int($0)) } ?? "n/a",
-        ]
+    let state = RunnerPresenceState(
+        recentWithinOffline: recentWithinOffline,
+        recentWithinAbsent: presence.anyRecent,
+        anyKnownRunner: presence.anyKnown
+    )
+    return decideRunnerOffline(
+        pending: pending,
+        presence: state,
+        offlineSeconds: offlineThreshold,
+        absentSeconds: absentThreshold
     )
 }
 

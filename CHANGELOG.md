@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.242] - 2026-05-23
+
+### Changed
+
+- **Runner-offline alert is now proactive — it fires on an empty queue too.**
+  Previously the runner-offline health rule only fired when jobs were queued AND
+  no runner had checked in, so a dead runner went unnoticed until work piled up
+  behind it. The rule now has two modes:
+  - **Jobs queued (urgent):** unchanged — fires when no runner has checked in
+    within `ALERT_RUNNER_OFFLINE_SECONDS` (default 300s).
+  - **Empty queue (proactive):** fires when a runner we've seen this session has
+    gone quiet for longer than the new `ALERT_RUNNER_ABSENT_SECONDS` grace
+    period (default 600s / 10 min), so capacity loss is caught before a backlog
+    forms.
+
+  The proactive case only fires if at least one runner has checked in this
+  session (a runner-less / browser-graded-only deployment never pages), and a
+  long-dead runner is "forgotten" after the same 1-hour window the admin
+  dashboard uses, so the alert auto-resolves rather than nagging forever.
+
+  Implementation: `WorkerActivityStore.runnerPresence(graceSeconds:rememberSeconds:)`
+  (non-mutating, so it never races the dashboard's pruning) plus a pure
+  `decideRunnerOffline(...)` decision function for table-testable firing logic.
+
+  **Known limitation:** because runner identity is in-memory and Docker runners
+  use ephemeral IDs (v0.4.32), this detects "no runner at all is checking in",
+  not "1 of N specific runners died". Per-runner / expected-runner monitoring
+  needs a stable runner identity + an expected-count registry — tracked as a
+  follow-up.
+
 ## [0.4.241] - 2026-05-23
 
 ### Added

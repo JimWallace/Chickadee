@@ -153,6 +153,96 @@ import Testing
         #expect(config.queueDepthThreshold == 25)
         #expect(abs(config.errorRateThreshold - 0.30) < 0.001)
         #expect(config.cooldownSeconds == 1800)
+        #expect(config.runnerOfflineSeconds == 300)
+        #expect(config.runnerAbsentSeconds == 600)
+    }
+
+    // MARK: - Runner offline / absent rule
+
+    private func presence(offline: Bool, absent: Bool, known: Bool) -> RunnerPresenceState {
+        RunnerPresenceState(recentWithinOffline: offline, recentWithinAbsent: absent, anyKnownRunner: known)
+    }
+
+    @Test func runnerOffline_firesWhenJobsQueuedAndNoRecentRunner() {
+        let evaluation = decideRunnerOffline(
+            pending: PendingQueueState(pendingCount: 3, oldestPendingAge: 120),
+            presence: presence(offline: false, absent: false, known: true),
+            offlineSeconds: 300,
+            absentSeconds: 600
+        )
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["pending_count"] == "3")
+    }
+
+    @Test func runnerOffline_okWhenJobsQueuedButRunnerRecent() {
+        let evaluation = decideRunnerOffline(
+            pending: PendingQueueState(pendingCount: 3, oldestPendingAge: 10),
+            presence: presence(offline: true, absent: true, known: true),
+            offlineSeconds: 300,
+            absentSeconds: 600
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerAbsent_firesWithEmptyQueueWhenKnownRunnerGoesQuiet() {
+        // The proactive case: queue is empty, but a runner we've seen this
+        // session hasn't checked in within the absent grace period.
+        let evaluation = decideRunnerOffline(
+            pending: .empty,
+            presence: presence(offline: false, absent: false, known: true),
+            offlineSeconds: 300,
+            absentSeconds: 600
+        )
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["runner_absent_threshold_seconds"] == "600")
+    }
+
+    @Test func runnerAbsent_okWithEmptyQueueWhenRunnerStillChecksIn() {
+        let evaluation = decideRunnerOffline(
+            pending: .empty,
+            presence: presence(offline: true, absent: true, known: true),
+            offlineSeconds: 300,
+            absentSeconds: 600
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerAbsent_okWithEmptyQueueWhenNoRunnerEverConnected() {
+        // A deployment with no runners (e.g. browser-graded only) must not page
+        // forever just because the store is empty.
+        let evaluation = decideRunnerOffline(
+            pending: .empty,
+            presence: presence(offline: false, absent: false, known: false),
+            offlineSeconds: 300,
+            absentSeconds: 600
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerPresence_distinguishesRecentKnownAndForgotten() async {
+        let store = WorkerActivityStore()
+        let now = Date()
+        // Runner last seen 12 minutes ago: past the 10-min grace, still remembered.
+        await store.markActive(workerID: "r1", hostname: "h1", at: now.addingTimeInterval(-720))
+
+        let quiet = await store.runnerPresence(graceSeconds: 600, rememberSeconds: 3600, now: now)
+        #expect(quiet.anyRecent == false)
+        #expect(quiet.anyKnown)
+
+        // A check-in 30s ago counts as recent.
+        await store.markActive(workerID: "r1", hostname: "h1", at: now.addingTimeInterval(-30))
+        let recent = await store.runnerPresence(graceSeconds: 600, rememberSeconds: 3600, now: now)
+        #expect(recent.anyRecent)
+        #expect(recent.anyKnown)
+
+        // Beyond the remember window the runner is forgotten entirely.
+        let forgotten = await store.runnerPresence(
+            graceSeconds: 600,
+            rememberSeconds: 3600,
+            now: now.addingTimeInterval(4000)
+        )
+        #expect(forgotten.anyRecent == false)
+        #expect(forgotten.anyKnown == false)
     }
 
     // MARK: - Rule helpers
