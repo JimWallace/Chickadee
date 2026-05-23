@@ -44,25 +44,27 @@ import Testing
         let response = JSONRPCResponse.success(id: .number(7), result: .object(["ok": .bool(true)]))
         let roundTripped = try decoder.decode(JSONValue.self, from: encoder.encode(response))
         #expect(
-            roundTripped == .object([
-                "jsonrpc": .string("2.0"),
-                "id": .int(7),
-                "result": .object(["ok": .bool(true)]),
-            ]))
+            roundTripped
+                == .object([
+                    "jsonrpc": .string("2.0"),
+                    "id": .int(7),
+                    "result": .object(["ok": .bool(true)]),
+                ]))
     }
 
     @Test func encodesErrorResponseWithNullIDFallback() throws {
         let response = JSONRPCResponse.failure(id: nil, error: .methodNotFound("frobnicate"))
         let roundTripped = try decoder.decode(JSONValue.self, from: encoder.encode(response))
         #expect(
-            roundTripped == .object([
-                "jsonrpc": .string("2.0"),
-                "id": .null,
-                "error": .object([
-                    "code": .int(-32_601),
-                    "message": .string("Method not found: frobnicate"),
-                ]),
-            ]))
+            roundTripped
+                == .object([
+                    "jsonrpc": .string("2.0"),
+                    "id": .null,
+                    "error": .object([
+                        "code": .int(-32_601),
+                        "message": .string("Method not found: frobnicate"),
+                    ]),
+                ]))
     }
 
     @Test func errorResponseOmitsResultKey() throws {
