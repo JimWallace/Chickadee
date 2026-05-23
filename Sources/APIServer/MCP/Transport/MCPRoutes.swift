@@ -26,10 +26,18 @@ struct MCPRoutes: RouteCollection {
         /// present and not listed is rejected (403).  An absent `Origin` is
         /// allowed, so non-browser clients (MCP Inspector, curl) still work.
         var allowedOrigins: Set<String>
+        /// RFC 9728 metadata URL echoed in the `WWW-Authenticate` challenge when
+        /// a tool call is rejected for insufficient scope.  Nil omits it.
+        var resourceMetadataURL: String?
 
-        init(allowedHosts: Set<String> = [], allowedOrigins: Set<String> = []) {
+        init(
+            allowedHosts: Set<String> = [],
+            allowedOrigins: Set<String> = [],
+            resourceMetadataURL: String? = nil
+        ) {
             self.allowedHosts = allowedHosts
             self.allowedOrigins = allowedOrigins
+            self.resourceMetadataURL = resourceMetadataURL
         }
     }
 
@@ -55,17 +63,26 @@ struct MCPRoutes: RouteCollection {
             return try jsonResponse(.failure(id: .null, error: .parseError()), status: .badRequest)
         }
 
-        // PR A is ungated: grant the full content scope set with a placeholder
-        // subject.  PR B's bearer middleware replaces this with the token's
-        // authenticated subject + granted scopes.
+        // The route is mounted behind MCPBearerAuthMiddleware, which
+        // authenticates the caller and populates `request.mcpPrincipal` (or
+        // rejects with 401/403) before dispatch ever runs.
+        guard let principal = req.mcpPrincipal else {
+            throw Abort(.unauthorized, reason: "MCP request reached the transport without an authenticated principal.")
+        }
         let context = ToolContext(
             request: req,
-            subject: "ungated",
-            grantedScopes: Set(ContentScope.allCases)
+            subject: principal.subject,
+            grantedScopes: principal.grantedScopes
         )
         guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context) else {
             // A notification was accepted; the spec mandates 202 with no body.
             return Response(status: .accepted)
+        }
+        // A per-tool scope denial is surfaced as HTTP 403 insufficient_scope so
+        // clients see the authorization failure at the transport layer.
+        if let error = rpcResponse.error, error.code == JSONRPCError.insufficientScopeCode {
+            return try jsonResponse(
+                rpcResponse, status: .forbidden, challenge: insufficientScopeChallenge(error))
         }
         return try jsonResponse(rpcResponse, status: .ok)
     }
@@ -105,10 +122,30 @@ struct MCPRoutes: RouteCollection {
         return try JSONDecoder().decode(JSONRPCRequest.self, from: Data(bytes))
     }
 
-    private func jsonResponse(_ payload: JSONRPCResponse, status: HTTPResponseStatus) throws -> Response {
+    private func jsonResponse(
+        _ payload: JSONRPCResponse, status: HTTPResponseStatus, challenge: String? = nil
+    ) throws -> Response {
         let data = try JSONEncoder().encode(payload)
         var headers = HTTPHeaders()
         headers.contentType = .json
+        if let challenge {
+            headers.replaceOrAdd(name: .wwwAuthenticate, value: challenge)
+        }
         return Response(status: status, headers: headers, body: .init(data: data))
+    }
+
+    /// Builds the `WWW-Authenticate: Bearer …, error="insufficient_scope", scope="…"`
+    /// header for a 403, mirroring the bearer middleware's challenge format.
+    private func insufficientScopeChallenge(_ error: JSONRPCError) -> String {
+        var params: [String]
+        if let url = configuration.resourceMetadataURL {
+            params = ["Bearer resource_metadata=\"\(url)\"", "error=\"insufficient_scope\""]
+        } else {
+            params = ["Bearer error=\"insufficient_scope\""]
+        }
+        if case .string(let scope)? = error.data {
+            params.append("scope=\"\(scope)\"")
+        }
+        return params.joined(separator: ", ")
     }
 }

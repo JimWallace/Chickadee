@@ -151,6 +151,17 @@ struct JSONRPCError: Error, Encodable, Equatable, Sendable {
     static func internalError(_ message: String = "Internal error") -> JSONRPCError {
         JSONRPCError(code: -32_603, message: message)
     }
+
+    // MCP authorization: the authenticated token lacks a scope the requested
+    // tool requires.  JSON-RPC reserves -32000…-32099 for server-defined errors;
+    // the transport maps this code to an HTTP 403 `insufficient_scope` response.
+    static let insufficientScopeCode = -32_001
+
+    /// `requiredScopes` is the space-delimited scope string the tool demands; it
+    /// is surfaced in the response `data` and the `WWW-Authenticate` challenge.
+    static func insufficientScope(_ requiredScopes: String) -> JSONRPCError {
+        JSONRPCError(code: insufficientScopeCode, message: "Insufficient scope.", data: .string(requiredScopes))
+    }
 }
 
 // MARK: - Typed decoding of JSON payloads

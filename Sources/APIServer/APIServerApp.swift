@@ -27,6 +27,16 @@ public func runAPIServer() async throws {
             app.oidcConfig = oidcConfig
         }
 
+        // Load the MCP signing-key authority (auto-generating it on first run)
+        // when the content-authoring MCP endpoint is enabled.  The routes are
+        // already mounted by configure(); the bearer middleware reads this
+        // authority per-request, so it only needs to exist before app.execute().
+        if app.appConfig.mcp.enabled {
+            app.mcpTokenAuthority = try await MCPTokenAuthority.loadOrGenerate(
+                path: app.appConfig.mcp.signingKeyPath, keyID: "mcp-1")
+            app.logger.info("MCP token authority ready (signing key: \(app.appConfig.mcp.signingKeyPath)).")
+        }
+
         try await app.execute()
     } catch {
         await app.localRunnerManager.stopIfRunning(logger: app.logger)

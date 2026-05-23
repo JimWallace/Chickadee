@@ -65,4 +65,10 @@ func routes(_ app: Application) throws {
     try admin.register(collection: AdminRoutes())
     try admin.register(collection: InternalMetricsRoutes())
     try admin.register(collection: CourseBundleRoutes())
+
+    // MARK: - MCP (content authoring)
+
+    // Bearer-gated /mcp transport + unauthenticated OAuth discovery metadata.
+    // Mounted only when MCP_ENABLED; a no-op otherwise.
+    try registerMCPRoutes(app)
 }

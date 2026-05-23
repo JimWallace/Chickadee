@@ -82,6 +82,31 @@ actor MCPTokenAuthority {
     func verify(_ token: String) async throws -> MCPAccessTokenClaims {
         try await keys.verify(token, as: MCPAccessTokenClaims.self)
     }
+
+    /// The public signing key as a JWK (RFC 7517) for the JWKS endpoint, or nil
+    /// when the public parameters are unavailable.  JWTKit returns the EC
+    /// coordinates as standard base64; a JWK requires base64url, so they are
+    /// converted here.
+    func publicJWK() -> [String: String]? {
+        guard let parameters = publicKeyParameters else { return nil }
+        return [
+            "kty": "EC",
+            "crv": "P-256",
+            "use": "sig",
+            "alg": "ES256",
+            "kid": keyID.string,
+            "x": Self.base64url(parameters.x),
+            "y": Self.base64url(parameters.y),
+        ]
+    }
+
+    /// Converts standard base64 to unpadded base64url (RFC 4648 §5).
+    private static func base64url(_ standardBase64: String) -> String {
+        standardBase64
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
 }
 
 // MARK: - Application storage

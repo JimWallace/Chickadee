@@ -87,6 +87,29 @@ import Vapor
             #expect(response.error?.code == -32_602)
         }
     }
+
+    @Test func dispatcherRejectsWriteToolWithoutWriteScope() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let registry = ToolRegistry([UpdateAssignmentTitleTool().erased()])
+            let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
+            // A read-only caller invoking the content:write tool is rejected
+            // before the tool runs (no database mutation occurs).
+            let readOnly = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let request = JSONRPCRequest(
+                jsonrpc: "2.0", id: .number(4), method: "tools/call",
+                params: .object([
+                    "name": .string("update_assignment_title"),
+                    "arguments": .object([
+                        "assignmentPublicID": .string("ABC123"), "title": .string("New"),
+                    ]),
+                ]))
+            let response = try #require(await dispatcher.dispatch(request, context: readOnly))
+            #expect(response.error?.code == JSONRPCError.insufficientScopeCode)
+        }
+    }
 }
 
 private func toolNames(in result: JSONValue?) -> [String] {
