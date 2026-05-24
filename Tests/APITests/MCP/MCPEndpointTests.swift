@@ -76,6 +76,24 @@ import XCTVapor
         }
     }
 
+    @Test func presentOriginWithEmptyAllowlistIsAllowed() async throws {
+        // Default config has an empty origin allowlist → "allow any", so a
+        // request carrying an Origin (e.g. a browser MCP client) is not
+        // rejected out of the box. Regression guard for the empty-set check.
+        try await withApp(try await makeApp()) { app in
+            let headers: HTTPHeaders = [
+                "Content-Type": "application/json",
+                "Origin": "https://some-client.example",
+            ]
+            let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
+            try await app.testable().test(
+                .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
+            ) { res async in
+                #expect(res.status == .ok)
+            }
+        }
+    }
+
     @Test func disallowedOriginReturns403() async throws {
         let configuration = MCPRoutes.Configuration(allowedOrigins: ["https://allowed.example"])
         try await withApp(try await makeApp(configuration: configuration)) { app in

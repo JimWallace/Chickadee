@@ -18,6 +18,14 @@ Authorize agent
         <li>#(label)</li>
         #endfor
     </ul>
+    <p style="margin-bottom:1rem;font-size:.9rem">After you authorize, you will be redirected to
+        <strong>#(redirectHost)</strong>. Only continue if you recognize this destination.</p>
+    #if(firstTimeApproval):
+    <div class="error-box" style="margin-bottom:1rem">
+        <p>⚠️ You have <strong>not approved this app before</strong>. Any app can register itself and
+        choose its own name — authorize it only if you trust <strong>#(redirectHost)</strong>.</p>
+    </div>
+    #endif
     <p style="color:var(--gray-600);font-size:.85rem;margin-bottom:1rem">
         Actions taken by the agent are recorded as you, attributed to <strong>#(clientName)</strong>.
         It cannot access student data, grades, enrolment, or submissions. You can revoke access later.

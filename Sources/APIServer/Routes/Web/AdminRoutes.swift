@@ -51,6 +51,8 @@ struct AdminRoutes: RouteCollection {
         admin.post("mcp", "accounts", use: createMCPAccount)
         admin.post("mcp", "accounts", ":userID", "token", use: mintMCPToken)
         admin.post("mcp", "accounts", ":userID", "delete", use: deleteMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "enroll", use: enrollMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "unenroll", use: unenrollMCPAccount)
     }
 
     // MARK: - GET /admin

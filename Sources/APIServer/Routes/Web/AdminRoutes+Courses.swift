@@ -345,6 +345,9 @@ extension AdminRoutes {
         } else {
             let users = try await APIUser.query(on: req.db)
                 .filter(\.$id ~~ enrolledUserIDs)
+                // Exclude `mcp` service accounts: enrolled to scope an agent's
+                // access (admin MCP tab), not human roster members.
+                .filter(\.$role != "mcp")
                 .sort(\.$username)
                 .all()
             enrolledUsers = users.compactMap { u in

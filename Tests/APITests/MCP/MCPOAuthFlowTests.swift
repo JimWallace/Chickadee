@@ -150,6 +150,40 @@ import XCTVapor
         }
     }
 
+    @Test func refreshAfterRoleDowngradeIsRejectedAndRevokesGrant() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let consentRes = try await consent(
+                app, cookie: cookie, scope: "content:read content:write", decision: "authorize")
+            let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
+            let tokenRes = try await tokenPost(
+                app,
+                fields: [
+                    "grant_type": "authorization_code", "code": code,
+                    "redirect_uri": redirectURI, "client_id": clientID,
+                    "code_verifier": codeVerifier,
+                ])
+            let refreshToken = try #require(jsonField("refresh_token", in: tokenRes))
+
+            // The instructor is demoted to student (role downgrade / repurpose).
+            let prof = try #require(
+                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
+            prof.role = "student"
+            try await prof.save(on: app.db)
+
+            // Refresh now fails, and the grant is revoked so a retry also fails.
+            let refreshRes = try await tokenPost(
+                app, fields: ["grant_type": "refresh_token", "refresh_token": refreshToken])
+            #expect(refreshRes.status == .badRequest)
+            #expect(jsonField("error", in: refreshRes) == "invalid_grant")
+            let grant = try #require(await MCPGrant.query(on: app.db).first())
+            #expect(grant.revoked)
+        }
+    }
+
     @Test func pkceMismatchIsRejected() async throws {
         let (app, _) = try await makeOAuthApp()
         try await withApp(app) { app in

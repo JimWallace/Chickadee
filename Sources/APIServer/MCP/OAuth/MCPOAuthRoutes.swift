@@ -28,6 +28,10 @@ struct MCPOAuthRoutes: Sendable {
     let endpoints: MCPEndpoints
     let accessTokenTTLSeconds: Int
     let grantTTLDays: Int
+    /// Cap on total dynamically-registered clients (anti-flooding backstop).
+    var maxRegisteredClients: Int = 1000
+    /// Cap on `redirect_uris` accepted in one registration.
+    var maxRedirectURIsPerClient: Int = 5
 
     /// Session key holding the authorize URL a user was bounced to /login from;
     /// honored by `postLoginRedirect`.
@@ -69,8 +73,25 @@ struct MCPOAuthRoutes: Sendable {
             return req.redirect(to: "/login")
         }
 
+        let firstTimeApproval = try await Self.isFirstApproval(
+            req, userID: user.id, clientID: client.clientID)
         return try await renderConsent(
-            req, client: client, scopes: scopes, query: query, notPermitted: !user.isInstructor)
+            req, client: client, scopes: scopes, query: query,
+            notPermitted: !user.isInstructor, firstTimeApproval: firstTimeApproval)
+    }
+
+    /// True when the user holds no existing non-revoked grant for this client —
+    /// drives the "you have not approved this app before" consent warning.
+    private static func isFirstApproval(
+        _ req: Request, userID: UUID?, clientID: String
+    ) async throws -> Bool {
+        guard let userID else { return true }
+        let prior = try await MCPGrant.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$clientID == clientID)
+            .filter(\.$revoked == false)
+            .first()
+        return prior == nil
     }
 
     // MARK: - POST /oauth/authorize
@@ -199,6 +220,16 @@ struct MCPOAuthRoutes: Sendable {
         else {
             return Self.tokenError(.badRequest, "invalid_grant")
         }
+        // Re-authorize at refresh time: if the human is no longer an
+        // instructor/admin (role downgraded or account repurposed), stop the
+        // agent — revoke the grant so it can't be refreshed again.  The web
+        // session loses access immediately via RoleMiddleware; this closes the
+        // gap for long-lived MCP grants.
+        guard user.isInstructor else {
+            grant.revoked = true
+            try await grant.save(on: req.db)
+            return Self.tokenError(.badRequest, "invalid_grant")
+        }
         // Rotate: remember the spent token (for replay detection) and issue a new one.
         let newRefresh = Self.randomToken()
         grant.previousRefreshTokenHash = grant.refreshTokenHash
@@ -229,6 +260,21 @@ struct MCPOAuthRoutes: Sendable {
         guard !redirects.isEmpty, redirects.allSatisfy(Self.isValidRedirectURI) else {
             return Self.registrationError(
                 "invalid_redirect_uri", "redirect_uris must be HTTPS (or http on localhost) absolute URLs.")
+        }
+        guard redirects.count <= maxRedirectURIsPerClient else {
+            return Self.registrationError(
+                "invalid_redirect_uri", "Too many redirect_uris (max \(maxRedirectURIsPerClient)).")
+        }
+        // Backstop against /oauth/register flooding (the rate limiter is the
+        // first line of defence; this bounds total rows).
+        guard try await MCPOAuthClient.query(on: req.db).count() < maxRegisteredClients else {
+            let response = Response(status: .tooManyRequests)
+            response.headers.contentType = .json
+            response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+            response.body = .init(
+                string: "{\"error\":\"temporarily_unavailable\","
+                    + "\"error_description\":\"Client registration limit reached.\"}")
+            return response
         }
 
         let name: String
@@ -314,7 +360,7 @@ struct MCPOAuthRoutes: Sendable {
 
     private func renderConsent(
         _ req: Request, client: MCPOAuthClient, scopes: Set<ContentScope>,
-        query: AuthorizeQuery, notPermitted: Bool
+        query: AuthorizeQuery, notPermitted: Bool, firstTimeApproval: Bool
     ) async throws -> Response {
         let ordered = ContentScope.allCases.filter { scopes.contains($0) }
         let context = ConsentContext(
@@ -324,6 +370,8 @@ struct MCPOAuthRoutes: Sendable {
             scopeRaw: ordered.map(\.rawValue).joined(separator: " "),
             clientID: client.clientID,
             redirectURI: query.redirectURI,
+            redirectHost: URLComponents(string: query.redirectURI)?.host ?? query.redirectURI,
+            firstTimeApproval: firstTimeApproval,
             state: query.state,
             codeChallenge: query.codeChallenge,
             codeChallengeMethod: query.codeChallengeMethod,
@@ -549,6 +597,11 @@ private struct ConsentContext: Encodable {
     let scopeRaw: String
     let clientID: String
     let redirectURI: String
+    /// Host portion of the redirect URI, shown prominently so the human can spot
+    /// an unexpected destination (DCR client names are self-asserted).
+    let redirectHost: String
+    /// True when the user has never approved this client — drives a warning.
+    let firstTimeApproval: Bool
     let state: String
     let codeChallenge: String
     let codeChallengeMethod: String

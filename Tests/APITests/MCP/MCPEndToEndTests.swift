@@ -41,6 +41,9 @@ import XCTVapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
+            // The token subject is a real account enrolled in the course it acts on.
+            let agent = try await makeTestUser(on: app, username: "agent", role: "mcp")
+            try await makeTestEnrollment(on: app, userID: agent.requireID(), courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_e2e", courseID: courseID)
             try await makeTestAssignment(
                 on: app, testSetupID: "setup_e2e", courseID: courseID, title: "Tasks")
@@ -56,6 +59,34 @@ import XCTVapor
             let text = String(buffer: res.body)
             #expect(text.contains("CS246"))
             #expect(text.contains("Tasks"))
+        }
+    }
+
+    @Test func listAssignmentsForUnenrolledCourseIsDeniedInResult() async throws {
+        let (app, authority) = try await makeMCPApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            // The agent exists but is NOT enrolled in CS246.
+            _ = try await makeTestUser(on: app, username: "agent", role: "mcp")
+            try await makeTestSetup(on: app, id: "setup_deny", courseID: courseID)
+            try await makeTestAssignment(
+                on: app, testSetupID: "setup_deny", courseID: courseID, title: "Tasks")
+
+            let token = try await authority.mint(
+                subject: "agent", scopes: [.read, .write],
+                issuer: issuer, audience: resource, ttlSeconds: 3600)
+            let body = #"""
+                {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_assignments","arguments":{"courseCode":"CS246"}}}
+                """#
+            let res = try await post(app, body: body, token: token)
+            // The token is valid (200), but the tool reports an authorization
+            // failure in-result rather than leaking the course's assignments.
+            #expect(res.status == .ok)
+            let text = String(buffer: res.body)
+            #expect(text.contains("\"isError\":true"))
+            #expect(text.contains("not enrolled"))
+            #expect(!text.contains("Tasks"))
         }
     }
 

@@ -99,16 +99,24 @@ func registerMCPOAuthRoutes(
     let oauth = MCPOAuthRoutes(
         endpoints: endpoints,
         accessTokenTTLSeconds: mcp.accessTokenTTLSeconds,
-        grantTTLDays: mcp.grantTTLDays
+        grantTTLDays: mcp.grantTTLDays,
+        maxRegisteredClients: mcp.maxRegisteredClients,
+        maxRedirectURIsPerClient: mcp.maxRedirectURIsPerClient
     )
     // Consent UI: needs a logged-in human + a CSRF-protected form.
     let userFacing = app.grouped(sessionAuth, csrf)
     userFacing.get("oauth", "authorize", use: oauth.authorizeForm)
     userFacing.post("oauth", "authorize", use: oauth.authorizeSubmit)
-    // Token + revoke + register: back-channel POSTs — no session, no CSRF.
-    app.post("oauth", "token", use: oauth.token)
-    app.post("oauth", "revoke", use: oauth.revoke)
-    app.post("oauth", "register", use: oauth.register)
+    // Token + revoke + register: back-channel POSTs — no session, no CSRF, but
+    // rate-limited per IP since they're unauthenticated (register is open).
+    let limiter = MCPOAuthRateLimitMiddleware(
+        perMinute: mcp.oauthRateLimitPerMin,
+        trustForwardedFor: app.loginRateLimitConfiguration.trustForwardedFor
+    )
+    let backChannel = app.grouped(limiter)
+    backChannel.post("oauth", "token", use: oauth.token)
+    backChannel.post("oauth", "revoke", use: oauth.revoke)
+    backChannel.post("oauth", "register", use: oauth.register)
 
     app.logger.info(
         "MCP browser OAuth flow mounted at /oauth/{authorize,token,revoke,register}")
