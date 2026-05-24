@@ -1,10 +1,12 @@
 // APIServer/MCP/Transport/MCPMetadataRoutes.swift
 //
-// Unauthenticated OAuth discovery endpoints for the MCP resource server:
+// Unauthenticated OAuth discovery endpoints for the MCP server:
 //   • /.well-known/oauth-protected-resource — RFC 9728 metadata pointing MCP
 //     clients at the authorization server and advertising supported scopes.
-//   • /.well-known/jwks.json — the ES256 public signing key (RFC 7517) so a
-//     client or external verifier can validate access tokens.
+//   • /.well-known/oauth-authorization-server — RFC 8414 metadata advertising
+//     the /authorize + /token endpoints, JWKS URI, scopes, grant types, and
+//     PKCE methods (so an MCP client can run the browser flow).
+//   • /.well-known/jwks.json — the ES256 public signing key (RFC 7517).
 // These must stay reachable without a token, so they are mounted outside the
 // bearer-gated /mcp group.
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
@@ -14,14 +16,12 @@ import Foundation
 import Vapor
 
 struct MCPMetadataRoutes: RouteCollection {
-    /// The authorization server identifier advertised to clients (`iss`).
-    let issuer: String
-    /// The resource identifier this server represents (`aud`, RFC 8707).
-    let resource: String
+    let endpoints: MCPEndpoints
 
     func boot(routes: RoutesBuilder) throws {
         let wellKnown = routes.grouped(".well-known")
         wellKnown.get("oauth-protected-resource", use: protectedResourceMetadata)
+        wellKnown.get("oauth-authorization-server", use: authorizationServerMetadata)
         wellKnown.get("jwks.json", use: jwks)
     }
 
@@ -29,10 +29,27 @@ struct MCPMetadataRoutes: RouteCollection {
     func protectedResourceMetadata(req: Request) throws -> Response {
         let scopes = ContentScope.allCases.map { JSONValue.string($0.rawValue) }
         let metadata = JSONValue.object([
-            "resource": .string(resource),
-            "authorization_servers": .array([.string(issuer)]),
+            "resource": .string(endpoints.resource),
+            "authorization_servers": .array([.string(endpoints.issuer)]),
             "scopes_supported": .array(scopes),
             "bearer_methods_supported": .array([.string("header")]),
+        ])
+        return try jsonResponse(metadata)
+    }
+
+    /// RFC 8414 authorization-server metadata for the browser flow.
+    func authorizationServerMetadata(req: Request) throws -> Response {
+        let scopes = ContentScope.allCases.map { JSONValue.string($0.rawValue) }
+        let metadata = JSONValue.object([
+            "issuer": .string(endpoints.issuer),
+            "authorization_endpoint": .string(endpoints.authorizationEndpoint),
+            "token_endpoint": .string(endpoints.tokenEndpoint),
+            "jwks_uri": .string(endpoints.jwksURL),
+            "scopes_supported": .array(scopes),
+            "response_types_supported": .array([.string("code")]),
+            "grant_types_supported": .array([.string("authorization_code"), .string("refresh_token")]),
+            "code_challenge_methods_supported": .array([.string("S256")]),
+            "token_endpoint_auth_methods_supported": .array([.string("none")]),
         ])
         return try jsonResponse(metadata)
     }

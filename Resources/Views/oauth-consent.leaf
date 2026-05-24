@@ -1,0 +1,41 @@
+#extend("base"):
+#export("title"):
+Authorize agent
+#endexport
+#export("content"):
+<div class="auth-box">
+    <h1>Authorize access</h1>
+    #if(notPermitted):
+    <div class="error-box" style="margin-bottom:1rem">
+        <p>You are signed in, but only <strong>instructors and admins</strong> may authorize an
+        agent to author course content. Ask an instructor or admin to complete this connection.</p>
+    </div>
+    #else:
+    <p style="margin-bottom:1rem"><strong>#(clientName)</strong> wants to act on your behalf over the
+       Model Context Protocol. It will be able to:</p>
+    <ul style="margin:0 0 1rem 1.25rem">
+        #for(label in scopeLabels):
+        <li>#(label)</li>
+        #endfor
+    </ul>
+    <p style="color:var(--gray-600);font-size:.85rem;margin-bottom:1rem">
+        Actions taken by the agent are recorded as you, attributed to <strong>#(clientName)</strong>.
+        It cannot access student data, grades, enrolment, or submissions. You can revoke access later.
+    </p>
+    <form class="form" method="post" action="/oauth/authorize">
+        #csrfFormField()
+        <input type="hidden" name="client_id" value="#(clientID)">
+        <input type="hidden" name="redirect_uri" value="#(redirectURI)">
+        <input type="hidden" name="scope" value="#(scopeRaw)">
+        <input type="hidden" name="state" value="#(state)">
+        <input type="hidden" name="code_challenge" value="#(codeChallenge)">
+        <input type="hidden" name="code_challenge_method" value="#(codeChallengeMethod)">
+        <div style="display:flex;gap:.5rem">
+            <button class="btn btn-primary" type="submit" name="decision" value="authorize">Authorize</button>
+            <button class="btn" type="submit" name="decision" value="deny">Deny</button>
+        </div>
+    </form>
+    #endif
+</div>
+#endexport
+#endextend

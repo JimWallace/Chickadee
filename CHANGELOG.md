@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.249] - 2026-05-23
+
+### Added
+
+- **MCP browser OAuth flow — live `/authorize` + `/token` (#701).** Chickadee
+  now acts as its own OAuth 2.1 authorization server so an agent can obtain a
+  token through a browser consent screen instead of an admin pasting one
+  (Phase 2). Mounted when `MCP_ENABLED`.
+  - **`GET/POST /oauth/authorize`** — validates the client, exact redirect-URI,
+    PKCE (`S256`), and requested scopes, requires a logged-in **instructor or
+    admin** (unauthenticated users round-trip through `/login` via a
+    session-stored, same-origin `returnTo`), shows a consent screen, and issues
+    a single-use 60-second authorization code.
+  - **`POST /oauth/token`** — `authorization_code` exchanges the PKCE code for a
+    short access token + a long rotating refresh token; `refresh_token` rotates
+    to a fresh pair. Codes/refresh tokens are stored only as SHA-256 hashes;
+    token responses are `Cache-Control: no-store`.
+  - **RFC 8414 authorization-server metadata** at
+    `/.well-known/oauth-authorization-server` (advertises the authorize/token
+    endpoints, JWKS URI, scopes, grant types, and `S256`).
+  - **Per-tool-call audit logging** (`mcp.tool_called`): every authorized tool
+    call is recorded as the human subject, attributed to the acting agent
+    (`via_agent`); tool arguments are never logged.
+  - The access token's subject is the **human**; the agent rides in the
+    `client_id`/`agent_name` claims (from v0.4.248) for audit attribution.
+  - **Not yet:** revoke-on-reuse refresh detection + `/revoke` + a "Connected
+    agents" management UI (next PR), and Dynamic Client Registration so a
+    connector self-registers (follow-up) — for now an OAuth client must be
+    pre-registered.
+
 ## [0.4.248] - 2026-05-23
 
 ### Added
