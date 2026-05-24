@@ -44,6 +44,7 @@ struct MCPMetadataRoutes: RouteCollection {
             "issuer": .string(endpoints.issuer),
             "authorization_endpoint": .string(endpoints.authorizationEndpoint),
             "token_endpoint": .string(endpoints.tokenEndpoint),
+            "registration_endpoint": .string(endpoints.registrationEndpoint),
             "jwks_uri": .string(endpoints.jwksURL),
             "scopes_supported": .array(scopes),
             "response_types_supported": .array([.string("code")]),

@@ -214,6 +214,66 @@ struct MCPOAuthRoutes: Sendable {
         return try tokenSuccess(req, access: access, refresh: newRefresh, scope: grant.scope)
     }
 
+    // MARK: - POST /oauth/register (RFC 7591 Dynamic Client Registration)
+
+    @Sendable
+    func register(req: Request) async throws -> Response {
+        let metadata: RegistrationRequest
+        do {
+            metadata = try req.content.decode(RegistrationRequest.self)
+        } catch {
+            return Self.registrationError("invalid_client_metadata", "Could not parse client metadata.")
+        }
+        let redirects = metadata.redirectURIs
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !redirects.isEmpty, redirects.allSatisfy(Self.isValidRedirectURI) else {
+            return Self.registrationError(
+                "invalid_redirect_uri", "redirect_uris must be HTTPS (or http on localhost) absolute URLs.")
+        }
+
+        let name: String
+        if let trimmed = metadata.clientName?.trimmingCharacters(in: .whitespaces), !trimmed.isEmpty {
+            name = trimmed
+        } else {
+            name = "Unnamed MCP client"
+        }
+        let clientID = Self.randomToken()
+        // Open registration: anyone may register a client, but it can do nothing
+        // until an instructor/admin consents at /authorize.
+        try await MCPOAuthClient(clientID: clientID, name: name, redirectURIs: redirects, isPublic: true)
+            .save(on: req.db)
+
+        let response = RegistrationResponse(
+            clientID: clientID,
+            clientIDIssuedAt: Int(Date().timeIntervalSince1970),
+            clientName: name,
+            redirectURIs: redirects,
+            grantTypes: ["authorization_code", "refresh_token"],
+            responseTypes: ["code"],
+            tokenEndpointAuthMethod: "none",
+            scope: ContentScope.allCases.map(\.rawValue).joined(separator: " "))
+        let result = Response(status: .created)
+        try result.content.encode(response, as: .json)
+        result.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        return result
+    }
+
+    /// Accepts HTTPS absolute URLs, plus http on loopback hosts (for local MCP
+    /// clients / the Inspector).
+    private static func isValidRedirectURI(_ uri: String) -> Bool {
+        guard let url = URL(string: uri), let scheme = url.scheme?.lowercased(), let host = url.host
+        else { return false }
+        if scheme == "https" { return true }
+        return scheme == "http" && (host == "localhost" || host == "127.0.0.1" || host == "[::1]")
+    }
+
+    private static func registrationError(_ error: String, _ description: String) -> Response {
+        let response = Response(status: .badRequest)
+        response.headers.contentType = .json
+        response.body = .init(string: "{\"error\":\"\(error)\",\"error_description\":\"\(description)\"}")
+        return response
+    }
+
     // MARK: - POST /oauth/revoke (RFC 7009)
 
     @Sendable
@@ -395,6 +455,46 @@ private struct ConsentForm: Content {
         case scope, state, decision
         case codeChallenge = "code_challenge"
         case codeChallengeMethod = "code_challenge_method"
+    }
+}
+
+private struct RegistrationRequest: Content {
+    var clientName: String?
+    var redirectURIs: [String]
+    var grantTypes: [String]?
+    var responseTypes: [String]?
+    var tokenEndpointAuthMethod: String?
+    var scope: String?
+
+    enum CodingKeys: String, CodingKey {
+        case clientName = "client_name"
+        case redirectURIs = "redirect_uris"
+        case grantTypes = "grant_types"
+        case responseTypes = "response_types"
+        case tokenEndpointAuthMethod = "token_endpoint_auth_method"
+        case scope
+    }
+}
+
+private struct RegistrationResponse: Content {
+    let clientID: String
+    let clientIDIssuedAt: Int
+    let clientName: String
+    let redirectURIs: [String]
+    let grantTypes: [String]
+    let responseTypes: [String]
+    let tokenEndpointAuthMethod: String
+    let scope: String
+
+    enum CodingKeys: String, CodingKey {
+        case clientID = "client_id"
+        case clientIDIssuedAt = "client_id_issued_at"
+        case clientName = "client_name"
+        case redirectURIs = "redirect_uris"
+        case grantTypes = "grant_types"
+        case responseTypes = "response_types"
+        case tokenEndpointAuthMethod = "token_endpoint_auth_method"
+        case scope
     }
 }
 

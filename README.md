@@ -135,14 +135,27 @@ PUBLIC_BASE_URL=https://your-host        # issuer + resource are derived from th
 # MCP_ALLOWED_ORIGINS=https://your-host  # rejects mismatched browser Origins
 ```
 
-Two unauthenticated discovery endpoints come online:
+Discovery endpoints come online (all unauthenticated):
 
 - `GET /.well-known/oauth-protected-resource` — RFC 9728 metadata (authorization server + supported scopes).
+- `GET /.well-known/oauth-authorization-server` — RFC 8414 metadata (authorize / token / register endpoints, JWKS URI, PKCE methods).
 - `GET /.well-known/jwks.json` — the ES256 public signing key (RFC 7517), for token verification.
 
-### Provision an agent + mint a token
+Chickadee acts as its own OAuth 2.1 authorization server, so there are two ways an agent gets a token.
 
-In the web UI go to **Admin → MCP**:
+### Browser OAuth (for MCP clients / connectors)
+
+Point an MCP client (e.g. the Claude connector, or the MCP Inspector's OAuth mode) at `https://your-host/mcp`. It discovers the metadata above, then:
+
+1. **Self-registers** via Dynamic Client Registration (`POST /oauth/register`, RFC 7591) — no manual client setup.
+2. Opens `/oauth/authorize` in a browser. An **instructor or admin** logs in (if not already) and approves the requested scopes on a consent screen. Students cannot authorize agents.
+3. Exchanges the PKCE code at `/oauth/token` for a short-lived access token + a long, **rotating** refresh token (authorize once, works for a term).
+
+The access token's subject is the **human**; the agent is recorded separately (`client_id` / `agent_name`) so its actions are auditable as "*human*, via *agent*" (`mcp.tool_called`). Manage or revoke authorizations at **`/agents`** ("Connected agents"), or `POST /oauth/revoke` (RFC 7009). Replaying a rotated refresh token revokes the whole grant.
+
+### Admin-minted tokens (for headless / CI use)
+
+For non-interactive agents (no human in the loop), mint a token directly. In the web UI go to **Admin → MCP**:
 
 1. **Create account** — provisions a non-loginable `mcp`-role service account. First-login flows (local registration and SSO) can never auto-assign this role.
 2. **Mint token** — choose `read + write` or `read only` and copy the token (shown once).

@@ -38,6 +38,7 @@ struct MCPEndpoints {
     var jwksURL: String { metadataOrigin + "/.well-known/jwks.json" }
     var authorizationEndpoint: String { metadataOrigin + "/oauth/authorize" }
     var tokenEndpoint: String { metadataOrigin + "/oauth/token" }
+    var registrationEndpoint: String { metadataOrigin + "/oauth/register" }
 
     /// Resolves the identifiers from explicit config, falling back to
     /// `PUBLIC_BASE_URL`.  Returns nil when neither issuer nor resource can be
@@ -104,11 +105,13 @@ func registerMCPOAuthRoutes(
     let userFacing = app.grouped(sessionAuth, csrf)
     userFacing.get("oauth", "authorize", use: oauth.authorizeForm)
     userFacing.post("oauth", "authorize", use: oauth.authorizeSubmit)
-    // Token + revoke: back-channel POSTs from the agent — no session, no CSRF.
+    // Token + revoke + register: back-channel POSTs — no session, no CSRF.
     app.post("oauth", "token", use: oauth.token)
     app.post("oauth", "revoke", use: oauth.revoke)
+    app.post("oauth", "register", use: oauth.register)
 
-    app.logger.info("MCP browser OAuth flow mounted at /oauth/authorize + /oauth/token + /oauth/revoke")
+    app.logger.info(
+        "MCP browser OAuth flow mounted at /oauth/{authorize,token,revoke,register}")
 }
 
 private extension String {

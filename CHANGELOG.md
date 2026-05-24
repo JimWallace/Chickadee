@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.251] - 2026-05-23
+
+### Added
+
+- **MCP Dynamic Client Registration — completes the browser OAuth arc (#703).**
+  An MCP client (the Claude connector, the Inspector's OAuth mode, etc.) can now
+  self-register, so no manual client setup is required.
+  - **`POST /oauth/register`** (RFC 7591) — creates a public OAuth client from
+    `client_name` + `redirect_uris` and returns a generated `client_id`
+    (`token_endpoint_auth_method: none`). Redirect URIs must be HTTPS absolute
+    URLs, or `http` on a loopback host (`localhost` / `127.0.0.1` / `[::1]`) for
+    local clients. Open registration is safe: a registered client can do nothing
+    until an instructor/admin consents at `/authorize`.
+  - **`registration_endpoint`** is advertised in the authorization-server
+    metadata.
+  - **README** updated with the full browser-OAuth path (self-register →
+    instructor consent → token), alongside the existing admin-minted-token flow
+    for headless use.
+
+  This closes out the MCP Phase 2 work: an end-to-end OAuth 2.1 authorization
+  server (discovery → DCR → PKCE authorize → token + rotating refresh →
+  revoke), with all agent activity auditable as "human, via agent".
+
 ## [0.4.250] - 2026-05-23
 
 ### Added
