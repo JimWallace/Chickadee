@@ -20,6 +20,7 @@ enum MCPToolCatalog {
             ListAssignmentsTool().erased(),
             GetAssignmentTool().erased(),
             GetSuiteTool().erased(),
+            GetNotebookTool().erased(),
             UpdateAssignmentTool().erased(),
             UpdateSuiteTool().erased(),
             UpdatePatternFamilyTool().erased(),
