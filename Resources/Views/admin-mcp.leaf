@@ -19,6 +19,8 @@ MCP
         Protocol endpoint (<code>/mcp</code>). Each account is non-loginable and carries the
         <code>mcp</code> role only — it grants no access to student data, grades, or enrolment.
     </p>
+    <p style="font-size:.85rem"><a href="/agents">View connected agents &rarr;</a>
+        — browser-authorized OAuth grants (Phase 2), with revoke.</p>
 
     #if(!enabled):
     <div class="form-error" style="margin-bottom:1rem">

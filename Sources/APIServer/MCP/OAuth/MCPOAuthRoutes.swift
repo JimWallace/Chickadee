@@ -178,19 +178,30 @@ struct MCPOAuthRoutes: Sendable {
         guard let refreshToken = form.refreshToken else {
             return Self.tokenError(.badRequest, "invalid_request")
         }
+        let hash = sha256HexDigest(refreshToken)
+
+        // Theft response: a token matching an already-rotated-away hash is a
+        // replay — revoke the whole grant and refuse.
+        if let reused = try await MCPGrant.query(on: req.db)
+            .filter(\.$previousRefreshTokenHash == hash).first(), !reused.revoked
+        {
+            reused.revoked = true
+            try await reused.save(on: req.db)
+            return Self.tokenError(.badRequest, "invalid_grant")
+        }
+
         guard
             let grant = try await MCPGrant.query(on: req.db)
-                .filter(\.$refreshTokenHash == sha256HexDigest(refreshToken)).first(),
+                .filter(\.$refreshTokenHash == hash).first(),
             !grant.revoked,
             grant.expiresAt > Date(),
             let user = try await APIUser.find(grant.userID, on: req.db)
         else {
             return Self.tokenError(.badRequest, "invalid_grant")
         }
-        // Rotate: the presented refresh token is now spent.  (Reuse-detection —
-        // revoking the grant when an already-rotated token reappears — lands
-        // with /revoke in the next PR.)
+        // Rotate: remember the spent token (for replay detection) and issue a new one.
         let newRefresh = Self.randomToken()
+        grant.previousRefreshTokenHash = grant.refreshTokenHash
         grant.refreshTokenHash = sha256HexDigest(newRefresh)
         grant.lastUsedAt = Date()
         try await grant.save(on: req.db)
@@ -201,6 +212,28 @@ struct MCPOAuthRoutes: Sendable {
             authority, subject: user.username, scope: grant.scope,
             clientID: grant.clientID, agentName: client?.name)
         return try tokenSuccess(req, access: access, refresh: newRefresh, scope: grant.scope)
+    }
+
+    // MARK: - POST /oauth/revoke (RFC 7009)
+
+    @Sendable
+    func revoke(req: Request) async throws -> Response {
+        if let token = (try? req.content.decode(RevokeForm.self))?.token, !token.isEmpty {
+            let hash = sha256HexDigest(token)
+            // Match the current or just-rotated refresh-token hash.  Bound to a
+            // `let` first so the trailing closure isn't read as the `if` body.
+            let grant = try await MCPGrant.query(on: req.db).group(.or) { group in
+                group.filter(\.$refreshTokenHash == hash)
+                    .filter(\.$previousRefreshTokenHash == hash)
+            }.first()
+            if let grant {
+                grant.revoked = true
+                try await grant.save(on: req.db)
+            }
+        }
+        // RFC 7009: respond 200 whether or not the token was recognized (an
+        // opaque access token / unknown token is simply a no-op).
+        return Response(status: .ok)
     }
 
     // MARK: - Helpers
@@ -362,6 +395,16 @@ private struct ConsentForm: Content {
         case scope, state, decision
         case codeChallenge = "code_challenge"
         case codeChallengeMethod = "code_challenge_method"
+    }
+}
+
+private struct RevokeForm: Content {
+    var token: String?
+    var tokenTypeHint: String?
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case tokenTypeHint = "token_type_hint"
     }
 }
 

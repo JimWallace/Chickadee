@@ -220,6 +220,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateMCPOAuthClients())
     app.migrations.add(CreateMCPAuthorizationCodes())
     app.migrations.add(CreateMCPGrants())
+    app.migrations.add(AddPreviousRefreshTokenHashToGrants())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())
