@@ -52,9 +52,28 @@ declare the `merge_group:` trigger so they run in the queue.
 Enabling it is a **repo-settings change you must make** (it can't live in a
 workflow file):
 
-1. **Settings → Branches → add a branch protection rule / ruleset for `main`.**
-   Require status checks (at minimum the `Swift Tests` jobs) and turn on
-   **"Require merge queue."**
+1. **Settings → Rules → Rulesets** (or Branches) → edit the `main` ruleset and
+   add **two** rules: **"Require merge queue"** *and* **"Require status checks
+   to pass"**. A merge-queue rule on its own with no other active rule can leave
+   a PR showing as queued while nothing processes it.
+   - **Only require checks that actually run on `merge_group`** — currently the
+     `Swift Tests` jobs (`format-lint`, `build`, `build-and-verify`,
+     `api-tests`, `api-tests-postgres`, `core-tests`, `worker-tests`,
+     `browser-runner-tests`) and `Analyze (javascript-typescript)`. Requiring a
+     check from a workflow that has *no* `merge_group:` trigger (e.g.
+     `docker-build`, `jupyterlite`) makes the queue wait forever for a check
+     that never starts. Add `merge_group:` to those workflows first if you want
+     them gating the queue.
+
+**Troubleshooting "queued but not moving":**
+
+- `gh api graphql -f query='{repository(owner:"OWNER",name:"REPO"){mergeQueue(branch:"main"){entries(first:5){nodes{state pullRequest{number}}}}}}'`
+  returning `mergeQueue: null` means **no queue is actually configured** — the
+  ruleset is missing the "Require merge queue" rule. Add it.
+- If the queue exists but a PR sits at `state: PENDING` forever, a required
+  check isn't running on the `merge_group` event. Check
+  `gh api 'repos/OWNER/REPO/actions/runs?event=merge_group'`; if it's empty, the
+  required workflows lack the `merge_group:` trigger.
 2. **Bypass for the release bot.** Protecting `main` will otherwise reject the
    `auto-release` bot's direct push (step 2 above). Either:
    - add the bot identity (e.g. a GitHub App or a fine-grained PAT used by
