@@ -49,6 +49,7 @@ import XCTVapor
                     as? [String: Any]
                 #expect((object?["authorization_endpoint"] as? String)?.hasSuffix("/oauth/authorize") == true)
                 #expect((object?["token_endpoint"] as? String)?.hasSuffix("/oauth/token") == true)
+                #expect((object?["registration_endpoint"] as? String)?.hasSuffix("/oauth/register") == true)
                 #expect((object?["code_challenge_methods_supported"] as? [String])?.contains("S256") == true)
             }
         }
