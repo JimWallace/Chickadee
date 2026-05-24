@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.259] - 2026-05-24
+
+### Changed
+
+- **Admin "MCP" tab is hidden when `MCP_ENABLED=false`.** The MCP nav tab no
+  longer appears in the admin panel unless the endpoint is enabled (new
+  `#mcpEnabled()` Leaf tag reads the boot-time flag).
+
+### Security
+
+- **Students are excluded from the MCP interface at the tool layer.** MCP tool
+  calls now require the token subject to be an instructor, admin, or `mcp`
+  service account — never a student. Students already can't complete the
+  `/oauth/authorize` consent flow (it requires instructor), so this is
+  defence-in-depth: the guarantee no longer rests solely on token issuance.
+
+
 ## [0.4.258] - 2026-05-24
 
 ### Added
