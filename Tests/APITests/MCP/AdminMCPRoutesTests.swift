@@ -15,14 +15,20 @@ import XCTVapor
     private let issuer = "https://chickadee.example"
     private let resource = "https://chickadee.example/mcp"
 
-    private func makeAdminApp(mcpEnabled: Bool) async throws -> (Application, MCPTokenAuthority?) {
+    private func makeAdminApp(
+        mcpEnabled: Bool, authMode: AuthMode = .local
+    ) async throws -> (
+        Application, MCPTokenAuthority?
+    ) {
         let mcp: MCPConfig =
             mcpEnabled
             ? MCPConfig(
                 enabled: true, allowedHosts: [], allowedOrigins: [],
                 tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource)
             : .default
-        let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
+        // app.authMode stays .local so the test's session login works; the
+        // service-account UI reads appConfig.auth.mode, which we set here.
+        let app = try await makeTestApp(appConfig: .testDefaults(authMode: authMode, mcp: mcp))
         var authority: MCPTokenAuthority?
         if mcpEnabled {
             let made = try await MCPTokenAuthority.make(
@@ -152,6 +158,26 @@ import XCTVapor
             #expect(res.status == .seeOther)
             #expect(res.headers.first(name: .location) == "/admin/mcp")
             #expect(try await mcpAccount(named: "gone-bot", on: app) == nil)
+        }
+    }
+
+    @Test func ssoModeHidesServiceAccountCreation() async throws {
+        let (app, _) = try await makeAdminApp(mcpEnabled: true, authMode: .sso)
+        try await withApp(app) { app in
+            let cookie = try await loginUser(
+                username: "mcp_admin", password: "testpassword", role: "admin", on: app)
+            try await app.asyncTest(
+                .GET, "/admin/mcp",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    // No manual service-account creation in SSO mode...
+                    #expect(body.contains("Create account") == false)
+                    // ...but the SSO/audit explanation and Connected Agents table show.
+                    #expect(body.contains("single sign-on"))
+                    #expect(body.contains("Connected agents"))
+                })
         }
     }
 

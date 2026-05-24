@@ -13,6 +13,7 @@ MCP
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
 </nav>
 <section class="admin-section">
+    #if(showServiceAccounts):
     <h2 style="margin-top:0">MCP service accounts</h2>
 
     #if(!enabled):
@@ -134,6 +135,15 @@ MCP
         #endif
         </tbody>
     </table>
+    #else:
+    <h2 style="margin-top:0">MCP agents</h2>
+    <p style="color:var(--gray-600);font-size:.85rem;max-width:70ch">
+        Instructors authorize agents through single sign-on (the browser OAuth flow) — no service
+        accounts are created here. Each agent acts on the authorizing instructor's behalf, and its
+        actions are recorded in the <a href="/admin/audit">audit log</a> as
+        <code>&lt;username&gt;-MCP</code>, separate from the instructor's own.
+    </p>
+    #endif
 
     <h2 style="margin-top:2rem">Connected agents</h2>
     <p style="color:var(--gray-600);font-size:.85rem;max-width:70ch">

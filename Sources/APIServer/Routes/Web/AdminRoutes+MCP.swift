@@ -164,6 +164,7 @@ extension AdminRoutes {
             issuer: endpoints?.issuer,
             resource: endpoints?.resource,
             tokenTTLSeconds: mcp.tokenTTLSeconds,
+            showServiceAccounts: req.application.appConfig.auth.mode == .local,
             accounts: accounts,
             allCourses: allCourses,
             grants: grantRows,
