@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Admin MCP panel UI cleanup (#708).**
+- **Admin MCP panel UI cleanup (#709).**
   - Removed the descriptive blurb / "View connected agents" link above the
     service-accounts table.
   - **Connected agents (browser-flow OAuth grants) now appear on the admin MCP
@@ -23,13 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **"No MCP accounts yet." persisted after creating an account (#708).** The
+- **"No MCP accounts yet." persisted after creating an account (#709).** The
   empty-state used `#if(!accounts.count)`, but `.count` doesn't resolve in this
   LeafKit; switched to `.isEmpty` (the idiom the other tables use). Fixed the
   same latent bug in the per-account "no courses" check and on the
   `/agents` page.
 - **Safari mis-identified the "Create account" username field as a password
-  field (#708).** Added `autocomplete="new-password"` (the project's existing
+  field (#709).** Added `autocomplete="new-password"` (the project's existing
   Safari-autofill bypass).
 
 ## [0.4.254] - 2026-05-24
