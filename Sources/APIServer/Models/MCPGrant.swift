@@ -35,6 +35,12 @@ final class MCPGrant: Model, Content, @unchecked Sendable {
     @Field(key: "refresh_token_hash")
     var refreshTokenHash: String
 
+    /// SHA-256 hex digest of the immediately-prior refresh token (set on each
+    /// rotation).  A token matching this — but not the current hash — is a
+    /// replay of an already-rotated token, which revokes the grant.
+    @OptionalField(key: "previous_refresh_token_hash")
+    var previousRefreshTokenHash: String?
+
     /// When the grant lapses (a term out); refresh fails past this.
     @Field(key: "expires_at")
     var expiresAt: Date

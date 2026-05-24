@@ -104,10 +104,11 @@ func registerMCPOAuthRoutes(
     let userFacing = app.grouped(sessionAuth, csrf)
     userFacing.get("oauth", "authorize", use: oauth.authorizeForm)
     userFacing.post("oauth", "authorize", use: oauth.authorizeSubmit)
-    // Token endpoint: a back-channel POST from the agent — no session, no CSRF.
+    // Token + revoke: back-channel POSTs from the agent — no session, no CSRF.
     app.post("oauth", "token", use: oauth.token)
+    app.post("oauth", "revoke", use: oauth.revoke)
 
-    app.logger.info("MCP browser OAuth flow mounted at /oauth/authorize + /oauth/token")
+    app.logger.info("MCP browser OAuth flow mounted at /oauth/authorize + /oauth/token + /oauth/revoke")
 }
 
 private extension String {

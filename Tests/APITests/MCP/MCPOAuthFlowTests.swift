@@ -202,4 +202,97 @@ import XCTVapor
                 })
         }
     }
+
+    /// Runs consent → code → token and returns the refresh token.
+    private func obtainRefreshToken(_ app: Application, cookie: String) async throws -> String {
+        let consentRes = try await consent(
+            app, cookie: cookie, scope: "content:read", decision: "authorize")
+        let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
+        let tokenRes = try await tokenPost(
+            app,
+            fields: [
+                "grant_type": "authorization_code", "code": code,
+                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+            ])
+        return try #require(jsonField("refresh_token", in: tokenRes))
+    }
+
+    @Test func revokeEndpointStopsRefresh() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let refresh = try await obtainRefreshToken(app, cookie: cookie)
+
+            let revokeRes = try await app.asyncSendRequest(
+                .POST, "/oauth/revoke",
+                beforeRequest: { req in try req.content.encode(["token": refresh], as: .urlEncodedForm) })
+            #expect(revokeRes.status == .ok)
+
+            let refreshRes = try await tokenPost(
+                app, fields: ["grant_type": "refresh_token", "refresh_token": refresh])
+            #expect(refreshRes.status == .badRequest)
+            #expect(refreshRes.body.string.contains("invalid_grant"))
+        }
+    }
+
+    @Test func replayedRefreshTokenRevokesGrant() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let firstRefresh = try await obtainRefreshToken(app, cookie: cookie)
+
+            // Legitimate rotation.
+            let rotated = try await tokenPost(
+                app, fields: ["grant_type": "refresh_token", "refresh_token": firstRefresh])
+            #expect(rotated.status == .ok)
+            let newRefresh = try #require(jsonField("refresh_token", in: rotated))
+
+            // Replaying the spent token revokes the grant.
+            let replay = try await tokenPost(
+                app, fields: ["grant_type": "refresh_token", "refresh_token": firstRefresh])
+            #expect(replay.status == .badRequest)
+            #expect(replay.body.string.contains("invalid_grant"))
+
+            // The otherwise-valid rotated token is now dead too.
+            let afterRevoke = try await tokenPost(
+                app, fields: ["grant_type": "refresh_token", "refresh_token": newRefresh])
+            #expect(afterRevoke.status == .badRequest)
+        }
+    }
+
+    @Test func connectedAgentsPageListsAndRevokes() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let refresh = try await obtainRefreshToken(app, cookie: cookie)
+
+            let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()
+            try await app.asyncTest(
+                .GET, "/agents",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains(clientName))
+                })
+
+            let (csrf, bound) = try await csrfFields(for: "/agents", cookie: cookie, on: app)
+            let revokeRes = try await app.asyncSendRequest(
+                .POST, "/agents/\(grantID.uuidString)/revoke",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: bound)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                })
+            #expect(revokeRes.status == .seeOther)
+
+            let refreshRes = try await tokenPost(
+                app, fields: ["grant_type": "refresh_token", "refresh_token": refresh])
+            #expect(refreshRes.status == .badRequest)
+        }
+    }
 }

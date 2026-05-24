@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.250] - 2026-05-23
+
+### Added
+
+- **MCP OAuth revocation + Connected Agents UI (#702).** Completes grant
+  lifecycle management for the Phase-2 browser flow.
+  - **`POST /oauth/revoke`** (RFC 7009) — revokes the grant behind a presented
+    refresh token; always responds 200 (an unknown/opaque token is a no-op).
+  - **Refresh-token reuse detection.** `oauth_grants` now records the
+    just-rotated-away refresh-token hash; replaying a spent refresh token is
+    treated as theft and **revokes the whole grant** (both the replayed and the
+    current token stop working).
+  - **"Connected agents" page** (`GET /agents`, instructor/admin): lists the
+    agents authorized on a user's behalf — agent name, scopes, authorized/last-
+    used/expiry — with a **Revoke** button. An instructor sees their own grants;
+    an admin sees every grant. Revocations are audit-logged (`mcp.grant_revoked`).
+    Linked from the Admin → MCP tab.
+
 ## [0.4.249] - 2026-05-23
 
 ### Added
